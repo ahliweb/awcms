@@ -17,7 +17,8 @@ import {
   CAPABILITIES_ACTIVITY_CODE,
   CHANNEL_ACCOUNTS_MODULE_KEY,
   CREDENTIALS_ACTIVITY_CODE,
-  RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE
+  RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+  WEBHOOKS_ACTIVITY_CODE
 } from "./domain/channel-accounts-constants";
 
 /** Tenant-user stamps only: the table says nothing ABOUT a person, so anonymising the identity makes each stamp resolve to nobody (ADR-0094). */
@@ -120,6 +121,12 @@ export const channelAccountsModule = defineModule({
       action: "revoke",
       description:
         "Revoke a risk acknowledgement of an unofficial channel provider; degrades the tenant's accounts of that provider when it was the last one (high-risk, audited at warning)"
+    },
+    {
+      activityCode: WEBHOOKS_ACTIVITY_CODE,
+      action: "configure",
+      description:
+        "Create or rotate the signed webhook subscription of a Meta WhatsApp number (app secret stored write-only, callback token shown once; high-risk, audited at warning)"
     }
   ],
   navigation: [

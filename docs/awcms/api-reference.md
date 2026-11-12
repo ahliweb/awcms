@@ -14187,6 +14187,73 @@ Only `queued` and `retry_wait` are cancellable. A row in `sending` has been clai
 | 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" - distinguishing them would hand a narrow grant an existence oracle over the queue. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/whatsapp/meta-signals/{id}/clear-restriction` — Clear a recorded WABA restriction.
+
+- **operationId**: `clearWhatsappMetaRestriction`
+- **Security**: bearerAuth + tenantHeader
+
+Clears the restriction Meta reported for a WABA (`{id}` is the WABA account) after the operator verified at Meta that it was lifted. Meta's documented reversals (a ban `REINSTATE`, `ACCOUNT_RECONNECTED`) clear their own restriction automatically; a policy restriction, a deletion or an app uninstall is cleared only here. While restricted, the WABA's numbers are refused at enqueue (`SENDER_UNAVAILABLE`) and held at dispatch (bounded retries); nothing is rerouted to another number. HIGH-RISK: audited at `warning`, `Idempotency-Key` required. Requires `whatsapp_delivery.meta_signals.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | The restriction was cleared.                                   | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | `NOT_RESTRICTED` (nothing to clear) or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/meta-templates` — Meta template approvals per WABA, and each WABA's signals.
+
+- **operationId**: `listWhatsappMetaTemplates`
+- **Security**: bearerAuth + tenantHeader
+
+Which Meta templates (name, language, category, Meta's own status) are recorded on which WABA account (`items`), and each WABA's latest restriction and messaging-limit tier as Meta reported them through a signed webhook (`signals`). Only WABA accounts the caller may see (`channel_accounts` assignments and business-scope confinement); default-deny when the channel module cannot be loaded. An evidence reference is never returned (only `hasEvidence`). A template is SENDABLE through a tenant-owned Meta number only when its row on THAT number's WABA is `APPROVED` or `REINSTATED` and its category matches the message's purpose (marketing MARKETING, transactional UTILITY, security AUTHENTICATION). Requires `whatsapp_delivery.meta_templates.read`.
+
+**Responses**
+
+| Status | Description                          | Schema                                 |
+| ------ | ------------------------------------ | -------------------------------------- |
+| 200    | Template approvals and WABA signals. | object                                 |
+| 401    | Missing or invalid session.          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.          | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/whatsapp/meta-templates` — Record a Meta template's status on one WABA.
+
+- **operationId**: `recordWhatsappMetaTemplate`
+- **Security**: bearerAuth + tenantHeader
+
+An operator records what Meta shows for ONE template on ONE WABA account (bootstrap: Meta sends a status webhook only when a status CHANGES, so an already-approved template is recorded here). `status` is Meta's own vocabulary; `APPROVED`/`REINSTATED` require an `evidenceRef` (where the approval can be checked). A later signed Meta webhook with a newer event time overrides this record. The WABA must be a live `waba` account of THIS tenant that the caller operates; anything else is the same `422 CONTAINER_NOT_FOUND`. HIGH-RISK (an approved row lets messages be sent with that template through that WABA's numbers): audited at `warning`, `Idempotency-Key` required. Requires `whatsapp_delivery.meta_templates.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`WhatsappMetaTemplateRequest`](#schema-whatsappmetatemplaterequest)
+
+**Responses**
+
+| Status | Description                                                                             | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The template record as now stored.                                                      | object                                 |
+| 400    | Validation error.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`: the key was already used with a different request.              | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 422    | `CONTAINER_NOT_FOUND`: not a live WABA account of this tenant that the caller operates. | [`ApiError`](#standard-error-envelope) |
+
 ### `PUT /api/v1/whatsapp/sender-policy` — Set the default sender of a business scope (prospective).
 
 - **operationId**: `setWhatsappSenderPolicy`
@@ -14362,6 +14429,57 @@ Key, version, the ONE purpose each template is registered with, its variable all
 | 200    | Registered templates.       | object                                 |
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/webhooks/meta/{token}` — Meta's webhook subscription handshake.
+
+- **operationId**: `verifyWhatsappMetaWebhook`
+- **Security**: none (public endpoint)
+
+Meta calls it once when the callback URL is configured. Answers the `hub.challenge` as plain text only when `hub.mode` is `subscribe`, the token names an ACTIVE signed subscription, and `hub.verify_token` equals the callback token itself (constant time). Anything else is `403`. `404` when `WHATSAPP_ENABLED` is not `true`.
+
+**Parameters**
+
+| Name               | In    | Required | Type              | Description |
+| ------------------ | ----- | -------- | ----------------- | ----------- |
+| `hub.mode`         | query | yes      | enum(`subscribe`) |             |
+| `hub.verify_token` | query | yes      | string            |             |
+| `hub.challenge`    | query | yes      | string            |             |
+
+**Responses**
+
+| Status | Description                                          | Schema                                 |
+| ------ | ---------------------------------------------------- | -------------------------------------- |
+| 200    | The challenge, echoed.                               | string                                 |
+| 403    | Access denied by RBAC/ABAC.                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                  | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many attempts from this address for this tenant. | [`ApiError`](#standard-error-envelope) |
+| 503    | Temporarily unavailable.                             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/whatsapp/webhooks/meta/{token}` — Meta Cloud API webhooks for one tenant-owned number.
+
+- **operationId**: `receiveWhatsappMetaWebhook`
+- **Security**: none (public endpoint)
+
+Called by Meta, never by a person or a browser. Authenticated by TWO facts, both compared in constant time: the callback token in the path and `X-Hub-Signature-256`, the HMAC-SHA256 of the exact request body under that number's Meta app secret (stored write-only). Order: (1) `404` when `WHATSAPP_ENABLED` is not `true`; (2) BEFORE any database work, a per-ADDRESS bucket of unverified requests (refunded when a request verifies, so forged tokens naming random tenants cannot evade it) and a per-(tenant of the token, address) attempt bucket, `429` with `retry-after` when either is exhausted (Meta retries a non-200, so nothing is dropped, only delayed); (3) the body, capped at 128 KiB, as raw bytes: the HMAC is computed over them before anything is decoded, and a signed body that is not UTF-8 JSON is accepted and applied nowhere; (4) in the token's tenant transaction, verification (a bad token, an inactive or rotated subscription, a number without a live WABA, a missing app secret, or a wrong or missing signature are ONE `401`, counted against a smaller per-(tenant, address) denial bucket that answers `429`); (5) the body hash is recorded per subscription and a repeated body (a replay or a provider retry) changes nothing; (6) the payload is read WITHIN the token's binding: an entry of another WABA, or a `messages` change of another phone number id, is dropped. Statuses reconcile only rows of the bound sender with that provider message id (and that recipient, when Meta names it), forward-only (sent, delivered, read; failed only before delivery); inbound messages open the 24-hour customer-service window of (that number, that recipient hash) and NOTHING of their content is read or stored; template status, messaging-limit and account events update the bound WABA's records only. Answered `200` with `{}`.
+
+**Parameters**
+
+| Name                  | In     | Required | Type   | Description                                             |
+| --------------------- | ------ | -------- | ------ | ------------------------------------------------------- |
+| `X-Hub-Signature-256` | header | yes      | string | `sha256=<64 lower-case hex>` over the exact body bytes. |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                      | Schema                                 |
+| ------ | ---------------------------------------------------------------- | -------------------------------------- |
+| 200    | Accepted (applied, a duplicate, or nothing applicable).          | object                                 |
+| 401    | Missing or invalid session.                                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                              | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                          | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many attempts or refusals from this address for this tenant. | [`ApiError`](#standard-error-envelope) |
+| 503    | Temporarily unavailable; Meta retries.                           | [`ApiError`](#standard-error-envelope) |
 
 ## HR Commission
 
@@ -15421,6 +15539,33 @@ Read-only on purpose: health is REPORTED by a provider connector's check or a di
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/channel-accounts/accounts/{id}/webhook-subscription` — Create or rotate the signed webhook subscription of a Meta number.
+
+- **operationId**: `createChannelAccountWebhookSubscription`
+- **Security**: bearerAuth + tenantHeader
+
+For a live Meta WhatsApp number (`whatsapp_cloud` `waba_phone_number`) with a live `waba` container: stores the Meta app secret WRITE-ONLY (envelope-encrypted, purpose `webhook_signing_secret`; never returned, logged, audited or put in the idempotency record) and mints an OPAQUE callback token (`wcb1.<tenant>.<subscription>.<256 random bits>`), of which only the SHA-256 is stored. The response carries the token ONCE (`callbackToken`, `callbackPath`, `revealed: true`): it is the last segment of the callback URL to configure at Meta and also the `hub.verify_token`. A replay of the same `Idempotency-Key` answers the stored body WITHOUT it (`revealed: false`). An earlier subscription of the number is revoked and its app-secret ciphertext erased in the same transaction (rotation). A number that is not a live Meta number is `409 NOT_A_META_NUMBER`; one with no live WABA container is `409 CONTAINER_BINDING_INVALID`. HIGH-RISK: the `owner` assignment on the account AND on its WABA container (an invisible container is the same `404`), a conditional step-up (a person with an MFA factor must present a fresh one), `Idempotency-Key`, audited at `warning` with no secret, token or external identifier. Disconnecting or deleting the account also revokes its subscriptions and erases their secrets. The app secret is NOT verified with Meta. Requires `channel_accounts.webhooks.configure` AND, because a subscription can feed WABA-level template approvals, restrictions and 24-hour windows, `whatsapp_delivery.meta_templates.configure` and `whatsapp_delivery.meta_signals.configure` (`403` without them).
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                 | Schema                                 |
+| ------ | --------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Created; the token is shown once.                                           | object                                 |
+| 400    | Validation error.                                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                 | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                         | [`ApiError`](#standard-error-envelope) |
+| 409    | `NOT_A_META_NUMBER`, `CONTAINER_BINDING_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`.                  | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/connections` — The tenant's provider connections.
 
@@ -23676,6 +23821,42 @@ Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`, `
 "queued"
 ```
 
+### Schema: WhatsappMetaTemplateRequest
+
+| Field                | Type                                                               | Required | Nullable | Description                                           |
+| -------------------- | ------------------------------------------------------------------ | -------- | -------- | ----------------------------------------------------- |
+| `containerAccountId` | string (uuid)                                                      | yes      | no       |                                                       |
+| `name`               | string                                                             | yes      | no       |                                                       |
+| `language`           | string                                                             | yes      | no       |                                                       |
+| `category`           | enum(`MARKETING`, `UTILITY`, `AUTHENTICATION`)                     | yes      | no       |                                                       |
+| `status`             | [`WhatsappMetaTemplateStatus`](#schema-whatsappmetatemplatestatus) | yes      | no       |                                                       |
+| `evidenceRef`        | string                                                             | no       | yes      | Required when `status` is `APPROVED` or `REINSTATED`. |
+
+**Example**
+
+```json
+{
+  "containerAccountId": "00000000-0000-0000-0000-000000000000",
+  "name": "string",
+  "language": "string",
+  "category": "MARKETING",
+  "status": "APPROVED",
+  "evidenceRef": "string"
+}
+```
+
+### Schema: WhatsappMetaTemplateStatus
+
+Meta's own template status vocabulary. Only `APPROVED` and `REINSTATED` are sendable; every other value (including `FLAGGED`) is refused.
+
+Enum values: `APPROVED`, `ARCHIVED`, `UNARCHIVED`, `DELETED`, `DISABLED`, `FLAGGED`, `IN_APPEAL`, `LIMIT_EXCEEDED`, `LOCKED`, `PAUSED`, `PENDING`, `REINSTATED`, `PENDING_DELETION`, `REJECTED`.
+
+**Example**
+
+```json
+"APPROVED"
+```
+
 ### Schema: WhatsappSenderPolicyRequest
 
 | Field                    | Type                                                     | Required | Nullable | Description                                                                                                                     |
@@ -23765,7 +23946,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (84)
+### Channels (85)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -23841,6 +24022,7 @@ consumer/subscriber contract in this file).
 - `awcms.whatsapp.dispatch.failed` — A WhatsApp dispatcher pass failed as a whole — job level, not one message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp- dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
 - `awcms.whatsapp.message.expired` — A WhatsApp message passed its expiry before it was sent and was not retried late (ADR-0133, Issue #963) — an OTP that arrives after its validity is worse than none. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` expired.
 - `awcms.whatsapp.message.failed` — A WhatsApp message reached a terminal failure (ADR-0133, Issue #963): a non- retryable provider rejection, exhausted retries, or a template that is no longer registered. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` failed and a coarse `failureCode` (including `senderAccountId` for a tenant-owned sender). Since Issue #1141 `failureCode` may be `sender_unavailable`: the row's sender was revoked, disabled, disconnected, unapproved or has no adapter, and the message was NOT sent through any other sender, number or provider.
+- `awcms.whatsapp.message.provider_status_changed` — A SIGNED Meta webhook moved a sent WhatsApp message's provider-reported status forward (Issue #1143). Producer: `whatsapp-delivery/application/ whatsapp-meta-directory.ts`'s `applyMetaWebhookActions`, in the webhook's tenant transaction. Reconciled ONLY against a row of the sender the callback token resolved to, under that provider message id (and that recipient when Meta names it); forward-only, so a repeated or late status emits nothing. Payload: `messageId`, `templateKey`, `senderAccountId`, `providerStatus` (delivered | read | failed; `sent` only when no earlier status was recorded) and, for `failed`, a coarse `failureCode` (`meta_<code>`). Never a phone number, a body or provider text. The queue `status` of the message is unchanged (`sent`).
 - `awcms.whatsapp.message.queued` — A message was accepted into the WhatsApp outbox (ADR-0133, Issue #963), in the SAME transaction as the caller's fact: a rolled-back booking emits nothing. Producer: `whatsapp-delivery/application/whatsapp-enqueue.ts`'s `enqueueWhatsappMessage`. Payload: `messageId`, `templateKey`, `purpose` (transactional | security | marketing), `recipientMasked`, `status` (queued), and, since Issue #1141 (ADR-0148 section 4), `senderAccountId` (the tenant-owned sender account snapshotted on the row, a uuid; the key is ABSENT for the deployment sender, so the payload of a message that names no sender is byte for byte what it was). Never a phone number, message body, template variable, token or device id; the caller's own record is joined through the envelope `correlationId`. The addition is optional and the event version stays 1.0: a consumer that ignores unknown keys is unaffected.
 - `awcms.whatsapp.message.sent` — The provider accepted the WhatsApp message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-dispatch.ts`, in the finalise transaction after the provider call returned. Same payload shape as `message.queued` with `status` sent (including `senderAccountId` for a tenant-owned sender). "Accepted" by the provider is never "delivered".
 - `awcms.workflow.delegation.created` — A workflow delegation/substitute assignment was created. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `createWorkflowDelegation`.

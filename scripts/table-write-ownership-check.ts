@@ -208,6 +208,22 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "succeed, and roll back with the rest."
   })),
   ...[
+    "awcms_channel_webhook_subscriptions",
+    "awcms_whatsapp_service_windows",
+    "awcms_whatsapp_webhook_receipts"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeWorkerPurgeDeleteFloors` (Issue " +
+      "#1143, L-2 of the PR #1267 review) seeds one fresh and one aged window " +
+      "and webhook receipt (and the subscription a receipt references) inside " +
+      "ONE transaction that it ALWAYS rolls back (it throws a sentinel), " +
+      "assumes `awcms_worker`, and proves the role can delete exactly the aged " +
+      "rows. Nothing it writes is ever committed, so it is a behavioural probe " +
+      "of the purge-only DELETE policies, not a second writer of these tables."
+  })),
+  ...[
     "awcms_social_publications",
     "awcms_social_publish_jobs",
     "awcms_channel_account_health",

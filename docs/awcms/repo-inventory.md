@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 274   |
-| `awcms_*` tables                    | 273   |
-| Tables with `FORCE` RLS             | 255   |
+| Migrations                          | 276   |
+| `awcms_*` tables                    | 277   |
+| Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 825   |
-| Route files                         | 677   |
+| Test files                          | 828   |
+| Route files                         | 681   |
 | ADR                                 | 324   |
 
 ### Modules
@@ -328,17 +328,19 @@
 | 261 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
 | 262 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
 | 263 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
-| 264 | `sql/369_awcms_crm_follow_up_schema.sql`                               |
-| 265 | `sql/370_awcms_crm_follow_up_permissions.sql`                          |
-| 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
-| 267 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
-| 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
-| 269 | `sql/379_awcms_email_provider_events_quarantine.sql`                   |
-| 270 | `sql/380_awcms_email_webhook_permissions.sql`                          |
-| 271 | `sql/382_awcms_omnichannel_inbox_schema.sql`                           |
-| 272 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
-| 273 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
-| 274 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
+| 264 | `sql/365_awcms_whatsapp_meta_sender_binding.sql`                       |
+| 265 | `sql/366_awcms_whatsapp_meta_sender_binding_permissions.sql`           |
+| 266 | `sql/369_awcms_crm_follow_up_schema.sql`                               |
+| 267 | `sql/370_awcms_crm_follow_up_permissions.sql`                          |
+| 268 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
+| 269 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
+| 270 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
+| 271 | `sql/379_awcms_email_provider_events_quarantine.sql`                   |
+| 272 | `sql/380_awcms_email_webhook_permissions.sql`                          |
+| 273 | `sql/382_awcms_omnichannel_inbox_schema.sql`                           |
+| 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
+| 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
+| 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
 
 ### Tables & Row-Level Security
 
@@ -608,8 +610,12 @@
 | `awcms_whatsapp_consents`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_delivery_attempts`             | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_messages`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_meta_sender_signals`           | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
+| `awcms_whatsapp_meta_templates`                | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_whatsapp_sender_policies`               | `sql/322_awcms_whatsapp_sender_routing.sql`                | yes | yes   |
+| `awcms_whatsapp_service_windows`               | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_whatsapp_suppressions`                  | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_webhook_receipts`              | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_workflow_decisions`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_definitions`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_delegations`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
@@ -622,16 +628,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 615        |
+| `(root)`      | 616        |
 | `e2e`         | 30         |
-| `integration` | 179        |
+| `integration` | 181        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 563   |
+| `/api/v1/**`    | 567   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

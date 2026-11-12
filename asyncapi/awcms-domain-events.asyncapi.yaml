@@ -353,6 +353,23 @@ channels:
       (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-
       dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp-
       dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
+  awcms.whatsapp.message.provider_status_changed:
+    address: awcms.whatsapp.message.provider_status_changed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A SIGNED Meta webhook moved a sent WhatsApp message's provider-reported
+      status forward (Issue #1143). Producer: `whatsapp-delivery/application/
+      whatsapp-meta-directory.ts`'s `applyMetaWebhookActions`, in the webhook's
+      tenant transaction. Reconciled ONLY against a row of the sender the
+      callback token resolved to, under that provider message id (and that
+      recipient when Meta names it); forward-only, so a repeated or late status
+      emits nothing. Payload: `messageId`, `templateKey`, `senderAccountId`,
+      `providerStatus` (delivered | read | failed; `sent` only when no earlier
+      status was recorded) and, for `failed`, a coarse `failureCode`
+      (`meta_<code>`). Never a phone number, a body or provider text. The queue
+      `status` of the message is unchanged (`sent`).
   awcms.booking.reservation.created:
     address: awcms.booking.reservation.created
     messages:
@@ -1153,6 +1170,12 @@ operations:
       $ref: "#/channels/awcms.whatsapp.dispatch.failed"
     messages:
       - $ref: "#/channels/awcms.whatsapp.dispatch.failed/messages/DomainEvent"
+  publishWhatsappMessageProviderStatusChanged:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.message.provider_status_changed"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.message.provider_status_changed/messages/DomainEvent"
   publishBookingReservationCreated:
     action: send
     channel:

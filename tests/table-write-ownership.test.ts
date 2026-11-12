@@ -122,9 +122,12 @@ describe("findSharedTableWrites", () => {
       "awcms_telegram_engagement_contacts",
       // #1268: the telegram probe's refused forged-opt-in attempt.
       "awcms_telegram_engagement_consents",
-      // #1161 M-3 of the PR #1272 audit: the rolled-back retention-floor probe.
+      // #1161 M-3 of the PR #1272 audit: the rolled-back retention-floor probe;
+      // #1143: the worker purge-floor probe (subscriptions seeded by both).
       "awcms_channel_webhook_subscriptions",
       "awcms_email_provider_events",
+      "awcms_whatsapp_service_windows",
+      "awcms_whatsapp_webhook_receipts",
       // #1146: the social dispatch write-boundary probe.
       "awcms_social_publications",
       "awcms_social_publish_jobs",

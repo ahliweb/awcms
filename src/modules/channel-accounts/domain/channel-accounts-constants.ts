@@ -12,6 +12,7 @@ export const CAPABILITIES_ACTIVITY_CODE = "capabilities";
 export const CREDENTIALS_ACTIVITY_CODE = "credentials";
 export const ASSIGNMENTS_ACTIVITY_CODE = "assignments";
 export const RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE = "risk_acknowledgements";
+export const WEBHOOKS_ACTIVITY_CODE = "webhooks";
 
 /**
  * The guards, one per seeded permission. `AccessAction` is a CLOSED vocabulary
@@ -72,6 +73,12 @@ export const CHANNEL_ACCOUNTS_GUARDS = {
     moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
     activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
     action: "revoke" as const
+  },
+  // Issue #1143: the signed webhook subscription of a Meta number (high-risk).
+  manageWebhooks: {
+    moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+    activityCode: WEBHOOKS_ACTIVITY_CODE,
+    action: "configure" as const
   }
 } as const;
 

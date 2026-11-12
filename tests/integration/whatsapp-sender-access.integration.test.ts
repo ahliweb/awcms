@@ -197,13 +197,23 @@ async function holdScope(tenantUserId: string, officeId: string) {
 /** A connected WhatsApp number that is approved for every capability. */
 async function seedSender(officeId: string | null): Promise<string> {
   phone += 1;
+  // Issue #1143: a Meta number sends only as part of a live WABA container.
+  const waba = (await admin()`
+    INSERT INTO awcms_channel_accounts
+      (tenant_id, provider, account_kind, external_id, display_name,
+       auth_mode, status)
+    VALUES (${tenantId}, 'whatsapp_cloud', 'waba', ${`waba-${phone}`},
+            'waba', 'api_token', 'connected')
+    RETURNING id
+  `) as { id: string }[];
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
-       account_kind, external_id, display_name, auth_mode, status)
+       account_kind, external_id, display_name, auth_mode, status,
+       parent_account_id)
     VALUES (${tenantId}, ${officeId ? "office" : null}, ${officeId},
             'whatsapp_cloud', 'waba_phone_number', ${String(phone)},
-            ${`n-${phone}`}, 'api_token', 'connected')
+            ${`n-${phone}`}, 'api_token', 'connected', ${waba[0]!.id})
     RETURNING id
   `) as { id: string }[];
 

@@ -233,7 +233,20 @@ export async function runIdempotent(
   idempotencyKey: string,
   actorTenantUserId: string,
   requestPayload: unknown,
-  produce: () => Promise<{ status: number; body: unknown } | Response>
+  produce: () => Promise<
+    | {
+        status: number;
+        body: unknown;
+        /**
+         * Issue #1143. Data for the FIRST caller only, never stored: a callback
+         * token is shown once, so a replay answers the stored body without it
+         * and with `revealed: false` (the `website_engagement` source pattern).
+         * Only meaningful when `body` is an object.
+         */
+        reveal?: Record<string, unknown>;
+      }
+    | Response
+  >
 ): Promise<Response> {
   // The credential is part of `requestPayload` for the write endpoint; the hash
   // is a KEYED HMAC (`computeRequestHash`), so it is not recoverable from the table.
@@ -267,7 +280,13 @@ export async function runIdempotent(
 
   if (produced instanceof Response) return produced;
 
-  const body = { success: true as const, data: produced.body, meta: {} };
+  const body = {
+    success: true as const,
+    data: produced.reveal
+      ? { ...(produced.body as Record<string, unknown>), revealed: false }
+      : produced.body,
+    meta: {}
+  };
 
   await saveIdempotencyRecord(
     tx,
@@ -279,6 +298,21 @@ export async function runIdempotent(
     produced.status,
     body
   );
+
+  if (produced.reveal) {
+    return jsonResponse(
+      {
+        success: true as const,
+        data: {
+          ...(produced.body as Record<string, unknown>),
+          ...produced.reveal,
+          revealed: true
+        },
+        meta: {}
+      },
+      { status: produced.status }
+    );
+  }
 
   return jsonResponse(body, { status: produced.status });
 }
@@ -396,6 +430,33 @@ type AccountGuard = Pick<
   AccessRequest,
   "moduleKey" | "activityCode" | "action"
 >;
+
+/**
+ * Whether the caller ALSO holds `guard`, decided through the same chokepoint
+ * (and written to the decision log like every guard). For an action whose
+ * effect reaches another surface's authority: a signed Meta webhook
+ * subscription can change WABA-level template approvals and restrictions, so
+ * creating one also needs those permissions (Issue #1143 review M-1).
+ */
+export async function callerAlsoHolds(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  resourceType: string
+): Promise<boolean> {
+  const decision = await authorizeInTransaction(
+    context.tx,
+    context.tenantId,
+    context.tokenHash,
+    context.now,
+    { ...guard, resourceType },
+    {
+      clientIp: resolveClientIp(context.request, context.clientAddress),
+      readCache: readCacheFor(context)
+    }
+  );
+
+  return decision.allowed;
+}
 
 /**
  * Whether the caller holds `scope`, re-evaluated through the SAME chokepoint

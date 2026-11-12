@@ -150,20 +150,59 @@ const credentials = createChannelSenderCredentialAdapter({
   env: CA_ENV
 });
 
+// Issue #1143: a tenant-owned Meta number sends only templates approved on its
+// own WABA, so both carry a provider template and every seeded WABA approves
+// them (`approveFixtureTemplates`).
 registerWhatsappTemplate({
   key: "it1141.reminder",
   version: 1,
   purpose: "transactional",
   body: "Reminder for {{name}}",
-  variables: ["name"]
+  variables: ["name"],
+  providerTemplate: { name: "it1141_reminder", language: "id" }
 });
 registerWhatsappTemplate({
   key: "it1141.promo",
   version: 1,
   purpose: "marketing",
   body: "Sale for {{name}}",
-  variables: ["name"]
+  variables: ["name"],
+  providerTemplate: { name: "it1141_promo", language: "id" }
 });
+
+/** Issue #1143 fixture: the two templates above, approved on one WABA. */
+async function approveFixtureTemplates(
+  tenantId: string,
+  containerId: string
+): Promise<void> {
+  await getAdminSql()`
+    INSERT INTO awcms_whatsapp_meta_templates
+      (tenant_id, waba_external_id, template_name, language, category,
+       provider_status, evidence_ref, source, last_event_at)
+    VALUES
+      (${tenantId}, ${containerId}, 'it1141_reminder', 'id', 'UTILITY',
+       'APPROVED', 'fixture', 'operator', now()),
+      (${tenantId}, ${containerId}, 'it1141_promo', 'id', 'MARKETING',
+       'APPROVED', 'fixture', 'operator', now())
+    ON CONFLICT DO NOTHING
+  `;
+}
+
+/** Issue #1143 fixture: a live WABA container for a Meta number. */
+async function seedWaba(tenantId: string, externalId: string): Promise<string> {
+  const rows = (await getAdminSql()`
+    INSERT INTO awcms_channel_accounts
+      (tenant_id, provider, account_kind, external_id, display_name,
+       auth_mode, status)
+    VALUES (${tenantId}, 'whatsapp_cloud', 'waba', ${`waba-${externalId}`},
+            'waba', 'api_token', 'connected')
+    RETURNING id
+  `) as { id: string }[];
+
+  await approveFixtureTemplates(tenantId, `waba-${externalId}`);
+
+  return rows[0]!.id;
+}
 
 const runtime = () => getRuntimeSql();
 const inTenant = <T>(
@@ -264,13 +303,19 @@ async function seedAccount(
     await ensureRiskAcknowledgement(tenantId);
   }
 
+  // Issue #1143: a Meta number belongs to a WABA.
+  const parentId =
+    provider === "whatsapp_cloud" && kind === "waba_phone_number"
+      ? await seedWaba(tenantId, externalId)
+      : null;
   const rows = (await admin`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
-       account_kind, external_id, display_name, auth_mode, status)
+       account_kind, external_id, display_name, auth_mode, status,
+       parent_account_id)
     VALUES (${tenantId}, ${seed.scope?.type ?? null}, ${seed.scope?.id ?? null},
             ${provider}, ${kind}, ${externalId}, ${`n-${externalId}`},
-            ${authMode}, ${seed.status ?? "connected"})
+            ${authMode}, ${seed.status ?? "connected"}, ${parentId})
     RETURNING id
   `) as { id: string }[];
   const id = rows[0]!.id;
@@ -374,6 +419,8 @@ async function seedOauthChild(
             ${connection[0]!.id})
     RETURNING id
   `) as { id: string }[];
+
+  await approveFixtureTemplates(tenantId, `waba-${externalId}`);
   const child = (await admin`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name,
@@ -688,9 +735,15 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
 
       expect(message.sender_account_id).toBe(a1.id);
       expect(message.sender_selection).toBe("explicit");
-      // The number and the token are on no queue row.
-      expect(JSON.stringify(message)).not.toContain(a1.externalId);
+      // The token is on no queue row. Since Issue #1143 the VERIFIED sender
+      // identity (phone number id and WABA id, both read from the account
+      // records, neither secret) IS snapshotted, so a row can never be sent
+      // from another number than the one it was queued for.
       expect(JSON.stringify(message)).not.toContain(a1.token!);
+      expect(message.sender_external_id).toBe(a1.externalId);
+      expect(message.sender_container_external_id).toBe(
+        `waba-${a1.externalId}`
+      );
 
       const events = JSON.stringify(
         await getAdminSql()`SELECT payload FROM awcms_domain_events WHERE tenant_id = ${TENANT_A}`
@@ -942,37 +995,61 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
   });
 
   describe("the snapshot is immutable", () => {
-    test("no role can re-point a queued message at another sender, change how it was chosen, or move its scope", async () => {
-      const first = await seedAccount(TENANT_A);
-      const second = await seedAccount(TENANT_A);
-      const queued = await enqueue(TENANT_A, { senderAccountId: first.id });
-      const id = queuedId(queued);
+    workerTest(
+      "no role can re-point a queued message at another sender, change how it was chosen, or move its scope",
+      async () => {
+        const first = await seedAccount(TENANT_A);
+        const second = await seedAccount(TENANT_A);
+        const queued = await enqueue(TENANT_A, { senderAccountId: first.id });
+        const id = queuedId(queued);
 
-      for (const change of [
-        (sql: Bun.SQL) =>
-          sql`UPDATE awcms_whatsapp_messages SET sender_account_id = ${second.id} WHERE id = ${id}`,
-        (sql: Bun.SQL) =>
-          sql`UPDATE awcms_whatsapp_messages SET sender_account_id = NULL, sender_selection = 'deployment' WHERE id = ${id}`,
-        (sql: Bun.SQL) =>
-          sql`UPDATE awcms_whatsapp_messages SET sender_selection = 'policy' WHERE id = ${id}`,
-        (sql: Bun.SQL) =>
-          sql`UPDATE awcms_whatsapp_messages SET business_scope_type = 'brand', business_scope_id = ${SCOPE_X.id} WHERE id = ${id}`
-      ]) {
-        // The table owner bypasses RLS but not the trigger.
-        await assertPgRejected(
-          Promise.resolve(change(getAdminSql())),
-          "an UPDATE of the sender snapshot",
-          { errno: "23514", message: "sender snapshot is immutable" }
-        );
-        await assertPgRejected(
-          inTenant(TENANT_A, (tx) => Promise.resolve(change(tx))),
-          "an UPDATE of the sender snapshot as the runtime role",
-          { errno: "23514", message: "sender snapshot is immutable" }
+        for (const change of [
+          // Issue #1143 review L-1: the verified identity snapshot (phone number
+          // id and WABA id) is part of the same immutable snapshot.
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET sender_external_id = ${second.externalId} WHERE id = ${id}`,
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET sender_container_external_id = ${`waba-${second.externalId}`} WHERE id = ${id}`,
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET sender_account_id = ${second.id} WHERE id = ${id}`,
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET sender_account_id = NULL, sender_selection = 'deployment' WHERE id = ${id}`,
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET sender_selection = 'policy' WHERE id = ${id}`,
+          (sql: Bun.SQL) =>
+            sql`UPDATE awcms_whatsapp_messages SET business_scope_type = 'brand', business_scope_id = ${SCOPE_X.id} WHERE id = ${id}`
+        ]) {
+          // The table owner bypasses RLS but not the trigger.
+          await assertPgRejected(
+            Promise.resolve(change(getAdminSql())),
+            "an UPDATE of the sender snapshot",
+            { errno: "23514", message: "sender snapshot is immutable" }
+          );
+          await assertPgRejected(
+            inTenant(TENANT_A, (tx) => Promise.resolve(change(tx))),
+            "an UPDATE of the sender snapshot as the runtime role",
+            { errno: "23514", message: "sender snapshot is immutable" }
+          );
+          // The worker holds UPDATE on the queue (it finalises rows) and is
+          // bound by the same trigger.
+          await assertPgRejected(
+            withTenantOrThrow(getWorkerRoleSql(), TENANT_A, (tx) =>
+              Promise.resolve(change(tx))
+            ),
+            "an UPDATE of the sender snapshot as the worker role",
+            { errno: "23514", message: "sender snapshot is immutable" }
+          );
+        }
+
+        const after = await row(id);
+
+        expect(after.sender_account_id).toBe(first.id);
+        expect(after.sender_external_id).toBe(first.externalId);
+        expect(after.sender_container_external_id).toBe(
+          `waba-${first.externalId}`
         );
       }
-
-      expect((await row(id)).sender_account_id).toBe(first.id);
-    });
+    );
 
     test("an ordinary state change of the row is still allowed", async () => {
       const account = await seedAccount(TENANT_A);
@@ -3197,7 +3274,8 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           (tx) => tx`SELECT id, status, secret_id FROM awcms_channel_accounts`
         );
 
-        expect(readable).toHaveLength(1);
+        // The number and its WABA container (Issue #1143).
+        expect(readable).toHaveLength(2);
         expect(
           await inTenantWorker(
             TENANT_B,
@@ -3701,12 +3779,19 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         ORDER BY table_name
       `) as { table_name: string }[];
 
+      // Issue #1143 added four tables and none of them is a queue: template
+      // approvals, WABA signals, 24-hour windows and webhook receipts. Nothing
+      // is ever SENT from them; the dispatcher still claims only `messages`.
       expect(tables.map((t) => t.table_name)).toEqual([
         "awcms_whatsapp_consents",
         "awcms_whatsapp_delivery_attempts",
         "awcms_whatsapp_messages",
+        "awcms_whatsapp_meta_sender_signals",
+        "awcms_whatsapp_meta_templates",
         "awcms_whatsapp_sender_policies",
-        "awcms_whatsapp_suppressions"
+        "awcms_whatsapp_service_windows",
+        "awcms_whatsapp_suppressions",
+        "awcms_whatsapp_webhook_receipts"
       ]);
       expect(await count("awcms_whatsapp_messages")).toBe(2);
       expect(

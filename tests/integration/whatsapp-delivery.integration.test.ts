@@ -1709,14 +1709,18 @@ suite("whatsapp_delivery against PostgreSQL", () => {
         ).toEqual({
           purgedAttempts: 0,
           purgedMessages: 0,
-          expiredMessages: 0
+          expiredMessages: 0,
+          purgedServiceWindows: 0,
+          purgedWebhookReceipts: 0
         });
         expect(
           await purgeWhatsappQueue(getWorkerRoleSql(), TENANT_A, guard)
         ).toEqual({
           purgedAttempts: 1,
           purgedMessages: 1,
-          expiredMessages: 0
+          expiredMessages: 0,
+          purgedServiceWindows: 0,
+          purgedWebhookReceipts: 0
         });
       }
     );

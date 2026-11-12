@@ -19,6 +19,9 @@ export const WHATSAPP_CONSENT_WITHDRAWN_EVENT_TYPE =
   "awcms.whatsapp.consent.withdrawn";
 export const WHATSAPP_DISPATCH_FAILED_EVENT_TYPE =
   "awcms.whatsapp.dispatch.failed";
+/** Issue #1143. A signed Meta webhook moved a sent message's provider-reported status forward. */
+export const WHATSAPP_MESSAGE_PROVIDER_STATUS_CHANGED_EVENT_TYPE =
+  "awcms.whatsapp.message.provider_status_changed";
 
 export const WHATSAPP_MESSAGE_AGGREGATE_TYPE = "whatsapp_message";
 export const WHATSAPP_CONSENT_AGGREGATE_TYPE = "whatsapp_consent";

@@ -422,6 +422,29 @@ export function createChannelAccountPortAdapter(
       }
 
       const account = evaluation.account;
+      let container: SenderAccountRow | null = null;
+
+      // Issue #1143: a Meta number sends only as part of its WABA. The parent
+      // must be a live `waba` container of the same provider, whatever the
+      // number's own auth mode (an API-token number with no parent has no
+      // verifiable binding). A container that is degraded, pending, revoked or
+      // disabled answers its own status reason (held or terminal by the
+      // consumer's policy), never "usable".
+      if (account.provider === "whatsapp_cloud") {
+        const binding = await loadLendingParent(tx, input.tenantId, account);
+
+        if ("reason" in binding) {
+          return {
+            usable: false,
+            reason:
+              binding.reason === "CREDENTIAL_UNAVAILABLE"
+                ? "CONTAINER_BINDING_INVALID"
+                : binding.reason
+          };
+        }
+
+        container = binding.parent;
+      }
 
       return {
         usable: true,
@@ -430,6 +453,8 @@ export function createChannelAccountPortAdapter(
           provider: account.provider as WhatsappSenderProvider,
           accountKind: account.account_kind,
           externalId: account.external_id,
+          containerAccountId: container?.id ?? null,
+          containerExternalId: container?.external_id ?? null,
           businessScope:
             account.business_scope_type && account.business_scope_id
               ? {

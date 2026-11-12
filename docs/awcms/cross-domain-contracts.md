@@ -448,6 +448,18 @@ security messages are unchanged. No field or signature changed; `booking` maps a
 unknown reason to a coarse code and is unaffected. `whatsapp_delivery` is
 registered at `1.2.0`.
 
+**Version 1.3.0 (Issue #1143) is additive.** The refusal reasons gain
+`TEMPLATE_NOT_APPROVED` and `OUTSIDE_SERVICE_WINDOW`, returned only for a message
+through a TENANT-OWNED Meta Cloud API number: the template must be approved on
+THAT number's WABA in the category the purpose requires, and a registration
+without a provider template may go only inside the 24-hour window the recipient
+opened with THAT number. Never for the deployment sender, never for StarSender.
+The verified sender identity (phone number id, WABA id) is snapshotted on the
+row by the database guard. No field or signature changed. `whatsapp_delivery`
+is registered at `1.3.0`, and `channel_account` at `1.2.0` (the refusal reason
+`CONTAINER_BINDING_INVALID`, the optional container identity of a resolved
+sender, and the exported `ChannelWebhookVerifierPort` for signed Meta webhooks).
+
 ### 5.1 Telegram delivery port (live, #965)
 
 - **Status:** **live since Issue #965** (ADR-0140, inert behind `TELEGRAM_ENABLED`). Unlike §5 it carries **operational and staff alerts only**, to a member of staff who bound their own private chat; it is never a fallback for WhatsApp or e-mail and no other channel falls back to it (ADR-0139).

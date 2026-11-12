@@ -553,13 +553,13 @@ describe("the composition roots", () => {
 });
 
 describe("the contract versions", () => {
-  test("channel_account is 1.3.0 (Issue #1160 added the email ports at 1.2.0, Issue #1146 the publisher health port) and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
-    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.3.0");
+  test("channel_account is 1.4.0 (Issue #1160 added the email ports at 1.2.0, Issue #1146 the publisher health port at 1.3.0, Issue #1143 the webhook verifier port at 1.4.0) and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
+    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.4.0");
     expect(CAPABILITY_CONTRACT_VERSIONS.social_publishing).toBe("1.0.0");
 
     const manifest = read("awcms-family-compatibility.yaml");
 
-    expect(manifest).toContain('channel_account: "1.3.0"');
+    expect(manifest).toContain('channel_account: "1.4.0"');
     expect(manifest).toContain('social_publishing: "1.0.0"');
   });
 

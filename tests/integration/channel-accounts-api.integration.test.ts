@@ -81,6 +81,7 @@ import {
   POST as acknowledgeRiskRoute
 } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/index";
 import { POST as attestDeviceRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/attest-device";
+import { POST as createWebhookSubscriptionRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/webhook-subscription";
 import { POST as revokeRiskAcknowledgementRoute } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/[id]/revoke";
 import { POST as startOAuth } from "../../src/pages/api/v1/channel-accounts/connections/oauth/start";
 import { GET as oauthCallback } from "../../src/pages/api/v1/channel-accounts/connections/oauth/callback";
@@ -564,6 +565,18 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             token
           });
         }
+      ],
+      [
+        // Issue #1143.
+        "channel_accounts.webhooks.configure",
+        (id, token) =>
+          call(createWebhookSubscriptionRoute, {
+            method: "POST",
+            path: `${BASE}/accounts/${id}/webhook-subscription`,
+            params: { id },
+            token,
+            body: { appSecret: "0123456789abcdef0123456789abcdef" }
+          })
       ]
     ];
 
@@ -575,17 +588,36 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       );
     });
 
+    // Issue #1143 review M-1: a signed Meta webhook subscription can change
+    // WABA-level state, so it ALSO needs the two permissions governing it.
+    const ALSO_REQUIRED: Record<string, readonly string[]> = {
+      "channel_accounts.webhooks.configure": [
+        "whatsapp_delivery.meta_templates.configure",
+        "whatsapp_delivery.meta_signals.configure"
+      ]
+    };
+
     for (const [permission, run] of actions) {
       test(`${permission}: refused without it, allowed with only it`, async () => {
         if (!handlerReady) return;
 
         const id = (await register("guard-dev")).body.data!.id;
-        const without = await seedUser(
-          env.tenantId,
-          "without",
-          ALL_PERMISSIONS.filter((key) => key !== permission)
-        );
-        const only = await seedUser(env.tenantId, "only", [permission]);
+        const extra = ALSO_REQUIRED[permission] ?? [];
+        const without = await seedUser(env.tenantId, "without", [
+          ...ALL_PERMISSIONS.filter((key) => key !== permission),
+          ...extra
+        ]);
+        const only = await seedUser(env.tenantId, "only", [
+          permission,
+          ...extra
+        ]);
+
+        if (extra.length > 0) {
+          // ...and the permission ALONE is not enough (review M-1, T3).
+          const bare = await seedUser(env.tenantId, "bare", [permission]);
+
+          expect((await run(id, bare.token)).status).toBe(403);
+        }
 
         expect((await run(id, without.token)).status).toBe(403);
         // "Allowed" means: past authorization. The action itself may then be a
@@ -593,6 +625,67 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         expect((await run(id, only.token)).status).not.toBe(403);
       });
     }
+  });
+
+  test("#1143 M-1 (T3): owning ONE Meta number is not enough; a webhook needs the owner assignment on its WABA container too", async () => {
+    if (!handlerReady) return;
+
+    const waba = (await admin()`
+      INSERT INTO awcms_channel_accounts
+        (tenant_id, provider, account_kind, external_id, display_name,
+         auth_mode, status)
+      VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba', 'waba-t3-1', 'waba',
+              'api_token', 'connected')
+      RETURNING id
+    `) as { id: string }[];
+    const number = (await admin()`
+      INSERT INTO awcms_channel_accounts
+        (tenant_id, provider, account_kind, external_id, display_name,
+         auth_mode, status, parent_account_id)
+      VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba_phone_number',
+              '8880000000001', 'number', 'api_token', 'connected',
+              ${waba[0]!.id})
+      RETURNING id
+    `) as { id: string }[];
+    const holder = await seedUser(env.tenantId, "t3", [
+      "channel_accounts.webhooks.configure",
+      "whatsapp_delivery.meta_templates.configure",
+      "whatsapp_delivery.meta_signals.configure"
+    ]);
+    const other = await seedUser(env.tenantId, "t3-other", []);
+    const subscribe = () =>
+      call(createWebhookSubscriptionRoute, {
+        method: "POST",
+        path: `${BASE}/accounts/${number[0]!.id}/webhook-subscription`,
+        params: { id: number[0]!.id },
+        token: holder.token,
+        body: { appSecret: "0123456789abcdef0123456789abcdef" }
+      });
+    const assign = (accountId: string, tenantUserId: string) => admin()`
+      INSERT INTO awcms_channel_account_assignments
+        (tenant_id, account_id, tenant_user_id, kind)
+      VALUES (${env.tenantId}, ${accountId}, ${tenantUserId}, 'owner')
+    `;
+
+    // The holder owns the NUMBER; the WABA container belongs to someone else.
+    await assign(number[0]!.id, holder.tenantUserId);
+    await assign(waba[0]!.id, other.tenantUserId);
+
+    const refused = await subscribe();
+
+    expect(refused.status).toBe(404);
+    expect(
+      (
+        (await admin()`
+          SELECT count(*)::int AS n FROM awcms_channel_webhook_subscriptions
+        `) as { n: number }[]
+      )[0]!.n
+    ).toBe(0);
+
+    // Owning the container as well: allowed.
+    await assign(waba[0]!.id, holder.tenantUserId);
+
+    expect((await subscribe()).status).toBe(201);
   });
 
   test("the deployment switch answers 503 after authorization, and nothing is written", async () => {

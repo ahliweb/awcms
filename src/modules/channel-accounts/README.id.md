@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f9bd9f3f37eb0ae1e88659ce74076e7ab654d93e25205f0b6f8e7902600b456d -->
+<!-- i18n-source-hash: sha256:2e43411b2f5d8783241932675059e0b66b479b6cd8db048f0c298fb619e33b03 -->
 
 # `channel_accounts`
 
@@ -87,6 +87,14 @@ Refresh dijaga **lease** (`acquireRefreshLease`, compare-and-set pada baris kone
 - **Menyatakan dan mengatestasi butuh step-up segar dari orang yang punya faktor MFA** (bersyarat, aturan yang sama dengan rute kredensial, ADR-0141); orang tanpa faktor tidak terkunci dan tidak ada pendaftaran yang dipaksakan.
 - **Atestasi, bukan verifikasi.** Kesehatan akun dilaporkan konektor dan tidak pernah ditegaskan seseorang, dengan SATU pengecualian tercatat: StarSender tidak mendokumentasikan panggilan status tanpa efek samping, jadi `POST accounts/{id}/attest-device` memungkinkan operator yang memegang pernyataan aktifnya **sendiri** mengatestasi bahwa perangkat sudah terpasang (kredensial tersimpan, akun `pending` atau `degraded`, `WHATSAPP_STARSENDER_ENABLED=true`). Kesehatan berbunyi `OPERATOR_ATTESTED`; respons berkata `basis: operator_attested`. Bila StarSender membuktikan panggilan status, konektor menggantikannya.
 - Worker (`awcms_worker`) hanya memegang `SELECT` per kolom pada `(id, tenant_id, provider, text_version, revoked_at)` dan tidak ada lagi dari tabel ini.
+
+## Pengikatan WABA Meta dan webhook bertanda tangan (Issue #1143)
+
+- **Nomor Meta milik sebuah WABA.** `ChannelAccountPort.resolveWhatsappSender` (kapabilitas `channel_account` 1.2.0) menjawab `CONTAINER_BINDING_INVALID` (terminal) untuk `whatsapp_cloud` `waba_phone_number` yang induknya bukan container `waba` hidup dari provider yang sama, apa pun mode auth-nya, dan mengembalikan account id serta WABA id container bersama pengirim yang dapat dipakai. Container yang degraded, pending, revoked, atau disabled menjawab alasan statusnya sendiri.
+- **`POST /accounts/{id}/webhook-subscription`** (`webhooks.configure`, berisiko tinggi: penugasan `owner` pada nomor DAN pada container WABA-nya, juga `whatsapp_delivery.meta_templates.configure` DAN `whatsapp_delivery.meta_signals.configure`, karena langganan dapat memasok keadaan tingkat WABA itu (tinjauan keamanan M-1), step-up kondisional, `Idempotency-Key`, audit `warning` tanpa secret, token, atau external id; app secret tidak diverifikasi ke Meta): menyimpan app secret Meta write-only (purpose `webhook_signing_secret`) dan mencetak token callback opak `wcb1.<tenant>.<subscription>.<256 bit acak>` yang ditampilkan SEKALI (`revealed: true`; replay menjawab tanpanya). Hanya SHA-256-nya yang disimpan di `awcms_channel_webhook_subscriptions.callback_token_hash`. Langganan baru mencabut langganan lama nomor itu dan menghapus secret-nya.
+- **`ChannelWebhookVerifierPort`** (`application/webhook-subscription-directory.ts`) adalah yang ditanyakan webhook publik `whatsapp_delivery`, dalam transaksi tenant yang disebut token: hash token (constant-time, terhadap dummy bila tak ada baris yang cocok), langganan `active` `hmac_signature`, nomor Meta hidup dengan WABA hidup, dan `X-Hub-Signature-256` atas byte persis (constant-time). App secret hanya didekripsi oleh role APLIKASI; kebijakan worker `sql/328` tetap menyembunyikan setiap `webhook_signing_secret` dari `awcms_worker`.
+- `disconnect` dan `delete` mencabut langganan akun DAN menghapus permanen ciphertext secret penandatangannya, sama seperti rotasi (tinjauan keamanan M-3).
+- Belum dikerjakan: layar untuk langganan (`webhooks.configure` ada di `NOT_YET_SCREENED`).
 
 ## Retensi dan jawaban subjek data
 

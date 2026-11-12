@@ -36,6 +36,7 @@ import {
   resetHandlerDatabase,
   teardownHandlerDatabase
 } from "./harness";
+import { seedMetaWabaContainer } from "./meta-waba-fixture";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { defineProgressSseRoute } from "../../src/modules/_shared/progress-sse-route";
@@ -215,13 +216,16 @@ async function seedSender(
   officeId: string | null
 ): Promise<string> {
   phone += 1;
+  // Issue #1143: a Meta number sends only under a live WABA container.
+  const wabaId = await seedMetaWabaContainer(admin(), tenant, `waba-${phone}`);
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
-       account_kind, external_id, display_name, auth_mode, status)
+       account_kind, external_id, display_name, auth_mode, status,
+       parent_account_id)
     VALUES (${tenant}, ${officeId ? "office" : null}, ${officeId},
             'whatsapp_cloud', 'waba_phone_number', ${String(phone)},
-            ${`n-${phone}`}, 'api_token', 'connected')
+            ${`n-${phone}`}, 'api_token', 'connected', ${wabaId})
     RETURNING id
   `) as { id: string }[];
 

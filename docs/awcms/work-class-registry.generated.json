@@ -617,6 +617,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/channel-accounts/accounts/[id]/webhook-subscription.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/channel-accounts/accounts/index.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -2473,6 +2478,16 @@
     },
     {
       "path": "src/pages/api/v1/whatsapp/messages/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/meta-signals/[id]/clear-restriction.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/meta-templates.ts",
       "workClass": "interactive",
       "source": "factory"
     },

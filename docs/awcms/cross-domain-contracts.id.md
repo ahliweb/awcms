@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:decb7cd62381e6ce5de62420354f49fc92444ef16870fcfae66883c9665a1895 -->
+<!-- i18n-source-hash: sha256:eb4825ae11337266b4fb2f76420f257f3213eeabfe871037bb5d735060a4dc84 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -462,6 +462,19 @@ Penarikan dan supresi tetap berlaku di seluruh tenant;
 pesan transaksional dan keamanan tidak berubah. Tidak ada field atau signature
 yang berubah; `booking` memetakan alasan yang tak dikenal ke kode kasar dan tidak
 terdampak. `whatsapp_delivery` didaftarkan pada `1.2.0`.
+
+**Versi 1.3.0 (Issue #1143) bersifat aditif.** Alasan penolakan mendapat
+`TEMPLATE_NOT_APPROVED` dan `OUTSIDE_SERVICE_WINDOW`, yang hanya dikembalikan
+untuk pesan melalui nomor Meta Cloud API MILIK TENANT: template wajib disetujui
+pada WABA nomor ITU dengan kategori yang dituntut tujuannya, dan registrasi tanpa
+template penyedia hanya boleh dikirim di dalam jendela 24 jam yang dibuka
+penerima dengan nomor ITU. Tidak pernah untuk pengirim deployment, tidak pernah
+untuk StarSender. Identitas pengirim terverifikasi (phone number id, WABA id)
+di-snapshot pada baris oleh guard database. Tidak ada field atau signature yang
+berubah. `whatsapp_delivery` didaftarkan pada `1.3.0`, dan `channel_account` pada
+`1.2.0` (alasan penolakan `CONTAINER_BINDING_INVALID`, identitas container
+opsional dari pengirim yang di-resolve, dan `ChannelWebhookVerifierPort` yang
+diekspor untuk webhook Meta bertanda tangan).
 
 ### 5.1 Port pengiriman Telegram (live, #965)
 

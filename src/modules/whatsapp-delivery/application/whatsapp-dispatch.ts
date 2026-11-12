@@ -138,6 +138,10 @@ import {
   emitWhatsappDispatchFailedEvent,
   emitWhatsappMessageEvent
 } from "./whatsapp-event-emit";
+import {
+  decideMetaSendForMessage,
+  readMetaRestriction
+} from "./whatsapp-meta-directory";
 
 const MODULE_KEY = "whatsapp_delivery";
 
@@ -151,8 +155,14 @@ const SENDER_HOLD_MS = 5 * 60_000;
 /** Holds that COUNT an attempt and end in a terminal failure, not an indefinite wait (Issue #1233 L1). */
 const BOUNDED_HOLD_REASONS: ReadonlySet<string> = new Set([
   "CREDENTIAL_REJECTED",
-  "PROVIDER_CONFIG_INVALID"
+  "PROVIDER_CONFIG_INVALID",
+  // Issue #1143: Meta reports the sender's WABA restricted (banned,
+  // restricted, deleted, offboarded, app uninstalled). Retried with backoff,
+  // counted, then terminal; never sent through another number.
+  "SENDER_RESTRICTED"
 ]);
+/** Issue #1143: after the provider answered "rate limited", the rest of THAT sender's lane waits this long (not counted as an attempt). */
+const RATE_LIMIT_HOLD_MS = 60_000;
 /** Most lanes one pass serves; the oldest-waiting come first, so a lane past this limit is served by the next pass, not starved. */
 const MAX_LANES_PER_PASS = 64;
 
@@ -174,6 +184,9 @@ type ClaimedRow = {
   expires_at: Date | string | null;
   retry_count: string | number;
   created_at: Date | string;
+  /** Issue #1143: the verified identity snapshotted at enqueue (NULL on rows queued before `sql/365`). */
+  sender_external_id: string | null;
+  sender_container_external_id: string | null;
 };
 
 export type DispatchWhatsappQueueOptions = {
@@ -422,7 +435,8 @@ async function claimEligibleMessages(
                   t.correlation_id, t.template_key, t.purpose,
                   t.recipient, t.recipient_hash, t.recipient_masked, t.body,
                   t.variables, t.contains_secret, t.expires_at, t.retry_count,
-                  t.created_at
+                  t.created_at, t.sender_external_id,
+                  t.sender_container_external_id
       `;
 
       // `UPDATE ... RETURNING` does not preserve the CTE's ORDER BY, so the
@@ -713,11 +727,23 @@ type LaneState = {
   credentialRejected: boolean;
   /** Rows gated since the verdict and provider were last resolved (Issue #1231 L1). */
   rowsSinceRevalidation: number;
+  /**
+   * Issue #1143. The provider answered "rate limited" for this sender: the rest
+   * of its lane waits ({@link RATE_LIMIT_HOLD_MS}) instead of hammering it.
+   */
+  rateLimited: boolean;
+  /** Issue #1143. The WABA's restriction, read once per revalidation window (`undefined` = not read yet). */
+  restriction: string | null | undefined;
 };
 
 type RowGate =
-  | ({ ok: true } & LaneProvider)
-  | { ok: false; kind: "terminal" | "hold"; reason: string };
+  | ({ ok: true; metaWabaId: string | null } & LaneProvider)
+  | {
+      ok: false;
+      kind: "terminal" | "hold";
+      reason: string;
+      holdMs?: number;
+    };
 
 /**
  * Dispatches one batch of due `awcms_whatsapp_messages` rows for ONE tenant.
@@ -845,7 +871,9 @@ export async function dispatchWhatsappQueue(
       provider: null,
       providerFailure: null,
       credentialRejected: false,
-      rowsSinceRevalidation: 0
+      rowsSinceRevalidation: 0,
+      rateLimited: false,
+      restriction: undefined
     };
     let enforceQuota = false;
 
@@ -1042,7 +1070,7 @@ export async function dispatchWhatsappQueue(
    */
   async function gateRow(lane: LaneState, entry: ClaimedRow): Promise<RowGate> {
     if (lane.senderAccountId === null) {
-      return { ok: true, ...lane.deployment! };
+      return { ok: true, metaWabaId: null, ...lane.deployment! };
     }
 
     const accountId = lane.senderAccountId;
@@ -1062,6 +1090,7 @@ export async function dispatchWhatsappQueue(
       lane.verdicts.clear();
       lane.provider = null;
       lane.providerFailure = null;
+      lane.restriction = undefined;
       lane.rowsSinceRevalidation = 0;
     }
 
@@ -1102,6 +1131,68 @@ export async function dispatchWhatsappQueue(
 
     if (!senderScopeAllows(verdict.sender.businessScope, rowScope)) {
       return { ok: false, kind: "terminal", reason: "SCOPE_MISMATCH" };
+    }
+
+    // Issue #1143: the row is sent ONLY from the identity it was queued for.
+    // A row queued before `sql/365` has no snapshot and is bound by the
+    // current record (which must still have a valid WABA, below).
+    if (
+      entry.sender_external_id !== null &&
+      entry.sender_external_id !== verdict.sender.externalId
+    ) {
+      return { ok: false, kind: "terminal", reason: "SENDER_BINDING_CHANGED" };
+    }
+
+    let metaWabaId: string | null = null;
+
+    if (verdict.sender.provider === "whatsapp_cloud") {
+      metaWabaId = verdict.sender.containerExternalId ?? null;
+
+      if (!metaWabaId || !verdict.sender.containerAccountId) {
+        return {
+          ok: false,
+          kind: "terminal",
+          reason: "CONTAINER_BINDING_INVALID"
+        };
+      }
+
+      if (
+        entry.sender_container_external_id !== null &&
+        entry.sender_container_external_id !==
+          verdict.sender.containerExternalId
+      ) {
+        return {
+          ok: false,
+          kind: "terminal",
+          reason: "SENDER_BINDING_CHANGED"
+        };
+      }
+
+      if (lane.restriction === undefined) {
+        const wabaId = metaWabaId;
+
+        lane.restriction = await withTenantOrThrow(
+          sql,
+          tenantId,
+          (tx) => readMetaRestriction(tx, tenantId, wabaId),
+          { workClass: "background_sync" }
+        );
+      }
+
+      if (lane.restriction) {
+        return { ok: false, kind: "hold", reason: "SENDER_RESTRICTED" };
+      }
+    }
+
+    if (lane.rateLimited) {
+      // Backoff after the provider's rate-limit answer (Issue #1143): the rest
+      // of this sender's lane waits, uncounted; other senders are unaffected.
+      return {
+        ok: false,
+        kind: "hold",
+        reason: "RATE_LIMITED",
+        holdMs: RATE_LIMIT_HOLD_MS
+      };
     }
 
     if (lane.providerFailure) {
@@ -1188,7 +1279,7 @@ export async function dispatchWhatsappQueue(
       };
     }
 
-    return { ok: true, ...lane.provider };
+    return { ok: true, metaWabaId, ...lane.provider };
   }
 
   /**
@@ -1326,7 +1417,7 @@ export async function dispatchWhatsappQueue(
           sql,
           tenantId,
           entry.id,
-          new Date(clock().getTime() + SENDER_HOLD_MS),
+          new Date(clock().getTime() + (gate.holdMs ?? SENDER_HOLD_MS)),
           leaseUntil
         );
         result.held += 1;
@@ -1354,7 +1445,7 @@ export async function dispatchWhatsappQueue(
       return;
     }
 
-    const { provider, providerName } = gate;
+    const { provider, providerName, metaWabaId } = gate;
 
     // 3. Eligibility, read again immediately before the send, under EVERY ring key.
     //    Keyed by the recipient, never by the sender (ADR-0148 section 4); a
@@ -1427,6 +1518,56 @@ export async function dispatchWhatsappQueue(
 
     const variables = entry.variables ?? {};
 
+    // 4b. Meta's own rules for a TENANT-OWNED Meta number (Issue #1143), read
+    //     again immediately before the send: the template must still be
+    //     approved on THIS sender's WABA (a webhook may have paused it), or a
+    //     free-text row must still be inside the recipient's 24-hour window
+    //     with THIS number. Terminal, never free text instead of a template,
+    //     never another number.
+    let serviceWindowOpen = false;
+
+    if (metaWabaId !== null && lane.senderAccountId !== null) {
+      const senderAccountId = lane.senderAccountId;
+      const meta = await withTenantOrThrow(
+        sql,
+        tenantId,
+        (tx) =>
+          decideMetaSendForMessage(tx, {
+            tenantId,
+            senderAccountId,
+            wabaId: metaWabaId,
+            purpose: entry.purpose as
+              "transactional" | "security" | "marketing",
+            providerTemplate: template.providerTemplate,
+            hashes,
+            now: clock()
+          }),
+        { workClass: "background_sync" }
+      );
+
+      if (!meta.ok) {
+        const code =
+          meta.reason === "TEMPLATE_NOT_APPROVED"
+            ? "template_not_approved"
+            : "outside_service_window";
+
+        await terminal(
+          "failed",
+          retryCount,
+          code,
+          meta.reason === "TEMPLATE_NOT_APPROVED"
+            ? "The template is not approved on this sender's WABA."
+            : "The recipient's 24-hour service window with this sender is closed."
+        );
+        result.failed += 1;
+        summary.failed += 1;
+
+        return;
+      }
+
+      serviceWindowOpen = meta.mode === "session";
+    }
+
     // 5. SEND — outside any transaction.
     const sendResult = await provider.send({
       to: entry.recipient,
@@ -1437,7 +1578,8 @@ export async function dispatchWhatsappQueue(
         ? { providerTemplate: template.providerTemplate }
         : {}),
       parameters: template.variables.map((name) => variables[name] ?? ""),
-      correlationId: messageCorrelationId
+      correlationId: messageCorrelationId,
+      ...(serviceWindowOpen ? { serviceWindowOpen: true } : {})
     });
 
     if (sendResult.ok) {
@@ -1504,6 +1646,12 @@ export async function dispatchWhatsappQueue(
       // without another call; the credential or the pairing is the tenant's to
       // fix, and no other sender, device or credential is tried.
       lane.credentialRejected = true;
+    }
+
+    if (sendResult.failureCode === "rate_limited" && lane.senderAccountId) {
+      // Issue #1143: back off THIS sender for the rest of the pass; the row
+      // itself is retried with backoff below. No other sender is tried.
+      lane.rateLimited = true;
     }
 
     if (sendResult.recipientInvalid) {

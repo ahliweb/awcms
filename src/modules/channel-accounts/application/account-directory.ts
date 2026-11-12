@@ -28,6 +28,7 @@ import type {
   UpdateAccountInput
 } from "../domain/channel-accounts-validation";
 import type { SecretStorePort } from "./secret-store";
+import { revokeAccountWebhookSubscriptions } from "./webhook-subscription-directory";
 
 export type AccountView = {
   id: string;
@@ -795,12 +796,8 @@ export async function disconnectAccount(
         updated_at = now(), version = version + 1
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
   `;
-  await tx`
-    UPDATE awcms_channel_webhook_subscriptions
-    SET status = 'revoked', updated_at = now()
-    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
-      AND status <> 'revoked'
-  `;
+  // Revoked AND their app-secret ciphertext erased (Issue #1143 review M-3).
+  await revokeAccountWebhookSubscriptions(tx, store, tenantId, accountId);
   await eraseAccountCredential(
     tx,
     store,
@@ -861,12 +858,8 @@ export async function deleteAccount(
     accountId,
     account.secretId
   );
-  await tx`
-    UPDATE awcms_channel_webhook_subscriptions
-    SET status = 'revoked', updated_at = now()
-    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
-      AND status <> 'revoked'
-  `;
+  // Revoked AND their app-secret ciphertext erased (Issue #1143 review M-3).
+  await revokeAccountWebhookSubscriptions(tx, store, tenantId, accountId);
   await tx`
     UPDATE awcms_channel_accounts
     SET status = 'deleted', deleted_at = now(), deleted_by = ${actorTenantUserId},

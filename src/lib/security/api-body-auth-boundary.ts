@@ -291,6 +291,12 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     reason:
       "Mailketing calls it, never a person, and documents no signature: the opaque per-account token in the path only locates the tenant and account, compared in constant time after a per-address bucket and a 32 KiB cap. Every event is quarantined as unauthenticated and changes no state (ADR-0151 section 5 strict); off (EMAIL_WEBHOOK_ENABLED unset) it is a 404."
   },
+  {
+    method: "POST",
+    pattern: "/api/v1/whatsapp/webhooks/meta/:token",
+    reason:
+      "Meta's WhatsApp Cloud API calls it, never a person (Issue #1143). Two credentials, both compared in constant time: the opaque per-account callback token in the path (tenant and account are resolved from it, never from the payload) and X-Hub-Signature-256, the HMAC-SHA256 of the exact body under that number's app secret. Every refusal is one 401; a per-(tenant, address) bucket answers 429 before any database work; off (WHATSAPP_ENABLED unset) it is a 404."
+  },
 
   // ---- Retired: answers 410 without reading anything ----
   {

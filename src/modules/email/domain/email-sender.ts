@@ -211,6 +211,10 @@ export function classifyEmailSenderUnavailable(
     case "RISK_ACKNOWLEDGEMENT_REQUIRED":
     case "PROVIDER_ADAPTER_DISABLED":
     case "CONNECTION_NOT_ACTIVE":
+    // Issue #1143 (channel_account 1.4.0): a Meta number with no live WABA
+    // container. Never produced for a Mailketing sender, but the reason union
+    // is shared and the switch must stay exhaustive.
+    case "CONTAINER_BINDING_INVALID":
       return "terminal";
     case "CHANNEL_ACCOUNTS_DISABLED":
     case "CONNECTION_EXPIRED":

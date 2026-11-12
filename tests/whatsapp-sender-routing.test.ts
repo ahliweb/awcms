@@ -251,6 +251,7 @@ describe("scope and capability rules", () => {
     const reasons: Record<SenderUnavailableReason, "terminal" | "hold"> = {
       ACCOUNT_NOT_FOUND: "terminal",
       NOT_A_WHATSAPP_SENDER: "terminal",
+      CONTAINER_BINDING_INVALID: "terminal",
       ACCOUNT_REVOKED: "terminal",
       ACCOUNT_DISABLED: "terminal",
       CAPABILITY_DENIED: "terminal",
@@ -274,7 +275,13 @@ describe("scope and capability rules", () => {
 });
 
 describe("no fallback to the deployment sender (#1233 test gap a)", () => {
-  const fakeTx = (() => {
+  const fakeTx = ((strings: TemplateStringsArray) => {
+    // Issue #1143: the one read an explicit META sender adds is its WABA's
+    // restriction (none here).
+    if (strings.join("?").includes("awcms_whatsapp_meta_sender_signals")) {
+      return Promise.resolve([]);
+    }
+
     throw new Error("no query may run for an explicit sender");
   }) as unknown as Bun.SQL;
   const decide = (
@@ -347,7 +354,9 @@ describe("no fallback to the deployment sender (#1233 test gap a)", () => {
             provider: "whatsapp_cloud" as const,
             accountKind: "waba_phone_number",
             externalId: "1234567890",
-            businessScope: null
+            businessScope: null,
+            containerAccountId: "c0000000-0000-4000-8000-000000000001",
+            containerExternalId: "2234567890"
           }
         };
       }
@@ -695,7 +704,26 @@ function scriptedTx(tables: {
     if (text.includes("FROM awcms_channel_accounts")) {
       const isParent = values.includes("parent-1");
 
-      return [isParent ? tables.parent : tables.account].filter(Boolean);
+      // Issue #1143: a Meta number belongs to a WABA. Unless a test scripts
+      // its own parent, `parent-1` is a connected `waba` container.
+      const parent =
+        tables.parent === undefined
+          ? {
+              id: "parent-1",
+              business_scope_type: null,
+              business_scope_id: null,
+              provider: "whatsapp_cloud",
+              account_kind: "waba",
+              external_id: "2098765432109",
+              auth_mode: "api_token",
+              connection_id: null,
+              parent_account_id: null,
+              secret_id: null,
+              status: "connected"
+            }
+          : tables.parent;
+
+      return [isParent ? parent : tables.account].filter(Boolean);
     }
     if (text.includes("FROM awcms_channel_provider_connections")) {
       const id = values[1] as string;
@@ -733,7 +761,8 @@ const cloudAccount = (over: Record<string, unknown> = {}) => ({
   external_id: "1098765432109",
   auth_mode: "api_token",
   connection_id: null,
-  parent_account_id: null,
+  // Issue #1143: every Meta number in these fixtures belongs to a WABA.
+  parent_account_id: "parent-1",
   secret_id: "secret-1",
   status: "connected",
   ...over
@@ -764,7 +793,10 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
         provider: "whatsapp_cloud",
         accountKind: "waba_phone_number",
         externalId: "1098765432109",
-        businessScope: null
+        businessScope: null,
+        // Issue #1143: the WABA the number belongs to, from the records.
+        containerAccountId: "parent-1",
+        containerExternalId: "2098765432109"
       }
     });
   });
@@ -1385,7 +1417,14 @@ describe("static contracts", () => {
         "awcms_whatsapp_delivery_attempts",
         "awcms_whatsapp_messages",
         "awcms_whatsapp_sender_policies",
-        "awcms_whatsapp_suppressions"
+        "awcms_whatsapp_suppressions",
+        // Issue #1143 (sql/365): none of these is a queue. Approvals, WABA
+        // signals, 24-hour windows and webhook receipts; nothing is sent from
+        // them and the dispatcher claims only `awcms_whatsapp_messages`.
+        "awcms_whatsapp_meta_sender_signals",
+        "awcms_whatsapp_meta_templates",
+        "awcms_whatsapp_service_windows",
+        "awcms_whatsapp_webhook_receipts"
       ].sort()
     );
   });
@@ -1523,9 +1562,9 @@ describe("static contracts", () => {
   test("the port is versioned additively and registered", () => {
     expect(
       read("src/modules/_shared/capability-contract-versions.ts")
-    ).toContain('whatsapp_delivery: "1.2.0"');
+    ).toContain('whatsapp_delivery: "1.3.0"');
     expect(read("awcms-family-compatibility.yaml")).toContain(
-      'whatsapp_delivery: "1.2.0"'
+      'whatsapp_delivery: "1.3.0"'
     );
   });
 

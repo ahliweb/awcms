@@ -217,6 +217,8 @@ export function classifySenderUnavailable(
     case "RISK_ACKNOWLEDGEMENT_REQUIRED":
     case "PROVIDER_ADAPTER_DISABLED":
     case "CONNECTION_NOT_ACTIVE":
+    // Issue #1143: a Meta number with no live WABA container.
+    case "CONTAINER_BINDING_INVALID":
       return "terminal";
     case "CHANNEL_ACCOUNTS_DISABLED":
     case "CONNECTION_EXPIRED":

@@ -10,3 +10,8 @@ export const WHATSAPP_ATTEMPTS_LIFECYCLE_KEY =
 export const WHATSAPP_CONSENTS_LIFECYCLE_KEY = "whatsapp_delivery.consents";
 export const WHATSAPP_SUPPRESSIONS_LIFECYCLE_KEY =
   "whatsapp_delivery.suppressions";
+/** Issue #1143. */
+export const WHATSAPP_SERVICE_WINDOWS_LIFECYCLE_KEY =
+  "whatsapp_delivery.service_windows";
+export const WHATSAPP_WEBHOOK_RECEIPTS_LIFECYCLE_KEY =
+  "whatsapp_delivery.webhook_receipts";

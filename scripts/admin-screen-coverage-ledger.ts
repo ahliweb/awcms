@@ -261,6 +261,16 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "channel_accounts.risk_acknowledgements.create",
   "channel_accounts.risk_acknowledgements.read",
   "channel_accounts.risk_acknowledgements.revoke",
+  // Meta multi-WABA sender binding (4) — Issue #1143. API-first: the signed
+  // webhook subscription (app secret write-only, callback token shown once),
+  // the per-WABA template approvals with their evidence, and clearing a WABA
+  // restriction. Each needs its own screen next to the WABA it governs (the
+  // one-time token display has the same WCAG contract as the website source
+  // token); until then they are reachable only through the API.
+  "channel_accounts.webhooks.configure",
+  "whatsapp_delivery.meta_signals.configure",
+  "whatsapp_delivery.meta_templates.configure",
+  "whatsapp_delivery.meta_templates.read",
   // whatsapp_delivery sender routing (2) — Issue #1141, ADR-0148 section 4.
   // The default-sender action is on the channel-account detail screen (#1154),
   // which claims BOTH keys (`sender_policy.configure` for the action,
