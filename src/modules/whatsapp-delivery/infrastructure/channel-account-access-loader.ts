@@ -44,6 +44,21 @@ export type SenderAccess = {
     accountId: string,
     minimumKind: ChannelAssignmentKind
   ): Promise<boolean>;
+  /**
+   * {@link canUseAccount} for WABA-LEVEL state (template approvals, restriction
+   * and tier signals): additionally `false` when the account is tenant-wide
+   * (no business scope) and the caller is scope-confined, because tenant-wide
+   * state is not a confined caller's (the rule of `policyVisible`/
+   * `canMakeDefault` in `whatsapp-sender-screen.ts`; #1267 audit M2). The
+   * same single `false` as an unknown or invisible account, so a route can
+   * answer it with its not-found response (no existence oracle).
+   */
+  canUseWabaState(
+    context: SenderAccessContext,
+    guard: SenderAccessGuard,
+    accountId: string,
+    minimumKind: ChannelAssignmentKind
+  ): Promise<boolean>;
   /** Whether the caller holds `scope` through the access chokepoint. */
   scopeCovered(
     context: SenderAccessContext,
@@ -78,31 +93,48 @@ export async function loadSenderAccess(): Promise<SenderAccess | null> {
       isConfined: (context) => support.callerIsScopeConfined(context),
       coveredScopes: (context, guard) =>
         support.coveredScopesFor(context, guard),
-      canUseAccount: async (context, guard, accountId, minimumKind) => {
-        const account = await directory.fetchAccountRecord(
-          context.tx,
-          context.tenantId,
-          accountId
-        );
-
-        if (!account) return false;
-
-        const visible = await directory.isAccountVisibleTo(
-          context.tx,
-          context.tenantId,
-          accountId,
-          context.auth.context.tenantUserId,
-          await support.canSeeAllAccounts(context),
-          minimumKind
-        );
-
-        if (!visible) return false;
-
-        return account.businessScope
-          ? support.scopeCoveredFor(context, guard, account.businessScope)
-          : true;
-      }
+      canUseAccount: (context, guard, accountId, minimumKind) =>
+        usable(context, guard, accountId, minimumKind, false),
+      canUseWabaState: (context, guard, accountId, minimumKind) =>
+        usable(context, guard, accountId, minimumKind, true)
     };
+
+    async function usable(
+      context: SenderAccessContext,
+      guard: SenderAccessGuard,
+      accountId: string,
+      minimumKind: ChannelAssignmentKind,
+      tenantWideNeedsUnconfined: boolean
+    ): Promise<boolean> {
+      const account = await directory.fetchAccountRecord(
+        context.tx,
+        context.tenantId,
+        accountId
+      );
+
+      if (!account) return false;
+
+      const visible = await directory.isAccountVisibleTo(
+        context.tx,
+        context.tenantId,
+        accountId,
+        context.auth.context.tenantUserId,
+        await support.canSeeAllAccounts(context),
+        minimumKind
+      );
+
+      if (!visible) return false;
+
+      if (account.businessScope) {
+        return support.scopeCoveredFor(context, guard, account.businessScope);
+      }
+
+      // Tenant-wide account. Its WABA-level state is tenant-wide state, which a
+      // scope-confined caller (pending confinements included) does not hold.
+      return tenantWideNeedsUnconfined
+        ? !(await support.callerIsScopeConfined(context))
+        : true;
+    }
   } catch {
     // A module import, not a query: default-deny.
     return null;

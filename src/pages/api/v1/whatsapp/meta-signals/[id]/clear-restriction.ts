@@ -69,7 +69,7 @@ export const POST = defineTenantRoute<Prepared>({
 
     if (
       !wabaId ||
-      !(await access.canUseAccount(context, GUARD, prepared.id, "operator"))
+      !(await access.canUseWabaState(context, GUARD, prepared.id, "operator"))
     ) {
       return notFound();
     }

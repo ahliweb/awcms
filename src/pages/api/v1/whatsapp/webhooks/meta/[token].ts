@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 
 import { fail } from "../../../../../../modules/_shared/api-response";
 import { parseChannelCallbackToken } from "../../../../../../modules/_shared/channel-webhook-token";
+import type { VerifyMetaWebhookRefusal } from "../../../../../../modules/_shared/ports/channel-account-port";
 import { getDatabaseClient } from "../../../../../../lib/database/client";
 import { log } from "../../../../../../lib/logging/logger";
 import {
@@ -39,7 +40,9 @@ import { loadChannelWebhookVerifier } from "../../../../../../modules/whatsapp-d
  * 1. **Off means 404.** Without `WHATSAPP_ENABLED=true` the route does not
  *    exist (nothing read, nothing compared).
  * 2. **Two buckets BEFORE any database work.** A per-ADDRESS bucket of
- *    unverified requests (a verified request is refunded), which a caller
+ *    unverified requests (refunded once the token matched: a verified request,
+ *    or a refusal that is the token's own tenant's, which goes to that tenant's
+ *    denial bucket instead; #1267 audit M1), which a caller
  *    cannot dodge by choosing tenant uuids (security review M-2); then a
  *    per-(tenant, address) attempt bucket, so one tenant's genuine volume never
  *    spends another tenant's allowance. Over either: `429` with `retry-after` —
@@ -130,6 +133,19 @@ const IP_BUCKET = {
 const ipBucketKey = (client: string) =>
   `whatsapp-meta-webhook-unverified:${client}`;
 
+/**
+ * Refusals that come AFTER the callback token matched its stored hash (the
+ * verifier checks the token first). Only `DISABLED` and `TOKEN_INVALID` are
+ * requests whose token proved nothing; they keep spending the address bucket,
+ * so random or guessed tokens are still throttled by address (M-2).
+ */
+const TOKEN_MATCHED_REFUSALS: ReadonlySet<VerifyMetaWebhookRefusal> = new Set([
+  "SUBSCRIPTION_INACTIVE",
+  "BINDING_INVALID",
+  "SECRET_UNAVAILABLE",
+  "SIGNATURE_INVALID"
+]);
+
 export const POST: APIRoute = async ({ request, params, clientAddress }) => {
   if (!isWhatsappEnabled()) return refuse(404, "NOT_FOUND", "Not found.");
 
@@ -188,6 +204,15 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
         moduleKey: WHATSAPP_MODULE_KEY,
         reason: outcome.reason
       });
+
+      // #1267 audit M1: once the TOKEN matched, the refusal is that tenant's
+      // own (a wrong or stale app secret, a revoked subscription, a broken
+      // binding). Charging it to the address bucket let one misconfigured
+      // tenant 429 every other tenant's genuine deliveries from the same Meta
+      // address; it is charged to the tenant's own denial bucket instead.
+      if (TOKEN_MATCHED_REFUSALS.has(outcome.reason)) {
+        await refundSharedRateLimit(ipBucketKey(client), IP_BUCKET);
+      }
 
       return denied(tenant, client);
     }

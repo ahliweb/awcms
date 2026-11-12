@@ -6,6 +6,7 @@ import {
   auditChannelAccounts,
   badId,
   callerAlsoHolds,
+  callerIsScopeConfined,
   commonRefusal,
   loadAuthorizedAccount,
   readIdempotencyKey,
@@ -68,8 +69,9 @@ const CALLBACK_PATH_PREFIX = "/api/v1/whatsapp/webhooks/meta/";
  * assignment on the account AND on its WABA container, BOTH
  * `whatsapp_delivery.meta_templates.configure` and
  * `whatsapp_delivery.meta_signals.configure` (the subscription can write that
- * WABA-level state; review M-1), and a `warning` audit row with no secret,
- * token or external identifier.
+ * WABA-level state; review M-1), a caller NOT confined to business scopes
+ * when that container is tenant-wide (#1267 audit M2), and a `warning` audit
+ * row with no secret, token or external identifier.
  *
  * The app secret is NOT verified with Meta here (it is the operator's
  * statement of which secret signs this number's webhooks); a wrong secret only
@@ -141,6 +143,17 @@ export const POST = defineTenantRoute<Prepared>({
       );
 
       if ("denied" in container) return container.denied;
+
+      // #1267 audit M2: a tenant-wide WABA's template approvals and
+      // restrictions are tenant-wide state, which a scope-confined caller
+      // (pending confinements included) does not hold. The same 404 as an
+      // invisible container: no existence oracle.
+      if (
+        container.account.businessScope === null &&
+        (await callerIsScopeConfined(context))
+      ) {
+        return accountNotFound();
+      }
     }
 
     const stepUp = await requireConditionalStepUp(context);

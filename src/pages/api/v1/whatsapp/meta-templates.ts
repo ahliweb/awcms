@@ -57,7 +57,7 @@ export const GET = defineTenantRoute({
       let known = seen.get(accountId);
 
       if (known === undefined) {
-        known = await access.canUseAccount(
+        known = await access.canUseWabaState(
           context,
           READ_GUARD,
           accountId,
@@ -155,7 +155,7 @@ export const PUT = defineTenantRoute<Prepared>({
       );
 
     if (
-      !(await access.canUseAccount(
+      !(await access.canUseWabaState(
         context,
         CONFIGURE_GUARD,
         validation.value.containerAccountId,

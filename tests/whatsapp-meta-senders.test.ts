@@ -336,6 +336,98 @@ describe("the webhook payload is read within the token's binding", () => {
       parseMetaWebhook({ object: "page", entry: [] }, binding, now)
     ).toEqual({ actions: [], bindingMismatches: 0, ignored: 1 });
   });
+
+  // #1267 audit M3: `entry.time` orders template, limit and account events.
+  // A future one would win against every genuine later event (state frozen
+  // until 2100); a finite but out-of-range one was an `Invalid Date`, a 503,
+  // and Meta retrying the delivery for a week.
+  // An inbound message timestamp past the Date range is unreadable: the
+  // message is ignored, never an `Invalid Date` window.
+  test.each([
+    ["the year 2100", 4102444800, ["account", "inbound", "template"]],
+    ["1e300", 1e300, ["account", "template"]],
+    [
+      "a twelve-digit string far in the future",
+      "999999999999",
+      ["account", "inbound", "template"]
+    ]
+  ] as const)(
+    "an entry.time of %s is clamped to the moment the webhook arrived",
+    (_label, time, kinds) => {
+      const parsed = parseMetaWebhook(
+        {
+          object: "whatsapp_business_account",
+          entry: [
+            {
+              id: "222",
+              time,
+              changes: [
+                {
+                  field: "message_template_status_update",
+                  value: {
+                    event: "APPROVED",
+                    message_template_category: "MARKETING",
+                    message_template_name: "promo",
+                    message_template_language: "en_US"
+                  }
+                },
+                {
+                  field: "account_update",
+                  value: { event: "DISABLED_UPDATE" }
+                },
+                {
+                  field: "messages",
+                  value: {
+                    metadata: { phone_number_id: "111" },
+                    messages: [{ from: "6281234567890", timestamp: time }]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        binding,
+        now
+      );
+      const stamped = parsed.actions.flatMap((action) =>
+        "eventAt" in action
+          ? [action.eventAt]
+          : action.kind === "inbound"
+            ? [action.at]
+            : []
+      );
+
+      expect(parsed.actions.map((action) => action.kind).sort()).toEqual([
+        ...kinds
+      ]);
+      for (const at of stamped) expect(at.getTime()).toBe(now.getTime());
+    }
+  );
+
+  test("a past entry.time is kept as Meta stated it", () => {
+    const parsed = parseMetaWebhook(
+      {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: "222",
+            time: Math.floor(now.getTime() / 1000) - 3600,
+            changes: [
+              {
+                field: "account_update",
+                value: { event: "DISABLED_UPDATE" }
+              }
+            ]
+          }
+        ]
+      },
+      binding,
+      now
+    );
+    const account = parsed.actions[0] as { eventAt: Date };
+
+    expect(account.eventAt.getTime()).toBe(now.getTime() - 3_600_000);
+  });
 });
 
 describe("validation and the adapter", () => {

@@ -379,9 +379,14 @@ function unixSeconds(value: unknown): Date | null {
         ? Number(value)
         : NaN;
 
-  return Number.isFinite(seconds) && seconds > 0
-    ? new Date(seconds * 1000)
-    : null;
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+
+  const at = new Date(seconds * 1000);
+
+  // `1e300` is finite but past the Date range: an `Invalid Date` would reach
+  // the database as a value it rejects, a 503, and Meta retrying for 7 days
+  // (#1267 audit M3). Unreadable, so the caller's fallback applies.
+  return Number.isNaN(at.getTime()) ? null : at;
 }
 
 /**
@@ -440,7 +445,12 @@ export function parseMetaWebhook(
       continue;
     }
 
-    const entryTime = unixSeconds(entry.time) ?? now;
+    // Clamped like an inbound timestamp (#1267 audit M3): a future `entry.time`
+    // would make this event "newer" than every genuine later one and freeze the
+    // WABA's template and restriction state until that date.
+    const statedTime = unixSeconds(entry.time);
+    const entryTime =
+      statedTime && statedTime.getTime() <= now.getTime() ? statedTime : now;
 
     for (const rawChange of changes.slice(0, 100)) {
       const change = asRecord(rawChange);
