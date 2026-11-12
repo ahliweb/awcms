@@ -100,6 +100,10 @@ import {
   resolvePlatformTenant,
   resolveTenancyMode
 } from "../src/lib/tenant/platform-tenant";
+import {
+  listMissingCdnPurgeSettings,
+  loadCdnPurgeConfig
+} from "../src/lib/edge-cache/cdn-purge-config";
 import { validateEnv } from "./validate-env";
 
 export type CheckSeverity = "critical" | "warning" | "info";
@@ -4977,6 +4981,17 @@ export function checkEdgeCacheConfigured(
       status: "pass",
       evidence:
         "EDGE_CACHE_MODE is off (or unset) — the edge-cache subsystem is inert: no surrogate headers are emitted and no invalidation is attempted."
+    };
+  }
+
+  const cdnMissing = listMissingCdnPurgeSettings(loadCdnPurgeConfig(env));
+
+  if (cdnMissing.length > 0) {
+    return {
+      name,
+      severity: "critical",
+      status: "fail",
+      evidence: `EDGE_CACHE_CDN_PURGE=on but ${cdnMissing.join(", ")} ${cdnMissing.length === 1 ? "is" : "are"} unset or unusable. The purge worker refuses to run, so no invalidation (Varnish or CDN) is sent and the queue only grows until this is fixed.`
     };
   }
 
