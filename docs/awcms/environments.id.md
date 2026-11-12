@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:b399de66ab2fbf5af0ad8a1733ceff1e57c1bd652ef59afdd962b99b3eda40e2 -->
+<!-- i18n-source-hash: sha256:fcf2663d7db97b499c8c502e868229bff1c4d52a734d6a651dfc7f42e7c8e2d2 -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 
@@ -135,20 +135,6 @@ database, secret, dan integrasi keluar di daftar atas, bukan sebuah label.
 
 Jalankan `bun run config:validate` dan `bun run security:readiness` **sebelum**
 deploy pertama tiap environment.
-
-## Environment uji beban sementara per run (bukan environment permanen)
-
-Pengukuran kapasitas (ADR-0161, Issue #1283) tidak boleh berjalan terhadap
-deployment yang hidup, dan ADR-0083 menjaga repo ini tetap satu environment
-ter-deploy. Keputusan pemilik pada #1281 (2026-11-12, opsi A) karena itu **bukan**
-environment kedua: uji beban mendapat **app terpisah dan PostgreSQL sekali pakai
-berisi data sintetis, dibuat untuk satu run dan dihancurkan setelahnya**
-(`bun run loadtest:env:up` / `loadtest:env:down`). Ia hidup di satu workstation
-atau host build, mengikat ke `127.0.0.1`, memakai secret acak per run, dan tidak
-pernah membaca credential dari pemanggil, sehingga kontrak isolasi di atas
-berlaku secara konstruksi. Tidak ada baris yang ditambahkan ke tabel §Satu
-environment. Prosedur, pengaman, dan batasnya:
-[`load-testing.md`](load-testing.md).
 
 ## Tenant default & akun owner
 
@@ -485,6 +471,9 @@ Env aplikasi:
 ```bash
 EDGE_CACHE_MODE=auto        # `on` hanya untuk membuktikan lapisannya;
                             # `auto` meng-cache saat origin tertekan
+EDGE_CACHE_PUBLIC_SURFACES=pressure  # `always`: surface publik terdeklarasi
+                            # bisa di-cache CDN apa pun bebannya (s-maxage,
+                            # dibatasi EDGE_CACHE_MAX_TTL_SECONDS, jaga <=300)
 EDGE_CACHE_PURGE_ENDPOINT=http://<container-varnish>:80
 EDGE_CACHE_PURGE_TOKEN=<secret per environment>
 EDGE_CACHE_MAX_TTL_SECONDS=300

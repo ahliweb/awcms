@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](edge-cache-architecture.md)
 
-<!-- i18n-source-hash: sha256:59f261af35bac6aecf3504d11ed56b6253a68d29b602cf480079f9a7ed8709d8 -->
+<!-- i18n-source-hash: sha256:d134d20f54edbbaeb873c9ba62c70c07ee051dd4abfb701a957cc7b84e281aae -->
 
 # Arsitektur cache tepi (Varnish)
 
@@ -60,6 +60,41 @@ sebagai temuan **critical** justru karena kegagalan ini tidak berisik.
 | `on`   | Selalu iklankan TTL surface yang dideklarasikan. Tekanan tidak dikonsultasi sama sekali.                            |
 
 Mode **tidak pernah** mengubah _apa_ yang boleh di-cache — hanya _berapa lama_.
+
+### Surface publik tanpa bergantung beban (`EDGE_CACHE_PUBLIC_SURFACES`)
+
+`auto` membiarkan halaman publik tidak ter-cache di bawah ambang aktivasi,
+sehingga lonjakan pertama menanggung biaya origin penuh.
+`EDGE_CACHE_PUBLIC_SURFACES=always` (issue #1284,
+ADR-0161)
+menghapus ketergantungan itu untuk surface yang sudah dideklarasikan di
+`surface-registry.ts`:
+
+| Setelan              | Efek                                                                                                                                                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pressure` (default) | Perilaku saat ini: mode yang menentukan TTL.                                                                                                                                                                                                       |
+| `always`             | Surface terdeklarasi mengiklankan TTL-nya (dibatasi `EDGE_CACHE_MAX_TTL_SECONDS`) di `Surrogate-Control` **dan** `Cache-Control: public, max-age=0, s-maxage=<ttl>, must-revalidate`, yang dibaca tier CDN (Varnish membuang `Surrogate-Control`). |
+
+Tidak berefek saat `EDGE_CACHE_MODE=off`; nilai tak dikenal berarti `pressure`.
+`Cache-Control` milik route tetap tidak pernah ditimpa.
+
+**Tabel keputusan.** "Always" berlaku untuk setiap entri allow-list dan tidak
+untuk yang lain; allow-list itu sendiri tidak berubah.
+
+| Surface (key registri)                                                                                                                                                                                                       | Selalu aman?                     | Alasan                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `blog-index`, `blog-post`, `blog-taxonomy`, `blog-page`, `blog-discovery`, `seo-robots`, `seo-sitemap`, `seo-feed`, `theming-tokens`                                                                                         | Ya, dengan pemeriksaan yang sama | Anonim, berkunci tenant, fungsi dari konten terbit; semua pengecualian per-request tetap jalan |
+| Apa pun di luar registri, `/admin/**`, `/api/v1/**`, `/search`, URL token pratinjau, `/login`, catch-all                                                                                                                     | Tidak pernah (bukan allow-list)  | Tidak berubah dari ADR-0042                                                                    |
+| Permintaan ber-`Authorization` atau cookie `awcms_*`; respons ber-`Set-Cookie`, `private`/`no-store`/`no-cache`, `Vary: *`/`Cookie`/`Accept-Language`; bukan GET/HEAD; parameter query tak terdaftar; tenant tak ter-resolve | Tidak pernah                     | Pemeriksaan per-request di `cacheability.ts` berjalan sebelum TTL pada semua setelan           |
+
+Kunci cache, `Vary`, dan aturan locale-di-path (ADR-0098) tidak disentuh.
+
+**Batas kebasian.** Selama purge belum menjangkau CDN (bagian berikut, C14),
+salinan CDN paling lama berumur `s-maxage`. Dengan default
+`EDGE_CACHE_MAX_TTL_SECONDS=300` itu adalah **≤300 detik** yang sudah diterima;
+`validate-env` memberi peringatan (`edge_cache_cdn_ttl_exceeds_accepted_bound`)
+bila `always` digabung dengan batas lebih besar. Menaikkan batas butuh keputusan
+purge CDN (#1282) lebih dulu.
 
 ## Menambah surface cacheable
 

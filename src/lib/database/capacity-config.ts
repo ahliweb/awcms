@@ -98,6 +98,16 @@ export type PgBouncerCapacityConfig = {
   maxClientConnections: number;
   /** `pgbouncer.ini`'s `default_pool_size` — the ceiling on PgBouncer's OWN backend connections to real PostgreSQL. */
   defaultPoolSize: number;
+  /**
+   * How many distinct (database, user) pools PgBouncer keeps. PgBouncer's
+   * `default_pool_size` is PER (database, user) pair, so its real backend
+   * ceiling is `default_pool_size x poolCount`. `loadCapacityConfigFromEnv`
+   * derives it from the distinct role/database pairs in `DATABASE_URL`,
+   * `WORKER_DATABASE_URL` and `SETUP_DATABASE_URL` (classes that can run at
+   * all) and `DATABASE_CAPACITY_PGBOUNCER_POOL_COUNT` overrides it. Absent
+   * means 1 (Issue #1286).
+   */
+  poolCount?: number;
 };
 
 export type CapacityConfig = {
@@ -166,6 +176,51 @@ function parseBoundedInt(
   }
 
   return parsed;
+}
+
+/**
+ * Distinct `user@database` pairs among the connection strings the process
+ * classes use (a class with no URL of its own falls back to `DATABASE_URL`,
+ * exactly like `getNamedDatabaseClient`). Only the user name and database name
+ * are read, never the password, and neither leaves this function. Classes that
+ * cannot run (`max` instances 0) are skipped. Returns at least 1.
+ */
+export function countDistinctPgBouncerPools(
+  env: Record<string, string | undefined>,
+  instanceCounts: Record<ProcessClass, InstanceCountConfig>
+): number {
+  const urlVar: Record<ProcessClass, string> = {
+    app: "DATABASE_URL",
+    worker: "WORKER_DATABASE_URL",
+    setup: "SETUP_DATABASE_URL"
+  };
+  const pairs = new Set<string>();
+
+  for (const processClass of PROCESS_CLASSES) {
+    if (instanceCounts[processClass].max <= 0) {
+      continue;
+    }
+
+    const raw = env[urlVar[processClass]]?.trim() || env.DATABASE_URL?.trim();
+
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const url = new URL(raw);
+
+      pairs.add(
+        `${decodeURIComponent(url.username)}@${url.pathname.replace(/^\//, "")}`
+      );
+    } catch {
+      // An unparseable URL is reported by the runtime, not here; count it as
+      // its own pool so the budget errs on the safe (larger) side.
+      pairs.add(`unparseable:${processClass}`);
+    }
+  }
+
+  return Math.max(1, pairs.size);
 }
 
 function loadInstanceCounts(
@@ -238,6 +293,12 @@ export function loadCapacityConfigFromEnv(
         DEFAULT_PGBOUNCER_DEFAULT_POOL_SIZE,
         1,
         CONNECTION_BUDGET_MAX
+      ),
+      poolCount: parseBoundedInt(
+        env.DATABASE_CAPACITY_PGBOUNCER_POOL_COUNT,
+        countDistinctPgBouncerPools(env, instanceCounts),
+        1,
+        1000
       )
     },
     approvedConnections: parseBoundedInt(
@@ -445,7 +506,8 @@ export type CapacityBudgetReport = {
  *   1. App-side: `sum(instance_count x pool_max)` must fit within
  *      `pgBouncer.maxClientConnections` (`max_client_conn`) — PgBouncer
  *      itself refuses new client connections past that ceiling.
- *   2. Server-side: `pgBouncer.defaultPoolSize + reservedAdminHeadroom` must
+ *   2. Server-side: `pgBouncer.defaultPoolSize x poolCount (one pool per
+ *      distinct database/user pair) + reservedAdminHeadroom` must
  *      fit within `approvedConnections` — PgBouncer's OWN backend
  *      connections to real PostgreSQL (bounded by `default_pool_size`,
  *      independent of how many app-side clients are multiplexed onto them)
@@ -457,6 +519,13 @@ export type CapacityBudgetReport = {
  * your configured ceiling, does it still fit", not merely today's expected
  * usage.
  */
+/** PgBouncer's backend ceiling: `default_pool_size` is per (database, user) pool. */
+export function pgBouncerBackendCeiling(
+  pgBouncer: PgBouncerCapacityConfig
+): number {
+  return pgBouncer.defaultPoolSize * Math.max(1, pgBouncer.poolCount ?? 1);
+}
+
 export function evaluateCapacityBudget(
   config: CapacityConfig = loadCapacityConfigFromEnv()
 ): CapacityBudgetReport {
@@ -473,7 +542,8 @@ export function evaluateCapacityBudget(
       const appSideOk =
         usage.totalConnections <= config.pgBouncer.maxClientConnections;
       const serverSideOk =
-        config.pgBouncer.defaultPoolSize + config.reservedAdminHeadroom <=
+        pgBouncerBackendCeiling(config.pgBouncer) +
+          config.reservedAdminHeadroom <=
         config.approvedConnections;
 
       return !appSideOk || !serverSideOk;
@@ -491,7 +561,7 @@ export function evaluateCapacityBudget(
       code: "capacity_exceeds_budget_at_max",
       message: config.pgBouncer.enabled
         ? `At the configured max instance counts, app-side connections (${worstCase.totalConnections}) or ` +
-          `PgBouncer's backend pool (${config.pgBouncer.defaultPoolSize} + ${config.reservedAdminHeadroom} reserved) ` +
+          `PgBouncer's backend pool (${config.pgBouncer.defaultPoolSize} x ${Math.max(1, config.pgBouncer.poolCount ?? 1)} pool(s) + ${config.reservedAdminHeadroom} reserved) ` +
           `would exceed the approved capacity (client cap ${config.pgBouncer.maxClientConnections}, approved ${config.approvedConnections}).`
         : `At the configured max instance counts, sum(instance_count x pool_max) = ${worstCase.totalConnections} ` +
           `would leave less than the reserved admin headroom (${config.reservedAdminHeadroom}) free within the ` +

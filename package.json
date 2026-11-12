@@ -165,6 +165,8 @@
     "contracts:omes:sync": "bun scripts/sync-omes-contracts.ts",
     "contracts:omes:sync:check": "bun scripts/sync-omes-contracts.ts --check",
     "omes:contract:preflight": "bun scripts/omes-contract-preflight.ts",
+    "database:capacity:check": "bun scripts/database-capacity-check.ts",
+    "database:pgbouncer:verify": "bun scripts/database-pgbouncer-verify.ts",
     "db:pool:health": "bun scripts/db-pool-health.ts",
     "redis:health": "bun scripts/redis-health.ts",
     "changesets:policy:check": "bun scripts/changeset-policy-check.ts",

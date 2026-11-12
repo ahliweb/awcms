@@ -17,11 +17,30 @@
 ;   sudo systemctl enable --now pgbouncer
 ;
 ; When PgBouncer is fronting this app in transaction pool mode, set
-; DATABASE_PGBOUNCER=true in the app's environment — this automatically
-; disables prepared statements on the Bun.SQL client (see
-; docs/awcms/database-pooling.md §1), which are unsafe under PgBouncer
-; transaction mode because a prepared statement can be reused on a
-; different backend connection between transactions.
+; DATABASE_PGBOUNCER=true in the app's environment. That one switch (verified
+; against PgBouncer 1.25 with `bun run database:pgbouncer:verify`, Issue
+; #1286) does two things on the Bun.SQL client:
+;   - disables prepared statements (`prepare: false`), unsafe under
+;     transaction mode because a prepared statement can be reused on a
+;     different backend connection between transactions;
+;   - stops sending `statement_timeout` as a connection startup parameter.
+;     PgBouncer refuses it ("unsupported startup parameter") and the pool
+;     would never open. `withTenant` sets it per transaction instead
+;     (`SET LOCAL statement_timeout`). For queries outside a transaction set a
+;     role default: ALTER ROLE awcms_app SET statement_timeout = '15s';
+; Do NOT work around that with `ignore_startup_parameters = statement_timeout`:
+; the timeout would then be silently dropped.
+;
+; RLS: every tenant query runs inside `withTenant`'s transaction with
+; `SET LOCAL app.current_tenant_id`, which PgBouncer keeps on ONE backend for
+; the whole transaction and which resets at COMMIT/ROLLBACK. Never add
+; session-level state (plain SET, advisory session locks, LISTEN, WITH HOLD
+; cursors) to application code while this profile is on.
+;
+; default_pool_size is PER (database, user) pair. This app uses up to three
+; roles (awcms_app, awcms_worker, awcms_setup), so PgBouncer may hold
+; default_pool_size x 3 backend connections (plus reserve_pool_size when set).
+; `bun run database:capacity:check` counts the distinct pairs for you.
 ;
 ; auth_type = scram-sha-256 (Issue #682, epic #679, platform-hardening —
 ; was `md5`). Matches PostgreSQL 18's own default password hashing
@@ -50,7 +69,10 @@ listen_port = 6432
 auth_type = scram-sha-256
 auth_file = /etc/pgbouncer/userlist.txt
 pool_mode = transaction
-; max_client_conn menampung banyak koneksi pendek dari edge/serverless;
-; default_pool_size selaras dengan DATABASE_POOL_MAX aplikasi ini.
+; max_client_conn must cover instances x DATABASE_POOL_MAX of every process
+; class (`bun run database:capacity:check` computes it).
+; default_pool_size is the backend ceiling per (database, user) pair.
 max_client_conn = 200
 default_pool_size = 20
+; Protocol-level named prepared statements are not used (prepare: false).
+max_prepared_statements = 0

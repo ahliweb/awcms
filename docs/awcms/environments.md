@@ -484,6 +484,9 @@ Application env:
 ```bash
 EDGE_CACHE_MODE=auto        # `on` only to prove the layer works;
                             # `auto` caches when the origin is under pressure
+EDGE_CACHE_PUBLIC_SURFACES=pressure  # `always`: declared public surfaces are
+                            # CDN-cacheable regardless of load (s-maxage,
+                            # clamped to EDGE_CACHE_MAX_TTL_SECONDS, keep <=300)
 EDGE_CACHE_PURGE_ENDPOINT=http://<varnish-container>:80
 EDGE_CACHE_PURGE_TOKEN=<secret per environment>
 EDGE_CACHE_MAX_TTL_SECONDS=300

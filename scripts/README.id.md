@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:088d54ba7ed7a9da00dc4dbb2aa302e6b9f5197e3e2848943bc571cb2ada7739 -->
+<!-- i18n-source-hash: sha256:540d517dec329b6a05c1f8d2c0bcd1a24cf16ceb17368ae56a02199770a585a8 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-160 target menjalankan berkas di `scripts/`; 65 di antaranya
+162 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -84,6 +84,8 @@ terjadwal, atau oleh workflow CI tertentu.
 | `data-lifecycle:registry:check`           | `data-lifecycle-registry-check.ts`             | ✅   |
 | `data-lifecycle:table-coverage:check`     | `data-lifecycle-table-coverage-check.ts`       | ✅   |
 | `data-lifecycle:worker-grants:check`      | `data-lifecycle-worker-grants-check.ts`        | ✅   |
+| `database:capacity:check`                 | `database-capacity-check.ts`                   | —    |
+| `database:pgbouncer:verify`               | `database-pgbouncer-verify.ts`                 | —    |
 | `db:fk-index:check`                       | `db-fk-index-check.ts`                         | ✅   |
 | `db:function-search-path:check`           | `db-function-search-path-check.ts`             | ✅   |
 | `db:jsonb-binding:check`                  | `jsonb-binding-check.ts`                       | ✅   |
@@ -202,15 +204,15 @@ Rantai `check` harus aman dijalankan di checkout lokal mana pun tanpa database,
 tanpa server, dan tanpa konteks PR. Yang di luar rantai ada karena melanggar
 salah satu syarat itu:
 
-| Target                                                                  | Kenapa di luar `check`                                                                                         |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `security:readiness`                                                    | Butuh database termigrasi — memeriksa RLS `FORCE`, role app non-superuser, grant worker/setup                  |
-| `config:validate`                                                       | Butuh environment nyata (`process.env`, atau `--file <path>`). Jalankan sebelum deploy                         |
-| `db:migrate`, `db:pool:health`, `redis:health`, `email:provider:health` | Butuh database/Redis/provider yang berjalan                                                                    |
-| Seluruh worker terjadwal                                                | Butuh database, dan dijalankan cron/systemd — lihat `ModuleDescriptor.jobs` + `GET /api/v1/modules/{key}/jobs` |
-| `changesets:policy:check`                                               | Berbentuk PR-diff (`origin/main...HEAD`); dijalankan `.github/workflows/changesets.yml`                        |
-| `release:verify`                                                        | Hanya bermakna pada commit ber-tag `vX.Y.Z`; dijalankan job `validate` di `.github/workflows/release.yml`      |
-| `*:generate`                                                            | Pasangan tulis dari sebuah `*:check`. Yang menggerbangi CI adalah `:check`-nya                                 |
+| Target                                                                                               | Kenapa di luar `check`                                                                                         |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `security:readiness`                                                                                 | Butuh database termigrasi — memeriksa RLS `FORCE`, role app non-superuser, grant worker/setup                  |
+| `config:validate`                                                                                    | Butuh environment nyata (`process.env`, atau `--file <path>`). Jalankan sebelum deploy                         |
+| `db:migrate`, `db:pool:health`, `database:pgbouncer:verify`, `redis:health`, `email:provider:health` | Butuh database/Redis/provider yang berjalan                                                                    |
+| Seluruh worker terjadwal                                                                             | Butuh database, dan dijalankan cron/systemd — lihat `ModuleDescriptor.jobs` + `GET /api/v1/modules/{key}/jobs` |
+| `changesets:policy:check`                                                                            | Berbentuk PR-diff (`origin/main...HEAD`); dijalankan `.github/workflows/changesets.yml`                        |
+| `release:verify`                                                                                     | Hanya bermakna pada commit ber-tag `vX.Y.Z`; dijalankan job `validate` di `.github/workflows/release.yml`      |
+| `*:generate`                                                                                         | Pasangan tulis dari sebuah `*:check`. Yang menggerbangi CI adalah `:check`-nya                                 |
 
 Urutan otoritatif rantai `check` ada di `package.json` langsung — sengaja tidak
 diduplikasi di sini supaya tidak drift.
@@ -246,7 +248,6 @@ tetap hijau karena gate lamanya hanya membaca lima berkas markdown akar.
 | ----------------------------------------------- | ------------------------------------------------------------------ |
 | `config:docs:check`                             | Rekonsiliasi tiga-arah `.env.example` ↔ doc 18 ↔ `validate-env.ts` |
 | `i18n:extract` / `:pot:check` / `:parity:check` | Setup i18n (`.po`/`.pot`) + UI                                     |
-| `database:capacity:check`                       | Validasi kapasitas lintas-instance (preflight)                     |
 | `production:preflight`, `resilience:dr-drill`   | Mengagregasi gate di atas + server berjalan                        |
 | `performance:*`                                 | Harness beban + environment berukuran produksi                     |
 

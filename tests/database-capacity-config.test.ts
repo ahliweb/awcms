@@ -100,7 +100,8 @@ describe("loadCapacityConfigFromEnv", () => {
     expect(config.pgBouncer).toEqual({
       enabled: true,
       maxClientConnections: 500,
-      defaultPoolSize: 30
+      defaultPoolSize: 30,
+      poolCount: 1
     });
   });
 

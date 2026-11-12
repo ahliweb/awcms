@@ -110,7 +110,7 @@ esac
 # Source: OPERATOR_ONLY_TARGETS in scripts/jobs-env-allowlist.ts, where each
 # entry carries its reason. Do not edit between the markers; regenerate.
 case "$JOB" in
-  bench:booking | config:validate | jobs:env-allowlist:check | jobs:env-allowlist:generate | security:readiness | subject-data:coverage:check | telegram:webhook:register)
+  bench:booking | config:validate | database:capacity:check | database:pgbouncer:verify | jobs:env-allowlist:check | jobs:env-allowlist:generate | security:readiness | subject-data:coverage:check | telegram:webhook:register)
     log "$JOB is an operator-only command and does not run in a job container; refusing" >&2
     log "  It needs variables the runner never copies (or is a CI/developer gate), so" >&2
     log "  it would run against a partial environment and print a misleading report." >&2

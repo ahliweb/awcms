@@ -316,6 +316,42 @@ export function resolveClientIp(
 }
 
 /**
+ * Instances the deployment declares (`APP_INSTANCE_COUNT`, default 1). A
+ * malformed or sub-1 value reads as 1 here; `config:validate` is what rejects
+ * it, so a typo cannot make the limiter look multi-instance by accident.
+ */
+export function declaredInstanceCount(
+  env: Readonly<Record<string, string | undefined>> = process.env
+): number {
+  const parsed = Number.parseInt(env.APP_INSTANCE_COUNT?.trim() ?? "", 10);
+
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
+}
+
+let warnedMultiInstanceWithoutRedis = false;
+
+function warnIfMultiInstanceWithoutRedis(): void {
+  if (warnedMultiInstanceWithoutRedis) return;
+
+  const instances = declaredInstanceCount();
+
+  if (instances <= 1) return;
+
+  warnedMultiInstanceWithoutRedis = true;
+
+  log("error", "security.rate_limit.multi_instance_without_redis", {
+    instances,
+    reason:
+      "APP_INSTANCE_COUNT > 1 but Redis is not configured: each instance counts its own window, so every rate limit is effectively multiplied by the instance count. Set REDIS_ENABLED=true and REDIS_URL (ADR-0066, #1285)."
+  });
+}
+
+/** Test-only: re-arm the once-per-process multi-instance warning. */
+export function resetMultiInstanceWarningForTests(): void {
+  warnedMultiInstanceWithoutRedis = false;
+}
+
+/**
  * Shared, cross-instance rate limit backed by Redis — ADR-0066.
  *
  * Fixed window, same semantics as `checkRateLimit`: `INCR` the window's counter
@@ -338,7 +374,12 @@ export async function checkSharedRateLimit(
   const client = deps.client === undefined ? getRedisClient() : deps.client;
 
   if (!client) {
-    // No Redis configured: single-instance topology, nothing to share.
+    // No Redis configured: correct for ONE instance, nothing to share. When
+    // the deployment declares several, this is the N x limit defect (#1285):
+    // `config:validate` refuses that profile, and this says so loudly if it
+    // still reaches runtime (preflight skipped). Never silent.
+    warnIfMultiInstanceWithoutRedis();
+
     return checkRateLimit(key, config, now);
   }
 

@@ -6,9 +6,13 @@
  * (which is the whole reason Redis is involved), and that a Redis outage
  * degrades to ALLOW rather than to a site-wide login lockout.
  */
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { checkSharedRateLimit } from "../src/lib/security/rate-limit";
+import {
+  checkSharedRateLimit,
+  declaredInstanceCount,
+  resetMultiInstanceWarningForTests
+} from "../src/lib/security/rate-limit";
 
 const CONFIG = { maxAttempts: 3, windowMs: 60_000 };
 const NOW = 1_800_000_000_000;
@@ -182,5 +186,104 @@ describe("every authentication surface is limited", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("multi-instance deployments (#1285)", () => {
+  const previous = process.env.APP_INSTANCE_COUNT;
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env.APP_INSTANCE_COUNT;
+    else process.env.APP_INSTANCE_COUNT = previous;
+
+    resetMultiInstanceWarningForTests();
+  });
+
+  function captureLogs(run: () => Promise<void>) {
+    const lines: string[] = [];
+    const spy = spyOn(console, "log").mockImplementation((...args) => {
+      lines.push(args.join(" "));
+    });
+
+    return run()
+      .then(() => lines)
+      .finally(() => spy.mockRestore());
+  }
+
+  test("declaredInstanceCount defaults to 1 and ignores malformed values", () => {
+    expect(declaredInstanceCount({})).toBe(1);
+    expect(declaredInstanceCount({ APP_INSTANCE_COUNT: "3" })).toBe(3);
+    expect(declaredInstanceCount({ APP_INSTANCE_COUNT: "0" })).toBe(1);
+    expect(declaredInstanceCount({ APP_INSTANCE_COUNT: "two" })).toBe(1);
+  });
+
+  test("two limiter instances over one Redis enforce ONE window", async () => {
+    // Two "replicas" are two independent callers holding their own client
+    // handle to the same store; neither has any state of its own.
+    const redis = fakeRedis();
+    const replicaA = () =>
+      checkSharedRateLimit("ip:9.9.9.9", CONFIG, NOW, {
+        client: redis.client,
+        buildKey: (raw) => raw
+      });
+    const replicaB = () =>
+      checkSharedRateLimit("ip:9.9.9.9", CONFIG, NOW, {
+        client: { send: (c, a) => redis.client.send(c, a) },
+        buildKey: (raw) => raw
+      });
+
+    expect((await replicaA()).allowed).toBe(true);
+    expect((await replicaB()).allowed).toBe(true);
+    expect((await replicaA()).allowed).toBe(true);
+    // 4th request overall, from the instance that has seen only two of them.
+    expect((await replicaB()).allowed).toBe(false);
+  });
+
+  test("declared multi-instance without Redis logs a loud error, once", async () => {
+    process.env.APP_INSTANCE_COUNT = "2";
+    resetMultiInstanceWarningForTests();
+
+    const lines = await captureLogs(async () => {
+      await checkSharedRateLimit(`mi-${NOW}`, CONFIG, NOW, { client: null });
+      await checkSharedRateLimit(`mi-${NOW}`, CONFIG, NOW, { client: null });
+    });
+    const warned = lines.filter((line) =>
+      line.includes("security.rate_limit.multi_instance_without_redis")
+    );
+
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain('"level":"error"');
+  });
+
+  test("single-instance without Redis stays silent and unchanged", async () => {
+    delete process.env.APP_INSTANCE_COUNT;
+    resetMultiInstanceWarningForTests();
+
+    const lines = await captureLogs(async () => {
+      for (let i = 0; i < 4; i += 1) {
+        await checkSharedRateLimit(`si-${NOW}`, CONFIG, NOW, { client: null });
+      }
+    });
+
+    expect(lines.some((l) => l.includes("multi_instance_without_redis"))).toBe(
+      false
+    );
+  });
+
+  test("multi-instance WITH Redis does not warn", async () => {
+    process.env.APP_INSTANCE_COUNT = "3";
+    resetMultiInstanceWarningForTests();
+
+    const redis = fakeRedis();
+    const lines = await captureLogs(async () => {
+      await checkSharedRateLimit("k", CONFIG, NOW, {
+        client: redis.client,
+        buildKey: (raw) => raw
+      });
+    });
+
+    expect(lines.some((l) => l.includes("multi_instance_without_redis"))).toBe(
+      false
+    );
   });
 });
