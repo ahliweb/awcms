@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:540d517dec329b6a05c1f8d2c0bcd1a24cf16ceb17368ae56a02199770a585a8 -->
+<!-- i18n-source-hash: sha256:d8bf0a4228654f717da9c6df1cb941de9afa288b0bdbdb9bf208616590f17346 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-162 target menjalankan berkas di `scripts/`; 65 di antaranya
+163 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -151,6 +151,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `news-media:reconcile`                    | `news-media-r2-reconcile.ts`                   | —    |
 | `omes:contract:preflight`                 | `omes-contract-preflight.ts`                   | ✅   |
 | `omes:repository-progress:poll`           | `omes-repository-progress-poll.ts`             | —    |
+| `omnichannel-inbox:sla`                   | `omnichannel-inbox-sla.ts`                     | —    |
 | `openapi:bundle`                          | `openapi-bundle.ts`                            | —    |
 | `payroll:catalog-boundary:check`          | `payroll-catalog-boundary-check.ts`            | —    |
 | `payroll:sql-boundary:check`              | `payroll-sql-boundary-check.ts`                | ✅   |

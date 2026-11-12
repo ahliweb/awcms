@@ -253,6 +253,7 @@ describe("buildDomainEventConsumerRegistry", () => {
       "domain_event_runtime.activity_rollup_projector",
       "hr_workforce.attendance_correction_settler",
       "logging.sample_event_audit_projector",
+      "omnichannel_inbox.conversation_projector",
       "reporting.event_activity_projector"
     ]);
     expect(findMissingShippedConsumers(listModules())).toEqual([]);

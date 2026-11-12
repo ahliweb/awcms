@@ -853,7 +853,13 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
     // commission intake queue into the accrual ledger, and the payroll boundary
     // lets only the request role touch an accrual (ADR-0147, Issue #1189). Every
     // other scheduled job is withheld DATABASE_URL.
-    const APP_ROLE_SCHEDULED_JOBS = new Set(["hr-commission:intents:post"]);
+    // ADR-0160 (Issue #1164) adds the second: the inbox SLA job re-checks an
+    // assignee's role grants and enqueues the breach e-mail, which only the
+    // request role may read and write.
+    const APP_ROLE_SCHEDULED_JOBS = new Set([
+      "hr-commission:intents:post",
+      "omnichannel-inbox:sla"
+    ]);
 
     for (const job of scheduled) {
       const { lines, exitCode } = await runSelection(

@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 39    |
-| Migrations                          | 271   |
-| `awcms_*` tables                    | 268   |
-| Tables with `FORCE` RLS             | 250   |
+| Registered modules                  | 40    |
+| Migrations                          | 274   |
+| `awcms_*` tables                    | 273   |
+| Tables with `FORCE` RLS             | 255   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 821   |
-| Route files                         | 666   |
-| ADR                                 | 322   |
+| Test files                          | 825   |
+| Route files                         | 677   |
+| ADR                                 | 324   |
 
 ### Modules
 
@@ -59,6 +59,7 @@
 | `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 | `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 | `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
+| `omnichannel_inbox`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 
 ### Migrations
 
@@ -334,7 +335,10 @@
 | 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
 | 269 | `sql/379_awcms_email_provider_events_quarantine.sql`                   |
 | 270 | `sql/380_awcms_email_webhook_permissions.sql`                          |
-| 271 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
+| 271 | `sql/382_awcms_omnichannel_inbox_schema.sql`                           |
+| 272 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
+| 273 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
+| 274 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
 
 ### Tables & Row-Level Security
 
@@ -463,6 +467,11 @@
 | `awcms_identity_mfa_recovery_codes`            | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
 | `awcms_idn_admin_regions`                      | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
 | `awcms_idn_region_datasets`                    | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
+| `awcms_inbox_activity`                         | `sql/382_awcms_omnichannel_inbox_schema.sql`               | yes | yes   |
+| `awcms_inbox_conversation_tags`                | `sql/382_awcms_omnichannel_inbox_schema.sql`               | yes | yes   |
+| `awcms_inbox_conversations`                    | `sql/382_awcms_omnichannel_inbox_schema.sql`               | yes | yes   |
+| `awcms_inbox_sla_policies`                     | `sql/382_awcms_omnichannel_inbox_schema.sql`               | yes | yes   |
+| `awcms_inbox_tags`                             | `sql/382_awcms_omnichannel_inbox_schema.sql`               | yes | yes   |
 | `awcms_inventory_balances`                     | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
 | `awcms_inventory_locations`                    | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
 | `awcms_inventory_low_stock_signals`            | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
@@ -613,16 +622,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 613        |
+| `(root)`      | 615        |
 | `e2e`         | 30         |
-| `integration` | 177        |
+| `integration` | 179        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 552   |
+| `/api/v1/**`    | 563   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

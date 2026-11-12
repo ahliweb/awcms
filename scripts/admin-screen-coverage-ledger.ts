@@ -354,5 +354,20 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // which claims these keys and removes them from this ledger in that change.
   "email.provider_events.approve",
   "email.webhook.configure",
-  "email.webhook.read"
+  "email.webhook.read",
+
+  // omnichannel_inbox (7) — ADR-0160 (Proposed) / Issue #1164. API-first and
+  // `experimental`: the operator screen (the conversation list with status,
+  // assignee, tag and breached-SLA filters, the detail with its activity
+  // history, assignment, tags, SLA policy authoring and the rebuild) is the
+  // recorded follow-up that flips the module to `active` and adds its
+  // navigation entry in the same change (a nav entry without a page is a
+  // permanent 404).
+  "omnichannel_inbox.conversations.assign",
+  "omnichannel_inbox.conversations.read",
+  "omnichannel_inbox.conversations.update",
+  "omnichannel_inbox.projection.configure",
+  "omnichannel_inbox.sla_policies.configure",
+  "omnichannel_inbox.sla_policies.read",
+  "omnichannel_inbox.tags.configure"
 ];

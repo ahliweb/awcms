@@ -7828,6 +7828,9 @@ msgstr "Keterlibatan Telegram"
 msgid "CRM Follow-up"
 msgstr "Tindak Lanjut CRM"
 
+msgid "Omnichannel Inbox"
+msgstr "Kotak Masuk Omnichannel"
+
 msgid "Tenant suspended"
 msgstr "Tenant ditangguhkan"
 

@@ -97,6 +97,8 @@ tags:
     description: "Account and credential CONTROL PLANE of the omnichannel foundation (channel_accounts module, Issue #1140, ADR-0148 capability C1): a tenant's connected external accounts (WhatsApp WABA phone numbers and StarSender devices, Pages, profiles, channels, bots, Mailketing ESP logins), the provider connections (OAuth 2.0 grants with single-use state and PKCE, API tokens, bot tokens, device keys) behind them, FAIL-CLOSED per-account capability evaluated against the provider matrix v1, write-only envelope-encrypted credentials, health and per-account assignments. There is NO send or publish endpoint and NO provider call: dispatch belongs to later issues. No operation ever returns a credential, an OAuth token, an authorisation code, a PKCE verifier, an OAuth state or the reference to any of them. A live external account belongs to ONE tenant. Ships inert behind CHANNEL_ACCOUNTS_ENABLED."
   - name: Website Engagement
     description: "Tenant-scoped website lead/contact capture and inbound website interaction events (website_engagement module, Issue #1153, ADR-0155). INTAKE ONLY: one PUBLIC, unauthenticated-by-design submission endpoint authenticated by an opaque per-source token (keyed hash at rest, shown once, rotatable, revocable; the tenant is opened FROM it and a tenant id anywhere else is never believed) and by the verified Origin host against the domains registered for that source, with per-address and per-source rate limits, an optional Turnstile challenge, a closed versioned field set, idempotency on (source, eventId) and explicit consent provenance; plus default-deny administrator operations for sources, masked submissions, an audited reveal and the controller's withdrawal. It creates, matches and merges no person; a CRM adapter consumes the outbox events in the AsyncAPI contract."
+  - name: Omnichannel Inbox
+    description: "Tenant-scoped staff work queue over verified inbound envelopes (omnichannel_inbox module, Issue #1164, ADR-0160, Accepted). A projection of the Telegram and website inbound events into body-free conversation rows (opaque references, states, the channel account's business scope), plus authored staff work state: status, assignment with history, tags and first/next-response SLA in business minutes on a working calendar. Visibility follows the channel_accounts confinement rule: only a caller who is not scope-confined and holds the route's permission on a tenant-wide grant sees everything; anyone else sees only the business scopes they cover and never a tenant-wide conversation. The inbox SENDS NOTHING to a customer and has no send facade: a reply goes through the arrival channel's own route. Ships inert behind OMNICHANNEL_INBOX_ENABLED."
   - name: Social Publishing
     description: "Account-scoped social publishing (social_publishing module, Issue #1145, ADR-0157, ADR-0148 capability C3) behind the existing SocialPublishingPort that blog_content calls when an article is published. One PUBLICATION (an immutable content snapshot: text, link and a media object verified for type, size and rights) fans out to ONE JOB PER TARGET channel account, idempotent per article, trigger and account; a job names the account and holds no token and no secret reference, because the dispatcher resolves the credential for that account at dispatch time. Approval (required by default; a creator cannot approve their own publication), a schedule, per-account retry and cancel. Provider adapters are plug-ins whose capability map is a CEILING and never a grant: content a provider cannot carry is REFUSED, never downgraded, and an account still needs a granted publish capability with evidence, re-checked at enqueue and at dispatch. A job that was published is terminal, so a partial failure never replays a sibling and never alters the source article. No operation accepts or returns a token, a secret reference, a provider-side id or an account label. One connector ships, Facebook Pages (Issue #1146, Graph API v27.0), behind its own switch SOCIAL_PUBLISHING_FACEBOOK_ENABLED (default off); the other providers are separate issues, and until a connector is on, enabling the module publishes nothing. Ships inert behind SOCIAL_PUBLISHING_ENABLED and a per-tenant switch."
   - name: CRM Leads
@@ -24536,6 +24538,662 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/conversations:
+    get:
+      operationId: listOmnichannelInboxConversations
+      tags:
+        - Omnichannel Inbox
+      summary: List the inbox conversations the caller may see
+      description: "Requires `omnichannel_inbox.conversations.read`. A scope-confined caller (any active, non-tenant business-scope assignment that has not ended, including one that has not started yet) sees only conversations of the business scopes they cover, and never a tenant-wide one. Newest inbound first, keyset-paginated. Opaque references and states only: never a message body or a customer identifier."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - open
+              - pending
+              - resolved
+              - closed
+        - name: assignee
+          in: query
+          description: "`me`, `unassigned`, or a tenant user id."
+          schema:
+            type: string
+            maxLength: 36
+        - name: slaState
+          in: query
+          schema:
+            type: string
+            enum:
+              - breached
+        - name: tagId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: sourceKind
+          in: query
+          schema:
+            type: string
+            enum:
+              - telegram
+              - website
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: One page of conversations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omnichannel-inbox/conversations/{id}:
+    get:
+      operationId: getOmnichannelInboxConversation
+      tags:
+        - Omnichannel Inbox
+      summary: Read one conversation with its tags and latest activity
+      description: Requires `omnichannel_inbox.conversations.read` and visibility (business scope). Unknown, foreign and invisible are the same `404`. The activity history carries ids and closed codes only.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationDetailEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omnichannel-inbox/conversations/{id}/assignment:
+    post:
+      operationId: assignOmnichannelInboxConversation
+      tags:
+        - Omnichannel Inbox
+      summary: Assign or unassign a conversation
+      description: "Requires `omnichannel_inbox.conversations.assign`, a signed-in person, `Idempotency-Key` and visibility; audited. The assignee must be an active user holding `conversations.update` on a tenant-wide grant and, if they are scope-confined, cover the conversation's business scope (or an ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE`, one answer with no reason, whatever the cause (an unknown, inactive, unpermitted or out-of-scope person look alike, so the route is no oracle on a colleague's account). `expectedVersion` guards concurrent reassignment: exactly one writer wins, the other gets `409 VERSION_CONFLICT`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - assigneeTenantUserId
+                - expectedVersion
+              properties:
+                assigneeTenantUserId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: "`null` unassigns."
+                expectedVersion:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Assigned, unassigned or unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationWriteEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`VERSION_CONFLICT` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`ASSIGNEE_NOT_ELIGIBLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/conversations/{id}/responses:
+    post:
+      operationId: recordOmnichannelInboxResponse
+      tags:
+        - Omnichannel Inbox
+      summary: Record that the customer was answered through the arrival channel
+      description: "Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. The inbox SENDS NOTHING: the reply goes through the arrival channel's own route, queue and consent checks; this records that it happened, settles everything received up to now and stops the SLA clock. Refused (`409 CUSTOMER_UNREACHABLE`) when the customer opted out or withdrew."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expectedVersion
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationWriteEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`VERSION_CONFLICT` or `CUSTOMER_UNREACHABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/conversations/{id}/status:
+    post:
+      operationId: setOmnichannelInboxConversationStatus
+      tags:
+        - Omnichannel Inbox
+      summary: Change a conversation's status
+      description: Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. `resolved` and `closed` settle everything received so far (the SLA clock stops; only a NEW inbound reopens it). A withdrawn customer's conversation cannot be reopened (`409 CUSTOMER_UNREACHABLE`).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - status
+                - expectedVersion
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - open
+                    - pending
+                    - resolved
+                    - closed
+                expectedVersion:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Changed or unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationWriteEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`VERSION_CONFLICT` or `CUSTOMER_UNREACHABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/conversations/{id}/tags:
+    put:
+      operationId: setOmnichannelInboxConversationTags
+      tags:
+        - Omnichannel Inbox
+      summary: Replace a conversation's tags
+      description: Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. At most 20 live tags of this tenant (`422 TAG_UNKNOWN` otherwise). Each added or removed tag is an activity row.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - tagIds
+                - expectedVersion
+              properties:
+                tagIds:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: string
+                    format: uuid
+                expectedVersion:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Changed or unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxConversationWriteEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`VERSION_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`TAG_UNKNOWN`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/projection/rebuild:
+    post:
+      operationId: rebuildOmnichannelInboxProjection
+      tags:
+        - Omnichannel Inbox
+      summary: Replay the verified inbound events into the projection (one batch)
+      description: "Requires `omnichannel_inbox.projection.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Replays this tenant's `awcms.telegram_engagement.*` and `awcms.website_engagement.*` inbound events recorded inside `windowDays` (at most the default conversation retention, 365) in event-sequence order, at most 2000 per call; call again with `afterSequence: nextAfterSequence` until `complete`. Idempotent by value; staff work state is never reset."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                afterSequence:
+                  type: string
+                  pattern: ^[0-9]{1,19}$
+                  description: A decimal event sequence, at most 9223372036854775807 (the PostgreSQL bigint maximum); a larger value is `400 VALIDATION_ERROR`.
+                windowDays:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+      responses:
+        "200":
+          description: One batch replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      processed:
+                        type: integer
+                      created:
+                        type: integer
+                      nextAfterSequence:
+                        type: string
+                      complete:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/sla-policies:
+    get:
+      operationId: listOmnichannelInboxSlaPolicies
+      tags:
+        - Omnichannel Inbox
+      summary: List the tenant's inbox SLA policies
+      description: Requires `omnichannel_inbox.sla_policies.read`. Newest first, at most 200.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The policies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxSlaPolicyList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createOmnichannelInboxSlaPolicy
+      tags:
+        - Omnichannel Inbox
+      summary: Create an SLA policy (and retire the active one of the same scope)
+      description: "Requires `omnichannel_inbox.sla_policies.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Budgets are BUSINESS minutes on a working calendar: an IANA timezone, seven weekday windows (Monday first; `null` = closed; at least one open) and local holiday dates. A scope-confined caller may name only a business scope they cover, never the tenant default. Terms are immutable; a change is a new policy."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OmnichannelInboxSlaPolicyCreateRequest"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/OmnichannelInboxSlaPolicy"
+                      retiredPolicyId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`SLA_POLICY_CONFLICT` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`SCOPE_UNRESOLVED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/sla-policies/{id}/retire:
+    post:
+      operationId: retireOmnichannelInboxSlaPolicy
+      tags:
+        - Omnichannel Inbox
+      summary: Retire an SLA policy
+      description: Requires `omnichannel_inbox.sla_policies.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Conversations already waiting keep their due time. The body must be empty or `{}`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Retired (or already retired).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - retired
+                      alreadyRetired:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/tags:
+    get:
+      operationId: listOmnichannelInboxTags
+      tags:
+        - Omnichannel Inbox
+      summary: List the tenant's live inbox tags
+      description: Requires `omnichannel_inbox.conversations.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tags.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxTagList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createOmnichannelInboxTag
+      tags:
+        - Omnichannel Inbox
+      summary: Create an inbox tag
+      description: Requires `omnichannel_inbox.tags.configure`, a signed-in person and `Idempotency-Key`; audited. A live duplicate code is `409 TAG_CODE_TAKEN`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - code
+                - label
+              properties:
+                code:
+                  type: string
+                  pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+                label:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxTagEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`TAG_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/tags/{id}:
+    delete:
+      operationId: deleteOmnichannelInboxTag
+      tags:
+        - Omnichannel Inbox
+      summary: Delete an inbox tag
+      description: Requires `omnichannel_inbox.tags.configure`, a signed-in person and `Idempotency-Key`; audited. Soft-deletes the tag and unlinks it from every conversation in the same transaction.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                        enum:
+                          - true
+                      unlinkedConversations:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/partner/tenants:
     get:
       operationId: listManagedTenants
@@ -45207,6 +45865,370 @@ components:
             nextCursor:
               type: string
               nullable: true
+    OmnichannelInboxActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - assigned
+            - unassigned
+            - assignee_revoked
+            - status_changed
+            - response_recorded
+            - tag_added
+            - tag_removed
+            - sla_breached
+        actorTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        subjectTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        detailCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    OmnichannelInboxConversation:
+      type: object
+      description: "A conversation: opaque references (the account-scoped Telegram contact id or the website submission id), states and staff work state. Never a message body, a sender address or an external identifier."
+      properties:
+        id:
+          type: string
+          format: uuid
+        sourceKind:
+          type: string
+          enum:
+            - telegram
+            - website
+        sourceRef:
+          type: string
+          format: uuid
+        channelAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        businessScope:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+              format: uuid
+        status:
+          type: string
+          enum:
+            - open
+            - pending
+            - resolved
+            - closed
+        customerState:
+          type: string
+          enum:
+            - active
+            - opted_out
+            - withdrawn
+        assigneeTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        assignedAt:
+          type: string
+          format: date-time
+          nullable: true
+        firstInboundAt:
+          type: string
+          format: date-time
+        lastInboundAt:
+          type: string
+          format: date-time
+        awaitingSince:
+          type: string
+          format: date-time
+          nullable: true
+        firstRespondedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastRespondedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sla:
+          type: object
+          properties:
+            state:
+              type: string
+              enum:
+                - none
+                - on_track
+                - breached
+            policyId:
+              type: string
+              format: uuid
+              nullable: true
+            dueKind:
+              type: string
+              enum:
+                - first
+                - next
+              nullable: true
+            dueAt:
+              type: string
+              format: date-time
+              nullable: true
+            breachedAt:
+              type: string
+              format: date-time
+              nullable: true
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+    OmnichannelInboxConversationDetailEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          allOf:
+            - $ref: "#/components/schemas/OmnichannelInboxConversation"
+            - type: object
+              properties:
+                activity:
+                  type: array
+                  maxItems: 50
+                  items:
+                    $ref: "#/components/schemas/OmnichannelInboxActivity"
+        meta:
+          type: object
+    OmnichannelInboxConversationList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OmnichannelInboxConversation"
+            nextCursor:
+              type: string
+              nullable: true
+        meta:
+          type: object
+    OmnichannelInboxConversationWriteEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            outcome:
+              type: string
+              enum:
+                - assigned
+                - unassigned
+                - unchanged
+                - changed
+                - recorded
+            conversation:
+              $ref: "#/components/schemas/OmnichannelInboxConversation"
+        meta:
+          type: object
+    OmnichannelInboxSlaPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessScope:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+              format: uuid
+        name:
+          type: string
+        timezone:
+          type: string
+        firstResponseMinutes:
+          type: integer
+        nextResponseMinutes:
+          type: integer
+        workingHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/OmnichannelInboxWorkingWindow"
+        holidays:
+          type: array
+          items:
+            type: string
+            format: date
+        status:
+          type: string
+          enum:
+            - active
+            - retired
+        createdAt:
+          type: string
+          format: date-time
+        retiredAt:
+          type: string
+          format: date-time
+          nullable: true
+    OmnichannelInboxSlaPolicyCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - timezone
+        - firstResponseMinutes
+        - nextResponseMinutes
+        - workingHours
+      properties:
+        businessScope:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9_]*$
+            id:
+              type: string
+              format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          maxLength: 64
+          description: An IANA zone name.
+        firstResponseMinutes:
+          type: integer
+          minimum: 1
+          maximum: 43200
+        nextResponseMinutes:
+          type: integer
+          minimum: 1
+          maximum: 43200
+        workingHours:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: Monday first; each a {start, end} in minutes of the local day, or null (closed).
+          items:
+            $ref: "#/components/schemas/OmnichannelInboxWorkingWindow"
+        holidays:
+          type: array
+          maxItems: 366
+          items:
+            type: string
+            format: date
+    OmnichannelInboxSlaPolicyList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OmnichannelInboxSlaPolicy"
+        meta:
+          type: object
+    OmnichannelInboxTag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    OmnichannelInboxTagEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            tag:
+              $ref: "#/components/schemas/OmnichannelInboxTag"
+        meta:
+          type: object
+    OmnichannelInboxTagList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OmnichannelInboxTag"
+        meta:
+          type: object
+    OmnichannelInboxWorkingWindow:
+      type: object
+      nullable: true
+      additionalProperties: false
+      required:
+        - start
+        - end
+      properties:
+        start:
+          type: integer
+          minimum: 0
+          maximum: 1439
+        end:
+          type: integer
+          minimum: 1
+          maximum: 1440
     OwnSessionSummary:
       type: object
       description: One live session belonging to the caller. Carries no token, no raw IP and no raw User-Agent.

@@ -1642,6 +1642,61 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/[id]/assignment.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/[id]/responses.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/[id]/status.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/[id]/tags.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/conversations/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/projection/rebuild.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/sla-policies/[id]/retire.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/sla-policies/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/tags/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omnichannel-inbox/tags/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/partner/tenants/index.ts",
       "workClass": "interactive",
       "source": "factory"

@@ -1588,6 +1588,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Older versions": ["Versi lebih lama"],
   "Oldest still waiting:": ["Terlama yang masih menunggu:"],
   "Oldest:": ["Terlama:"],
+  "Omnichannel Inbox": ["Kotak Masuk Omnichannel"],
   "On": ["Aktif"],
   "On hand": ["Tersedia"],
   "On leave": ["Sedang cuti"],

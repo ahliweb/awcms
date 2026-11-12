@@ -602,6 +602,13 @@ describe("DATABASE_URL is withheld from jobs that cannot reach the app connectio
     [
       "hr-commission:intents:post",
       "ADR-0147: posts accruals; only awcms_app may"
+    ],
+    // ADR-0160 (Issue #1164): re-checks an inbox assignee's role grants and
+    // business scopes and enqueues the SLA e-mail; awcms_worker can read
+    // neither the role-grant tables nor insert an e-mail. It decrypts nothing.
+    [
+      "omnichannel-inbox:sla",
+      "ADR-0160: reads role grants and enqueues e-mail; only awcms_app may"
     ]
   ]);
   // Tracing every package target takes seconds; do it once for the block.
@@ -647,7 +654,9 @@ describe("DATABASE_URL is withheld from jobs that cannot reach the app connectio
       if (APP_ROLE_SCHEDULED_JOBS.has(target)) {
         // It reaches the app connection from its own entrypoint and nowhere else.
         expect(offenders, `${target} opens the app connection`).toEqual([
-          "scripts/hr-commission-intents-post.ts"
+          target === "omnichannel-inbox:sla"
+            ? "scripts/omnichannel-inbox-sla.ts"
+            : "scripts/hr-commission-intents-post.ts"
         ]);
         continue;
       }
