@@ -2342,7 +2342,13 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
       "title",
       "caption",
       "link_url",
-      "media_snapshot"
+      "media_snapshot",
+      // sql/386 (ADR-0157 L8): which source the dispatcher re-checks. Ids
+      // and a kind only; the article and the media object themselves are
+      // answered by two SECURITY DEFINER functions, never read.
+      "source_kind",
+      "source_id",
+      "media_object_id"
     ]
   },
   awcms_social_publish_jobs: {
@@ -3425,6 +3431,502 @@ export async function probeSocialDispatchWriteBoundary(
   return { ran: true };
 }
 
+// ---------------------------------------------------------------------------
+// sql/386 (Issue #1145, residual L8 of ADR-0157): the social dispatcher's
+// source re-check. Two SECURITY DEFINER functions answer one closed code per
+// (tenant, id); the dispatcher's role holds EXECUTE and no read of either table.
+// ---------------------------------------------------------------------------
+
+/** The NOLOGIN owner of the two re-check functions. */
+export const SOCIAL_SOURCE_CHECK_ROLE = "awcms_social_source_check";
+
+/** It holds no table-level privilege anywhere. */
+export const SOCIAL_SOURCE_CHECK_ROLE_GRANTS: Record<string, string[]> = {};
+
+/** Exactly the columns the two bodies read, both directions. */
+export const SOCIAL_SOURCE_CHECK_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
+  awcms_blog_posts: {
+    SELECT: [
+      "tenant_id",
+      "id",
+      "status",
+      "visibility",
+      "published_at",
+      "unpublish_at",
+      "deleted_at"
+    ]
+  },
+  awcms_news_media_objects: {
+    SELECT: [
+      "tenant_id",
+      "id",
+      "status",
+      "deleted_at",
+      "rights_verification_status",
+      "copyright_status"
+    ]
+  }
+};
+
+/**
+ * A SECURITY DEFINER function pinned EXACTLY: its whitespace-normalised body,
+ * owner, language, volatility, `search_path`, return type, and the complete
+ * list of roles that may EXECUTE it (the owner and `executors`, never PUBLIC).
+ * A substring pin would pass a body that drops the tenant binding, admits a
+ * `private` article or a `rejected` rights adjudication; an exact pin passes
+ * only what was reviewed. Changing one is a migration AND an edit here.
+ */
+export type PinnedDefinerFunction = {
+  /** `regprocedure` text, e.g. `awcms_x(uuid,uuid)`. */
+  signature: string;
+  owner: string;
+  executors: readonly string[];
+  body: string;
+};
+
+export const SOCIAL_SOURCE_CHECK_FUNCTIONS: readonly PinnedDefinerFunction[] = [
+  {
+    signature: "awcms_social_source_article_state(uuid,uuid)",
+    owner: SOCIAL_SOURCE_CHECK_ROLE,
+    executors: [SOCIAL_DISPATCH_ROLE],
+    body: "BEGIN IF p_tenant_id IS NULL OR p_article_id IS NULL OR p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.current_tenant_id', true), '')::uuid THEN RAISE EXCEPTION 'awcms_social_source_article_state: the tenant is not the transaction tenant' USING ERRCODE = '42501'; END IF; IF EXISTS ( SELECT 1 FROM awcms_blog_posts AS p WHERE p.tenant_id = p_tenant_id AND p.id = p_article_id AND p.deleted_at IS NULL AND p.status = 'published' AND p.visibility IN ('public', 'unlisted') AND p.published_at IS NOT NULL AND p.published_at <= now() AND (p.unpublish_at IS NULL OR p.unpublish_at > now()) ) THEN RETURN 'PUBLISHED'; END IF; RETURN 'SOURCE_RETRACTED'; END;"
+  },
+  {
+    signature: "awcms_social_source_media_state(uuid,uuid)",
+    owner: SOCIAL_SOURCE_CHECK_ROLE,
+    executors: [SOCIAL_DISPATCH_ROLE],
+    body: "DECLARE v_status text; v_rights text; v_copyright text; BEGIN IF p_tenant_id IS NULL OR p_media_object_id IS NULL OR p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.current_tenant_id', true), '')::uuid THEN RAISE EXCEPTION 'awcms_social_source_media_state: the tenant is not the transaction tenant' USING ERRCODE = '42501'; END IF; SELECT m.status, m.rights_verification_status, m.copyright_status INTO v_status, v_rights, v_copyright FROM awcms_news_media_objects AS m WHERE m.tenant_id = p_tenant_id AND m.id = p_media_object_id AND m.deleted_at IS NULL; IF NOT FOUND OR v_status IS NULL OR v_status NOT IN ('verified', 'attached') THEN RETURN 'MEDIA_UNAVAILABLE'; END IF; IF v_rights IS DISTINCT FROM 'verified' OR v_copyright IS NULL OR v_copyright NOT IN ( 'owned', 'licensed', 'public_domain', 'permission_granted', 'fair_use' ) THEN RETURN 'MEDIA_RIGHTS_REVOKED'; END IF; RETURN 'AVAILABLE'; END;"
+  }
+];
+
+/** `null` when the function exists exactly as pinned; else a finding naming what differs. */
+export async function pinDefinerFunction(
+  db: Bun.SQL,
+  pin: PinnedDefinerFunction
+): Promise<string | null> {
+  const rows = (await db`
+    SELECT p.prosecdef AS definer,
+           p.provolatile::text AS volatility,
+           l.lanname AS language,
+           p.prorettype = 'text'::regtype AS returns_text,
+           p.proretset AS returns_set,
+           COALESCE(p.proconfig, ARRAY[]::text[]) AS config,
+           pg_get_userbyid(p.proowner) AS owner,
+           p.prosrc AS body,
+           ARRAY(
+             SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                         ELSE pg_get_userbyid(a.grantee) END
+             FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
+             WHERE a.privilege_type = 'EXECUTE'
+             ORDER BY 1
+           ) AS executors
+    FROM pg_proc p
+    JOIN pg_language l ON l.oid = p.prolang
+    WHERE p.oid = to_regprocedure(${pin.signature})
+  `) as {
+    definer: boolean;
+    volatility: string;
+    language: string;
+    returns_text: boolean;
+    returns_set: boolean;
+    config: string[];
+    owner: string;
+    body: string;
+    executors: string[];
+  }[];
+  const row = rows[0];
+  const label = `function ${pin.signature}`;
+
+  if (!row) return `${label} is missing`;
+
+  const differences: string[] = [];
+
+  if (!row.definer) differences.push("not SECURITY DEFINER");
+  if (row.volatility !== "s") differences.push("not STABLE");
+  if (row.language !== "plpgsql") differences.push("not plpgsql");
+  if (!row.returns_text || row.returns_set) {
+    differences.push("does not return one text");
+  }
+  if (
+    row.config.length !== 1 ||
+    row.config[0] !== "search_path=public, pg_temp"
+  ) {
+    differences.push(`search_path is not exactly "public, pg_temp"`);
+  }
+  if (row.owner !== pin.owner) differences.push(`owned by ${row.owner}`);
+
+  const expectedExecutors = [...new Set([pin.owner, ...pin.executors])].sort();
+  const heldExecutors = [...new Set(row.executors)].sort();
+
+  if (heldExecutors.join(",") !== expectedExecutors.join(",")) {
+    differences.push(`EXECUTE is held by ${heldExecutors.join(", ")}`);
+  }
+  if (
+    normalizePolicyExpression(row.body) !== normalizePolicyExpression(pin.body)
+  ) {
+    differences.push("its body is no longer the reviewed one");
+  }
+
+  return differences.length === 0
+    ? null
+    : `${label} differs from its reviewed definition: ${differences.join("; ")}`;
+}
+
+/**
+ * The behavioural half of the sql/386 pins: in ONE transaction that is always
+ * rolled back, seed a throwaway tenant (and a second one) with articles and
+ * media objects in every state that matters, `SET LOCAL ROLE
+ * awcms_social_dispatch`, and require that:
+ *
+ *   - the two functions answer exactly the reviewed code for each row
+ *     (positive controls included, so a function that refuses EVERYTHING does
+ *     not pass): a published public or unlisted article is `PUBLISHED`; an
+ *     archived, private, deleted, scheduled (future `published_at`),
+ *     past-unpublish, unknown or other-tenant one is
+ *     `SOURCE_RETRACTED`; a verified media object with verified rights (`owned`,
+ *     `fair_use`) is `AVAILABLE`; a deleted, failed, unknown or other-tenant one
+ *     is `MEDIA_UNAVAILABLE`; rejected or unverified rights, or an unknown
+ *     copyright status, is `MEDIA_RIGHTS_REVOKED`;
+ *   - a tenant argument that is not the transaction tenant RAISES;
+ *   - the role cannot read either table directly (its view did not widen).
+ *
+ * Skipped when the connection cannot assume the role; `checkWorkerSetupRoleGrants`
+ * then names the skipped probe in its evidence (the #1274 audit, L4).
+ */
+export async function probeSocialSourceRecheck(
+  db: Bun.SQL
+): Promise<{ ran: boolean; finding?: string }> {
+  const can = (await db`
+    SELECT rolsuper OR pg_has_role(current_user, ${SOCIAL_DISPATCH_ROLE}, 'SET') AS can
+    FROM pg_roles WHERE rolname = current_user
+  `) as { can: boolean }[];
+
+  if (!can[0]?.can) return { ran: false };
+
+  const failures: string[] = [];
+
+  try {
+    await db.begin(async (tx) => {
+      const tenant = crypto.randomUUID();
+      const other = crypto.randomUUID();
+      const actor = crypto.randomUUID();
+
+      for (const id of [tenant, other]) {
+        const code = `probe-${id.slice(0, 8)}`;
+
+        await tx`
+          INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+          VALUES (${id}, ${code}, ${code})
+        `;
+      }
+
+      let seq = 0;
+      const article = async (
+        tenantId: string,
+        input: {
+          status: string;
+          visibility: string;
+          deleted?: boolean;
+          unpublishedAlready?: boolean;
+          scheduled?: boolean;
+        }
+      ): Promise<string> => {
+        await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+        seq += 1;
+
+        const rows = (await tx`
+          INSERT INTO awcms_blog_posts
+            (tenant_id, author_tenant_user_id, title, slug, content_json,
+             content_text, status, visibility, published_at, unpublish_at,
+             deleted_at)
+          VALUES (${tenantId}, ${actor}, 'probe', ${`probe-${seq}`}, '{}'::jsonb,
+                  'probe', ${input.status}, ${input.visibility},
+                  ${new Date(Date.now() + (input.scheduled ? 3600_000 : -2 * 3600_000))},
+                  ${input.unpublishedAlready ? new Date(Date.now() - 3600_000) : null},
+                  ${input.deleted ? new Date() : null})
+          RETURNING id
+        `) as { id: string }[];
+
+        return rows[0]!.id;
+      };
+      const media = async (
+        tenantId: string,
+        input: {
+          status: string;
+          rights: "unverified" | "verified" | "rejected";
+          copyright: string;
+          deleted?: boolean;
+        }
+      ): Promise<string> => {
+        await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+
+        const id = crypto.randomUUID();
+        const adjudicated = input.rights !== "unverified";
+        const attached = input.status === "attached";
+
+        await tx`
+          INSERT INTO awcms_news_media_objects
+            (id, tenant_id, bucket_name, object_key, public_url, mime_type,
+             status, created_by_tenant_user_id, copyright_status,
+             rights_verification_status, rights_verified_by, rights_verified_at,
+             owner_resource_type, owner_resource_id, deleted_at)
+          VALUES (${id}, ${tenantId}, 'probe',
+                  ${`news-media/${tenantId}/2026/11/${id}.jpg`},
+                  ${`https://media.example/${id}.jpg`}, 'image/jpeg',
+                  ${input.status}, ${actor}, ${input.copyright}, ${input.rights},
+                  ${adjudicated ? actor : null},
+                  ${adjudicated ? new Date() : null},
+                  ${attached ? "blog_post" : null},
+                  ${attached ? actor : null},
+                  ${input.deleted ? new Date() : null})
+        `;
+
+        return id;
+      };
+
+      const articles: { id: string; expected: string; label: string }[] = [
+        {
+          id: await article(tenant, {
+            status: "published",
+            visibility: "public"
+          }),
+          expected: "PUBLISHED",
+          label: "a published public article"
+        },
+        {
+          id: await article(tenant, {
+            status: "published",
+            visibility: "unlisted"
+          }),
+          expected: "PUBLISHED",
+          label: "a published unlisted article"
+        },
+        {
+          id: await article(tenant, {
+            status: "archived",
+            visibility: "public"
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "an archived article"
+        },
+        {
+          id: await article(tenant, { status: "draft", visibility: "public" }),
+          expected: "SOURCE_RETRACTED",
+          label: "an unpublished (draft) article"
+        },
+        {
+          id: await article(tenant, {
+            status: "published",
+            visibility: "private"
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "a private article"
+        },
+        {
+          id: await article(tenant, {
+            status: "published",
+            visibility: "public",
+            deleted: true
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "a deleted article"
+        },
+        {
+          id: await article(tenant, {
+            status: "published",
+            visibility: "public",
+            unpublishedAlready: true
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "an article past its unpublish time"
+        },
+        {
+          // The #1274 audit, L5: published, but its publication moment is
+          // still in the future (scheduled): not yet publicly reachable.
+          id: await article(tenant, {
+            status: "published",
+            visibility: "public",
+            scheduled: true
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "a scheduled article (published_at in the future)"
+        },
+        {
+          id: crypto.randomUUID(),
+          expected: "SOURCE_RETRACTED",
+          label: "an unknown article"
+        },
+        {
+          id: await article(other, {
+            status: "published",
+            visibility: "public"
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "another tenant's published article"
+        }
+      ];
+      const medias: { id: string; expected: string; label: string }[] = [
+        {
+          id: await media(tenant, {
+            status: "verified",
+            rights: "verified",
+            copyright: "owned"
+          }),
+          expected: "AVAILABLE",
+          label: "a verified, rights-verified, owned object"
+        },
+        {
+          id: await media(tenant, {
+            status: "attached",
+            rights: "verified",
+            copyright: "fair_use"
+          }),
+          expected: "AVAILABLE",
+          label: "an attached, rights-verified, fair_use object"
+        },
+        {
+          id: await media(tenant, {
+            status: "verified",
+            rights: "verified",
+            copyright: "owned",
+            deleted: true
+          }),
+          expected: "MEDIA_UNAVAILABLE",
+          label: "a soft-deleted (taken down) object"
+        },
+        {
+          id: await media(tenant, {
+            status: "failed",
+            rights: "verified",
+            copyright: "owned"
+          }),
+          expected: "MEDIA_UNAVAILABLE",
+          label: "a failed object"
+        },
+        {
+          id: await media(tenant, {
+            status: "verified",
+            rights: "rejected",
+            copyright: "owned"
+          }),
+          expected: "MEDIA_RIGHTS_REVOKED",
+          label: "an object whose rights were rejected"
+        },
+        {
+          id: await media(tenant, {
+            status: "verified",
+            rights: "unverified",
+            copyright: "owned"
+          }),
+          expected: "MEDIA_RIGHTS_REVOKED",
+          label: "an object whose rights are unverified"
+        },
+        {
+          id: await media(tenant, {
+            status: "verified",
+            rights: "verified",
+            copyright: "unknown"
+          }),
+          expected: "MEDIA_RIGHTS_REVOKED",
+          label: "an object of unknown copyright"
+        },
+        {
+          id: crypto.randomUUID(),
+          expected: "MEDIA_UNAVAILABLE",
+          label: "an unknown object"
+        },
+        {
+          id: await media(other, {
+            status: "verified",
+            rights: "verified",
+            copyright: "owned"
+          }),
+          expected: "MEDIA_UNAVAILABLE",
+          label: "another tenant's object"
+        }
+      ];
+
+      await tx`SELECT set_config('app.current_tenant_id', ${tenant}, true)`;
+      await tx.unsafe(`SET LOCAL ROLE ${SOCIAL_DISPATCH_ROLE}`);
+
+      for (const row of articles) {
+        const got = (await tx`
+          SELECT awcms_social_source_article_state(${tenant}::uuid, ${row.id}::uuid) AS state
+        `) as { state: string }[];
+
+        if (got[0]?.state !== row.expected) {
+          failures.push(
+            `${row.label} answered ${got[0]?.state ?? "nothing"}, not ${row.expected}`
+          );
+        }
+      }
+
+      for (const row of medias) {
+        const got = (await tx`
+          SELECT awcms_social_source_media_state(${tenant}::uuid, ${row.id}::uuid) AS state
+        `) as { state: string }[];
+
+        if (got[0]?.state !== row.expected) {
+          failures.push(
+            `${row.label} answered ${got[0]?.state ?? "nothing"}, not ${row.expected}`
+          );
+        }
+      }
+
+      const refused = async (
+        label: string,
+        run: (sp: Bun.SQL) => Promise<unknown>
+      ) => {
+        try {
+          await tx.savepoint(async (sp) => {
+            await run(sp);
+          });
+          failures.push(`${label} was allowed`);
+        } catch {
+          // Refused, as required.
+        }
+      };
+
+      await refused(
+        "asking about another tenant's article from this tenant's transaction",
+        (sp) =>
+          sp`SELECT awcms_social_source_article_state(${other}::uuid, ${articles[8]!.id}::uuid)`
+      );
+      await refused(
+        "asking about another tenant's media object from this tenant's transaction",
+        (sp) =>
+          sp`SELECT awcms_social_source_media_state(${other}::uuid, ${medias[8]!.id}::uuid)`
+      );
+      await refused(
+        "reading awcms_blog_posts directly",
+        (sp) => sp`SELECT status FROM awcms_blog_posts LIMIT 1`
+      );
+      await refused(
+        "reading awcms_news_media_objects directly",
+        (sp) => sp`SELECT status FROM awcms_news_media_objects LIMIT 1`
+      );
+
+      throw new RollbackProbe();
+    });
+  } catch (error) {
+    if (!(error instanceof RollbackProbe)) {
+      return {
+        ran: true,
+        finding: `the awcms_social_dispatch source re-check probe could not run: ${errorMessage(error)}`
+      };
+    }
+  }
+
+  if (failures.length > 0) {
+    return {
+      ran: true,
+      finding: `awcms_social_dispatch source re-check (sql/386) does not hold: ${failures.join("; ")}`
+    };
+  }
+
+  return { ran: true };
+}
+
 export type WorkerSetupRoleGrantsPolicy = {
   worker: Record<string, string[]>;
   setup: Record<string, string[]>;
@@ -3436,6 +3938,12 @@ export type WorkerSetupRoleGrantsPolicy = {
   socialDispatch?: Record<string, string[]>;
   /** Optional: defaults to `SOCIAL_DISPATCH_COLUMN_GRANTS`. */
   socialDispatchColumns?: typeof WORKER_COLUMN_GRANTS;
+  /** Optional: defaults to `SOCIAL_SOURCE_CHECK_ROLE_GRANTS` (empty). */
+  socialSourceCheck?: Record<string, string[]>;
+  /** Optional: defaults to `SOCIAL_SOURCE_CHECK_COLUMN_GRANTS`. */
+  socialSourceCheckColumns?: typeof WORKER_COLUMN_GRANTS;
+  /** Optional: defaults to `SOCIAL_SOURCE_CHECK_FUNCTIONS`. */
+  socialSourceCheckFunctions?: readonly PinnedDefinerFunction[];
 };
 
 /**
@@ -3452,7 +3960,10 @@ export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolic
     workerColumns: WORKER_COLUMN_GRANTS,
     setupColumns: SETUP_COLUMN_GRANTS,
     socialDispatch: SOCIAL_DISPATCH_ROLE_GRANTS,
-    socialDispatchColumns: SOCIAL_DISPATCH_COLUMN_GRANTS
+    socialDispatchColumns: SOCIAL_DISPATCH_COLUMN_GRANTS,
+    socialSourceCheck: SOCIAL_SOURCE_CHECK_ROLE_GRANTS,
+    socialSourceCheckColumns: SOCIAL_SOURCE_CHECK_COLUMN_GRANTS,
+    socialSourceCheckFunctions: SOCIAL_SOURCE_CHECK_FUNCTIONS
   };
 }
 
@@ -3499,6 +4010,10 @@ export async function checkWorkerSetupRoleGrants(
     {
       role: SOCIAL_DISPATCH_ROLE,
       grants: policy?.socialDispatch ?? SOCIAL_DISPATCH_ROLE_GRANTS
+    },
+    {
+      role: SOCIAL_SOURCE_CHECK_ROLE,
+      grants: policy?.socialSourceCheck ?? SOCIAL_SOURCE_CHECK_ROLE_GRANTS
     }
   ];
 
@@ -3511,6 +4026,7 @@ export async function checkWorkerSetupRoleGrants(
     const findings: string[] = [];
     const absent: string[] = [];
     const present: string[] = [];
+    const skippedProbes: string[] = [];
 
     for (const { role, grants } of matrices) {
       const roleRows = (await sql`
@@ -3599,6 +4115,11 @@ export async function checkWorkerSetupRoleGrants(
       {
         role: SOCIAL_DISPATCH_ROLE,
         columns: policy?.socialDispatchColumns ?? SOCIAL_DISPATCH_COLUMN_GRANTS
+      },
+      {
+        role: SOCIAL_SOURCE_CHECK_ROLE,
+        columns:
+          policy?.socialSourceCheckColumns ?? SOCIAL_SOURCE_CHECK_COLUMN_GRANTS
       }
     ]) {
       if (!present.includes(role)) {
@@ -3797,6 +4318,22 @@ export async function checkWorkerSetupRoleGrants(
 
       if (writeProbe.finding) findings.push(writeProbe.finding);
 
+      // sql/386 (Issue #1145, ADR-0157 L8): the dispatch-time source re-check.
+      // The two SECURITY DEFINER functions are pinned exactly (body, owner,
+      // search_path, volatility, EXECUTE list) and probed in a rolled-back
+      // transaction (every verdict, the tenant binding, and that a direct read
+      // of either table is still refused).
+      for (const pin of policy?.socialSourceCheckFunctions ??
+        SOCIAL_SOURCE_CHECK_FUNCTIONS) {
+        const finding = await pinDefinerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      const sourceProbe = await probeSocialSourceRecheck(sql);
+
+      if (sourceProbe.finding) findings.push(sourceProbe.finding);
+
       // The #1271 audit, M1: a policy naming the role that is NOT one of the
       // reviewed pins (a re-added delivery INSERT, a new write path) is a
       // finding by itself, whatever its expression.
@@ -3820,6 +4357,45 @@ export async function checkWorkerSetupRoleGrants(
           );
         }
       }
+
+      // The #1274 audit, L3: the two pins say what the reviewed functions ARE,
+      // not that they are the only ones. A third function owned by the owner
+      // role (it can read the posts' and media objects' columns), or any
+      // SECURITY DEFINER function the dispatcher may EXECUTE (directly, through
+      // PUBLIC or a membership), that is not one of the pins is a finding by
+      // itself: the closure of what the role can reach through a definer is
+      // exactly the reviewed list.
+      const reviewedFunctions = new Set(
+        (
+          policy?.socialSourceCheckFunctions ?? SOCIAL_SOURCE_CHECK_FUNCTIONS
+        ).map((pin) => pin.signature)
+      );
+      const reachable = (await sql`
+        SELECT p.oid::regprocedure::text AS signature,
+               pg_get_userbyid(p.proowner) AS owner,
+               p.prosecdef AS definer
+        FROM pg_proc p
+        WHERE p.proowner = to_regrole(${SOCIAL_SOURCE_CHECK_ROLE})::oid
+           OR (p.prosecdef
+               AND has_function_privilege(${SOCIAL_DISPATCH_ROLE}, p.oid, 'EXECUTE'))
+        ORDER BY 1
+      `) as { signature: string; owner: string; definer: boolean }[];
+
+      for (const row of reachable) {
+        if (reviewedFunctions.has(row.signature)) continue;
+
+        findings.push(
+          row.owner === SOCIAL_SOURCE_CHECK_ROLE
+            ? `function ${row.signature} is owned by ${SOCIAL_SOURCE_CHECK_ROLE} and is not a reviewed pin (it runs with that role's reads of the posts and media objects)`
+            : `SECURITY DEFINER function ${row.signature} (owner ${row.owner}) is executable by ${SOCIAL_DISPATCH_ROLE} and is not a reviewed pin`
+        );
+      }
+
+      // The #1274 audit, L4: a probe that could not assume the role did not
+      // prove anything; say so in the evidence instead of passing silently.
+      if (!probe.ran) skippedProbes.push("secret visibility (sql/358)");
+      if (!writeProbe.ran) skippedProbes.push("write boundary (sql/373)");
+      if (!sourceProbe.ran) skippedProbes.push("source re-check (sql/386)");
     }
 
     // Issue #1160 audit L3: the two triggers that make an email sender snapshot
@@ -3932,7 +4508,7 @@ export async function checkWorkerSetupRoleGrants(
       name,
       severity,
       status: "pass",
-      evidence: `Provisioned split role(s) ${present.join(", ")} hold exactly their least-privilege matrix and nothing more (non-super, non-BYPASSRLS, zero grant on every out-of-matrix awcms_% table)${absent.length > 0 ? `; ${absent.join(", ")} not provisioned (DATABASE_URL fallback, fine)` : ""}.`
+      evidence: `Provisioned split role(s) ${present.join(", ")} hold exactly their least-privilege matrix and nothing more (non-super, non-BYPASSRLS, zero grant on every out-of-matrix awcms_% table)${absent.length > 0 ? `; ${absent.join(", ")} not provisioned (DATABASE_URL fallback, fine)` : ""}${skippedProbes.length > 0 ? `; WARNING: behavioural probe(s) NOT run, only the exact pins stood: ${skippedProbes.join(", ")} (this connection can neither SET ROLE ${SOCIAL_DISPATCH_ROLE} nor is it a superuser)` : ""}.`
     };
   } catch (error) {
     return {
@@ -4392,6 +4968,10 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   "awcms_principal_ensure",
   "awcms_principal_reach",
   "awcms_procurement_lifecycle_counter",
+  // sql/386 (Issue #1145, ADR-0157 L8): owns the two source re-check functions
+  // of the social dispatcher; column SELECT on the posts and media columns
+  // their bodies read, nothing else.
+  "awcms_social_source_check",
   "awcms_telegram_bootstrap"
 ];
 

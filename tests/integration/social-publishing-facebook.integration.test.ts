@@ -27,6 +27,7 @@ import {
   beforeEach,
   describe,
   expect,
+  spyOn,
   test
 } from "bun:test";
 
@@ -65,12 +66,18 @@ import {
 } from "../../src/modules/social-publishing/domain/social-publish-content";
 import { createFacebookPagesAdapter } from "../../src/modules/social-publishing/infrastructure/facebook-pages-adapter";
 import { createSocialAdapterRegistry } from "../../src/modules/social-publishing/infrastructure/social-adapter-registry";
+import { articlePublicationStatusAdapter } from "../../src/modules/blog-content/application/article-publication-status-adapter";
+import { mediaPublicationRecheckAdapter } from "../../src/modules/media-library/application/media-publication-recheck-adapter";
 import {
   SOCIAL_DISPATCH_WRITE_POLICIES,
+  SOCIAL_SOURCE_CHECK_FUNCTIONS,
   checkWorkerSetupRoleGrants,
+  pinDefinerFunction,
   pinPolicyExpression,
-  probeSocialDispatchWriteBoundary
+  probeSocialDispatchWriteBoundary,
+  probeSocialSourceRecheck
 } from "../../scripts/security-readiness";
+import { PUBLICATION_SOURCE_CHECKS } from "../../scripts/social-publishing-dispatch";
 
 const TENANT_A = "a1146000-0000-4000-8000-00000000000a";
 const TENANT_B = "a1146000-0000-4000-8000-00000000000b";
@@ -172,6 +179,9 @@ function dispatch(
     publishers,
     credentials,
     health: publishers,
+    // The REAL source re-check (ADR-0157 L8): the very value the production
+    // composition root hands the dispatcher (the #1274 audit, M1).
+    sources: PUBLICATION_SOURCE_CHECKS,
     registry,
     env: ENV,
     clock: at(0),
@@ -246,6 +256,66 @@ async function seedPage(
     secretId: access.secretId
   };
 }
+
+const FIXTURE_ACTOR = "a1146000-0000-4000-8000-0000000000ff";
+
+/** A real media registry row (ADR-0157 L8: the dispatcher re-checks it). */
+async function seedMedia(
+  tenantId: string,
+  seed: {
+    status?: string;
+    rights?: "unverified" | "verified" | "rejected";
+    copyright?: string;
+  } = {}
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const rights = seed.rights ?? "verified";
+  const adjudicated = rights !== "unverified";
+
+  await getAdminSql()`
+    INSERT INTO awcms_news_media_objects
+      (id, tenant_id, bucket_name, object_key, public_url, mime_type,
+       size_bytes, status, created_by_tenant_user_id, copyright_status,
+       rights_verification_status, rights_verified_by, rights_verified_at)
+    VALUES (${id}, ${tenantId}, 'fixture',
+            ${`news-media/${tenantId}/2026/11/${id}.jpg`},
+            ${`https://cdn.example/m/${id}.jpg`}, 'image/jpeg', 200000,
+            ${seed.status ?? "verified"}, ${FIXTURE_ACTOR},
+            ${seed.copyright ?? "owned"}, ${rights},
+            ${adjudicated ? FIXTURE_ACTOR : null},
+            ${adjudicated ? new Date() : null})
+  `;
+
+  return id;
+}
+
+let articleSeq = 0;
+
+/** A real, published, public blog post (ADR-0157 L8: the dispatcher re-checks it). */
+async function seedArticle(tenantId: string): Promise<string> {
+  articleSeq += 1;
+
+  const rows = (await getAdminSql()`
+    INSERT INTO awcms_blog_posts
+      (tenant_id, author_tenant_user_id, title, slug, content_json,
+       content_text, status, visibility, published_at)
+    VALUES (${tenantId}, ${FIXTURE_ACTOR}, 'Headline',
+            ${`headline-${articleSeq}`}, '{}'::jsonb, 'Body', 'published',
+            'public', ${new Date(Date.now() - 3600_000)})
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows[0]!.id;
+}
+
+const jpegFacts = (): MediaFacts => ({
+  publicUrl: "https://cdn.example/m/harbour.jpg",
+  altText: "Harbour",
+  mimeType: "image/jpeg",
+  sizeBytes: 200_000,
+  creditLine: "Fixture Photo",
+  copyrightStatus: "owned"
+});
 
 function snapshot(media: MediaFacts | null = null, caption = "Hello Pages.") {
   const built = buildContentSnapshot({
@@ -731,7 +801,8 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
       TENANT_A,
       input([page.id], {
         snapshot: snapshot(image("image/jpeg", 200_000)),
-        mediaObjectId: crypto.randomUUID()
+        // A REAL registry row: the dispatcher re-checks it (ADR-0157 L8).
+        mediaObjectId: await seedMedia(TENANT_A)
       })
     );
 
@@ -1060,6 +1131,585 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
           } finally {
             await local.unsafe(`DROP POLICY IF EXISTS ${policy} ON ${table}`);
             await local.unsafe(statement);
+          }
+
+          expect(status).toBe("fail");
+          expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+        } finally {
+          await local.close({ timeout: 1 });
+        }
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // ADR-0157 L8 (sql/386): the source is re-checked just before the call.
+  // -------------------------------------------------------------------------
+  describe("the dispatch-time source re-check (ADR-0157 L8, sql/386)", () => {
+    /** An ARTICLE publication with a real image, queued while everything was publishable. */
+    async function queueArticle(
+      tenantId: string,
+      seed: { articleId?: string; mediaObjectId?: string | null } = {}
+    ) {
+      const page = await seedPage(tenantId);
+      const articleId = seed.articleId ?? (await seedArticle(tenantId));
+      const mediaObjectId =
+        seed.mediaObjectId === undefined
+          ? await seedMedia(tenantId)
+          : seed.mediaObjectId;
+      const pub = await enqueue(
+        tenantId,
+        input([page.id], {
+          source: { kind: "article", articleId, trigger: "post_published" },
+          snapshot: snapshot(mediaObjectId ? jpegFacts() : null),
+          mediaObjectId
+        })
+      );
+
+      expect(pub.jobsCreated).toBe(1);
+
+      return { page, articleId, mediaObjectId, pub };
+    }
+
+    async function attemptsOf(jobId: string) {
+      return (await getAdminSql()`
+        SELECT attempt_no, outcome, error_code FROM awcms_social_publish_attempts
+        WHERE job_id = ${jobId} ORDER BY attempt_no
+      `) as { attempt_no: number; outcome: string; error_code: string }[];
+    }
+
+    async function auditOf(jobId: string) {
+      return (await getAdminSql()`
+        SELECT action, attributes FROM awcms_audit_events
+        WHERE resource_id = ${jobId} AND action = 'social_publishing.job.failed'
+      `) as { action: string; attributes: Record<string, unknown> }[];
+    }
+
+    /** The job failed terminally with `code`, Graph was never called, and nothing retries it. */
+    async function expectStopped(publicationId: string, code: string) {
+      const [job] = await jobsOf(publicationId);
+
+      expect(job).toMatchObject({ status: "failed", failure_code: code });
+      expect(graphCalls).toHaveLength(0);
+      expect(await attemptsOf(job!.id)).toEqual([
+        { attempt_no: 1, outcome: "rejected", error_code: code }
+      ]);
+
+      const audit = await auditOf(job!.id);
+
+      expect(audit).toHaveLength(1);
+      // Ids and the code only: no caption, title, URL, credit or token.
+      expect(Object.keys(audit[0]!.attributes).sort()).toEqual(
+        [
+          "accountDegraded",
+          "accountId",
+          "attemptNo",
+          "failureCode",
+          "provider",
+          "publicationId"
+        ].sort()
+      );
+      expect(audit[0]!.attributes.failureCode).toBe(code);
+      expect(JSON.stringify(audit[0]!.attributes)).not.toContain("Headline");
+      expect(JSON.stringify(audit[0]!.attributes)).not.toContain("cdn.example");
+
+      // A later pass claims nothing: the job is terminal, never retried.
+      const again = await dispatch(TENANT_A, { clock: at(120) });
+
+      expect(again.claimed).toBe(0);
+      expect(graphCalls).toHaveLength(0);
+      expect((await jobsOf(publicationId))[0]!.status).toBe("failed");
+    }
+
+    test("everything still publishable: the article's image goes to /photos (positive control)", async () => {
+      const { pub } = await queueArticle(TENANT_A);
+      const result = await dispatch(TENANT_A);
+
+      expect(result.published).toBe(1);
+      expect(graphCalls).toHaveLength(1);
+      expect(graphCalls[0]!.edge).toBe("photos");
+      expect((await jobsOf(pub.publicationId!))[0]!.status).toBe("published");
+    });
+
+    test("M1 (#1274 audit): the production composition root's checks are the two module adapters, and they stop a retracted article and a revoked media object", async () => {
+      // Structural: the script composes exactly the adapters of the modules
+      // that own the facts, never a stub.
+      expect(PUBLICATION_SOURCE_CHECKS.articles).toBe(
+        articlePublicationStatusAdapter
+      );
+      expect(PUBLICATION_SOURCE_CHECKS.media).toBe(
+        mediaPublicationRecheckAdapter
+      );
+
+      const archived = await queueArticle(TENANT_A);
+      const revoked = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'archived'
+        WHERE id = ${archived.articleId}
+      `;
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET rights_verification_status = 'rejected'
+        WHERE id = ${revoked.mediaObjectId}
+      `;
+
+      const result = await dispatchSocialPublishQueue(roleSql(), TENANT_A, {
+        publishers,
+        credentials,
+        health: publishers,
+        sources: PUBLICATION_SOURCE_CHECKS,
+        registry,
+        env: ENV,
+        clock: at(0),
+        http: () => graphHttp
+      });
+
+      expect(result).toMatchObject({ claimed: 2, published: 0, failed: 2 });
+      expect(graphCalls).toHaveLength(0);
+      expect((await jobsOf(archived.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "SOURCE_RETRACTED"
+      });
+      expect((await jobsOf(revoked.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "MEDIA_RIGHTS_REVOKED"
+      });
+    });
+
+    test("M2 (#1274 audit): a MANUAL publication's media is re-checked too: rights rejected after enqueue is not sent", async () => {
+      const page = await seedPage(TENANT_A);
+      const mediaObjectId = await seedMedia(TENANT_A);
+      const pub = await enqueue(
+        TENANT_A,
+        input([page.id], { snapshot: snapshot(jpegFacts()), mediaObjectId })
+      );
+
+      expect(pub.jobsCreated).toBe(1);
+
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET rights_verification_status = 'rejected'
+        WHERE id = ${mediaObjectId}
+      `;
+
+      await dispatch(TENANT_A);
+      await expectStopped(pub.publicationId!, "MEDIA_RIGHTS_REVOKED");
+    });
+
+    test("L1 (#1274 audit): no credential is resolved for a withdrawn job, and one is for the publishable sibling", async () => {
+      const kept = await queueArticle(TENANT_A);
+      const stopped = await queueArticle(TENANT_A);
+      const asked: string[] = [];
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'archived'
+        WHERE id = ${stopped.articleId}
+      `;
+
+      const result = await dispatch(TENANT_A, {
+        credentials: {
+          async resolvePublishCredential(tx, request) {
+            asked.push(request.accountId);
+
+            return credentials.resolvePublishCredential(tx, request);
+          }
+        }
+      });
+
+      expect(result).toMatchObject({ published: 1, failed: 1 });
+      // The positive control proves the spy is wired; the withdrawn job's
+      // account was never asked for (nothing decrypted for it).
+      expect(asked).toEqual([kept.page.id]);
+      expect(asked).not.toContain(stopped.page.id);
+    });
+
+    test("an article unpublished (archived) after enqueue is not sent: SOURCE_RETRACTED", async () => {
+      const { pub, articleId } = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'archived' WHERE id = ${articleId}
+      `;
+
+      const result = await dispatch(TENANT_A);
+
+      expect(result).toMatchObject({ claimed: 1, published: 0, failed: 1 });
+      await expectStopped(pub.publicationId!, "SOURCE_RETRACTED");
+    });
+
+    test("an article deleted or made private after enqueue is not sent: SOURCE_RETRACTED", async () => {
+      const deleted = await queueArticle(TENANT_A);
+      const privateOne = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET deleted_at = now()
+        WHERE id = ${deleted.articleId}
+      `;
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET visibility = 'private'
+        WHERE id = ${privateOne.articleId}
+      `;
+
+      const result = await dispatch(TENANT_A);
+
+      expect(result).toMatchObject({ claimed: 2, published: 0, failed: 2 });
+      expect(graphCalls).toHaveLength(0);
+
+      for (const { pub } of [deleted, privateOne]) {
+        expect((await jobsOf(pub.publicationId!))[0]).toMatchObject({
+          status: "failed",
+          failure_code: "SOURCE_RETRACTED"
+        });
+      }
+    });
+
+    test("a media object taken down (soft-deleted) after enqueue is not sent: MEDIA_UNAVAILABLE", async () => {
+      const { pub, mediaObjectId } = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET deleted_at = now(), status = 'deleted'
+        WHERE id = ${mediaObjectId}
+      `;
+
+      await dispatch(TENANT_A);
+      await expectStopped(pub.publicationId!, "MEDIA_UNAVAILABLE");
+    });
+
+    test("a media object whose rights were rejected after enqueue is not sent: MEDIA_RIGHTS_REVOKED", async () => {
+      const { pub, mediaObjectId } = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET rights_verification_status = 'rejected'
+        WHERE id = ${mediaObjectId}
+      `;
+
+      await dispatch(TENANT_A);
+      await expectStopped(pub.publicationId!, "MEDIA_RIGHTS_REVOKED");
+    });
+
+    test("fair_use stays accepted, as at enqueue", async () => {
+      const mediaObjectId = await seedMedia(TENANT_A, {
+        copyright: "fair_use"
+      });
+      const { pub } = await queueArticle(TENANT_A, { mediaObjectId });
+
+      expect((await dispatch(TENANT_A)).published).toBe(1);
+      expect((await jobsOf(pub.publicationId!))[0]!.status).toBe("published");
+    });
+
+    test("a withdrawn job leaves a published sibling and the other jobs alone", async () => {
+      const kept = await queueArticle(TENANT_A);
+      const stopped = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'draft'
+        WHERE id = ${stopped.articleId}
+      `;
+
+      const result = await dispatch(TENANT_A);
+
+      expect(result).toMatchObject({ published: 1, failed: 1 });
+      expect(graphCalls).toHaveLength(1);
+      expect(graphCalls[0]!.pageId).toBe(kept.page.pageId);
+      expect((await jobsOf(kept.pub.publicationId!))[0]!.status).toBe(
+        "published"
+      );
+      expect((await jobsOf(stopped.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "SOURCE_RETRACTED"
+      });
+    });
+
+    test("cross-tenant: tenant B's job naming tenant A's published article or media is never sent, and A's own job is", async () => {
+      const articleA = await seedArticle(TENANT_A);
+      const mediaA = await seedMedia(TENANT_A);
+      const ownA = await queueArticle(TENANT_A, {
+        articleId: articleA,
+        mediaObjectId: mediaA
+      });
+      // The ids are A's; the publications are B's. Enqueue does not resolve
+      // the article (the port hands the snapshot), so only the re-check stands
+      // between B's queue and A's content.
+      const borrowsArticle = await queueArticle(TENANT_B, {
+        articleId: articleA,
+        mediaObjectId: null
+      });
+      const borrowsMedia = await queueArticle(TENANT_B, {
+        mediaObjectId: mediaA
+      });
+
+      const resultB = await dispatch(TENANT_B);
+
+      expect(resultB).toMatchObject({ published: 0, failed: 2 });
+      expect(graphCalls).toHaveLength(0);
+      expect(
+        (await jobsOf(borrowsArticle.pub.publicationId!))[0]
+      ).toMatchObject({ status: "failed", failure_code: "SOURCE_RETRACTED" });
+      expect((await jobsOf(borrowsMedia.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "MEDIA_UNAVAILABLE"
+      });
+
+      expect((await dispatch(TENANT_A)).published).toBe(1);
+      expect(graphCalls).toHaveLength(1);
+      expect((await jobsOf(ownA.pub.publicationId!))[0]!.status).toBe(
+        "published"
+      );
+    });
+
+    test("a check that cannot be answered is never 'may send': the job waits (SOURCE_CHECK_UNAVAILABLE) and nothing is sent", async () => {
+      const { pub } = await queueArticle(TENANT_A);
+      const lines: string[] = [];
+      const spy = spyOn(console, "log").mockImplementation((line: unknown) => {
+        lines.push(String(line));
+      });
+      let result: Awaited<ReturnType<typeof dispatch>>;
+
+      try {
+        result = await dispatch(TENANT_A, {
+          sources: {
+            articles: {
+              async checkArticlePublished(tx) {
+                // A real database error inside the pre-send transaction.
+                await tx`SELECT 1 / 0`;
+
+                return { published: true };
+              }
+            },
+            media: mediaPublicationRecheckAdapter
+          }
+        });
+      } finally {
+        spy.mockRestore();
+      }
+
+      // L6 (#1274 audit): the operator gets the job and the SQLSTATE
+      // (22012, division_by_zero), never the database's message text.
+      const [queued] = await jobsOf(pub.publicationId!);
+      const failure = lines
+        .map((line) => {
+          try {
+            return JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        })
+        .find(
+          (entry) =>
+            entry.message === "social_publishing.dispatch.source_check_failed"
+        );
+
+      expect(failure).toMatchObject({ jobId: queued!.id, sqlState: "22012" });
+      expect(JSON.stringify(failure)).not.toContain("division");
+
+      expect(result).toMatchObject({ published: 0, retried: 1 });
+      expect(graphCalls).toHaveLength(0);
+      expect((await jobsOf(pub.publicationId!))[0]).toMatchObject({
+        status: "retry_wait",
+        failure_code: "SOURCE_CHECK_UNAVAILABLE"
+      });
+    });
+
+    test("the role learns one code per id and still cannot read the posts or the media registry", async () => {
+      const articleId = await seedArticle(TENANT_A);
+      const mediaObjectId = await seedMedia(TENANT_A);
+      const answers = await withTenantOrThrow(roleSql(), TENANT_A, (tx) =>
+        Promise.all([
+          articlePublicationStatusAdapter.checkArticlePublished(tx, {
+            tenantId: TENANT_A,
+            articleId
+          }),
+          mediaPublicationRecheckAdapter.recheckMediaForPublication(tx, {
+            tenantId: TENANT_A,
+            mediaObjectId
+          })
+        ])
+      );
+
+      expect(answers).toEqual([{ published: true }, { eligible: true }]);
+
+      for (const read of [
+        "SELECT status FROM awcms_blog_posts",
+        "SELECT title FROM awcms_blog_posts",
+        "SELECT status FROM awcms_news_media_objects",
+        "SELECT public_url FROM awcms_news_media_objects"
+      ]) {
+        let refused = false;
+
+        try {
+          await withTenantOrThrow(roleSql(), TENANT_A, (tx) => tx.unsafe(read));
+        } catch {
+          refused = true;
+        }
+
+        expect(refused, read).toBe(true);
+      }
+
+      // A tenant argument that is not the transaction's tenant RAISES: it is
+      // never answered. That stops a bug that mixes two tenants up, NOT a
+      // hostile dispatcher (the role sets its own transaction tenant); what
+      // bounds that one is the closed code per unguessable id, with no listing.
+      let mismatch = false;
+
+      try {
+        await withTenantOrThrow(roleSql(), TENANT_B, (tx) =>
+          articlePublicationStatusAdapter.checkArticlePublished(tx, {
+            tenantId: TENANT_A,
+            articleId
+          })
+        );
+      } catch {
+        mismatch = true;
+      }
+
+      expect(mismatch).toBe(true);
+    });
+
+    test("readiness pins both functions exactly and its probe passes on the migrated database", async () => {
+      for (const pin of SOCIAL_SOURCE_CHECK_FUNCTIONS) {
+        expect(
+          await pinDefinerFunction(getAdminSql(), pin),
+          pin.signature
+        ).toBeNull();
+      }
+
+      expect(await probeSocialSourceRecheck(getAdminSql())).toEqual({
+        ran: true
+      });
+      expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+    });
+
+    const MIGRATION = "sql/386_awcms_social_dispatch_source_recheck.sql";
+
+    /** Re-applies sql/386 verbatim (it is idempotent): the reviewed state. */
+    async function restore(local: Bun.SQL) {
+      await local.unsafe(await Bun.file(MIGRATION).text());
+    }
+
+    const FUNCTION_MUTATIONS: [string, string, (body: string) => string][] = [
+      [
+        "an article body that admits a private article",
+        "awcms_social_source_article_state",
+        (sql) =>
+          sql.replace(
+            "p.visibility IN ('public', 'unlisted')",
+            "p.visibility IN ('public', 'unlisted', 'private')"
+          )
+      ],
+      [
+        "an article body that drops the status test (true OR ...)",
+        "awcms_social_source_article_state",
+        (sql) =>
+          sql.replace(
+            "AND p.status = 'published'",
+            "AND (true OR p.status = 'published')"
+          )
+      ],
+      [
+        "a media body that admits a rejected rights adjudication",
+        "awcms_social_source_media_state",
+        (sql) =>
+          sql.replace(
+            "IF v_rights IS DISTINCT FROM 'verified'",
+            "IF v_rights = 'unverified'"
+          )
+      ],
+      [
+        "a media body that admits a soft-deleted object",
+        "awcms_social_source_media_state",
+        (sql) =>
+          sql.replace(
+            "AND m.id = p_media_object_id\n    AND m.deleted_at IS NULL;",
+            "AND m.id = p_media_object_id;"
+          )
+      ]
+    ];
+
+    for (const [label, fn, mutate] of FUNCTION_MUTATIONS) {
+      test(`readiness FAILS with ${label}, and passes once sql/386 is restored`, async () => {
+        const local = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+        const original = await Bun.file(MIGRATION).text();
+        const from = original.indexOf(`CREATE OR REPLACE FUNCTION ${fn}(`);
+        const statement = original.slice(
+          from,
+          original.indexOf("$function$;", from) + "$function$;".length
+        );
+        const mutated = mutate(statement);
+
+        expect(from).toBeGreaterThan(0);
+        expect(mutated).not.toBe(statement);
+
+        try {
+          let status: string;
+          let probe: { ran: boolean; finding?: string };
+
+          try {
+            await local.unsafe(mutated);
+            status = (await checkWorkerSetupRoleGrants()).status;
+            // On the SAME database the mutation was applied to.
+            probe = await probeSocialSourceRecheck(local);
+          } finally {
+            await restore(local);
+          }
+
+          expect(status).toBe("fail");
+          // The behaviour, not only the text: the probe sees the widening too.
+          expect(probe.finding).toBeDefined();
+          expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+        } finally {
+          await local.close({ timeout: 1 });
+        }
+      });
+    }
+
+    const GRANT_MUTATIONS: [string, string, string][] = [
+      [
+        "EXECUTE granted to PUBLIC",
+        "GRANT EXECUTE ON FUNCTION awcms_social_source_media_state(uuid, uuid) TO PUBLIC",
+        "REVOKE EXECUTE ON FUNCTION awcms_social_source_media_state(uuid, uuid) FROM PUBLIC"
+      ],
+      [
+        "a direct read of the posts granted to the dispatcher",
+        "GRANT SELECT (status) ON awcms_blog_posts TO awcms_social_dispatch",
+        "REVOKE SELECT (status) ON awcms_blog_posts FROM awcms_social_dispatch"
+      ],
+      [
+        "a wider column read for the owner role",
+        "GRANT SELECT (public_url) ON awcms_news_media_objects TO awcms_social_source_check",
+        "REVOKE SELECT (public_url) ON awcms_news_media_objects FROM awcms_social_source_check"
+      ],
+      [
+        // The #1274 audit, L3 (X1): the two pins alone did not close the set.
+        "a third function owned by the owner role and executable by the dispatcher",
+        "CREATE FUNCTION awcms_social_source_extra(p uuid) RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$; REVOKE ALL ON FUNCTION awcms_social_source_extra(uuid) FROM PUBLIC; GRANT EXECUTE ON FUNCTION awcms_social_source_extra(uuid) TO awcms_social_dispatch; ALTER FUNCTION awcms_social_source_extra(uuid) OWNER TO awcms_social_source_check",
+        "DROP FUNCTION awcms_social_source_extra(uuid)"
+      ],
+      [
+        "a function owned by the owner role that the dispatcher cannot even execute",
+        "CREATE FUNCTION awcms_social_source_extra(p uuid) RETURNS text LANGUAGE sql STABLE SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$; REVOKE ALL ON FUNCTION awcms_social_source_extra(uuid) FROM PUBLIC; ALTER FUNCTION awcms_social_source_extra(uuid) OWNER TO awcms_social_source_check",
+        "DROP FUNCTION awcms_social_source_extra(uuid)"
+      ],
+      [
+        "an unreviewed SECURITY DEFINER function of another owner, executable by the dispatcher through PUBLIC",
+        "CREATE FUNCTION awcms_social_unreviewed_definer() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$",
+        "DROP FUNCTION awcms_social_unreviewed_definer()"
+      ]
+    ];
+
+    for (const [label, widen, undo] of GRANT_MUTATIONS) {
+      test(`readiness FAILS with ${label}, and passes once it is revoked`, async () => {
+        const local = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+
+        try {
+          let status: string;
+
+          try {
+            await local.unsafe(widen);
+            status = (await checkWorkerSetupRoleGrants()).status;
+          } finally {
+            await local.unsafe(undo);
           }
 
           expect(status).toBe("fail");

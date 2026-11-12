@@ -15,7 +15,11 @@
         "module_management",
         "logging"
       ],
-      "capabilitiesProvided": ["public_content", "seo_facts"],
+      "capabilitiesProvided": [
+        "public_content",
+        "seo_facts",
+        "article_publication_status"
+      ],
       "capabilitiesConsumed": [
         {
           "capability": "media_library",
@@ -589,6 +593,11 @@
         {
           "capability": "media_library",
           "providedBy": "media_library",
+          "optional": true
+        },
+        {
+          "capability": "article_publication_status",
+          "providedBy": "blog_content",
           "optional": true
         }
       ],

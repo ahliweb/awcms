@@ -218,6 +218,19 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "ALWAYS rolls back (it throws a sentinel). Nothing it writes is ever " +
       "committed: a behavioural probe of the role's RESTRICTIVE write " +
       "policies, not a second writer of these tables."
+  })),
+  ...["awcms_blog_posts", "awcms_news_media_objects"].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeSocialSourceRecheck` (Issue " +
+      "#1145, ADR-0157 L8, sql/386) seeds two throwaway tenants with articles " +
+      "and media objects in every state that matters INSIDE one transaction it " +
+      "ALWAYS rolls back (it throws a sentinel), then, as " +
+      "`awcms_social_dispatch`, asks the two SECURITY DEFINER re-check " +
+      "functions for their verdicts and proves a direct read is refused. " +
+      "Nothing it writes is ever committed: a behavioural probe of the " +
+      "functions, not a second writer of posts or media."
   }))
 ];
 

@@ -131,7 +131,9 @@ describe("blog_content is the single seo_facts provider (seam wiring)", () => {
   test("blog_content provides public_content + seo_facts", () => {
     expect(blogContentModule.capabilities?.provides).toEqual([
       "public_content",
-      "seo_facts"
+      "seo_facts",
+      // Issue #1145, ADR-0157 L8: the social dispatcher's source re-check.
+      "article_publication_status"
     ]);
   });
 

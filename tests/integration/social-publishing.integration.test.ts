@@ -100,6 +100,7 @@ import {
   TEXT_ONLY_CAPABILITIES,
   createFakeSocialAdapter
 } from "../support/fake-social-publish-adapter";
+import { sourcesAlwaysPublishableForTests } from "../support/fake-publication-source-checks";
 
 const TENANT_A = "a1145000-0000-4000-8000-00000000000a";
 const TENANT_B = "a1145000-0000-4000-8000-00000000000b";
@@ -324,6 +325,7 @@ function dispatch(
   return dispatchSocialPublishQueue(runtime(), tenantId, {
     publishers,
     credentials,
+    sources: sourcesAlwaysPublishableForTests,
     registry,
     env: ENV,
     clock: at(0),
@@ -910,6 +912,7 @@ suite("social_publishing against PostgreSQL", () => {
       const run = await dispatchSocialPublishQueue(worker(), TENANT_A, {
         publishers,
         credentials: noPublishCredentialPort,
+        sources: sourcesAlwaysPublishableForTests,
         registry: createSocialAdapterRegistry([]),
         env: ENV,
         clock: at(0)
@@ -932,6 +935,7 @@ suite("social_publishing against PostgreSQL", () => {
       await dispatchSocialPublishQueue(worker(), TENANT_A, {
         publishers,
         credentials: noPublishCredentialPort,
+        sources: sourcesAlwaysPublishableForTests,
         registry,
         env: ENV,
         clock: at(0)

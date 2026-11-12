@@ -80,6 +80,7 @@ import {
   FULL_CAPABILITIES,
   createFakeSocialAdapter
 } from "../support/fake-social-publish-adapter";
+import { sourcesAlwaysPublishableForTests } from "../support/fake-publication-source-checks";
 
 const OWNER_PASSWORD = randomBytes(12).toString("hex") + "-Aa1!";
 const BASE = "/api/v1/social-publishing";
@@ -354,6 +355,7 @@ function dispatchAsApp(tenantId: string, minutes = 0) {
       store,
       env: process.env as NodeJS.ProcessEnv
     }),
+    sources: sourcesAlwaysPublishableForTests,
     registry: createSocialAdapterRegistry([fb, li]),
     env: process.env as NodeJS.ProcessEnv,
     clock: () => instant

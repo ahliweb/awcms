@@ -129,7 +129,10 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_account_health",
       "awcms_audit_events",
       "awcms_domain_events",
-      "awcms_domain_event_deliveries"
+      "awcms_domain_event_deliveries",
+      // #1145 L8 (sql/386): the social source re-check probe.
+      "awcms_blog_posts",
+      "awcms_news_media_objects"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
