@@ -60,6 +60,40 @@ is not noisy.
 
 The mode **never** changes _what_ may be cached — only _for how long_.
 
+### Public surfaces independent of load (`EDGE_CACHE_PUBLIC_SURFACES`)
+
+`auto` leaves a public page uncached below the activation threshold, so the
+first spike pays full origin cost. `EDGE_CACHE_PUBLIC_SURFACES=always` (issue
+#1284, ADR-0161)
+removes that dependency for the surfaces already declared in
+`surface-registry.ts`:
+
+| Setting              | Effect                                                                                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pressure` (default) | Today's behaviour: the mode decides the TTL.                                                                                                                                                                                                                        |
+| `always`             | A declared surface advertises its declared TTL (clamped to `EDGE_CACHE_MAX_TTL_SECONDS`) in `Surrogate-Control` **and** `Cache-Control: public, max-age=0, s-maxage=<ttl>, must-revalidate`, which is what the CDN tier reads (Varnish strips `Surrogate-Control`). |
+
+It does nothing while `EDGE_CACHE_MODE=off`, and an unrecognised value means
+`pressure`. A route's own `Cache-Control` is still never overwritten.
+
+**Decision table.** "Always" applies to every entry of the allow-list and to
+nothing else; the allow-list itself did not change.
+
+| Surface (registry key)                                                                                                                                                                                                     | Always safe?                      | Why                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `blog-index`, `blog-post`, `blog-taxonomy`, `blog-page`, `blog-discovery`, `seo-robots`, `seo-sitemap`, `seo-feed`, `theming-tokens`                                                                                       | Yes, on the same checks as before | Anonymous, tenant-keyed, a function of published content; every per-request exclusion still runs |
+| Anything not in the registry, `/admin/**`, `/api/v1/**`, `/search`, preview-token URLs, `/login`, the catch-all                                                                                                            | Never (not on the allow-list)     | Unchanged from ADR-0042                                                                          |
+| Any request with `Authorization` or an `awcms_*` cookie; any response with `Set-Cookie`, `private`/`no-store`/`no-cache`, `Vary: *`/`Cookie`/`Accept-Language`; non-GET/HEAD; unlisted query parameters; unresolved tenant | Never                             | Per-request checks in `cacheability.ts` run before the TTL, in every setting                     |
+
+Cache key, `Vary` and the locale-in-path rule (ADR-0098) are untouched.
+
+**Staleness bound.** While purge does not reach the CDN (see the next section,
+C14), a CDN copy can be at most `s-maxage` old. With the default
+`EDGE_CACHE_MAX_TTL_SECONDS=300` that is the **≤300 seconds** already accepted;
+`validate-env` warns (`edge_cache_cdn_ttl_exceeds_accepted_bound`) when `always`
+is combined with a larger ceiling. Raising the ceiling needs the CDN purge
+decision (#1282) first.
+
 ## Adding a cacheable surface
 
 One entry in `PUBLIC_CACHE_SURFACES`

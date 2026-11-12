@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:6925da02c6a3032bf41b54bcf15d7ab71436a6c7bda23a16ee8fc95c3815a342 -->
+<!-- i18n-source-hash: sha256:45806953a609be66be51c41e12afe7b0bf63546a9077b5a632698de2b07155b5 -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 
@@ -471,6 +471,9 @@ Env aplikasi:
 ```bash
 EDGE_CACHE_MODE=auto        # `on` hanya untuk membuktikan lapisannya;
                             # `auto` meng-cache saat origin tertekan
+EDGE_CACHE_PUBLIC_SURFACES=pressure  # `always`: surface publik terdeklarasi
+                            # bisa di-cache CDN apa pun bebannya (s-maxage,
+                            # dibatasi EDGE_CACHE_MAX_TTL_SECONDS, jaga <=300)
 EDGE_CACHE_PURGE_ENDPOINT=http://<container-varnish>:80
 EDGE_CACHE_PURGE_TOKEN=<secret per environment>
 EDGE_CACHE_MAX_TTL_SECONDS=300

@@ -839,6 +839,12 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  {
+    name: "EDGE_CACHE_PUBLIC_SURFACES",
+    required: false,
+    type: "enum",
+    values: ["pressure", "always"]
+  },
   { name: "EDGE_CACHE_PURGE_BATCH_SIZE", required: false, type: "int", min: 1 }
 ];
 

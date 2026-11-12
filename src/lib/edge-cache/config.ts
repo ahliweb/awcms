@@ -19,6 +19,18 @@
  * - `on` — always advertise the declared TTL for declared public surfaces.
  *   Use for a read-heavy public site where staleness within the TTL is fine.
  *
+ * ## Public surfaces independent of load (`EDGE_CACHE_PUBLIC_SURFACES`, #1284)
+ *
+ * `auto` ramps the TTL from pressure, which leaves a public page uncached below
+ * the threshold and makes the first spike pay full origin cost. Setting
+ * `EDGE_CACHE_PUBLIC_SURFACES=always` makes every surface declared in
+ * `surface-registry.ts` advertise its declared TTL (clamped to
+ * `EDGE_CACHE_MAX_TTL_SECONDS`) regardless of pressure, AND tells the CDN in
+ * front of Varnish through `Cache-Control: s-maxage` (Varnish consumes and
+ * strips `Surrogate-Control`, so the CDN never sees it). Default `pressure`
+ * keeps today's behaviour. It cannot widen WHAT is cacheable and does nothing
+ * while `mode` is `off`.
+ *
  * `auto` vs `on` only ever changes **how long** a response may be cached. It can
  * never widen **what** is cacheable — that is decided independently, and
  * fail-closed, by `cacheability.ts`.
@@ -27,10 +39,18 @@ import { loadEdgeCacheMode, type EdgeCacheMode } from "./mode";
 
 export type { EdgeCacheMode } from "./mode";
 
+/**
+ * `pressure` (default): the mode decides the TTL (`auto` ramps with load).
+ * `always`: declared public surfaces are always cacheable, edge and CDN.
+ */
+export type EdgeCachePublicSurfaces = "pressure" | "always";
+
 export type EdgeCacheEnvironment = Readonly<Record<string, string | undefined>>;
 
 export type EdgeCacheConfig = {
   mode: EdgeCacheMode;
+  /** Whether declared public surfaces are cacheable regardless of load. */
+  publicSurfaces: EdgeCachePublicSurfaces;
   /**
    * Hard ceiling on any advertised `Surrogate-Control: max-age`. Even a surface
    * that declares a longer TTL is clamped to this, so one careless surface
@@ -102,11 +122,27 @@ function readNonEmpty(raw: string | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Anything but exactly `always` is `pressure`: a typo must not widen caching. */
+function loadPublicSurfaces(
+  env: EdgeCacheEnvironment
+): EdgeCachePublicSurfaces {
+  return env.EDGE_CACHE_PUBLIC_SURFACES?.trim().toLowerCase() === "always"
+    ? "always"
+    : "pressure";
+}
+
+/**
+ * The documented staleness bound when nothing purges the CDN (C14, accepted
+ * 2026-08-05): `s-maxage` beyond this needs a CDN purge decision first.
+ */
+export const CDN_STALENESS_BOUND_SECONDS = 300;
+
 export function loadEdgeCacheConfig(
   env: EdgeCacheEnvironment = process.env
 ): EdgeCacheConfig {
   return {
     mode: loadEdgeCacheMode(env),
+    publicSurfaces: loadPublicSurfaces(env),
     maxTtlSeconds: readBoundedInt(
       env.EDGE_CACHE_MAX_TTL_SECONDS,
       DEFAULTS.maxTtlSeconds,
@@ -168,6 +204,17 @@ export function validateEdgeCacheConfig(
 
   if (config.mode === "off") {
     return findings;
+  }
+
+  if (
+    config.publicSurfaces === "always" &&
+    config.maxTtlSeconds > CDN_STALENESS_BOUND_SECONDS
+  ) {
+    findings.push({
+      severity: "warning",
+      code: "edge_cache_cdn_ttl_exceeds_accepted_bound",
+      message: `EDGE_CACHE_PUBLIC_SURFACES=always with EDGE_CACHE_MAX_TTL_SECONDS above ${CDN_STALENESS_BOUND_SECONDS} lets the CDN serve stale public pages for longer than the accepted staleness bound while purge does not reach the CDN.`
+    });
   }
 
   if (!config.purgeEndpoint) {
