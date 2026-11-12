@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:1b4f8bacaf29bbf8afe59067c5729bc3ed55ed542c2a3fe701d6d003258a4fa0 -->
+<!-- i18n-source-hash: sha256:2cf6fbb313d4ee61c06fcfeed478572e28e1b6b01f926e0e49288947471e587b -->
 
 # Database Connection Pooling and Backpressure
 
@@ -279,9 +279,8 @@ check-nya sendiri crash.
 proses ini sendiri (bukan agregat lintas-instance — satu proses tidak
 mengetahui instance lain) — untuk validasi lintas-instance sebelum
 scale-out, lihat
-[`database-capacity-runbook.md`](database-capacity-runbook.md) (library
-`capacity-config.ts` sudah nyata; CLI `bun run database:capacity:check`
-masih target — lihat status dokumen runbook tersebut).
+[`database-capacity-runbook.md`](database-capacity-runbook.md) (`bun run database:capacity:check`
+menjalankan validasi itu sesuai permintaan).
 
 ## 6. Domain event `database.pool.saturated`
 
@@ -315,34 +314,48 @@ app + PostgreSQL, lihat `docker-compose.yml` root dan
 service `pgbouncer` di compose digerbangi lewat Docker Compose `profiles`
 sehingga hanya aktif bila diminta eksplisit.
 
-Implikasi saat `DATABASE_PGBOUNCER=true`:
+Contoh Compose dengan image ber-pin (hanya PgBouncer, tanpa PostgreSQL) ada di
+[`../../deploy/pgbouncer/docker-compose.yml`](../../deploy/pgbouncer/docker-compose.yml).
+Aplikasi bergabung ke jaringannya dan `DATABASE_URL` (serta
+`WORKER_DATABASE_URL` / `SETUP_DATABASE_URL` bila dipakai) menunjuk ke
+PgBouncer.
 
-- `prepare: false` diset otomatis pada `Bun.SQL` (lihat §1) — prepared
-  statement otomatis bermasalah di PgBouncer transaction mode karena setiap
-  statement bisa dieksekusi di koneksi backend berbeda antar transaction.
-- Kode aplikasi sudah aman: `withTenant` selalu memakai
-  `SET LOCAL app.current_tenant_id` (bukan `SET` sesi biasa), yang scope-nya
-  otomatis terbatas pada satu transaction — kompatibel dengan PgBouncer
-  transaction mode.
+### Apa yang diubah `DATABASE_PGBOUNCER=true`, dan kenapa aman bagi RLS
+
+Diverifikasi pada 12 November 2026 terhadap PgBouncer 1.25 dengan `pool_mode =
+transaction`, PostgreSQL 18.6 dan Bun 1.4.4, lewat `getDatabaseClient()` dan
+`withTenantOrThrow` produksi (`bun run database:pgbouncer:verify` mengulanginya):
+
+| Perihal                                                   | Perilaku                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prepared statement                                        | `prepare: false` diset otomatis. Bun lalu mengirim statement tak bernama yang bisa dirutekan PgBouncer per transaction; query berparameter (`` sql`... ${value}` ``) berjalan. Prepared statement bernama tidak dipakai, jadi `max_prepared_statements` PgBouncer tetap `0`.                                                                                                                                                                                                                                                                                                                                                    |
+| `SET LOCAL app.current_tenant_id` (GUC tenant untuk RLS)  | Aman. `withTenant` menjalankan `sql.begin(...)`, sehingga `BEGIN`, `SET LOCAL`, semua query dan `COMMIT` tetap di SATU koneksi backend (PgBouncer menahan satu server selama transaction) dan `SET LOCAL` kembali saat `COMMIT`/`ROLLBACK`. 200 transaction berselang-seling untuk dua tenant di 5 koneksi backend melihat 0 baris asing dan 0 nilai GUC asing; di luar transaction GUC adalah default fail-closed role dan tidak ada baris yang terlihat.                                                                                                                                                                      |
+| `statement_timeout`                                       | **Berubah.** Tanpa PgBouncer ia adalah parameter startup koneksi. PgBouncer menolaknya (`unsupported startup parameter: statement_timeout`) dan pool tidak pernah terbuka, sehingga di bawah `DATABASE_PGBOUNCER=true` ia tidak dikirim saat connect dan `withTenant` menjalankan `SET LOCAL statement_timeout` di setiap transaction (nilai `DATABASE_STATEMENT_TIMEOUT_MS`, default 15 detik). Query di luar `withTenant` tidak punya timeout dari app; set default role: `ALTER ROLE awcms_app SET statement_timeout = '15s'`. Jangan memakai `ignore_startup_parameters = statement_timeout`: timeout-nya hilang diam-diam. |
+| State sesi                                                | Tidak tersedia di transaction mode. Kode aplikasi tidak boleh memakai `SET` biasa, advisory lock tingkat sesi, langganan `LISTEN`/`NOTIFY`, atau cursor `WITH HOLD` pada profil ini. `withTenant` dan lock job runner yang berscope transaction kompatibel.                                                                                                                                                                                                                                                                                                                                                                     |
+| Deployment langsung (`DATABASE_PGBOUNCER` kosong/`false`) | Tidak berubah: prepared statement aktif, `statement_timeout` dikirim saat connect, tanpa statement tambahan per transaction.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+
+Belum diverifikasi: suite integrasi penuh berbasis Postgres
+(`bun test tests/integration/`) lewat PgBouncer. Harness-nya membuka koneksi
+khusus sendiri ke database sementara, sehingga tidak bisa diarahkan ke
+PgBouncer tanpa mengubah harness; bukti isolasi RLS di atas memakai jalur
+klien produksi. Job CI yang menjalankan `database:pgbouncer:verify` terhadap
+service container PgBouncer mungkin dikerjakan sebagai tindak lanjut.
 
 ## 8. Kapasitas deployment-aware
 
-Bagian 1-7 di atas melindungi SATU proses. Kapasitas PostgreSQL/PgBouncer
-yang disetujui berlaku untuk SELURUH armada instance — `src/lib/database/
-capacity-config.ts` **sudah ada dan aktif di runtime** (instance count per
-process class, pool budget, kapasitas PgBouncer, budget koneksi disetujui,
-headroom admin dipakai oleh `GET /api/v1/database/pool/health`'s field
-`capacity`, dan `recordGauge` mencatat `db_pool_capacity_*` lewat
-`src/lib/observability/metrics-port.ts`). Yang **belum ada** adalah CLI
-wrapper-nya: `bun run database:capacity:check` dan
-`production:preflight`'s stage `database:capacity` bukan script nyata —
-tidak ada key ini di `package.json` (lihat `scripts/README.md` §Ditunda).
-Validasi kapasitas hari ini hanya bisa dilakukan dengan memanggil
-fungsi `capacity-config.ts` langsung (mis. dari test atau REPL), bukan
-lewat perintah `bun run` berdiri sendiri. Detail lengkap:
-[`database-capacity-runbook.md`](database-capacity-runbook.md) (rumus,
-contoh perhitungan, SOP incident saturasi/connection-storm, dan status
-implementasi CLI yang lebih rinci).
+Bagian 1-7 di atas melindungi SATU proses. Kapasitas PostgreSQL/PgBouncer yang
+disetujui berlaku untuk SELURUH armada instance. `src/lib/database/
+capacity-config.ts` memuat modelnya (instance count per process class, pool
+budget, kapasitas PgBouncer, budget koneksi disetujui, headroom admin) yang
+dipakai field `capacity` milik `GET /api/v1/database/pool/health` dan
+`recordGauge` (`db_pool_capacity_*`), dan `bun run database:capacity:check`
+menjalankannya sesuai permintaan: instance x ukuran pool per proses ditambah
+headroom cadangan terhadap `max_connections`, atau terhadap batas PgBouncer
+bila `DATABASE_PGBOUNCER=true`. Ia gagal (exit 1) bila anggaran terlampaui pada
+jumlah instance maksimum yang dikonfigurasi. Jalankan sebelum menambah
+instance; belum ada skrip `production:preflight`, jadi ini langkah manual.
+Detail lengkap: [`database-capacity-runbook.md`](database-capacity-runbook.md)
+(rumus, contoh perhitungan, SOP incident saturasi/connection-storm).
 
 ## Gap yang belum ditutup
 

@@ -27,6 +27,17 @@
  * publishes. A tenant under an active legal hold over `edge_cache.purges` is
  * skipped for retention while its sends continue.
  *
+ * ## CDN purge (Issue #1282, revisit of C14) — off by default
+ *
+ * With `EDGE_CACHE_CDN_PURGE=on` a row is done only after the Varnish BAN AND a
+ * CDN purge-by-tag succeed. Tags are deduplicated and sent 100 per request. A
+ * rate limit or a rejected credential stops the CDN calls for the rest of the
+ * run and RELEASES the rows without spending an attempt (nothing is dropped, and
+ * nothing walks toward the dead-letter for a fault that is not the row's). With
+ * the flag on and credentials missing, the job refuses to start a pass at all
+ * (exit code 1) so the queue keeps every row. See
+ * `src/lib/edge-cache/cdn-client.ts`.
+ *
  * ## No-op when disabled
  *
  * With `EDGE_CACHE_MODE` off or no purge endpoint configured, the job exits
@@ -36,12 +47,19 @@
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { purgeCdnForRows } from "../src/lib/edge-cache/cdn-client";
+import {
+  listMissingCdnPurgeSettings,
+  loadCdnPurgeConfig
+} from "../src/lib/edge-cache/cdn-purge-config";
 import { loadEdgeCacheConfig } from "../src/lib/edge-cache/config";
+import { recordGauge } from "../src/lib/observability/metrics-port";
 import {
   claimEdgeCachePurges,
   markEdgeCachePurgeDone,
   markEdgeCachePurgeFailed,
-  pruneTerminalEdgeCachePurges
+  pruneTerminalEdgeCachePurges,
+  releaseEdgeCachePurge
 } from "../src/lib/edge-cache/purge-queue";
 import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 import { sendEdgeCachePurge } from "../src/lib/edge-cache/varnish-client";
@@ -64,8 +82,28 @@ async function main(): Promise<void> {
     return;
   }
 
+  const cdn = loadCdnPurgeConfig();
+  const missingCdn = listMissingCdnPurgeSettings(cdn);
+
+  if (missingCdn.length > 0) {
+    // Fail closed: do not ban in Varnish and leave the CDN behind. The queue
+    // keeps every row; fix the settings and the next run drains it.
+    console.error(
+      `edge-cache:purge REFUSED — correlationId=${correlationId} ` +
+        `EDGE_CACHE_CDN_PURGE=on but unusable settings: ${missingCdn.join(", ")}`
+    );
+    process.exitCode = 1;
+
+    return;
+  }
+
   const sql = getWorkerDatabaseClient();
   const now = new Date();
+  let cdnPurged = 0;
+  let cdnFailed = 0;
+  let cdnReleased = 0;
+  let cdnMaxLagSeconds = 0;
+  let cdnHalt: "rate_limited" | "auth" | "unavailable" | null = null;
 
   let sent = 0;
   let failed = 0;
@@ -80,6 +118,10 @@ async function main(): Promise<void> {
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
+        if (cdnHalt !== null) {
+          break;
+        }
+
         const claimed = await withTenantOrThrow(
           sql,
           tenant.id,
@@ -97,10 +139,18 @@ async function main(): Promise<void> {
           break;
         }
 
+        const varnishOk: typeof claimed = [];
+
         for (const row of claimed) {
           const outcome = await sendEdgeCachePurge(row.surrogate_key, {
             config
           });
+
+          if (outcome.ok && cdn.enabled) {
+            // Not done yet: the CDN step below decides.
+            varnishOk.push(row);
+            continue;
+          }
 
           // Each outcome is committed on its own so a crash mid-batch loses at
           // most one row's status, not the whole pass's progress.
@@ -126,6 +176,57 @@ async function main(): Promise<void> {
             failed += 1;
           }
         }
+
+        if (cdn.enabled && varnishOk.length > 0) {
+          const decisions = await purgeCdnForRows(varnishOk, { config: cdn });
+          const createdAt = new Map(
+            varnishOk.map((row) => [row.id, new Date(row.created_at)])
+          );
+
+          if (decisions.halt !== null) cdnHalt = decisions.halt;
+
+          await withTenantOrThrow(
+            sql,
+            tenant.id,
+            async (tx) => {
+              const stamp = new Date();
+
+              for (const id of decisions.done) {
+                await markEdgeCachePurgeDone(tx, id, stamp);
+                const created = createdAt.get(id);
+
+                if (created) {
+                  cdnMaxLagSeconds = Math.max(
+                    cdnMaxLagSeconds,
+                    Math.round((stamp.getTime() - created.getTime()) / 1_000)
+                  );
+                }
+              }
+              for (const item of decisions.retry) {
+                await markEdgeCachePurgeFailed(tx, item.id, item.detail, stamp);
+              }
+              for (const item of decisions.deadLetter) {
+                await markEdgeCachePurgeFailed(
+                  tx,
+                  item.id,
+                  item.detail,
+                  stamp,
+                  true
+                );
+              }
+              for (const item of decisions.release) {
+                await releaseEdgeCachePurge(tx, item.id, item.detail, stamp);
+              }
+            },
+            { workClass: "background_sync" }
+          );
+
+          cdnPurged += decisions.done.length;
+          sent += decisions.done.length;
+          cdnFailed += decisions.retry.length + decisions.deadLetter.length;
+          failed += decisions.retry.length + decisions.deadLetter.length;
+          cdnReleased += decisions.release.length;
+        }
       }
 
       const retention = await withTenantOrThrow(
@@ -150,8 +251,29 @@ async function main(): Promise<void> {
       `edge-cache:purge complete — correlationId=${correlationId} ` +
         `mode=${config.mode} tenants=${tenants.length} ` +
         `sent=${sent} failed=${failed} prunedCompleted=${prunedCompleted} ` +
-        `prunedFailed=${prunedFailed} legalHoldTenants=${heldTenants}`
+        `prunedFailed=${prunedFailed} legalHoldTenants=${heldTenants} ` +
+        `cdn=${cdn.enabled ? "on" : "off"} cdnPurged=${cdnPurged} ` +
+        `cdnFailed=${cdnFailed} cdnReleased=${cdnReleased} ` +
+        `cdnMaxLagSeconds=${cdnMaxLagSeconds} cdnHalt=${cdnHalt ?? "none"}`
     );
+
+    if (cdn.enabled) {
+      for (const [itemName, value] of Object.entries({
+        cdnPurged,
+        cdnFailed,
+        cdnReleased,
+        cdnMaxLagSeconds
+      })) {
+        recordGauge("job_run_item_count", value, {
+          jobName: "edge-cache:purge",
+          itemName
+        });
+      }
+    }
+
+    if (cdnHalt === "auth") {
+      process.exitCode = 1;
+    }
   } catch (error) {
     logScriptFailure("edge-cache:purge FAILED", error);
   } finally {

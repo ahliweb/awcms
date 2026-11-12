@@ -2,7 +2,7 @@
 
 # Observability: Metrics, SLOs, Job Health, and Provider Telemetry
 
-> **Document status:** the core implementation is real, part of it is still a target. `src/lib/observability/` ALREADY exists and is in use — `metrics-port.ts`, `in-memory-metrics-port.ts`, and `adapters/prometheus-text-adapter.ts` are all real, and `recordCounter`/`recordGauge`/`recordHistogram` are already wired into `job-runner.ts` (`emitJobRunMetrics`), `work-class.ts` (`emitWorkClassGauges`), `circuit-breaker.ts` (`decorateWithMetrics`), `capacity-config.ts`, as well as into real domain application code (`workflow-approval`'s `workflow-escalation.ts`, `domain-event-runtime`'s `dispatch-domain-events.ts`, and several `src/pages/api/v1/workflows/**` routes). What is **still a target/does not exist yet**: the `http_requests_total`/`http_request_duration_ms` instrumentation in `middleware.ts` (not wired yet), the authorized dependency-health endpoint, the OpenTelemetry adapter, every observability test file referenced in §Testing, and of course the ERP-specific metrics (`transaction_posted_total`, etc.) because no ERP module calls them yet. This document still adapts the metric examples to the business transaction domain (finance, inventory, HR/payroll) as a target for once the ERP module is built.
+> **Document status:** the core implementation is real, part of it is still a target. `src/lib/observability/` ALREADY exists and is in use — `metrics-port.ts`, `in-memory-metrics-port.ts`, and `adapters/prometheus-text-adapter.ts` are all real, and `recordCounter`/`recordGauge`/`recordHistogram` are already wired into `job-runner.ts` (`emitJobRunMetrics`), `work-class.ts` (`emitWorkClassGauges`), `circuit-breaker.ts` (`decorateWithMetrics`), `capacity-config.ts`, as well as into real domain application code (`workflow-approval`'s `workflow-escalation.ts`, `domain-event-runtime`'s `dispatch-domain-events.ts`, and several `src/pages/api/v1/workflows/**` routes). What is **still a target/does not exist yet**: the authorized dependency-health endpoint, the OpenTelemetry adapter, every observability test file referenced in §Testing, and of course the ERP-specific metrics (`transaction_posted_total`, etc.) because no ERP module calls them yet. This document still adapts the metric examples to the business transaction domain (finance, inventory, HR/payroll) as a target for once the ERP module is built.
 
 A companion to [`deployment-profiles.md`](deployment-profiles.md) §Shared worker runner. This document covers the concepts: low-cardinality numeric metrics (counter/histogram/gauge), initial SLI/SLOs, and the authorized dependency-health endpoint.
 
@@ -12,7 +12,7 @@ A companion to [`deployment-profiles.md`](deployment-profiles.md) §Shared worke
 
 ```mermaid
 flowchart LR
-  MW["middleware.ts (planned)"] -->|http_requests_total<br/>http_request_duration_ms| Port[MetricsPort]
+  MW["middleware.ts onRequest"] -->|http_requests_total<br/>http_request_duration_ms| Port[MetricsPort]
   JR[job-runner.ts buildResult] -->|job_run_total<br/>job_run_duration_ms<br/>job_run_item_count| Port
   CB[circuit-breaker.ts decorateWithMetrics] -->|provider_call_total<br/>provider_call_duration_ms<br/>provider_circuit_state| Port
   WC[work-class.ts emitWorkClassGauges] -->|db_pool_work_class_active<br/>db_pool_work_class_queued| Port
@@ -28,12 +28,12 @@ flowchart LR
 
 ## Mandatory instrumentation points — a shared mechanism, not duplication per call site
 
-The mandatory principle: provider/job/pool metrics must flow through the shared mechanism THAT ALREADY EXISTS, not be duplicated at every call site. Three of the five points below are ALREADY really wired; two are still targets:
+The mandatory principle: provider/job/pool metrics must flow through the shared mechanism THAT ALREADY EXISTS, not be duplicated at every call site. Four of the five points below are ALREADY really wired; one is still a target:
 
 - **Job run status/backlog (real implementation)** — a single function point (`buildResult` in `job-runner.ts`) that every `runJob` return path (lock acquire failed, skip-on-contention, success/partial, timeout/terminated, error) already passes through. `emitJobRunMetrics` is called once there — every job (audit purge, sync dispatcher, posting batch, payroll run) gets `job_run_total`/`job_run_duration_ms`/`job_run_item_count` for free.
 - **Provider outcome/latency/circuit state (real implementation)** — a single function `getProviderCircuitBreaker()` that every provider call site (email, object storage, payment gateway, marketplace, Coretax, logistics, SSO) must go through — no call site calls `createCircuitBreaker` directly. The `decorateWithMetrics` wrapper in between is the single source of these metrics.
 - **DB pool saturation (real implementation)** — a single place (`work-class.ts`'s `gates`) where `active`/`queue.length` ever changes (acquire, hand-off on release, decrement on release, timeout eviction). `emitWorkClassGauges(workClass)` is called at each of those points. `capacity-config.ts` also already calls `recordGauge` directly for the capacity metrics (`db_pool_capacity_*`).
-- **HTTP request outcome/latency (planned — not wired yet)** — a single function (`middleware.ts`'s `onRequest`) that every request passes through, PLANNED to call `recordHttpRequestMetrics` at every response-producing branch, using Astro's static `routePattern` (e.g. `"/api/v1/finance/journals/[journalId]"` — a literal bracketed placeholder, not a concrete path containing a real id). `middleware.ts` today does not import anything from `src/lib/observability/` — the `recordHttpRequestMetrics` function itself has not been written.
+- **HTTP request outcome/latency (real implementation, Issue #1287)** — a single function (`middleware.ts`'s `onRequest`) that every request passes through. The whole handler is wrapped in `instrumentHttpRequest` (`src/lib/observability/http-request-metrics.ts`), so every response-producing branch (rendered, redirect, early rejection) records `http_requests_total` and `http_request_duration_ms`, and an error thrown out of the handler is recorded as `500` and rethrown unchanged. Labels use Astro's static `routePattern` (e.g. `"/api/v1/finance/journals/[journalId]"` — a literal bracketed placeholder, never the concrete path); the helper additionally collapses anything that is not an absolute pattern, carries a query or fragment, or has a UUID or long digit run to `unmatched`, and unknown HTTP methods to `OTHER`. With the default no-op port the cost is two small label objects per request. **Not covered:** requests the adapter's static handler answers from `dist/client/` never reach the middleware, so static assets are not counted; and nothing registers a metrics adapter or exposes a scrape endpoint by default (`setMetricsPort(createPrometheusTextMetricsPort())` is the deployment's choice), so the series exist only in a deployment that does that.
 - **ERP transaction posting/domain event (planned — new for this platform)** — a single chokepoint in the application/domain layer for every financial transaction posting, stock adjustment, or payroll run execution, following the same pattern: `transaction_posted_total`/`transaction_posting_duration_ms`, recorded from ONE wrapper/service, not scattered across every handler — waiting on the first finance/inventory/HR-payroll module. The same instrumentation pattern is ALREADY used outside ERP by existing domain code: `workflow-approval`'s `workflow-escalation.ts` (`workflow_escalation_total`), `domain-event-runtime`'s `dispatch-domain-events.ts` (`domain_event_dispatch_total`/`domain_event_delivery_backlog`), and several `src/pages/api/v1/workflows/**` routes (`workflow_recovery_action_total`).
 
 ## Cardinality and privacy (mandatory criteria)
@@ -57,6 +57,19 @@ Every metric the application emits must be declared in `METRIC_DEFINITIONS` with
 **Labels that need a dedicated bounding mechanism**: a provider circuit-breaker registry key can be tenant-scoped (e.g. `sso-oidc-discovery:<tenantId>:<providerKey>`, or for ERP: `payment-gateway:<tenantId>:<providerKey>`). Putting that raw string in a metric label would BE BOTH — a tenant-id leak and unbounded cardinality. The bounding function (`deriveProviderFamilyLabel`, kept from the base) keeps only the literal, code-hardcoded prefix before the first `:` — every provider call site in this repo follows the same "literal-category-prefix, optional dynamic `:`-suffix" convention, so one generic split rule is enough.
 
 **No tenant id, unbounded id-bearing route, email/IP, object key, token, account/NPWP number, transaction amount, or conversation content may appear in any label** — every value must be a member of a fixed enum or a code literal string, never data originating from a request body, a tenant record, or financial/personal data.
+
+## Reading p95 from the HTTP histogram
+
+`http_request_duration_ms` is a histogram in milliseconds with the adapter's bucket boundaries (`DEFAULT_HISTOGRAM_BUCKETS_MS` for the bundled Prometheus text adapter: 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000 ms), so p95 is read per route pattern from the cumulative buckets, never from a mean. With Prometheus:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, routePattern) (rate(http_request_duration_ms_bucket[5m]))
+)
+```
+
+Add `method` to the `by` clause to split reads from writes. The estimate is only as fine as the bucket boundaries around the target (a 500 ms target needs a boundary at or near 500), and a route class with very few requests in the window gives a noisy p95; judge a target over a long enough window or under a load test (#1283), not from a quiet minute.
 
 ## Initial SLI/SLOs and burn-rate guidance
 

@@ -150,6 +150,23 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
   ...[
     "awcms_tenants",
     "awcms_channel_accounts",
+    "awcms_channel_webhook_subscriptions",
+    "awcms_email_provider_events"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeEmailProviderEventRetentionFloor` " +
+      "(Issue #1161, M-3 of the PR #1272 audit) seeds a throwaway tenant, a " +
+      "Mailketing account, a callback and four back-dated quarantine rows inside " +
+      "ONE transaction that it ALWAYS rolls back (it throws a sentinel), assumes " +
+      "`awcms_worker`, and proves the retention DELETE removes exactly the two " +
+      "rows past their window. Nothing it writes is ever committed, so it is a " +
+      "behavioural probe of the floor, not a second writer of these tables."
+  })),
+  ...[
+    "awcms_tenants",
+    "awcms_channel_accounts",
     "awcms_channel_provider_connections",
     "awcms_channel_secrets"
   ].map((table) => ({

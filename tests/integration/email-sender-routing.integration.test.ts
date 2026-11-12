@@ -722,6 +722,8 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
     });
 
     // s1 now sends; s2 (no health row) is held, then over budget it fails.
+    expect(result.sent).toBe(1);
+    expect(result.senderHeld).toBe(1);
     expect(h.sent.map((s) => s.from)).toEqual([s1!.address]);
     expect((await row(unknown.id)).status).toBe("queued");
 

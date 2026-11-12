@@ -14,6 +14,10 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { previewAnnouncement } from "../../../../../modules/email/application/announcement-directory";
 import { validateAnnouncementInput } from "../../../../../modules/email/domain/announcement-validation";
+import {
+  isRequestReservedEmailCategory,
+  TEMPLATE_CATEGORY_RESERVED_CODE
+} from "../../../../../modules/email/domain/email-sender";
 
 const NOTIFICATION_GUARD = {
   moduleKey: "email",
@@ -83,6 +87,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     const input = validation.value;
+
+    // Issue #1161: announcement routes no longer accept auth/security templates.
+    if (isRequestReservedEmailCategory(input.templateKey)) {
+      return fail(
+        422,
+        TEMPLATE_CATEGORY_RESERVED_CODE,
+        "This template category is reserved for system security mail and cannot be sent as an announcement."
+      );
+    }
+
     const isBulk =
       input.target.type === "role" || input.target.type === "tenant";
 

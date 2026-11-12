@@ -60,6 +60,40 @@ is not noisy.
 
 The mode **never** changes _what_ may be cached — only _for how long_.
 
+### Public surfaces independent of load (`EDGE_CACHE_PUBLIC_SURFACES`)
+
+`auto` leaves a public page uncached below the activation threshold, so the
+first spike pays full origin cost. `EDGE_CACHE_PUBLIC_SURFACES=always` (issue
+#1284, ADR-0161)
+removes that dependency for the surfaces already declared in
+`surface-registry.ts`:
+
+| Setting              | Effect                                                                                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pressure` (default) | Today's behaviour: the mode decides the TTL.                                                                                                                                                                                                                        |
+| `always`             | A declared surface advertises its declared TTL (clamped to `EDGE_CACHE_MAX_TTL_SECONDS`) in `Surrogate-Control` **and** `Cache-Control: public, max-age=0, s-maxage=<ttl>, must-revalidate`, which is what the CDN tier reads (Varnish strips `Surrogate-Control`). |
+
+It does nothing while `EDGE_CACHE_MODE=off`, and an unrecognised value means
+`pressure`. A route's own `Cache-Control` is still never overwritten.
+
+**Decision table.** "Always" applies to every entry of the allow-list and to
+nothing else; the allow-list itself did not change.
+
+| Surface (registry key)                                                                                                                                                                                                     | Always safe?                      | Why                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `blog-index`, `blog-post`, `blog-taxonomy`, `blog-page`, `blog-discovery`, `seo-robots`, `seo-sitemap`, `seo-feed`, `theming-tokens`                                                                                       | Yes, on the same checks as before | Anonymous, tenant-keyed, a function of published content; every per-request exclusion still runs |
+| Anything not in the registry, `/admin/**`, `/api/v1/**`, `/search`, preview-token URLs, `/login`, the catch-all                                                                                                            | Never (not on the allow-list)     | Unchanged from ADR-0042                                                                          |
+| Any request with `Authorization` or an `awcms_*` cookie; any response with `Set-Cookie`, `private`/`no-store`/`no-cache`, `Vary: *`/`Cookie`/`Accept-Language`; non-GET/HEAD; unlisted query parameters; unresolved tenant | Never                             | Per-request checks in `cacheability.ts` run before the TTL, in every setting                     |
+
+Cache key, `Vary` and the locale-in-path rule (ADR-0098) are untouched.
+
+**Staleness bound.** While purge does not reach the CDN (see the next section,
+C14), a CDN copy can be at most `s-maxage` old. With the default
+`EDGE_CACHE_MAX_TTL_SECONDS=300` that is the **≤300 seconds** already accepted;
+`validate-env` warns (`edge_cache_cdn_ttl_exceeds_accepted_bound`) when `always`
+is combined with a larger ceiling. Raising the ceiling needs the CDN purge
+decision (#1282) first.
+
 ## Adding a cacheable surface
 
 One entry in `PUBLIC_CACHE_SURFACES`
@@ -141,6 +175,10 @@ over `default.vcl`.
 
 ## The reach limit of purging
 
+> **Since Issue #1282** the CDN tier can be purged too, behind the default-off
+> `EDGE_CACHE_CDN_PURGE` flag (next section). Everything in this section
+> describes the deployment **with the flag off**, which is the default.
+
 The purge queue reaches **Varnish, and only Varnish** —
 `EDGE_CACHE_PURGE_ENDPOINT` points at the Varnish listener, and the BAN the
 worker sends stops there. In the real deployed topology, the tier that actually
@@ -155,6 +193,51 @@ configuration) — so the bound is time, not invalidation. An acceptance test th
 only reads Varnish's `X-Cache` is measuring a tier that is not the one answering;
 read `cf-cache-status`/`age` as well. This gap is recorded as **C14** in
 [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9.
+
+## CDN purge (`EDGE_CACHE_CDN_PURGE`, off by default)
+
+Issue #1282 revisits C14 with the owner's decision of 12 November 2026:
+implemented, **behind a flag that is off by default**. Nothing below happens
+until the owner fills the credentials and turns the flag on; until then the
+section above is the whole truth and the ≤300-second bound is the acceptance.
+
+**Flow.** The queue row is unchanged (one surrogate key). With the flag on the
+worker (`bun run edge-cache:purge`) sends the Varnish BAN first, then purges the
+**same key as a CDN tag** (`POST <api base>/zones/<zone>/purge_cache`, body
+`{"tags":[...]}`, `Authorization: Bearer <token>`). The row is `done` only when
+both succeeded. The app also emits `Cache-Tag: <keys, comma-separated>` next to
+`Surrogate-Key`, only while the flag is on (the CDN strips it; Varnish passes it
+through, unlike `Surrogate-Key`).
+
+**Design decisions** (from Cloudflare's public purge documentation: purge by URL,
+hostname, tag, prefix and everything is available on every plan; at most 100
+operations per request; account-wide token bucket for tag/hostname/prefix purge of
+5 requests/minute on Free, 5/s Pro, 10/s Business, 50/s Enterprise):
+
+| Decision            | Choice                                                                                                                                                                                                 | Why                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Purge unit          | **Tag** (the existing surrogate key), not URL                                                                                                                                                          | The queue holds keys; the app cannot enumerate the URLs behind a module. Tags are on every plan and kill every object with that key. |
+| Batching            | Distinct tags per claimed batch, **100 per request**                                                                                                                                                   | The documented maximum; a burst of thousands of rows becomes tens of requests against a 5-per-minute (Free) to 50-per-second bucket. |
+| Rate limit          | HTTP 429 stops CDN calls for the rest of the run; rows are **released** (back to `pending`, attempt not counted). The limit is account-wide, so the next scheduled run resumes                         | Retrying inside the run only deepens the limit; a limit is not the row's fault, so it must not walk the row to the dead-letter.      |
+| Backoff and retry   | Transient (5xx, timeout, network, `success` not true): 3 inline attempts, 250 ms then 1 s; then the run stops calling the CDN (`unavailable`) and the row returns to `pending` counting an attempt     | An outage must not be drained into the dead-letter inside one run; later scheduled runs keep the queue's existing 5-attempt budget.  |
+| Dead-letter         | Other 4xx (request is wrong) parks the rows in `failed` with the reason; retries exhausted do the same after 5 attempts. `failed` is the existing dead-letter (180-day retention, ADR-0076)            | Nothing is dropped; an operator sees the cause.                                                                                      |
+| Rejected credential | HTTP 401/403: rows **released**, run stops, exit code 1                                                                                                                                                | A bad or expired token is configuration, not a verdict on the rows; fixing it loses nothing.                                         |
+| Missing credentials | Flag on and any of the three settings missing or unusable: the worker **refuses to run** (exit 1) before touching the queue; `security:readiness` reports CRITICAL                                     | Fail closed: never BAN in Varnish and quietly leave the CDN behind, never drop rows.                                                 |
+| Metrics             | Summary line and `job_run_item_count{jobName="edge-cache:purge",itemName=cdnPurged\|cdnFailed\|cdnReleased\|cdnMaxLagSeconds}`; lag = completion time minus enqueue time of the slowest row in the run | No new metric name, no tenant label (#698 privacy rules). A job process only exports when the deployment registers a metrics port.   |
+
+**Settings** (environment only; none is ever committed or logged):
+`EDGE_CACHE_CDN_PURGE` (`on` enables; anything else is off),
+`EDGE_CACHE_CDN_ZONE_ID`, `EDGE_CACHE_CDN_API_TOKEN` (job-scoped to
+`edge-cache:purge`), optional `EDGE_CACHE_CDN_API_BASE` (https, or http on
+loopback only). Give the token only the cache-purge permission for the one zone.
+Tags are case-insensitive at the CDN; keys built from lower-case ids are
+unaffected.
+
+**What it does not do.** It does not configure the CDN account or zone, does not
+widen the allow-list, and does not make a purge instantaneous: the CDN accepts
+the request and propagates it, so verify with `cf-cache-status`/`age` after a
+publish. Enabling it also lifts the reason to keep `EDGE_CACHE_MAX_TTL_SECONDS`
+at or below 300 for staleness (ADR-0161), but that decision is separate.
 
 ## What is not wired up yet (do not claim it exists)
 

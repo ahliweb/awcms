@@ -33,6 +33,8 @@ import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/applica
 import {
   EMAIL_ATTEMPT_DEFAULT_RETENTION_DAYS,
   EMAIL_MESSAGE_DEFAULT_RETENTION_DAYS,
+  EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS,
+  EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS,
   purgeEmailQueue,
   resolveEmailRetentionCutoff
 } from "../src/modules/email/application/email-queue-purge";
@@ -55,7 +57,7 @@ async function previewTenant(
   sql: Bun.SQL,
   tenantId: string,
   now: Date
-): Promise<{ attempts: number; messages: number }> {
+): Promise<{ attempts: number; messages: number; providerEvents: number }> {
   const messageCutoff = resolveEmailRetentionCutoff(
     now,
     EMAIL_MESSAGE_DEFAULT_RETENTION_DAYS
@@ -79,9 +81,29 @@ async function previewTenant(
       AND updated_at < ${messageCutoff}
   `) as CountRow[];
 
+  // Issue #1161 (audit L-4 of PR #1272): the same two windows the purge uses.
+  const reviewedCutoff = resolveEmailRetentionCutoff(
+    now,
+    EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS
+  );
+  const pendingCutoff = resolveEmailRetentionCutoff(
+    now,
+    EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS
+  );
+  const providerEvents = (await sql`
+    SELECT count(*)::int AS total
+    FROM awcms_email_provider_events
+    WHERE tenant_id = ${tenantId}
+      AND (
+        (review_status <> 'pending' AND received_at < ${reviewedCutoff})
+        OR received_at < ${pendingCutoff}
+      )
+  `) as CountRow[];
+
   return {
     attempts: attempts[0]?.total ?? 0,
-    messages: messages[0]?.total ?? 0
+    messages: messages[0]?.total ?? 0,
+    providerEvents: providerEvents[0]?.total ?? 0
   };
 }
 
@@ -98,6 +120,8 @@ async function main() {
 
     let totalAttempts = 0;
     let totalMessages = 0;
+    let totalProviderEvents = 0;
+    let failedTenants = 0;
 
     for (const tenant of tenants) {
       if (dryRun) {
@@ -109,30 +133,47 @@ async function main() {
 
         totalAttempts += preview.attempts;
         totalMessages += preview.messages;
+        totalProviderEvents += preview.providerEvents;
         continue;
       }
 
-      for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await purgeEmailQueue(
-          sql,
-          tenant.id,
-          legalHoldGuardPortAdapter,
-          { correlationId }
-        );
+      try {
+        for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
+          const result = await purgeEmailQueue(
+            sql,
+            tenant.id,
+            legalHoldGuardPortAdapter,
+            { correlationId }
+          );
 
-        totalAttempts += result.purgedAttempts;
-        totalMessages += result.purgedMessages;
+          totalAttempts += result.purgedAttempts;
+          totalMessages += result.purgedMessages;
+          totalProviderEvents += result.purgedProviderEvents;
 
-        if (result.purgedAttempts + result.purgedMessages === 0) {
-          break;
+          if (
+            result.purgedAttempts +
+              result.purgedMessages +
+              result.purgedProviderEvents ===
+            0
+          ) {
+            break;
+          }
         }
+      } catch (error) {
+        // tx-swallow-ok: The handle here is a pooled client, not a transaction:
+        // each `purgeEmailQueue` call opens its OWN tenant transaction, already
+        // rolled back when it throws. One tenant's failure must not stop the
+        // purge for every other tenant (Issue #1161).
+        failedTenants += 1;
+        logScriptFailure(`email:queue:purge tenant ${tenant.id} FAILED`, error);
       }
     }
 
     console.log(
       `email:queue:purge ${dryRun ? "DRY RUN" : "complete"} — ` +
         `correlationId=${correlationId} tenants=${tenants.length} ` +
-        `attempts=${totalAttempts} messages=${totalMessages}`
+        `attempts=${totalAttempts} messages=${totalMessages} ` +
+        `providerEvents=${totalProviderEvents} failedTenants=${failedTenants}`
     );
   } catch (error) {
     // tx-swallow-ok: The handle here is a pooled client, not a transaction

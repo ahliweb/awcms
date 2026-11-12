@@ -5,28 +5,19 @@
 > **Document status (AWCMS).** The mechanism below is inherited from the
 > `awcms-mini` technical base (Issue #743 in the original repo, epic
 > `platform-evolution`) and applies generically regardless of which ERP
-> module is active — but its status is SPLIT IN TWO.
-> **`src/lib/database/capacity-config.ts` (the library) already exists
-> and is active at runtime**: really used by
-> `GET /api/v1/database/pool/health`'s `capacity` field, and
-> `recordGauge` records the `db_pool_capacity_*` metrics through
-> `src/lib/observability/metrics-port.ts`.
-> **`bun run database:capacity:check` (the standalone CLI wrapper) DOES
-> NOT EXIST YET** — there is no such key in `package.json`, and
-> `production:preflight`'s `database:capacity` stage, referenced
-> repeatedly in this document, does not exist yet either (see
-> [`production-preflight-runbook.md`](production-preflight-runbook.md)
-> and `scripts/README.md` §Deferred, which already lists
-> `database:capacity:check` as needing "cross-instance capacity
-> validation (preflight)" that has not been built). Read every
-> `bun run database:capacity:check`/`production:preflight` example below
-> as a **target procedure** for once the CLI wrapper is written — today,
-> capacity validation can only be done by calling `capacity-config.ts`'s
-> functions directly. Separately from that, what also **does not exist
-> yet** is real load from the ERP modules (finance/inventory/payroll
-> etc.) to validate the capacity numbers against production traffic —
-> the example numbers in this document remain illustrative until there
-> is a real deployment to measure.
+> module is active.
+> **`src/lib/database/capacity-config.ts` (the library) is active at
+> runtime**: `GET /api/v1/database/pool/health`'s `capacity` field uses it and
+> `recordGauge` records the `db_pool_capacity_*` metrics.
+> **`bun run database:capacity:check` (the standalone CLI) exists** since
+> Issue #1286 (`scripts/database-capacity-check.ts`): offline by default, with
+> an optional `--live` read of the server's `max_connections`. There is still
+> **no `production:preflight` script** in `package.json` (see
+> [`production-preflight-runbook.md`](production-preflight-runbook.md)), so the
+> check is a **manual step** before any scale-out or restart plan and is not
+> wired into a preflight stage. What also **does not exist yet** is a measured
+> baseline from real load (ADR-0161); the example numbers in this document
+> stay illustrative until there is one.
 
 Companion to [`database-pooling.md`](database-pooling.md) (per-process
 pool config, work-class concurrency gate, circuit breaker) and
@@ -52,13 +43,11 @@ result = connection storm during scale-out or restart
 env-configurable model of every database-using process class's expected/
 min/max instance count and pool budget, a pure calculator, and a validator
 that fails on unsafe or internally inconsistent combinations. This library
-is real and already runs read-only every time `GET
-/api/v1/database/pool/health` is called (its `capacity` field). What's
-**not yet built** is a standalone CLI to run the same validator on demand
-— the standalone `bun run database:capacity:check` and the READ-ONLY
-`database:capacity` stage in `bun run production:preflight` described
-throughout the rest of this runbook are both target commands, not scripts
-that exist in `package.json` today.
+is real and runs read-only every time `GET
+/api/v1/database/pool/health` is called (its `capacity` field).
+`bun run database:capacity:check` runs the same validator on demand, from
+configuration alone, so the arithmetic happens before a scale-out instead of
+during one.
 
 ## Process class inventory
 
@@ -117,11 +106,19 @@ connections onto far fewer server-side ones:
 1. **App-side**: `sum(instance_count x pool_max)` must fit within
    `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN` (`pgbouncer.ini`'s
    `max_client_conn`).
-2. **Server-side**: `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE +
+2. **Server-side**: `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE x pools +
 DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS` must fit within
    `DATABASE_CAPACITY_APPROVED_CONNECTIONS` — PgBouncer's OWN backend
    connections to PostgreSQL, independent of how many app-side clients are
-   multiplexed onto them.
+   multiplexed onto them. `default_pool_size` is **per (database, user)
+   pair**, and this application can use three roles (`awcms_app`,
+   `awcms_worker`, `awcms_setup`), so "pools" is the number of distinct
+   pairs. It is derived from the user and database names in `DATABASE_URL`,
+   `WORKER_DATABASE_URL` and `SETUP_DATABASE_URL` (classes that can run) and
+   can be forced with `DATABASE_CAPACITY_PGBOUNCER_POOL_COUNT`. `reserve_pool_size`,
+   when you set it in `pgbouncer.ini`, adds to the ceiling per pool and is not
+   modelled; leave headroom for it in the approved budget. With more than one
+   PgBouncer process in front of one PostgreSQL, multiply by their count.
 
 Keep `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`/
 `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` in sync with the operator's
@@ -138,8 +135,7 @@ pattern of the `awcms-mini` base) §Deployment-aware capacity. Every
 variable is OPTIONAL
 with a conservative default that reproduces a single-instance offline/LAN
 topology — the underlying `capacity-config.ts` validator passes with zero
-of them set (verified today by calling the validator directly; via `bun
-run database:capacity:check` once that CLI wrapper exists).
+of them set (`bun run database:capacity:check` passes on a clean checkout).
 
 ## Worked example — sizing for a 4-instance scale-out
 
@@ -159,41 +155,52 @@ DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS=5
 Worst case: `app` 6 x 15 = 90, `worker` 1 x 15 = 15 (worker falls back to
 `DATABASE_POOL_MAX` unless `DATABASE_POOL_MAX_WORKER` is set separately),
 `setup` 1 x 15 = 15 (same fallback) = 120, plus 5 reserved = 125 > 100 —
-**this configuration would FAIL** the validator's check as-is (the
-underlying `capacity-config.ts` calculation is real; only the
-`database:capacity:check` CLI framing below is target). Fix by also
+**this configuration would FAIL** `bun run database:capacity:check` as-is. Fix by also
 setting `DATABASE_POOL_MAX_WORKER=5`/`DATABASE_POOL_MAX_SETUP=5` (worker/
 setup rarely need as many connections as the request-serving `app` class):
 `90 + 1x5 + 1x5 + 5 = 105` — still over. Lower `DATABASE_POOL_MAX` to 12:
 `6x12 + 5 + 5 + 5 = 87 <= 100` — passes. This iterative "run the check,
-read the finding, adjust one number" loop IS the intended workflow once
-the CLI exists; the check exists specifically so this arithmetic happens
-before a scale-out, not during one.
+read the finding, adjust one number" loop is the intended workflow; the
+check exists specifically so this arithmetic happens before a scale-out, not
+during one.
 
-## Running the check (target — CLI wrapper not yet built)
+## Worked example — the same fleet with and without PgBouncer
 
-Neither command below exists in `package.json` today (see this doc's
-status banner). Once the CLI wrapper is written, the intended usage is:
+10 `app` instances, 1 `worker`, `DATABASE_POOL_MAX=20`, a dedicated worker
+role (`WORKER_DATABASE_URL`), and a PostgreSQL with `max_connections=100`:
+
+| Profile                                                  | Arithmetic                                                                          | Result                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------- |
+| Direct                                                   | `10 x 20 + 1 x 20 + 1 x 20 (setup) = 240`, available `100 - 5 = 95`                 | **FAIL** (240 > 95)           |
+| PgBouncer, `max_client_conn=400`, `default_pool_size=20` | clients `240 <= 400`; backend `20 x 2 pools + 5 reserved = 45 <= 100`               | **OK**                        |
+| PgBouncer, `max_client_conn=200`                         | clients `240 > 200`                                                                 | **FAIL** (clients outgrow it) |
+| PgBouncer, `default_pool_size=50`                        | backend `50 x 2 + 5 = 105 > 100` (a per-pool reading, `50 + 5`, would wrongly pass) | **FAIL**                      |
+
+All four rows are unit-tested (`tests/database-capacity-check.test.ts`).
+
+## Running the check
 
 ```bash
-bun run database:capacity:check
+# offline, from the same env the application reads
+DATABASE_CAPACITY_APP_INSTANCES_MAX=10 DATABASE_CAPACITY_APP_INSTANCES_EXPECTED=10 \
+  bun run database:capacity:check
+
+# also cap the budget at what the live server accepts (read-only: two settings
+# and one session count). Point it at PostgreSQL directly.
+DATABASE_CAPACITY_LIVE_URL=<direct-postgres-url> bun run database:capacity:check --live
+
+bun run database:capacity:check --json   # machine-readable
 ```
 
-Or as part of the full read-only preflight sequence (recommended before any
-scale-out or restart plan, same rehearsal-first discipline as
-[`production-preflight-runbook.md`](production-preflight-runbook.md)):
-
-```bash
-APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight
-```
-
-Both are designed to be 100% read-only — pure config arithmetic, no
-database connection, no network call, and neither can change
-pool/database configuration. A
-`[FAIL]` finding blocks preflight's overall `GO-LIVE DIIZINKAN` verdict
-exactly like any other stage; a `[WARNING]` finding (currently only the
-work-class-vs-pool oversubscription check, see `database-pooling.md`'s
-corrected header comment) is printed but never blocks.
+It prints the per-class arithmetic for the `expected` and `max` scenarios, the
+budget it was compared with, and one line per finding. Exit codes: `0` pass
+(a `[WARNING]` never blocks), `1` the budget fails or is inconsistent, `2` a
+usage error or an unreadable `--live` server (never a silent pass). It changes
+no configuration and prints no connection string. Run it with the production
+values of `DATABASE_POOL_MAX*`, `DATABASE_PGBOUNCER` and
+`DATABASE_CAPACITY_*` before any scale-out or restart plan, and again whenever
+you change an instance count or a pool size. There is no
+`production:preflight` script yet, so nothing runs it for you.
 
 ## Graceful saturation behavior
 
@@ -250,10 +257,8 @@ labels only, no tenant ids, no DSNs:
      automatically.
    - If saturation persists beyond a few queue-timeout windows, re-check
      capacity against the CURRENT real instance count (not just the
-     configured `expected`/`max`) — until the `database:capacity:check`
-     CLI exists (see this doc's status banner), do this by calling
-     `capacity-config.ts`'s validator directly with the current instance
-     counts, not via `bun run`. An unplanned extra
+     configured `expected`/`max`) — run `bun run database:capacity:check`
+     with the current instance counts. An unplanned extra
      instance (a stuck old deployment not yet drained, a runaway worker
      re-run — e.g. a duplicate payroll batch) pushes actual usage above
      what was budgeted.
