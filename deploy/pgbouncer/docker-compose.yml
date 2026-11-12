@@ -1,0 +1,54 @@
+# Optional PgBouncer (transaction pooling) in front of PostgreSQL for AWCMS
+# (Issue #1286, ADR-0161 stage S2). An EXAMPLE to adapt, not a deployed stack.
+#
+# AWCMS has no canonical root Compose application stack, so like
+# deploy/redis/docker-compose.yml this file stands alone. The application joins
+# the same Docker network (AWCMS_PGBOUNCER_NETWORK) and connects to the host
+# name `pgbouncer`, port 6432; the port is never published to the host. Set
+# DATABASE_PGBOUNCER=true in the application (see
+# docs/awcms/database-pooling.md section 7) and point DATABASE_URL (and
+# WORKER_DATABASE_URL / SETUP_DATABASE_URL when used) at PgBouncer, never at
+# PostgreSQL directly.
+#
+# Before `docker compose up`:
+#   1. copy pgbouncer.ini.example to a private path, set `host=` in
+#      [databases] to your PostgreSQL, and set PGBOUNCER_INI to that path;
+#   2. create userlist.txt (SCRAM verifiers, one line per role; see the header
+#      of pgbouncer.ini.example) at a private path and set
+#      PGBOUNCER_USERLIST to it. It is a secret and is never committed.
+# The image tag is pinned; raise it on purpose, not by a moving tag.
+
+name: awcms-pgbouncer
+
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.1-p0
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/pgbouncer"]
+    command: ["/etc/pgbouncer/pgbouncer.ini"]
+    volumes:
+      - ${PGBOUNCER_INI:?Set PGBOUNCER_INI to your private pgbouncer.ini}:/etc/pgbouncer/pgbouncer.ini:ro
+      - ${PGBOUNCER_USERLIST:?Set PGBOUNCER_USERLIST to your private userlist.txt}:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - awcms-pgbouncer
+    expose:
+      - "6432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 128M
+
+networks:
+  awcms-pgbouncer:
+    name: ${AWCMS_PGBOUNCER_NETWORK:-awcms-pgbouncer}

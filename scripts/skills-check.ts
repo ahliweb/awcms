@@ -162,7 +162,6 @@ const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
  */
 const DEFERRED_TARGET_PREFIXES: readonly string[] = [
   "config:docs:check",
-  "database:capacity:check",
   "i18n:",
   "modules:sync",
   "performance:",

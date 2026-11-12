@@ -1,33 +1,24 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-capacity-runbook.md)
 
-<!-- i18n-source-hash: sha256:21ae1faf11ff23d49e8442e5b70a8770654037592afe390f5b997cb21a452243 -->
+<!-- i18n-source-hash: sha256:a41400d885b89e9064517f26fc8964988d09e712b8ee04f43fc0149832a98e7a -->
 
 # Runbook Kapasitas Database — Anggaran Pool/Work-Class Sadar-Deployment
 
 > **Status dokumen (AWCMS).** Mekanisme di bawah diwarisi dari base teknis
 > `awcms-mini` (Issue #743 di repo asal, epic `platform-evolution`) dan
-> berlaku generik terlepas dari modul ERP mana yang aktif — tapi statusnya
-> TERBELAH DUA. **`src/lib/database/capacity-config.ts` (library-nya) sudah
-> ada dan aktif di runtime**: benar-benar dipakai oleh field `capacity`
-> milik `GET /api/v1/database/pool/health`, dan `recordGauge` mencatat
-> metrik `db_pool_capacity_*` lewat
-> `src/lib/observability/metrics-port.ts`.
-> **`bun run database:capacity:check` (CLI wrapper yang berdiri sendiri)
-> BELUM ADA** — tidak ada key seperti itu di `package.json`, dan stage
-> `database:capacity` milik `production:preflight`, yang dirujuk berulang
-> di dokumen ini, juga belum ada (lihat
-> [`production-preflight-runbook.md`](production-preflight-runbook.md)
-> dan `scripts/README.md` §Ditunda, yang sudah mendaftar
-> `database:capacity:check` sebagai butuh "validasi kapasitas
-> lintas-instance (preflight)" yang belum dibangun). Baca setiap contoh
-> `bun run database:capacity:check`/`production:preflight` di bawah
-> sebagai **prosedur target** untuk saat CLI wrapper-nya sudah ditulis —
-> hari ini, validasi kapasitas hanya bisa dilakukan dengan memanggil
-> fungsi `capacity-config.ts` secara langsung. Terpisah dari itu, yang
-> juga **belum ada** adalah beban nyata dari modul ERP
-> (finance/inventory/payroll dsb.) untuk memvalidasi angka kapasitas
-> terhadap trafik produksi — angka contoh di dokumen ini tetap ilustratif
-> sampai ada deployment nyata untuk diukur.
+> berlaku generik terlepas dari modul ERP mana yang aktif.
+> **`src/lib/database/capacity-config.ts` (library-nya) aktif di runtime**:
+> dipakai oleh field `capacity` milik `GET /api/v1/database/pool/health`, dan
+> `recordGauge` mencatat metrik `db_pool_capacity_*`.
+> **`bun run database:capacity:check` (CLI berdiri sendiri) sudah ada** sejak
+> Issue #1286 (`scripts/database-capacity-check.ts`): offline secara default,
+> dengan pembacaan `max_connections` server yang opsional lewat `--live`.
+> **Skrip `production:preflight` masih belum ada** di `package.json` (lihat
+> [`production-preflight-runbook.md`](production-preflight-runbook.md)), jadi
+> pemeriksaan ini adalah **langkah manual** sebelum rencana scale-out atau
+> restart apa pun dan belum terpasang sebagai stage preflight. Yang juga
+> **belum ada** adalah baseline terukur dari beban nyata (ADR-0161); angka
+> contoh di dokumen ini tetap ilustratif sampai ada.
 
 Pendamping [`database-pooling.md`](database-pooling.md) (konfigurasi pool
 per-proses, gerbang konkurensi work-class, circuit breaker) dan
@@ -56,12 +47,9 @@ anggaran pool setiap kelas proses pengguna database, sebuah kalkulator
 murni, dan sebuah validator yang gagal pada kombinasi yang tidak aman atau
 tidak konsisten secara internal. Library ini nyata dan sudah berjalan
 read-only setiap kali `GET /api/v1/database/pool/health` dipanggil (lewat
-field `capacity`-nya). Yang **belum dibangun** adalah CLI berdiri sendiri
-untuk menjalankan validator yang sama sesuai permintaan — `bun run
-database:capacity:check` yang berdiri sendiri dan stage `database:capacity`
-yang READ-ONLY di `bun run production:preflight`, yang dijelaskan di
-sepanjang sisa runbook ini, keduanya perintah target, bukan skrip yang ada
-di `package.json` hari ini.
+field `capacity`-nya). `bun run database:capacity:check` menjalankan validator
+yang sama sesuai permintaan, hanya dari konfigurasi, sehingga aritmetikanya
+terjadi sebelum scale-out, bukan saat sedang berlangsung.
 
 ## Inventaris kelas proses
 
@@ -123,11 +111,21 @@ sisi-klien ke koneksi sisi-server yang jauh lebih sedikit:
 1. **Sisi-app**: `sum(instance_count x pool_max)` wajib muat di dalam
    `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN` (`max_client_conn` milik
    `pgbouncer.ini`).
-2. **Sisi-server**: `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE +
+2. **Sisi-server**: `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE x pool +
 DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS` wajib muat di dalam
    `DATABASE_CAPACITY_APPROVED_CONNECTIONS` — koneksi backend MILIK
    PgBouncer SENDIRI ke PostgreSQL, terlepas dari berapa banyak klien
-   sisi-app yang dimultipleks ke atasnya.
+   sisi-app yang dimultipleks ke atasnya. `default_pool_size` berlaku **per
+   pasangan (database, user)**, dan aplikasi ini bisa memakai tiga role
+   (`awcms_app`, `awcms_worker`, `awcms_setup`), jadi "pool" adalah jumlah
+   pasangan yang berbeda. Angkanya diturunkan dari nama user dan database di
+   `DATABASE_URL`, `WORKER_DATABASE_URL` dan `SETUP_DATABASE_URL` (kelas yang
+   bisa berjalan) dan dapat dipaksa lewat
+   `DATABASE_CAPACITY_PGBOUNCER_POOL_COUNT`. `reserve_pool_size`, bila Anda
+   mengisinya di `pgbouncer.ini`, menambah batas per pool dan tidak
+   dimodelkan; sisakan ruang untuknya di anggaran yang disetujui. Bila ada
+   lebih dari satu proses PgBouncer di depan satu PostgreSQL, kalikan dengan
+   jumlahnya.
 
 Jaga `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`/
 `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` tetap selaras dengan
@@ -166,44 +164,52 @@ Kasus terburuk: `app` 6 x 15 = 90, `worker` 1 x 15 = 15 (worker jatuh
 balik ke `DATABASE_POOL_MAX` kecuali `DATABASE_POOL_MAX_WORKER` di-set
 terpisah), `setup` 1 x 15 = 15 (fallback yang sama) = 120, ditambah 5
 cadangan = 125 > 100 — **konfigurasi ini akan GAGAL** pada pemeriksaan
-validator apa adanya (perhitungan `capacity-config.ts` yang mendasarinya
-nyata; hanya pembingkaian CLI `database:capacity:check` di bawah yang
-masih target). Perbaiki dengan juga men-set
+`bun run database:capacity:check` apa adanya. Perbaiki dengan juga men-set
 `DATABASE_POOL_MAX_WORKER=5`/`DATABASE_POOL_MAX_SETUP=5` (worker/setup
 jarang butuh koneksi sebanyak kelas `app` yang melayani request):
 `90 + 1x5 + 1x5 + 5 = 105` — masih lebih. Turunkan `DATABASE_POOL_MAX` ke
 12: `6x12 + 5 + 5 + 5 = 87 <= 100` — lolos. Loop iteratif "jalankan
-pemeriksaannya, baca temuannya, sesuaikan satu angka" inilah alur kerja
-yang dimaksudkan begitu CLI-nya ada; pemeriksaan itu ada justru supaya
-aritmetika ini terjadi sebelum scale-out, bukan saat sedang berlangsung.
+pemeriksaannya, baca temuannya, sesuaikan satu angka" adalah alur kerja yang
+dimaksudkan; pemeriksaan itu ada justru supaya aritmetika ini terjadi sebelum
+scale-out, bukan saat sedang berlangsung.
 
-## Menjalankan pemeriksaannya (target — CLI wrapper belum dibangun)
+## Contoh terkerjakan — armada yang sama dengan dan tanpa PgBouncer
 
-Tak satu pun perintah di bawah ada di `package.json` hari ini (lihat
-banner status dokumen ini). Begitu CLI wrapper-nya ditulis, penggunaan
-yang dimaksudkan adalah:
+10 instance `app`, 1 `worker`, `DATABASE_POOL_MAX=20`, role worker khusus
+(`WORKER_DATABASE_URL`), dan PostgreSQL dengan `max_connections=100`:
+
+| Profil                                                   | Aritmetika                                                                         | Hasil                      |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------- |
+| Langsung                                                 | `10 x 20 + 1 x 20 + 1 x 20 (setup) = 240`, tersedia `100 - 5 = 95`                 | **GAGAL** (240 > 95)       |
+| PgBouncer, `max_client_conn=400`, `default_pool_size=20` | klien `240 <= 400`; backend `20 x 2 pool + 5 cadangan = 45 <= 100`                 | **OK**                     |
+| PgBouncer, `max_client_conn=200`                         | klien `240 > 200`                                                                  | **GAGAL** (klien melebihi) |
+| PgBouncer, `default_pool_size=50`                        | backend `50 x 2 + 5 = 105 > 100` (pembacaan per-pool, `50 + 5`, keliru meloloskan) | **GAGAL**                  |
+
+Keempat baris diuji unit (`tests/database-capacity-check.test.ts`).
+
+## Menjalankan pemeriksaannya
 
 ```bash
-bun run database:capacity:check
+# offline, dari env yang sama dengan yang dibaca aplikasi
+DATABASE_CAPACITY_APP_INSTANCES_MAX=10 DATABASE_CAPACITY_APP_INSTANCES_EXPECTED=10 \
+  bun run database:capacity:check
+
+# sekaligus menjepit anggaran pada apa yang diterima server hidup (read-only:
+# dua setting dan satu hitungan sesi). Arahkan langsung ke PostgreSQL.
+DATABASE_CAPACITY_LIVE_URL=<url-postgres-langsung> bun run database:capacity:check --live
+
+bun run database:capacity:check --json   # terbaca mesin
 ```
 
-Atau sebagai bagian dari rangkaian preflight read-only penuh (disarankan
-sebelum rencana scale-out atau restart apa pun, disiplin gladi-dulu yang
-sama seperti
-[`production-preflight-runbook.md`](production-preflight-runbook.md)):
-
-```bash
-APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight
-```
-
-Keduanya dirancang 100% read-only — murni aritmetika konfigurasi, tanpa
-koneksi database, tanpa panggilan jaringan, dan tak satu pun bisa mengubah
-konfigurasi pool/database. Temuan
-`[FAIL]` memblokir vonis keseluruhan `GO-LIVE DIIZINKAN` milik preflight
-persis seperti stage lain mana pun; temuan `[WARNING]` (saat ini hanya
-pemeriksaan oversubscription work-class-vs-pool, lihat komentar header
-`database-pooling.md` yang sudah dikoreksi) dicetak tapi tidak pernah
-memblokir.
+Perintah ini mencetak aritmetika per kelas untuk skenario `expected` dan `max`,
+anggaran pembandingnya, dan satu baris per temuan. Kode keluar: `0` lolos
+(`[WARNING]` tidak pernah memblokir), `1` anggaran gagal atau tidak konsisten,
+`2` salah penggunaan atau server `--live` tidak terbaca (tidak pernah lolos
+diam-diam). Ia tidak mengubah konfigurasi dan tidak mencetak connection string.
+Jalankan dengan nilai produksi `DATABASE_POOL_MAX*`, `DATABASE_PGBOUNCER` dan
+`DATABASE_CAPACITY_*` sebelum rencana scale-out atau restart apa pun, dan lagi
+setiap kali jumlah instance atau ukuran pool berubah. Belum ada skrip
+`production:preflight`, jadi tidak ada yang menjalankannya untuk Anda.
 
 ## Perilaku saturasi yang anggun
 
@@ -262,10 +268,8 @@ berkardinalitas-rendah/terdefinisi-di-kode, tanpa id tenant, tanpa DSN:
      `Retry-After` pulih otomatis.
    - Bila saturasi bertahan melewati beberapa jendela queue-timeout,
      periksa ulang kapasitas terhadap jumlah instance nyata SAAT INI
-     (bukan sekadar `expected`/`max` yang dikonfigurasi) — sampai CLI
-     `database:capacity:check` ada (lihat banner status dokumen ini),
-     lakukan ini dengan memanggil validator `capacity-config.ts` secara
-     langsung memakai jumlah instance saat ini, bukan lewat `bun run`.
+     (bukan sekadar `expected`/`max` yang dikonfigurasi) — jalankan
+     `bun run database:capacity:check` dengan jumlah instance saat ini.
      Satu instance ekstra yang tak direncanakan (deployment lama yang
      macet dan belum dikuras, re-run worker yang lepas kendali — mis.
      batch payroll ganda) mendorong pemakaian nyata melampaui yang
