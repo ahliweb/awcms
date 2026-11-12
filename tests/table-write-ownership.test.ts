@@ -203,10 +203,17 @@ describe("scripts/** is scanned (Issue #1268)", () => {
     // A tooling write with no exception: a second writer added under scripts/
     // (also catches a table nobody else writes, which the one-writer rule
     // alone would not flag).
-    // The migration runner is the ONE tooling-only table: no module writes
-    // `awcms_schema_migrations`, so tooling is its owner rather than a second
-    // writer. Anything else added here needs the same argument.
-    const TOOLING_OWNED = new Set(["awcms_schema_migrations"]);
+    // Tooling-only tables: no module writes them, so tooling is their owner
+    // rather than a second writer. Anything else added here needs the same
+    // argument.
+    // - `awcms_schema_migrations`: the migration runner's ledger.
+    // - `awcms_pgbouncer_verify` (#1286): a scratch table that
+    //   `scripts/database-pgbouncer-verify.ts` creates, writes and drops
+    //   itself; no migration defines it and no module can see it.
+    const TOOLING_OWNED = new Set([
+      "awcms_schema_migrations",
+      "awcms_pgbouncer_verify"
+    ]);
 
     for (const table of TOOLING_OWNED) {
       expect(
