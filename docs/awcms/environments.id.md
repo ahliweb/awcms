@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:45806953a609be66be51c41e12afe7b0bf63546a9077b5a632698de2b07155b5 -->
+<!-- i18n-source-hash: sha256:fcf2663d7db97b499c8c502e868229bff1c4d52a734d6a651dfc7f42e7c8e2d2 -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 

@@ -746,6 +746,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
     ]
   },
   {
+    name: "EDGE_CACHE_CDN_API_TOKEN",
+    reason:
+      "the credential that purges the CDN copy of public pages (Issue #1282); it can force a mass cache miss",
+    jobs: [
+      {
+        target: "edge-cache:purge",
+        reason:
+          "the purge worker: the only job that calls the CDN purge API, which is what the token authenticates"
+      }
+    ]
+  },
+  {
     name: "REDIS_URL",
     reason:
       "a Redis connection string (it usually carries the password); only the health probe opens a Redis connection from a job",

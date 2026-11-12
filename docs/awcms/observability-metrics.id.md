@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](observability-metrics.md)
 
-<!-- i18n-source-hash: sha256:bc659358ac8c8a76270db1a869c6ae4ddd9cab043e5fa81d6df8da413e1513e8 -->
+<!-- i18n-source-hash: sha256:55c485a8bf384af508959d0a136d14a491c4c6c78f728af3b8117babb3fc71fe -->
 
 # Observability: Metrics, SLOs, Job Health, and Provider Telemetry
 
-> **Status dokumen:** implementasi inti sudah nyata, sebagian masih target. `src/lib/observability/` SUDAH ada dan dipakai — `metrics-port.ts`, `in-memory-metrics-port.ts`, dan `adapters/prometheus-text-adapter.ts` semuanya nyata, dan `recordCounter`/`recordGauge`/`recordHistogram` sudah di-wire ke `job-runner.ts` (`emitJobRunMetrics`), `work-class.ts` (`emitWorkClassGauges`), `circuit-breaker.ts` (`decorateWithMetrics`), `capacity-config.ts`, serta ke kode aplikasi domain nyata (`workflow-approval`'s `workflow-escalation.ts`, `domain-event-runtime`'s `dispatch-domain-events.ts`, dan beberapa route `src/pages/api/v1/workflows/**`). Yang **masih target/belum ada**: instrumentasi `http_requests_total`/`http_request_duration_ms` di `middleware.ts` (belum di-wire), endpoint dependency-health terautorisasi, adapter OpenTelemetry, seluruh berkas test observability yang dirujuk di §Testing, dan tentu saja metrik ERP-spesifik (`transaction_posted_total`, dsb.) karena belum ada modul ERP yang memanggilnya. Dokumen ini tetap mengadaptasi contoh metrik ke domain transaksi bisnis (finance, inventory, HR/payroll) sebagai target begitu modul ERP dibangun.
+> **Status dokumen:** implementasi inti sudah nyata, sebagian masih target. `src/lib/observability/` SUDAH ada dan dipakai — `metrics-port.ts`, `in-memory-metrics-port.ts`, dan `adapters/prometheus-text-adapter.ts` semuanya nyata, dan `recordCounter`/`recordGauge`/`recordHistogram` sudah di-wire ke `job-runner.ts` (`emitJobRunMetrics`), `work-class.ts` (`emitWorkClassGauges`), `circuit-breaker.ts` (`decorateWithMetrics`), `capacity-config.ts`, serta ke kode aplikasi domain nyata (`workflow-approval`'s `workflow-escalation.ts`, `domain-event-runtime`'s `dispatch-domain-events.ts`, dan beberapa route `src/pages/api/v1/workflows/**`). Yang **masih target/belum ada**: endpoint dependency-health terautorisasi, adapter OpenTelemetry, seluruh berkas test observability yang dirujuk di §Testing, dan tentu saja metrik ERP-spesifik (`transaction_posted_total`, dsb.) karena belum ada modul ERP yang memanggilnya. Dokumen ini tetap mengadaptasi contoh metrik ke domain transaksi bisnis (finance, inventory, HR/payroll) sebagai target begitu modul ERP dibangun.
 
 Companion untuk [`deployment-profiles.md`](deployment-profiles.md) §Shared worker runner. Dokumen ini mencakup konsep: metrik numerik berkardinalitas rendah (counter/histogram/gauge), SLI/SLO awal, dan endpoint dependency-health terautorisasi.
 
@@ -14,7 +14,7 @@ Companion untuk [`deployment-profiles.md`](deployment-profiles.md) §Shared work
 
 ```mermaid
 flowchart LR
-  MW["middleware.ts (rencana)"] -->|http_requests_total<br/>http_request_duration_ms| Port[MetricsPort]
+  MW["middleware.ts onRequest"] -->|http_requests_total<br/>http_request_duration_ms| Port[MetricsPort]
   JR[job-runner.ts buildResult] -->|job_run_total<br/>job_run_duration_ms<br/>job_run_item_count| Port
   CB[circuit-breaker.ts decorateWithMetrics] -->|provider_call_total<br/>provider_call_duration_ms<br/>provider_circuit_state| Port
   WC[work-class.ts emitWorkClassGauges] -->|db_pool_work_class_active<br/>db_pool_work_class_queued| Port
@@ -30,12 +30,12 @@ flowchart LR
 
 ## Titik instrumentasi wajib — mekanisme bersama, bukan duplikasi per call site
 
-Prinsip wajib: metrik provider/job/pool harus disalurkan lewat mekanisme bersama YANG SUDAH ADA, tidak diduplikasi di setiap call site. Tiga dari lima titik di bawah SUDAH di-wire nyata; dua masih target:
+Prinsip wajib: metrik provider/job/pool harus disalurkan lewat mekanisme bersama YANG SUDAH ADA, tidak diduplikasi di setiap call site. Empat dari lima titik di bawah SUDAH di-wire nyata; satu masih target:
 
 - **Status/backlog job run (implementasi nyata)** — satu titik fungsi (`buildResult` di `job-runner.ts`) yang setiap path return `runJob` (lock acquire gagal, skip-on-contention, sukses/parsial, timeout/terminated, error) sudah dilalui. `emitJobRunMetrics` dipanggil sekali di sana — setiap job (audit purge, dispatcher sync, posting batch, payroll run) mendapatkan `job_run_total`/`job_run_duration_ms`/`job_run_item_count` gratis.
 - **Outcome/latensi/circuit state provider (implementasi nyata)** — satu fungsi `getProviderCircuitBreaker()` yang setiap call site provider (email, object storage, payment gateway, marketplace, Coretax, logistik, SSO) wajib melaluinya — tidak ada call site yang langsung memanggil `createCircuitBreaker`. Wrapper `decorateWithMetrics` di antara keduanya menjadi satu-satunya sumber metrik ini.
 - **Saturasi DB pool (implementasi nyata)** — satu tempat (`work-class.ts`'s `gates`) di mana `active`/`queue.length` pernah berubah (acquire, hand-off saat release, decrement saat release, timeout eviction). `emitWorkClassGauges(workClass)` dipanggil di setiap titik itu. `capacity-config.ts` juga sudah memanggil `recordGauge` langsung untuk metrik kapasitas (`db_pool_capacity_*`).
-- **Outcome/latensi request HTTP (rencana — belum di-wire)** — satu fungsi (`middleware.ts`'s `onRequest`) yang setiap request melaluinya, DIRENCANAKAN memanggil `recordHttpRequestMetrics` di setiap cabang penghasil response, memakai `routePattern` statis Astro (mis. `"/api/v1/finance/journals/[journalId]"` — placeholder literal bertanda kurung, bukan path konkret berisi id nyata). `middleware.ts` hari ini belum mengimpor apa pun dari `src/lib/observability/` — fungsi `recordHttpRequestMetrics` itu sendiri belum ditulis.
+- **Outcome/latensi request HTTP (implementasi nyata, Issue #1287)** — satu fungsi (`middleware.ts`'s `onRequest`) yang setiap request melaluinya. Seluruh handler dibungkus `instrumentHttpRequest` (`src/lib/observability/http-request-metrics.ts`), sehingga setiap cabang penghasil response (dirender, redirect, penolakan awal) mencatat `http_requests_total` dan `http_request_duration_ms`, dan error yang dilempar keluar dari handler dicatat sebagai `500` lalu dilempar ulang tanpa perubahan. Label memakai `routePattern` statis Astro (mis. `"/api/v1/finance/journals/[journalId]"` — placeholder literal bertanda kurung, tidak pernah path konkret); helper juga meruntuhkan apa pun yang bukan pola absolut, membawa query atau fragmen, atau berisi UUID atau deret digit panjang menjadi `unmatched`, dan method HTTP tak dikenal menjadi `OTHER`. Dengan port no-op default, biayanya dua objek label kecil per request. **Tidak tercakup:** request yang dijawab handler statis adapter dari `dist/client/` tidak pernah mencapai middleware, jadi aset statis tidak dihitung; dan tidak ada yang mendaftarkan adapter metrik atau membuka endpoint scrape secara default (`setMetricsPort(createPrometheusTextMetricsPort())` adalah pilihan deployment), jadi seri baru ada pada deployment yang melakukannya.
 - **Posting transaksi/domain event ERP (rencana — baru untuk platform ini)** — satu titik chokepoint di layer aplikasi/domain untuk setiap posting transaksi finansial, penyesuaian stok, atau eksekusi payroll run, mengikuti pola yang sama: `transaction_posted_total`/`transaction_posting_duration_ms`, dicatat dari SATU wrapper/service, bukan tersebar di setiap handler — menunggu modul finance/inventory/HR-payroll pertama. Pola instrumentasi yang sama SUDAH dipakai di luar ERP oleh kode domain yang ada: `workflow-approval`'s `workflow-escalation.ts` (`workflow_escalation_total`), `domain-event-runtime`'s `dispatch-domain-events.ts` (`domain_event_dispatch_total`/`domain_event_delivery_backlog`), dan beberapa route `src/pages/api/v1/workflows/**` (`workflow_recovery_action_total`).
 
 ## Kardinalitas dan privasi (kriteria wajib)
@@ -59,6 +59,19 @@ Setiap metrik yang dipancarkan aplikasi wajib dideklarasikan di `METRIC_DEFINITI
 **Label yang butuh mekanisme bounding khusus**: registry key circuit-breaker provider bisa tenant-scoped (mis. `sso-oidc-discovery:<tenantId>:<providerKey>`, atau untuk ERP: `payment-gateway:<tenantId>:<providerKey>`). Menaruh string mentah itu di label metrik akan JADI KEDUANYA — kebocoran tenant-id dan kardinalitas tak terbatas. Fungsi bounding (`deriveProviderFamilyLabel`, dipertahankan dari basis) menyimpan hanya prefix literal, code-hardcoded sebelum `:` pertama — setiap call site provider di repo ini mengikuti konvensi yang sama "literal-category-prefix, optional dynamic `:`-suffix", jadi satu aturan split generik cukup.
 
 **Tidak ada tenant id, route ber-id tak terbatas, email/IP, object key, token, nomor rekening/NPWP, nominal transaksi, atau konten percakapan yang boleh muncul di label mana pun** — setiap nilai wajib berupa anggota enum tetap atau string literal kode, tidak pernah data yang berasal dari body request, record tenant, atau data finansial/personal.
+
+## Membaca p95 dari histogram HTTP
+
+`http_request_duration_ms` adalah histogram dalam milidetik dengan batas bucket milik adapter (`DEFAULT_HISTOGRAM_BUCKETS_MS` untuk adapter teks Prometheus bawaan: 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000 ms), sehingga p95 dibaca per route pattern dari bucket kumulatif, tidak pernah dari rata-rata. Dengan Prometheus:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, routePattern) (rate(http_request_duration_ms_bucket[5m]))
+)
+```
+
+Tambahkan `method` ke klausa `by` untuk memisahkan baca dari tulis. Estimasinya hanya sehalus batas bucket di sekitar target (target 500 ms butuh batas di atau dekat 500), dan kelas route dengan request sangat sedikit dalam jendela memberi p95 yang berisik; nilai target pada jendela yang cukup panjang atau di bawah uji beban (#1283), bukan dari satu menit sepi.
 
 ## SLI/SLO awal dan panduan burn-rate
 

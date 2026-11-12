@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](edge-cache-architecture.md)
 
-<!-- i18n-source-hash: sha256:d134d20f54edbbaeb873c9ba62c70c07ee051dd4abfb701a957cc7b84e281aae -->
+<!-- i18n-source-hash: sha256:2136684a7fd4f1b567fff2e7bea7252a6e6351a8fc6f7ca61e62682b58b1c55d -->
 
 # Arsitektur cache tepi (Varnish)
 
@@ -174,6 +174,11 @@ atas `default.vcl`.
 
 ## Batas jangkauan purge
 
+> **Sejak Issue #1282** tier CDN juga bisa dibersihkan, di balik flag
+> `EDGE_CACHE_CDN_PURGE` yang mati secara default (bagian berikutnya).
+> Semua isi bagian ini menggambarkan deployment **dengan flag mati**, yaitu
+> default.
+
 Antrean purge menjangkau **Varnish, dan hanya Varnish** —
 `EDGE_CACHE_PURGE_ENDPOINT` menunjuk listener Varnish, dan BAN yang dikirim
 worker berhenti di sana. Pada topologi ter-deploy nyata, tier yang menyajikan
@@ -188,6 +193,52 @@ batasnya waktu, bukan invalidasi. Uji penerimaan yang hanya membaca `X-Cache`
 Varnish mengukur tier yang bukan penjawab; baca `cf-cache-status`/`age` juga.
 Celah ini tercatat sebagai **C14** di
 [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9.
+
+## Purge CDN (`EDGE_CACHE_CDN_PURGE`, mati secara default)
+
+Issue #1282 meninjau ulang C14 dengan keputusan pemilik 12 November 2026:
+diimplementasikan, **di balik flag yang mati secara default**. Tidak ada yang di
+bawah ini terjadi sebelum pemilik mengisi credential dan menyalakan flag; sampai
+saat itu bagian di atas adalah seluruh kebenarannya dan batas ≤300 detik adalah
+penerimaannya.
+
+**Alur.** Baris antrean tidak berubah (satu surrogate key). Dengan flag nyala,
+worker (`bun run edge-cache:purge`) mengirim BAN Varnish lebih dulu, lalu
+membersihkan **key yang sama sebagai tag CDN** (`POST <api base>/zones/<zona>/purge_cache`,
+body `{"tags":[...]}`, `Authorization: Bearer <token>`). Baris menjadi `done`
+hanya bila keduanya berhasil. Aplikasi juga mengirim
+`Cache-Tag: <key, dipisah koma>` di samping `Surrogate-Key`, hanya saat flag
+nyala (CDN membuangnya; Varnish meneruskannya, tidak seperti `Surrogate-Key`).
+
+**Keputusan desain** (dari dokumentasi purge publik Cloudflare: purge per URL,
+hostname, tag, prefix, dan semuanya tersedia di semua paket; maksimal 100
+operasi per request; token bucket per akun untuk purge tag/hostname/prefix:
+5 request/menit Free, 5/detik Pro, 10/detik Business, 50/detik Enterprise):
+
+| Keputusan          | Pilihan                                                                                                                                                                                                   | Alasan                                                                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit purge         | **Tag** (surrogate key yang ada), bukan URL                                                                                                                                                               | Antrean menyimpan key; aplikasi tak bisa menyebut URL di balik sebuah modul. Tag ada di semua paket dan mematikan semua objek ber-key itu. |
+| Batching           | Tag unik per batch yang diklaim, **100 per request**                                                                                                                                                      | Batas terdokumentasi; ledakan ribuan baris menjadi puluhan request terhadap bucket 5/menit (Free) sampai 50/detik.                         |
+| Rate limit         | HTTP 429 menghentikan panggilan CDN sisa run; baris **dilepas** (kembali `pending`, percobaan tidak dihitung). Batas ini per akun, jadi run terjadwal berikutnya melanjutkan                              | Mengulang di dalam run hanya memperdalam batas; batas bukan salah baris, jadi tak boleh menggiringnya ke dead-letter.                      |
+| Backoff dan retry  | Sementara (5xx, timeout, jaringan, `success` bukan true): 3 percobaan inline, 250 ms lalu 1 dtk; lalu run berhenti memanggil CDN (`unavailable`) dan baris kembali `pending` dengan percobaan dihitung    | Gangguan tak boleh menguras antrean ke dead-letter dalam satu run; run berikutnya memakai jatah 5 percobaan antrean yang sudah ada.        |
+| Dead-letter        | 4xx lain (permintaan salah) memarkir baris di `failed` beserta alasannya; retry habis sama setelah 5 percobaan. `failed` adalah dead-letter yang sudah ada (retensi 180 hari, ADR-0076)                   | Tidak ada yang dibuang; operator melihat penyebabnya.                                                                                      |
+| Credential ditolak | HTTP 401/403: baris **dilepas**, run berhenti, exit code 1                                                                                                                                                | Token buruk atau kedaluwarsa adalah konfigurasi, bukan vonis atas baris; memperbaikinya tidak menghilangkan apa pun.                       |
+| Credential kurang  | Flag nyala dan salah satu dari tiga setelan kurang atau tak terpakai: worker **menolak jalan** (exit 1) sebelum menyentuh antrean; `security:readiness` melaporkan CRITICAL                               | Gagal-tertutup: tak pernah BAN di Varnish lalu diam-diam meninggalkan CDN, tak pernah membuang baris.                                      |
+| Metrik             | Baris ringkasan dan `job_run_item_count{jobName="edge-cache:purge",itemName=cdnPurged\|cdnFailed\|cdnReleased\|cdnMaxLagSeconds}`; lag = waktu selesai dikurangi waktu enqueue baris terlambat di run ini | Tanpa nama metrik baru, tanpa label tenant (aturan privasi #698). Proses job hanya mengekspor bila deployment mendaftarkan port metrik.    |
+
+**Setelan** (hanya environment; tidak pernah di-commit atau dicatat di log):
+`EDGE_CACHE_CDN_PURGE` (`on` mengaktifkan; selain itu mati),
+`EDGE_CACHE_CDN_ZONE_ID`, `EDGE_CACHE_CDN_API_TOKEN` (job-scoped ke
+`edge-cache:purge`), opsional `EDGE_CACHE_CDN_API_BASE` (https, atau http hanya
+di loopback). Beri token hanya izin purge cache untuk satu zona itu. Tag tidak
+peka huruf besar-kecil di CDN; key dari id huruf kecil tidak terpengaruh.
+
+**Yang tidak dilakukannya.** Tidak mengonfigurasi akun atau zona CDN, tidak
+melebarkan allow-list, dan tidak membuat purge seketika: CDN menerima permintaan
+lalu menyebarkannya, jadi verifikasi dengan `cf-cache-status`/`age` setelah
+publish. Mengaktifkannya juga menghilangkan alasan menjaga
+`EDGE_CACHE_MAX_TTL_SECONDS` ≤ 300 demi kebasian (ADR-0161), tetapi keputusan itu
+terpisah.
 
 ## Yang belum tersambung (jangan klaim ada)
 
