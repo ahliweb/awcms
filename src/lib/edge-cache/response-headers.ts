@@ -94,7 +94,14 @@ export function applyEdgeCacheHeaders(
   }
 
   if (!response.headers.has("cache-control")) {
-    response.headers.set("Cache-Control", BROWSER_CACHE_CONTROL);
+    // Browsers still revalidate; only the shared CDN tier gets a TTL, and only
+    // when the deployment opted into `always` (#1284).
+    response.headers.set(
+      "Cache-Control",
+      decision.sharedMaxAgeSeconds
+        ? `public, max-age=0, s-maxage=${decision.sharedMaxAgeSeconds}, must-revalidate`
+        : BROWSER_CACHE_CONTROL
+    );
   }
 
   // Compression negotiation must be part of the cache key or a gzip body can be

@@ -184,7 +184,7 @@ export function createPressureTracker(
 
       // `on` means "always advertise the declared TTL" — pressure is not
       // consulted at all, which is what makes the mode predictable.
-      if (config.mode === "on") {
+      if (config.mode === "on" || config.publicSurfaces === "always") {
         return Math.min(surfaceTtlSeconds, config.maxTtlSeconds);
       }
 
