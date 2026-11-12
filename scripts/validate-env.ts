@@ -846,7 +846,19 @@ const RULES: readonly Rule[] = [
     type: "enum",
     values: ["pressure", "always"]
   },
-  { name: "EDGE_CACHE_PURGE_BATCH_SIZE", required: false, type: "int", min: 1 }
+  { name: "EDGE_CACHE_PURGE_BATCH_SIZE", required: false, type: "int", min: 1 },
+  // Issue #1282 CDN purge (revisit of C14): off unless EDGE_CACHE_CDN_PURGE=on;
+  // with it on, missing credentials are a CRITICAL `security:readiness` finding
+  // and the purge worker refuses to run (the queue keeps its rows).
+  { name: "EDGE_CACHE_CDN_PURGE", required: false, type: "string" },
+  { name: "EDGE_CACHE_CDN_API_BASE", required: false, type: "string" },
+  { name: "EDGE_CACHE_CDN_ZONE_ID", required: false, type: "string" },
+  {
+    name: "EDGE_CACHE_CDN_API_TOKEN",
+    required: false,
+    type: "string",
+    secret: true
+  }
 ];
 
 /** Nilai placeholder yang aman di dev tapi dilarang di produksi. */
