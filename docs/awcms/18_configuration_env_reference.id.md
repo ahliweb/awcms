@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:a3f5f061b781c51d1bd67fc0eb855fa9137b9eefd9dcdb8c59c171b51a2fc6cf -->
+<!-- i18n-source-hash: sha256:bf16b14069e5ad073acf1189311cdb92ab774d4e02e7433b6d15755ae04d7c05 -->
 
 # Bagian 18 — Configuration dan Environment Reference
 

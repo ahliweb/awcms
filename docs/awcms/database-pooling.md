@@ -279,8 +279,7 @@ of this process itself (not a cross-instance aggregate — one process does not
 know about other instances) — for cross-instance validation before scale-out,
 see
 [`database-capacity-runbook.md`](database-capacity-runbook.md) (the
-`capacity-config.ts` library is real; the CLI `bun run database:capacity:check`
-is still a target — see that runbook's document status).
+`bun run database:capacity:check` runs that validation on demand).
 
 ## 6. Domain event `database.pool.saturated`
 
@@ -314,35 +313,49 @@ PostgreSQL, see the root `docker-compose.yml` and
 `pgbouncer` service in compose is gated behind Docker Compose `profiles` so it
 is only active when explicitly requested.
 
-Implications when `DATABASE_PGBOUNCER=true`:
+A pinned-image Compose example (PgBouncer only, no PostgreSQL) is at
+[`../../deploy/pgbouncer/docker-compose.yml`](../../deploy/pgbouncer/docker-compose.yml).
+The application joins its network and `DATABASE_URL` (and
+`WORKER_DATABASE_URL` / `SETUP_DATABASE_URL` when used) points at PgBouncer.
 
-- `prepare: false` is set automatically on `Bun.SQL` (see §1) — prepared
-  statements are inherently problematic in PgBouncer transaction mode because
-  each statement can be executed on a different backend connection between
-  transactions.
-- The application code is already safe: `withTenant` always uses
-  `SET LOCAL app.current_tenant_id` (not a plain session `SET`), whose scope
-  is automatically limited to one transaction — compatible with PgBouncer
-  transaction mode.
+### What `DATABASE_PGBOUNCER=true` changes, and why it is RLS-safe
+
+Verified on 12 November 2026 against PgBouncer 1.25 in `pool_mode =
+transaction` with PostgreSQL 18.6 and Bun 1.4.4, through the production
+`getDatabaseClient()` and `withTenantOrThrow` (`bun run
+database:pgbouncer:verify` repeats it):
+
+| Concern                                                 | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prepared statements                                     | `prepare: false` is set automatically. Bun then sends unnamed statements, which PgBouncer can route per transaction; parameterized queries (`` sql`... ${value}` ``) work. Named prepared statements are not used, so PgBouncer's `max_prepared_statements` stays `0`.                                                                                                                                                                                                                                                                                                                                                  |
+| `SET LOCAL app.current_tenant_id` (the RLS tenant GUC)  | Safe. `withTenant` runs `sql.begin(...)`, so `BEGIN`, the `SET LOCAL`, every query and `COMMIT` stay on ONE backend connection (PgBouncer pins a server for the whole transaction) and `SET LOCAL` reverts at `COMMIT`/`ROLLBACK`. 200 interleaved transactions for two tenants on 5 backend connections saw 0 foreign rows and 0 foreign GUC values; outside a transaction the GUC is the role's fail-closed default and no rows are visible.                                                                                                                                                                          |
+| `statement_timeout`                                     | **Changed.** Without PgBouncer it is a connection startup parameter. PgBouncer rejects it (`unsupported startup parameter: statement_timeout`) and the pool never opens, so under `DATABASE_PGBOUNCER=true` it is not sent at connect time and `withTenant` runs `SET LOCAL statement_timeout` in each transaction instead (value of `DATABASE_STATEMENT_TIMEOUT_MS`, default 15 s). A query run outside `withTenant` has no timeout from the app; set a role default: `ALTER ROLE awcms_app SET statement_timeout = '15s'`. Do not use `ignore_startup_parameters = statement_timeout`: it silently drops the timeout. |
+| Session state                                           | Not available in transaction mode. Application code must not use a plain `SET`, session-level advisory locks, `LISTEN`/`NOTIFY` subscriptions or `WITH HOLD` cursors on this profile. `withTenant` and the job runner's transaction-scoped locks are compatible.                                                                                                                                                                                                                                                                                                                                                        |
+| Direct deployments (`DATABASE_PGBOUNCER` unset/`false`) | Unchanged: prepared statements on, `statement_timeout` sent at connect time, no extra statement per transaction.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+Not verified: the full Postgres-backed integration suite
+(`bun test tests/integration/`) through PgBouncer. Its harness opens its own
+dedicated connections to an ephemeral database, so it cannot be repointed at
+PgBouncer without changing the harness; the RLS isolation proof above uses the
+production client path instead. A CI job that runs `database:pgbouncer:verify`
+against a PgBouncer service container is possible follow-up work.
 
 ## 8. Deployment-aware capacity
 
 Sections 1-7 above protect ONE process. The approved PostgreSQL/PgBouncer
-capacity applies to the ENTIRE fleet of instances — `src/lib/database/
-capacity-config.ts` **already exists and is active at runtime** (instance
-count per process class, pool budget, PgBouncer capacity, approved connection
-budget, admin headroom used by `GET /api/v1/database/pool/health`'s `capacity`
-field, and `recordGauge` recording `db_pool_capacity_*` through
-`src/lib/observability/metrics-port.ts`). What does **not** exist yet is the
-CLI wrapper: `bun run database:capacity:check` and `production:preflight`'s
-`database:capacity` stage are not real scripts — those keys are not in
-`package.json` (see `scripts/README.md` §Deferred). Capacity validation today
-can only be done by calling the `capacity-config.ts` functions directly (e.g.
-from a test or a REPL), not through a standalone `bun run` command. Full
-detail:
+capacity applies to the ENTIRE fleet of instances.
+`src/lib/database/capacity-config.ts` holds the model (instance count per
+process class, pool budget, PgBouncer capacity, approved connection budget,
+admin headroom) used by `GET /api/v1/database/pool/health`'s `capacity` field
+and by `recordGauge` (`db_pool_capacity_*`), and `bun run
+database:capacity:check` runs it on demand: instances x per-process pool size
+plus reserved headroom against `max_connections`, or against the PgBouncer
+limits when `DATABASE_PGBOUNCER=true`. It fails (exit 1) when the budget is
+exceeded at the configured max instance counts. Run it before adding an
+instance; there is no `production:preflight` script yet, so it is a manual
+step. Full detail:
 [`database-capacity-runbook.md`](database-capacity-runbook.md) (formulas,
-worked examples, the saturation/connection-storm incident SOP, and a more
-detailed CLI implementation status).
+worked examples, the saturation/connection-storm incident SOP).
 
 ## Gaps not yet closed
 
