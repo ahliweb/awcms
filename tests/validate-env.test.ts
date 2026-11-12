@@ -348,3 +348,36 @@ describe("validateEnv", () => {
     });
   });
 });
+
+describe("multi-instance rate limiter (#1285)", () => {
+  const has = (env: Record<string, string | undefined>) =>
+    validateEnv({ ...base, ...env }).some((p) =>
+      p.includes("APP_INSTANCE_COUNT")
+    );
+
+  test("one instance (or unset) needs no Redis", () => {
+    expect(has({})).toBe(false);
+    expect(has({ APP_INSTANCE_COUNT: "1" })).toBe(false);
+  });
+
+  test("more than one instance without Redis is an error", () => {
+    expect(has({ APP_INSTANCE_COUNT: "2" })).toBe(true);
+    expect(has({ APP_INSTANCE_COUNT: "3", REDIS_ENABLED: "false" })).toBe(true);
+    expect(has({ APP_INSTANCE_COUNT: "2", REDIS_ENABLED: "true" })).toBe(true);
+  });
+
+  test("more than one instance with Redis passes", () => {
+    expect(
+      has({
+        APP_INSTANCE_COUNT: "2",
+        REDIS_ENABLED: "true",
+        REDIS_URL: "redis://redis:6379"
+      })
+    ).toBe(false);
+  });
+
+  test("a malformed or zero count is rejected by the int rule", () => {
+    expect(has({ APP_INSTANCE_COUNT: "0" })).toBe(true);
+    expect(has({ APP_INSTANCE_COUNT: "two" })).toBe(true);
+  });
+});

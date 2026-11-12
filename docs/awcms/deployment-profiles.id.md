@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deployment-profiles.md)
 
-<!-- i18n-source-hash: sha256:18fa867180177e34871e340f6d613d218f905e5a778303413e8227f193e5461c -->
+<!-- i18n-source-hash: sha256:18c3ab97d3065beaf927895a50895584a97fb7742da3ffaebb7a4eaa250c7c22 -->
 
 # Deployment Profiles
 
@@ -194,6 +194,7 @@ Prinsip konfigurasi wajib: "Konfigurasi tervalidasi saat boot; nilai wajib yang 
 - Kondisional: bila sync/integrasi eksternal (`AWCMS_SYNC_ENABLED=true`), maka `AWCMS_SYNC_HMAC_SECRET` wajib diisi dan bukan placeholder `.env.example` (`change-me`).
 - Kondisional: bila storage objek eksternal (`R2_ENABLED=true`), maka kredensial R2 terkait wajib diisi.
 - Tidak pernah mencetak nilai secret asli — hanya nama variabel yang hilang/tidak valid. Exit code bukan nol bila ada kegagalan.
+- Kondisional (multi-instance, #1285): `APP_INSTANCE_COUNT` (bilangan bulat >= 1, default 1) menyatakan jumlah instance app yang melayani deployment. Di atas 1, `REDIS_ENABLED=true` dan `REDIS_URL` wajib, bila tidak `config:validate` gagal: tanpa Redis bersama tiap instance menghitung jendela rate limit sendiri dan setiap batas dikalikan jumlah instance (ADR-0066). Repo ini tidak menyediakan Redis. Bila preflight dilewati dan limiter tetap berjalan per-proses dengan jumlah di atas 1, ia mencatat `security.rate_limit.multi_instance_without_redis` pada level `error` sekali per proses; ia tidak pernah beralih diam-diam. Redis terkonfigurasi yang tak terjangkau tetap **mengizinkan** (fail-open, ADR-0066 — tidak berubah); penguncian per-identitas di PostgreSQL tidak terpengaruh.
 
 `bun run production:preflight` (direncanakan) menjalankan `config:validate` sebagai tahap pertama, sebelum `db:migrate` — konfigurasi harus valid sebelum ada percobaan koneksi/migrasi apa pun.
 

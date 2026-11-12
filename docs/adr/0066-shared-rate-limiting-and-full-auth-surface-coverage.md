@@ -103,3 +103,5 @@ lockout in the DB, and swapping the algorithm without changing that only moves
 the number around.
 
 **Zero migrations, zero permissions, zero OpenAPI changes.**
+
+> **Updated (#1285):** multi-instance correctness is now explicit. `APP_INSTANCE_COUNT` (default 1) declares the replica count; above 1, `bun run config:validate` fails unless `REDIS_ENABLED=true` and `REDIS_URL` are set, and a limiter that still runs per-process with a declared count above 1 logs `security.rate_limit.multi_instance_without_redis` at `error` level once. The fail-open decision above is unchanged. See [`deployment-profiles.md`](../awcms/deployment-profiles.md).

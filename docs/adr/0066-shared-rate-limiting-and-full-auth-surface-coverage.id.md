@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0066-shared-rate-limiting-and-full-auth-surface-coverage.md)
 
-<!-- i18n-source-hash: sha256:0ee410dd6b0c2a1ca340c9b8c334b8798253d628eb0ea8591801867df2b2674b -->
+<!-- i18n-source-hash: sha256:dce94cf210505f1f14755dca411ca8a720d2f83baa6cb0e041bf79ccd18f18da -->
 
 # ADR-0066 — Rate limit berbagi lintas-instans, dan seluruh permukaan auth ter-cakup
 
@@ -103,3 +103,5 @@ kontrol yang benar-benar mengikat brute-force adalah lockout per-identitas di DB
 dan mengganti algoritma tanpa mengubah itu hanya memindahkan angka.
 
 **Nol migrasi, nol permission, nol perubahan OpenAPI.**
+
+> **Diperbarui (#1285):** kebenaran multi-instance kini eksplisit. `APP_INSTANCE_COUNT` (default 1) menyatakan jumlah replika; di atas 1, `bun run config:validate` gagal kecuali `REDIS_ENABLED=true` dan `REDIS_URL` diset, dan limiter yang tetap berjalan per-proses dengan jumlah terdeklarasi di atas 1 mencatat `security.rate_limit.multi_instance_without_redis` pada level `error` sekali. Keputusan fail-open di atas tidak berubah. Lihat [`deployment-profiles.id.md`](../awcms/deployment-profiles.id.md).
