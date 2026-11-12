@@ -38,6 +38,8 @@ export type EdgeCachePurgeRow = {
   tenant_id: string;
   surrogate_key: string;
   attempts: number;
+  /** When the row was enqueued; the CDN purge lag is measured from it. */
+  created_at: Date | string;
 };
 
 /**
@@ -119,7 +121,7 @@ export async function claimEdgeCachePurges(
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, tenant_id, surrogate_key, attempts
+    RETURNING id, tenant_id, surrogate_key, attempts, created_at
   `) as EdgeCachePurgeRow[];
 }
 
@@ -134,6 +136,31 @@ export async function markEdgeCachePurgeDone(
         completed_at = ${now},
         updated_at = ${now},
         last_error = NULL,
+        lease_expires_at = NULL
+    WHERE id = ${purgeId}
+  `;
+}
+
+/**
+ * Hand a claimed row back WITHOUT spending an attempt (Issue #1282).
+ *
+ * For back-pressure and configuration faults at the CDN (rate limit, rejected
+ * credential): nothing is wrong with the row, so it must not walk toward the
+ * dead-letter just because the account-wide limit was hit or a token expired.
+ * `claim` already counted this attempt, so it is given back here.
+ */
+export async function releaseEdgeCachePurge(
+  tx: SqlExecutor,
+  purgeId: string,
+  detail: string,
+  now: Date
+): Promise<void> {
+  await tx`
+    UPDATE awcms_edge_cache_purges
+    SET status = 'pending',
+        attempts = GREATEST(attempts - 1, 0),
+        last_error = left(${detail}, 500),
+        updated_at = ${now},
         lease_expires_at = NULL
     WHERE id = ${purgeId}
   `;

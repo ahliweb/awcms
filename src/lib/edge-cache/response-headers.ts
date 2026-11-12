@@ -29,10 +29,19 @@
  * separate, stable, conservative directive.
  */
 import type { CacheDecision } from "./cacheability";
+import { isCdnPurgeEnabled } from "./cdn-purge-config";
 import { buildSurrogateKeyHeader } from "./surrogate-keys";
 
 export const SURROGATE_CONTROL_HEADER = "Surrogate-Control";
 export const SURROGATE_KEY_HEADER = "Surrogate-Key";
+/**
+ * The CDN's tag header (Cloudflare purge-by-tag, Issue #1282). Same keys as
+ * `Surrogate-Key`, comma-separated. Emitted ONLY while `EDGE_CACHE_CDN_PURGE` is
+ * `on`: the CDN strips it before the visitor, but a deployment with no CDN in
+ * front would otherwise leak internal topology, which is why Varnish strips
+ * `Surrogate-Key` and why this one is opt-in.
+ */
+export const CACHE_TAG_HEADER = "Cache-Tag";
 /** Debug-only: why a response was not cached. Stripped by the VCL before it reaches a client. */
 export const EDGE_CACHE_SKIP_HEADER = "X-Edge-Cache-Skip";
 
@@ -87,14 +96,24 @@ export function applyEdgeCacheHeaders(
   );
 
   if (decision.surrogateKeys.length > 0) {
-    response.headers.set(
-      SURROGATE_KEY_HEADER,
-      buildSurrogateKeyHeader(decision.surrogateKeys)
-    );
+    const keyHeader = buildSurrogateKeyHeader(decision.surrogateKeys);
+
+    response.headers.set(SURROGATE_KEY_HEADER, keyHeader);
+
+    if (isCdnPurgeEnabled()) {
+      response.headers.set(CACHE_TAG_HEADER, keyHeader.split(" ").join(","));
+    }
   }
 
   if (!response.headers.has("cache-control")) {
-    response.headers.set("Cache-Control", BROWSER_CACHE_CONTROL);
+    // Browsers still revalidate; only the shared CDN tier gets a TTL, and only
+    // when the deployment opted into `always` (#1284).
+    response.headers.set(
+      "Cache-Control",
+      decision.sharedMaxAgeSeconds
+        ? `public, max-age=0, s-maxage=${decision.sharedMaxAgeSeconds}, must-revalidate`
+        : BROWSER_CACHE_CONTROL
+    );
   }
 
   // Compression negotiation must be part of the cache key or a gzip body can be

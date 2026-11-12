@@ -192,6 +192,7 @@ The mandatory configuration principle: "Configuration is validated at boot; a mi
 - Conditional: if external sync/integration is on (`AWCMS_SYNC_ENABLED=true`), then `AWCMS_SYNC_HMAC_SECRET` must be filled in and must not be the `.env.example` placeholder (`change-me`).
 - Conditional: if external object storage is on (`R2_ENABLED=true`), then the related R2 credentials must be filled in.
 - Never prints the real secret values — only the names of missing/invalid variables. Non-zero exit code on any failure.
+- Conditional (multi-instance, #1285): `APP_INSTANCE_COUNT` (integer >= 1, default 1) declares how many app instances serve the deployment. Above 1, `REDIS_ENABLED=true` and `REDIS_URL` are required, otherwise `config:validate` fails: without a shared Redis each instance counts its own rate-limit window and every limit is multiplied by the instance count (ADR-0066). Redis is not provisioned by this repo. If preflight is skipped and the limiter still runs per-process with the count above 1, it logs `security.rate_limit.multi_instance_without_redis` at `error` level once per process; it never switches silently. An unreachable configured Redis still **allows** (fail-open, ADR-0066 — unchanged); the per-identity lockout in PostgreSQL is unaffected.
 
 `bun run production:preflight` (planned) runs `config:validate` as its first stage, before `db:migrate` — the configuration must be valid before there is any connection/migration attempt at all.
 

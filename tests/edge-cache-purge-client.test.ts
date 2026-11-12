@@ -65,6 +65,7 @@ afterAll(() => {
 function configFor(endpoint: string): EdgeCacheConfig {
   return {
     mode: "on",
+    publicSurfaces: "pressure",
     maxTtlSeconds: 300,
     staleWhileRevalidateSeconds: 600,
     purgeEndpoint: endpoint,

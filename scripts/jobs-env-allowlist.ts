@@ -746,6 +746,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
     ]
   },
   {
+    name: "EDGE_CACHE_CDN_API_TOKEN",
+    reason:
+      "the credential that purges the CDN copy of public pages (Issue #1282); it can force a mass cache miss",
+    jobs: [
+      {
+        target: "edge-cache:purge",
+        reason:
+          "the purge worker: the only job that calls the CDN purge API, which is what the token authenticates"
+      }
+    ]
+  },
+  {
     name: "REDIS_URL",
     reason:
       "a Redis connection string (it usually carries the password); only the health probe opens a Redis connection from a job",
@@ -858,6 +870,18 @@ export const OPERATOR_ONLY_TARGETS: readonly {
     kind: "needs-web-only",
     reason:
       "validates the WHOLE environment, web-only and setup variables included (TELEGRAM_WEBHOOK_SECRET, SETUP_DATABASE_URL)"
+  },
+  {
+    target: "database:capacity:check",
+    kind: "needs-web-only",
+    reason:
+      "the operator's connection-budget preflight (Issue #1286); reads the capacity budget and the SETUP_DATABASE_URL role name, both web-only"
+  },
+  {
+    target: "database:pgbouncer:verify",
+    kind: "tooling",
+    reason:
+      "operator-run PgBouncer isolation check (Issue #1286); needs a privileged direct URL no job container holds and writes a scratch table, so it is never a scheduled job"
   },
   {
     target: "security:readiness",
@@ -1122,7 +1146,8 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
     "APPROVED_CONNECTIONS",
     "RESERVED_ADMIN_CONNECTIONS",
     "PGBOUNCER_MAX_CLIENT_CONN",
-    "PGBOUNCER_DEFAULT_POOL_SIZE"
+    "PGBOUNCER_DEFAULT_POOL_SIZE",
+    "PGBOUNCER_POOL_COUNT"
   ].map((name) => ({
     name: `DATABASE_CAPACITY_${name}`,
     reason:
