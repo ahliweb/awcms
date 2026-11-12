@@ -13,6 +13,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": [".astro/types.d.ts", "scripts/**/*", "src/**/*", "tests/**/*"],
+  "include": [
+    ".astro/types.d.ts",
+    "loadtest/**/*.ts",
+    "scripts/**/*",
+    "src/**/*",
+    "tests/**/*"
+  ],
   "exclude": ["node_modules", "dist", "scripts/astro-frontmatter"]
 }

@@ -1,0 +1,64 @@
+# Ephemeral per-run load-test environment (ADR-0161, Issue #1281 option A).
+#
+# Do not run this file by hand: `bun run loadtest:env:up` generates the run id,
+# the throw-away secrets and the ports, runs it as the compose project
+# `awcms-lt-<run id>`, and `bun run loadtest:env:down` removes everything
+# (containers, the tmpfs database, the built image, the generated env file).
+#
+# What makes it safe to load:
+#   - the database lives on tmpfs inside this project and dies with it;
+#   - its name is awcms_lt_<run id> and it carries a database comment the
+#     tooling checks before any write (`awcms-loadtest-ephemeral:<run id>`);
+#   - every credential is random and generated per run;
+#   - both ports bind to 127.0.0.1 only;
+#   - nothing here reads DATABASE_URL (or any credential) from the caller.
+name: awcms-lt-${LT_RUN_ID:?run through loadtest:env:up}
+
+services:
+  db:
+    image: postgres:18.6
+    restart: "no"
+    environment:
+      POSTGRES_USER: lt_admin
+      POSTGRES_PASSWORD: ${LT_DB_ADMIN_PASSWORD:?}
+      POSTGRES_DB: ${LT_DB_NAME:?}
+    tmpfs:
+      - /var/lib/postgresql
+    command: ["postgres", "-c", "max_connections=200", "-c", "fsync=off"]
+    ports:
+      - "127.0.0.1:${LT_DB_PORT:?}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lt_admin -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [lt]
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.production
+      target: runtime
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4321"
+      APP_URL: http://127.0.0.1:${LT_APP_PORT:?}
+      DATABASE_URL: postgres://awcms_app:${LT_DB_APP_PASSWORD:?}@db:5432/${LT_DB_NAME}
+      SETUP_DATABASE_URL: postgres://awcms_setup:${LT_DB_SETUP_PASSWORD:?}@db:5432/${LT_DB_NAME}
+      DATABASE_POOL_MAX: ${LT_DB_POOL_MAX:-20}
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_IP_HASH_SECRET: ${LT_APP_SECRET:?}
+      IDEMPOTENCY_HMAC_SECRET: ${LT_IDEMPOTENCY_SECRET:?}
+      EDGE_CACHE_MODE: ${LT_EDGE_CACHE_MODE:-off}
+      LOG_LEVEL: warn
+    ports:
+      - "127.0.0.1:${LT_APP_PORT}:4321"
+    networks: [lt]
+
+networks:
+  lt: {}
