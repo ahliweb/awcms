@@ -225,7 +225,6 @@ describe("rule 4 — cited `bun run` targets are real or declared deferred", () 
 
     for (const prefix of [
       "config:docs:check",
-      "database:capacity:check",
       "i18n:",
       "modules:sync",
       "performance:",

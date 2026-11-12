@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:ebef3cb8cfda2409c028d07197742919f4abb19d961eccde8f01aac30079da13 -->
+<!-- i18n-source-hash: sha256:cdebd76925bb3913613faa8e0599e510475155c1d42270ea20d993c73d8b26dc -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -198,22 +198,25 @@ awcms-mini — pool/work-class per proses vs kapasitas PostgreSQL/PgBouncer
 yang disetujui untuk seluruh armada instance, divalidasi lewat perintah
 `database:capacity:check` sebelum go-live.
 
-| Var                                             | Wajib | Default | Sensitif | Fungsi                                                                                                             |
-| ----------------------------------------------- | ----- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –     | `4`     | –        | Kedalaman antrean FIFO per work class = max konkurensi x angka ini; penuh -> reject langsung (503 + `Retry-After`) |
-| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –     | `1`     | –        | Instance `app` (web/SSR) minimum yang diharapkan berjalan bersamaan                                                |
-| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –     | `1`     | –        | Instance `app` steady-state yang diharapkan                                                                        |
-| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –     | `1`     | –        | Batas atas horizontal instance `app`                                                                               |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –     | `0`     | –        | Instance `worker` minimum (script periodik, bukan daemon selalu-jalan)                                             |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –     | `1`     | –        | Instance `worker` steady-state yang diharapkan                                                                     |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –     | `1`     | –        | Batas atas horizontal instance `worker`                                                                            |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –     | `0`     | –        | Instance `setup` minimum                                                                                           |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –     | `0`     | –        | Instance `setup` steady-state yang diharapkan                                                                      |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –     | `1`     | –        | Batas atas horizontal instance `setup`                                                                             |
-| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –     | `200`   | –        | `pgbouncer.ini`'s `max_client_conn` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                               |
-| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –     | `20`    | –        | `pgbouncer.ini`'s `default_pool_size` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                             |
-| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –     | `100`   | –        | Budget koneksi PostgreSQL/PgBouncer yang disetujui untuk deployment ini                                            |
-| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –     | `5`     | –        | Koneksi dicadangkan untuk admin/migration/backup-restore — tidak pernah dipakai sizing runtime app/worker/setup    |
+| Var                                             | Wajib | Default        | Sensitif | Fungsi                                                                                                                                                                                                                   |
+| ----------------------------------------------- | ----- | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –     | `4`            | –        | Kedalaman antrean FIFO per work class = max konkurensi x angka ini; penuh -> reject langsung (503 + `Retry-After`)                                                                                                       |
+| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –     | `1`            | –        | Instance `app` (web/SSR) minimum yang diharapkan berjalan bersamaan                                                                                                                                                      |
+| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –     | `1`            | –        | Instance `app` steady-state yang diharapkan                                                                                                                                                                              |
+| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –     | `1`            | –        | Batas atas horizontal instance `app`                                                                                                                                                                                     |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –     | `0`            | –        | Instance `worker` minimum (script periodik, bukan daemon selalu-jalan)                                                                                                                                                   |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –     | `1`            | –        | Instance `worker` steady-state yang diharapkan                                                                                                                                                                           |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –     | `1`            | –        | Batas atas horizontal instance `worker`                                                                                                                                                                                  |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –     | `0`            | –        | Instance `setup` minimum                                                                                                                                                                                                 |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –     | `0`            | –        | Instance `setup` steady-state yang diharapkan                                                                                                                                                                            |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –     | `1`            | –        | Batas atas horizontal instance `setup`                                                                                                                                                                                   |
+| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –     | `200`          | –        | `pgbouncer.ini`'s `max_client_conn` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                                                                                                                                     |
+| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –     | `20`           | –        | `pgbouncer.ini`'s `default_pool_size` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                                                                                                                                   |
+| `DATABASE_CAPACITY_PGBOUNCER_POOL_COUNT`        | –     | derived        | –        | Jumlah pool (database, user) berbeda yang dipegang PgBouncer; `default_pool_size` berlaku per pool. Diturunkan dari pasangan role/database di `DATABASE_URL`/`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` bila tidak diisi |
+| `DATABASE_CAPACITY_LIVE_URL`                    | –     | `DATABASE_URL` | yes      | URL langsung ke PostgreSQL untuk `database:capacity:check --live` (default `DATABASE_URL`)                                                                                                                               |
+| `DATABASE_PGBOUNCER_VERIFY_ADMIN_URL`           | –     | –              | yes      | URL istimewa langsung yang hanya dipakai `database:pgbouncer:verify` untuk satu tabel uji                                                                                                                                |
+| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –     | `100`          | –        | Budget koneksi PostgreSQL/PgBouncer yang disetujui untuk deployment ini                                                                                                                                                  |
+| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –     | `5`            | –        | Koneksi dicadangkan untuk admin/migration/backup-restore — tidak pernah dipakai sizing runtime app/worker/setup                                                                                                          |
 
 Default di atas ditujukan aman untuk topologi LAN-first satu-instance tanpa
 PgBouncer. Naikkan var instance MAX hanya saat benar-benar scale-out

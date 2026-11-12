@@ -1,6 +1,7 @@
 import { fail, jsonResponse } from "../../modules/_shared/api-response";
 import { IdempotencyRaceLostError } from "../../modules/_shared/idempotency";
 import { log } from "../logging/logger";
+import { isPgBouncerMode, resolveStatementTimeoutMs } from "./client";
 import { getDatabaseCircuitBreaker } from "./circuit-breaker";
 import {
   acquireWorkClassSlot,
@@ -210,6 +211,15 @@ async function runTenantWork<T>(
   try {
     const result = await sql.begin(async (tx) => {
       await tx.unsafe(`SET LOCAL app.current_tenant_id = '${safeTenantId}'`);
+
+      if (isPgBouncerMode()) {
+        // Not a connection startup parameter behind PgBouncer (see
+        // `buildClient`), so scope it to this transaction instead. A plain
+        // integer, never operator text.
+        await tx.unsafe(
+          `SET LOCAL statement_timeout = ${resolveStatementTimeoutMs()}`
+        );
+      }
 
       return fn(tx);
     });

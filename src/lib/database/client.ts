@@ -83,22 +83,45 @@ export function resolvePoolMaxForKind(
  *   which Bun applies to every pooled connection at connect time. `onconnect`
  *   is still used below, only to log connection failures.
  */
+/**
+ * `true` when the app talks to PostgreSQL through PgBouncer in transaction
+ * mode (`DATABASE_PGBOUNCER=true`, Issue #1286).
+ */
+export function isPgBouncerMode(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return env.DATABASE_PGBOUNCER === "true";
+}
+
+/** The effective `statement_timeout` in milliseconds (`DATABASE_STATEMENT_TIMEOUT_MS`, default 15000; invalid values fall back to the default). */
+export function resolveStatementTimeoutMs(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const parsed = Number(
+    env.DATABASE_STATEMENT_TIMEOUT_MS ?? DEFAULT_STATEMENT_TIMEOUT_MS
+  );
+
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_STATEMENT_TIMEOUT_MS;
+}
+
 function buildClient(databaseUrl: string, kind: ClientKind): Bun.SQL {
   const poolMax = resolvePoolMaxForKind(kind);
-  const statementTimeoutMs = Number(
-    process.env.DATABASE_STATEMENT_TIMEOUT_MS ?? DEFAULT_STATEMENT_TIMEOUT_MS
-  );
-  const usePgBouncer = process.env.DATABASE_PGBOUNCER === "true";
+  const usePgBouncer = isPgBouncerMode();
 
+  // Issue #1286: PgBouncer rejects an unknown startup parameter
+  // ("unsupported startup parameter: statement_timeout", verified against
+  // PgBouncer 1.25), so under `DATABASE_PGBOUNCER=true` the timeout is NOT sent
+  // at connect time. `withTenant` applies it per transaction instead
+  // (`SET LOCAL statement_timeout`), and the runbook recommends a role-level
+  // `ALTER ROLE ... SET statement_timeout` for queries outside a transaction.
   return new Bun.SQL(databaseUrl, {
     max: poolMax,
     prepare: !usePgBouncer,
-    connection: {
-      statement_timeout:
-        Number.isFinite(statementTimeoutMs) && statementTimeoutMs > 0
-          ? statementTimeoutMs
-          : DEFAULT_STATEMENT_TIMEOUT_MS
-    },
+    ...(usePgBouncer
+      ? {}
+      : { connection: { statement_timeout: resolveStatementTimeoutMs() } }),
     onconnect: (err) => {
       if (err) {
         log("error", "database.connection.failed", {
