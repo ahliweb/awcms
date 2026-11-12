@@ -137,6 +137,19 @@ list above, not a label.
 Run `bun run config:validate` and `bun run security:readiness` **before** each
 environment's first deploy.
 
+## Ephemeral per-run load-test environment (no permanent environment)
+
+Capacity measurements (ADR-0161, Issue #1283) must not run against the live
+deployment, and ADR-0083 keeps the repo at one deployed environment. The owner's
+decision on #1281 (2026-11-12, option A) is therefore **not** a second
+environment: a load test gets a **separate app and a throw-away PostgreSQL with
+synthetic data, created for one run and destroyed after it**
+(`bun run loadtest:env:up` / `loadtest:env:down`). It lives on one workstation
+or build host, binds to `127.0.0.1`, uses random per-run secrets and never reads
+a credential from the caller, so the isolation contract above holds by
+construction. Nothing is added to the table in §One environment. Procedure,
+interlocks and limits: [`load-testing.md`](load-testing.md).
+
 ## Default tenant & owner account
 
 | Item                      | Development                | Production                 |
