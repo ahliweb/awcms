@@ -64,7 +64,7 @@ We propose the following.
 
    The owner target is **S1 → S2**. S3 is out of scope of this ADR.
 
-5. **Work that follows** (each its own issue, S or M, waiting for the Definition-of-Ready gate): a distributed load-test harness and baseline; public surfaces always cacheable at the CDN through the existing fail-closed allow-list (ADR-0042); purge reaching the CDN within plan limits (revisiting C14); a shared Redis for the rate limiter; PgBouncer plus the cross-instance budget check; the HTTP p95 metric; and an owner decision on where a capacity baseline may run.
+5. **Work that follows** (each its own issue, S or M, waiting for the Definition-of-Ready gate): a distributed load-test harness and baseline (#1283); public surfaces always cacheable at the CDN through the existing fail-closed allow-list (ADR-0042) (#1284); purge reaching the CDN within plan limits, revisiting C14 (#1282); a shared Redis for the rate limiter (#1285); PgBouncer plus the cross-instance budget check (#1286); the HTTP p95 metric (#1287); and an owner decision on where a capacity baseline may run (#1281).
 6. **Nothing here relaxes an existing invariant.** Cacheability remains a fail-closed allow-list per surface, authenticated and tenant-scoped responses stay uncacheable, and RLS remains the authorization boundary (ADR-0003).
 
 ## Consequences

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0161-capacity-targets-are-measured-nfrs-and-the-scale-path-is-staged.md)
 
-<!-- i18n-source-hash: sha256:fcd4f001874ddfed4db1ec4406d09a406548409a4c03978074e4416a64a5da3c -->
+<!-- i18n-source-hash: sha256:511be026e844ebb9e6d4656f453c69a67a79b15f4a9f9815e0b3f23d45b0d2c5 -->
 
 # ADR-0161 — Target kapasitas adalah NFR yang terukur, dan jalur skala bertahap
 
@@ -66,7 +66,7 @@ Kami mengusulkan hal berikut.
 
    Target pemilik adalah **S1 → S2**. S3 di luar cakupan ADR ini.
 
-5. **Pekerjaan lanjutan** (masing-masing issue sendiri, S atau M, menunggu gerbang Definition-of-Ready): harness uji beban terdistribusi dan baseline; surface publik selalu dapat di-cache di CDN lewat allow-list fail-closed yang ada (ADR-0042); purge yang sampai ke CDN dalam batas paket (meninjau ulang C14); Redis bersama untuk rate limiter; PgBouncer plus pemeriksaan anggaran lintas instance; metrik p95 HTTP; dan keputusan pemilik tentang di mana baseline kapasitas boleh dijalankan.
+5. **Pekerjaan lanjutan** (masing-masing issue sendiri, S atau M, menunggu gerbang Definition-of-Ready): harness uji beban terdistribusi dan baseline (#1283); surface publik selalu dapat di-cache di CDN lewat allow-list fail-closed yang ada (ADR-0042) (#1284); purge yang sampai ke CDN dalam batas paket, meninjau ulang C14 (#1282); Redis bersama untuk rate limiter (#1285); PgBouncer plus pemeriksaan anggaran lintas instance (#1286); metrik p95 HTTP (#1287); dan keputusan pemilik tentang di mana baseline kapasitas boleh dijalankan (#1281).
 6. **Tidak ada invarian yang dilonggarkan.** Kemampuan di-cache tetap allow-list fail-closed per surface, respons terautentikasi dan ber-scope tenant tetap tidak boleh di-cache, dan RLS tetap batas otorisasi (ADR-0003).
 
 ## Konsekuensi
