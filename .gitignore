@@ -167,14 +167,13 @@ data/seputarborneo-legacy/article-paths.tsv
 redesign/
 
 # BEGIN:pengetahuan-ringkas
-# graphify: hanya graph.json, GRAPH_REPORT.md, STATUS.md, dan label yang dilacak.
+# graphify: yang dilacak hanya graph.json, GRAPH_REPORT.md, manifest.json,
+# cost.json, dan STATUS.md (docs/awcms/knowledge-graph.md). Berkas bertitik,
+# termasuk .graphify_labels.json{,.sig}, tetap diabaikan; graph:artifacts:check
+# menolak bila ada yang dilacak.
 graphify-out/cache/
-graphify-out/manifest.json
-graphify-out/cost.json
 graphify-out/graph.html
 graphify-out/GRAPH_TREE.html
 graphify-out/obsidian/
 graphify-out/.graphify_*
-!graphify-out/.graphify_labels.json
-!graphify-out/.graphify_labels.json.sig
 # END:pengetahuan-ringkas
