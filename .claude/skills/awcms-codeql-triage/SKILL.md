@@ -1,6 +1,6 @@
 ---
 name: awcms-codeql-triage
-description: Triage and fix AWCMS CodeQL code scanning findings (github.com/ahliweb/awcms/security/code-scanning). Use when asked to "analyse code scanning"/"fix CodeQL", when a PR fails the CodeQL check, or when a new alert appears. Documents six real false positives already found (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization in a test mock, two cases officially dismissed without reformulating the code, Bun.SQL tagged-template null-cast, and a build-time extension seam trivial-conditional) plus the "unused-local-variable in tests sometimes marks a coverage gap" pattern, AND one trivial-conditional counter-example that turned out to be a REAL bug (dead-code fallback because the helper is non-nullish, alert #140) — so it does not have to be investigated from scratch again and valid findings are not dismissed by mistake.
+description: Triage and fix AWCMS CodeQL code scanning findings (github.com/ahliweb/awcms/security/code-scanning). Use when asked to "analyse code scanning"/"fix CodeQL", when a PR fails the CodeQL check, or when a new alert appears. Documents six real false positives already found (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization in a test mock, two cases officially dismissed without reformulating the code, Bun.SQL tagged-template null-cast, and a build-time extension seam trivial-conditional) plus the "unused-local-variable / useless-assignment-to-local in tests sometimes marks a coverage gap" pattern (alert #204), AND one trivial-conditional counter-example that turned out to be a REAL bug (dead-code fallback because the helper is non-nullish, alert #140) — so it does not have to be investigated from scratch again and valid findings are not dismissed by mistake.
 ---
 
 🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
@@ -306,6 +306,32 @@ the same module — if it does, it is most likely a coverage gap (a helper
 written for a test that was then forgotten/truncated), not pure dead code.
 Wire it into an appropriate new assertion (closing the gap AND removing the
 alert) instead of merely deleting it.
+
+#### The same pattern under `js/useless-assignment-to-local` (alert #204)
+
+Found 2026-11-11 (alert #204, PR #1293):
+`tests/integration/email-sender-routing.integration.test.ts`, CodeQL message
+_"The value assigned to result here is unused."_ A test that runs several
+dispatch passes reassigns one `let result` per pass; the third pass's value
+was overwritten by the fourth before anything read it. Deleting the
+assignment would have silenced the alert — and hidden the gap: the comment
+right below it (_"s1 now sends; s2 (no health row) is held"_) states two
+outcomes, and only the side effects (the fake provider's outbox, the row
+status) were asserted, never the pass's own counters. A dispatcher that held
+s2's row without counting it in `senderHeld` — the figure operators read —
+would have passed.
+
+**Fix**: assert what the comment promises (`expect(result.sent).toBe(1)`,
+`expect(result.senderHeld).toBe(1)`), then prove the assertion measures
+something by flipping the expected value once and watching the test fail
+(`Expected: 0, Received: 1`) before restoring it.
+
+**Triage rule**: a `js/useless-assignment-to-local` on a reassigned `result`
+in a multi-step test is the same signal as an unused helper — read the
+comment or test title around that step; if it states an outcome the step's
+`result` would carry, add that assertion instead of dropping the
+assignment. Only when nothing describes that step's outcome is
+`await dispatch(...)` without assignment the right fix.
 
 ## Verification
 

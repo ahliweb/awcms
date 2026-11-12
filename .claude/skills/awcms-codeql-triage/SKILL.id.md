@@ -1,11 +1,11 @@
 ---
 name: awcms-codeql-triage
-description: Triase dan perbaiki temuan CodeQL code scanning AWCMS (github.com/ahliweb/awcms/security/code-scanning). Gunakan saat diminta "analisis code scanning"/"perbaiki CodeQL", saat sebuah PR gagal check CodeQL, atau saat menemukan alert baru. Mendokumentasikan enam false-positive nyata yang sudah ditemukan (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization di test mock, dua kasus dismiss resmi tanpa reformulasi kode, Bun.SQL tagged-template null-cast, dan build-time extension seam trivial-conditional) plus pola "unused-local-variable di test kadang menandai coverage gap", DAN satu counter-example trivial-conditional yang ternyata bug NYATA (dead-code fallback karena helper non-nullish, alert #140) — supaya tidak diinvestigasi ulang dari nol dan tidak salah men-dismiss temuan yang valid.
+description: Triase dan perbaiki temuan CodeQL code scanning AWCMS (github.com/ahliweb/awcms/security/code-scanning). Gunakan saat diminta "analisis code scanning"/"perbaiki CodeQL", saat sebuah PR gagal check CodeQL, atau saat menemukan alert baru. Mendokumentasikan enam false-positive nyata yang sudah ditemukan (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization di test mock, dua kasus dismiss resmi tanpa reformulasi kode, Bun.SQL tagged-template null-cast, dan build-time extension seam trivial-conditional) plus pola "unused-local-variable / useless-assignment-to-local di test kadang menandai coverage gap" (alert #204), DAN satu counter-example trivial-conditional yang ternyata bug NYATA (dead-code fallback karena helper non-nullish, alert #140) — supaya tidak diinvestigasi ulang dari nol dan tidak salah men-dismiss temuan yang valid.
 ---
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:6b3211706a4aecc385c5c8624eb285b8e3e6e692b599f483fdf4046dd906a186 -->
+<!-- i18n-source-hash: sha256:f1fd370b1e04abb0d67d47f9b907dbf75443f80e46a4ed6ddfc25e72be792e22 -->
 
 # AWCMS — Triase CodeQL Code Scanning
 
@@ -308,6 +308,34 @@ modul yang sama — kalau ya, kemungkinan besar itu coverage gap (helper
 ditulis untuk test yang lalu terlupa/terpotong), bukan dead code murni.
 Wire ke assertion baru yang sesuai (menutup gap SEKALIGUS menghilangkan
 alert) alih-alih sekadar menghapus.
+
+#### Pola yang sama di bawah `js/useless-assignment-to-local` (alert #204)
+
+Ditemukan 2026-11-11 (alert #204, PR #1293):
+`tests/integration/email-sender-routing.integration.test.ts`, pesan CodeQL
+_"The value assigned to result here is unused."_ Sebuah test yang menjalankan
+beberapa putaran dispatch meng-assign ulang satu `let result` per putaran;
+nilai putaran ketiga tertimpa putaran keempat sebelum sempat dibaca.
+Menghapus assignment-nya akan membungkam alert — sekaligus menyembunyikan
+celahnya: komentar tepat di bawahnya (_"s1 now sends; s2 (no health row) is
+held"_) menyebut dua hasil, dan yang diassert hanya efek sampingnya (outbox
+provider palsu, status baris), tidak pernah counter putaran itu sendiri.
+Dispatcher yang menahan baris s2 tanpa menghitungnya di `senderHeld` — angka
+yang dibaca operator — akan tetap lolos.
+
+**Perbaikan**: assert apa yang dijanjikan komentarnya
+(`expect(result.sent).toBe(1)`, `expect(result.senderHeld).toBe(1)`), lalu
+buktikan assertion itu mengukur sesuatu dengan membalik nilai harapannya
+sekali dan melihat test-nya gagal (`Expected: 0, Received: 1`) sebelum
+dikembalikan.
+
+**Aturan triase**: `js/useless-assignment-to-local` pada `result` yang
+di-assign ulang di test multi-langkah adalah sinyal yang sama dengan helper
+yang tak terpakai — baca komentar atau judul test di sekitar langkah itu;
+bila ia menyebut hasil yang dibawa `result` langkah tersebut, tambahkan
+assertion itu alih-alih membuang assignment-nya. Hanya bila tidak ada yang
+mendeskripsikan hasil langkah itu, `await dispatch(...)` tanpa assignment
+adalah perbaikan yang tepat.
 
 ## Verifikasi
 
