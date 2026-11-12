@@ -2,10 +2,10 @@
 
 # ADR-0161 — Capacity targets are measured NFRs, and the scale path is staged
 
-- **Status:** Proposed
-- **Review:** becomes Accepted only after maintainer review. Until then it is a recommendation. This ADR adds no code; the work it names is split into issues that wait for the Definition-of-Ready gate.
+- **Status:** Accepted
+- **Review:** accepted by the owner on 2026-11-12 through the standard choice dialog. This ADR adds no code; the work it names is split into issues that wait for the Definition-of-Ready gate.
 - **Date:** 2026-11-12
-- **Decision maker:** @ahliweb (maintainer review pending)
+- **Decision maker:** @ahliweb (accepted by the owner on 2026-11-12)
 - **Related:** [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (edge cache, fail-closed surface allow-list), [ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md), [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (shared rate limiting), [ADR-0083](0083-this-template-deploys-to-one-environment.md) (one environment), [ADR-0098](0098-the-cache-key-carries-the-locale-in-the-path.md), [ADR-0107](0107-a-readers-browser-may-search-and-the-origin-names-the-tenant.md); [`docs/awcms/edge-cache-architecture.md`](../awcms/edge-cache-architecture.md), [`docs/awcms/database-pooling.md`](../awcms/database-pooling.md), [`docs/awcms/database-capacity-runbook.md`](../awcms/database-capacity-runbook.md), [`docs/awcms/observability-metrics.md`](../awcms/observability-metrics.md), [`docs/awcms/standar-performa-dan-keamanan.md`](../awcms/standar-performa-dan-keamanan.md) (C14); `ahliweb/awcms-astro` (HTML cache headers, tracked there)
 
 **Docs and governance only.** No module, migration, API path, dependency or runtime change. The ADR fixes the _shape_ of the capacity targets and the order of the scale steps. The numbers marked "initial" are proposals to be revised after the first measured baseline.

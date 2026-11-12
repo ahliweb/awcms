@@ -1,13 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0161-capacity-targets-are-measured-nfrs-and-the-scale-path-is-staged.md)
 
-<!-- i18n-source-hash: sha256:511be026e844ebb9e6d4656f453c69a67a79b15f4a9f9815e0b3f23d45b0d2c5 -->
+<!-- i18n-source-hash: sha256:78fbe0e9c9a136ba2c480fb7dc8d059d6dbd8010f5d3fde89d2641d7a2275398 -->
 
 # ADR-0161 — Target kapasitas adalah NFR yang terukur, dan jalur skala bertahap
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima hanya setelah ditinjau maintainer. Sampai saat itu ia adalah rekomendasi. ADR ini tidak menambah kode; pekerjaan yang disebutnya dipecah menjadi issue yang menunggu gerbang Definition-of-Ready.
+- **Status:** Diterima
+- **Tinjauan:** diterima pemilik 2026-11-12 lewat dialog pilihan baku. ADR ini tidak menambah kode; pekerjaan yang disebutnya dipecah menjadi issue yang menunggu gerbang Definition-of-Ready.
 - **Tanggal:** 2026-11-12
-- **Pengambil keputusan:** @ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** @ahliweb (diterima pemilik 2026-11-12)
 - **Terkait:** [ADR-0042](0042-varnish-edge-cache-auto-activation.id.md) (cache tepi, allow-list surface fail-closed), [ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.id.md), [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.id.md) (rate limiting bersama), [ADR-0083](0083-this-template-deploys-to-one-environment.id.md) (satu environment), [ADR-0098](0098-the-cache-key-carries-the-locale-in-the-path.id.md), [ADR-0107](0107-a-readers-browser-may-search-and-the-origin-names-the-tenant.id.md); [`docs/awcms/edge-cache-architecture.id.md`](../awcms/edge-cache-architecture.id.md), [`docs/awcms/database-pooling.id.md`](../awcms/database-pooling.id.md), [`docs/awcms/database-capacity-runbook.id.md`](../awcms/database-capacity-runbook.id.md), [`docs/awcms/observability-metrics.id.md`](../awcms/observability-metrics.id.md), [`docs/awcms/standar-performa-dan-keamanan.md`](../awcms/standar-performa-dan-keamanan.md) (C14); `ahliweb/awcms-astro` (header cache HTML, dilacak di repo itu)
 
 **Hanya dokumen dan tata kelola.** Tidak ada perubahan modul, migrasi, path API, dependensi, maupun runtime. ADR ini menetapkan _bentuk_ target kapasitas dan urutan langkah skala. Angka bertanda "awal" adalah usulan yang direvisi setelah baseline terukur pertama.
