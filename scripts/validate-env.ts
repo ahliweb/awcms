@@ -131,6 +131,7 @@ const RULES: readonly Rule[] = [
   },
   { name: "SETUP_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
   { name: "SETUP_RATE_LIMIT_WINDOW_SEC", required: false, type: "int", min: 1 },
+  { name: "APP_INSTANCE_COUNT", required: false, type: "int", min: 1 },
   { name: "TRUSTED_PROXY_ENABLED", required: false, type: "bool" },
   { name: "TRUSTED_PROXY_HOP_COUNT", required: false, type: "int", min: 1 },
   {
@@ -1818,6 +1819,25 @@ export function validateEnv(env: EnvBag): string[] {
   ) {
     problems.push(
       `AUTH_SOURCE_RATE_LIMIT_MAX (${sourceMax}) lebih kecil dari AUTH_LOGIN_RATE_LIMIT_MAX (${loginMax}): plafon per-sumber akan mengikat lebih dulu bahkan pada satu tenant, sehingga login sah tertolak sebelum plafon per-tenant tercapai.`
+    );
+  }
+
+  // Multi-instance wajib punya rate limiter bersama (#1285, ADR-0066): tanpa
+  // Redis tiap instance menghitung jendelanya sendiri sehingga setiap batas
+  // menjadi N kali lipat. Ini error, bukan peringatan.
+  const instanceCount = Number.parseInt(
+    (env.APP_INSTANCE_COUNT ?? "").trim(),
+    10
+  );
+
+  if (
+    Number.isInteger(instanceCount) &&
+    instanceCount > 1 &&
+    ((env.REDIS_ENABLED ?? "").trim().toLowerCase() !== "true" ||
+      (env.REDIS_URL ?? "").trim() === "")
+  ) {
+    problems.push(
+      `APP_INSTANCE_COUNT=${instanceCount} (lebih dari satu instance) tetapi Redis belum dikonfigurasi: set REDIS_ENABLED=true dan REDIS_URL agar rate limiter dipakai bersama. Tanpa itu tiap instance menghitung sendiri dan setiap batas menjadi ${instanceCount} kali lipat (ADR-0066).`
     );
   }
 
