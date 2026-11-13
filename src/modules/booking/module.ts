@@ -77,7 +77,6 @@ import {
   type SubjectDataDescriptor
 } from "../_shared/module-contract";
 import type { BookingPort } from "../_shared/ports/booking-port";
-import { createBookingPort } from "./application/booking-port-adapter";
 import { resolveStaffAvailability } from "./application/booking-staff-availability-consumer";
 import type { StaffAvailabilityPort } from "../_shared/ports/staff-availability-port";
 import { BOOKING_MODULE_KEY } from "./domain/booking-permissions";
@@ -182,14 +181,60 @@ export async function loadStaffAvailabilityPort(): Promise<StaffAvailabilityPort
 }
 
 /**
+ * Binds one port method to the adapter, loaded on first use. `module.ts` must
+ * not import `application/booking-port-adapter` statically: that file reaches
+ * `domain-event-runtime/infrastructure/consumer-registry`, which imports the
+ * module registry (`src/modules/index.ts`), which imports THIS file. Entered
+ * through this file first (a test, a script that imports `bookingModule`
+ * directly), the registry then evaluated its module list while `bookingModule`
+ * was still uninitialised, a temporal-dead-zone `ReferenceError` that only the
+ * order of the first import decided (Issue #1278, item 3). Loading the adapter
+ * at the call, not at the import, removes the edge without changing what the
+ * port does.
+ */
+function lazily<M extends keyof BookingPort>(
+  load: () => Promise<BookingPort>,
+  method: M
+): BookingPort[M] {
+  return (async (...args: unknown[]) => {
+    const port = await load();
+
+    return (port[method] as (...rest: unknown[]) => unknown)(...args);
+  }) as BookingPort[M];
+}
+
+/**
  * The BookingPort a downstream adapter (commerce, a channel) is handed: the staff
  * constraint is resolved per tenant exactly as the routes do, through the loader
  * above, so a port reservation cannot double-book a person (Issue #949).
  */
 export function createComposedBookingPort(): BookingPort {
-  return createBookingPort((tx, tenantId) =>
-    resolveStaffAvailability(tx, tenantId, loadStaffAvailabilityPort)
-  );
+  let adapter: Promise<BookingPort> | null = null;
+  const load = (): Promise<BookingPort> => {
+    adapter ??= import("./application/booking-port-adapter").then(
+      ({ createBookingPort }) =>
+        createBookingPort((tx, tenantId) =>
+          resolveStaffAvailability(tx, tenantId, loadStaffAvailabilityPort)
+        )
+    );
+
+    return adapter;
+  };
+
+  return {
+    quote: lazily(load, "quote"),
+    hold: lazily(load, "hold"),
+    confirm: lazily(load, "confirm"),
+    cancel: lazily(load, "cancel"),
+    reschedule: lazily(load, "reschedule"),
+    checkIn: lazily(load, "checkIn"),
+    checkOut: lazily(load, "checkOut"),
+    markNoShow: lazily(load, "markNoShow"),
+    get: lazily(load, "get"),
+    getOffering: lazily(load, "getOffering"),
+    listOfferings: lazily(load, "listOfferings"),
+    availability: lazily(load, "availability")
+  };
 }
 
 export const bookingModule = defineModule({

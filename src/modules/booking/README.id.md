@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4281bb6c5e54a0874c2ad8d551f6254b3a8f7ba182866e3e9afb6a14f2dde430 -->
+<!-- i18n-source-hash: sha256:af38936580794d7ac8fdedaf5f595825162630b972f03dce9b491aea9dbdf64f -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -27,6 +27,14 @@ layanan klaim `placeHold`, dan rekonsiliasi read-only, ditambah job
 `booking:holds:expire`, yang berjalan sebagai `awcms_worker` lewat sapuan
 SECURITY DEFINER sempit `sql/200` (worker tak memegang privilege pada tabel
 booking).
+
+Confirm dan cancel yang bisa dipanggil worker (Issue #1278, `sql/387`): bila
+koneksi adalah `awcms_worker`, `BookingPort.confirm` / `.cancel` lewat fungsi
+SECURITY DEFINER sempit `awcms_booking_worker_transition` (owner
+`awcms_booking_transition`, argumen tenant harus sama dengan milik sesi, EXECUTE
+hanya untuk worker) dan bukan `transitionReservation`; baris audit dan domain
+event-nya sama. Keputusan terbuka: jalur itu tak menyimpan rekaman
+Idempotency-Key (worker tak bisa menyisipkannya); retry aman lewat cek status.
 
 Stay dan blok (Issue #940, `sql/204`): stay diklaim lewat allocator dan
 `placeHold` yang sama (`stay: { checkInDate, checkOutDate }`, exclusion
