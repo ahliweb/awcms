@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:213ba1790689ede029c520694d9f6747797ef32cbc47b92e29688c59acc5607f -->
+<!-- i18n-source-hash: sha256:5ad5e2c991f962eeed9130912054620e758c26c1033858369f06729ba5cf545b -->
 
 # Data Lifecycle
 
@@ -203,6 +203,22 @@ tanpa bantalan secara langsung, yang secara permanen mengecualikan baris batas
 baris terakhir yang sama. Bila Anda menyentuh logika batas ini, jalankan ulang
 `tests/data-lifecycle-cursor-boundary.test.ts` dan test integrasi yang
 digerbangi DB.
+
+### Tipe kolom kursor: `timestamptz` (bawaan) dan `date` (hanya purge)
+
+Deskriptor boleh menyatakan `cursorColumnType: "date"` untuk agregat harian
+(`day` proyeksi pelaporan). Diikat sebagai `($N::timestamptz AT TIME ZONE 'UTC')::date`
+(`cursorBoundSql`, `domain/cursor-boundary.ts`), sehingga batas retensi adalah
+tanggal kalender UTC dari cutoff dan tidak bergeser mengikuti TimeZone sesi
+database; sebuah hari dipertahankan sampai benar-benar lebih tua dari hari
+cutoff (audit Isu #1276). Kursor `date` **hanya purge**: gerbang registry menolak
+`archive.archivable: true` bersamanya, dan engine melempar bila ada yang sampai
+ke sana, karena semua baris satu hari berbagi satu nilai kursor, dan kursor
+lanjut arsip tidak bisa melangkahi lebih dari satu `batchLimit` baris berbagi
+nilai (batas atas purge lalu menutupi baris yang tak pernah diarsip). Mencabut
+larangan ini perlu kursor komposit `(cursor, id)`. Risiko seri yang sama, jauh
+lebih jarang, ada pada kursor `timestamptz` (lihat header
+`application/archive-purge-job.ts`).
 
 ## Port archive netral-provider
 

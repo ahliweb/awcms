@@ -185,6 +185,22 @@ looped the archive resume on the same last row. If you touch the boundary logic,
 re-run `tests/data-lifecycle-cursor-boundary.test.ts` and the DB-gated
 integration test.
 
+### Cursor column type: `timestamptz` (default) and `date` (purge-only)
+
+A descriptor may declare `cursorColumnType: "date"` for a daily aggregate (a
+reporting projection's `day`). Bound as `($N::timestamptz AT TIME ZONE 'UTC')::date`
+(`cursorBoundSql`, `domain/cursor-boundary.ts`), so the retention boundary is the
+UTC calendar date of the cutoff and does not move with the database session
+TimeZone; a day is kept until it is strictly older than the cutoff day (Issue
+#1276 audit). A `date` cursor is **purge-only**: the registry gate refuses
+`archive.archivable: true` with it, and the engine throws if one reaches it,
+because every row of a day shares one cursor value, and the archive resume
+cursor cannot step through more rows than one `batchLimit` of a shared value
+(the purge upper bound would then cover rows that were never archived). Lifting
+that needs a composite `(cursor, id)` cursor. The same tie risk exists, much
+rarer, for a `timestamptz` cursor (see the header of
+`application/archive-purge-job.ts`).
+
 ## Provider-neutral archive port
 
 `domain/archive-port.ts` (interface) +

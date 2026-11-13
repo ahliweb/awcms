@@ -15,6 +15,7 @@ import {
   collectHighVolumeTableDescriptors,
   validateLifecycleRegistry
 } from "../src/modules/data-lifecycle/domain/lifecycle-registry";
+import { cursorBoundSql } from "../src/modules/data-lifecycle/domain/cursor-boundary";
 import { listModules } from "../src/modules";
 
 function baseDescriptor(): HighVolumeTableDescriptor {
@@ -186,5 +187,65 @@ describe("validateLifecycleRegistry — rejects bad descriptors", () => {
     expect(
       result.issues.some((i) => /tableName must start with/.test(i.message))
     ).toBe(true);
+  });
+});
+
+describe("validateLifecycleRegistry — cursorColumnType (#1276 audit)", () => {
+  test("accepts a purge-only date cursor", () => {
+    const d: HighVolumeTableDescriptor = {
+      ...baseDescriptor(),
+      cursorColumnType: "date"
+    };
+    expect(validateLifecycleRegistry([moduleWith([d])]).valid).toBe(true);
+  });
+
+  test("rejects an ARCHIVABLE date cursor (rows sharing a day would be purged without an archive)", () => {
+    const d: HighVolumeTableDescriptor = {
+      ...baseDescriptor(),
+      cursorColumnType: "date",
+      archive: {
+        archivable: true,
+        port: "local_offline",
+        format: "jsonl",
+        rationale: "x"
+      }
+    };
+    const result = validateLifecycleRegistry([moduleWith([d])]);
+    expect(result.valid).toBe(false);
+    expect(
+      result.issues.some((i) => /date.*cannot be archivable/.test(i.message))
+    ).toBe(true);
+  });
+
+  test("rejects an unknown cursorColumnType", () => {
+    const d = {
+      ...baseDescriptor(),
+      cursorColumnType: "bigint"
+    } as unknown as HighVolumeTableDescriptor;
+    expect(validateLifecycleRegistry([moduleWith([d])]).valid).toBe(false);
+  });
+
+  test("an archivable timestamptz cursor stays valid", () => {
+    const d: HighVolumeTableDescriptor = {
+      ...baseDescriptor(),
+      cursorColumnType: "timestamptz",
+      archive: {
+        archivable: true,
+        port: "local_offline",
+        format: "jsonl",
+        rationale: "x"
+      }
+    };
+    expect(validateLifecycleRegistry([moduleWith([d])]).valid).toBe(true);
+  });
+});
+
+describe("cursorBoundSql", () => {
+  test("date compares against the UTC calendar date, timestamptz stays a cast", () => {
+    expect(cursorBoundSql("date", 2)).toBe(
+      "(($2::timestamptz) AT TIME ZONE 'UTC')::date"
+    );
+    expect(cursorBoundSql("timestamptz", 3)).toBe("$3::timestamptz");
+    expect(cursorBoundSql(undefined, 2)).toBe("$2::timestamptz");
   });
 });

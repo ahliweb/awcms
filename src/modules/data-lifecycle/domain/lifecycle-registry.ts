@@ -137,6 +137,25 @@ export function validateLifecycleDescriptorShape(
     );
   }
 
+  if (
+    descriptor.cursorColumnType !== undefined &&
+    descriptor.cursorColumnType !== "timestamptz" &&
+    descriptor.cursorColumnType !== "date"
+  ) {
+    push(
+      `cursorColumnType must be "timestamptz" or "date" (got ${JSON.stringify(descriptor.cursorColumnType)}).`
+    );
+  }
+
+  if (
+    descriptor.cursorColumnType === "date" &&
+    descriptor.archive?.archivable === true
+  ) {
+    push(
+      'a "date" cursorColumnType cannot be archivable: the archive resume cursor cannot step through rows sharing one day, so rows past one batch would be purged without an archive. Keep archive.archivable false (purge-only) until a composite (cursor, id) cursor exists.'
+    );
+  }
+
   if (!VALID_RETENTION_CLASSES.includes(descriptor.retentionClass)) {
     push(
       `retentionClass ${JSON.stringify(descriptor.retentionClass)} is not one of ${VALID_RETENTION_CLASSES.join(", ")}.`

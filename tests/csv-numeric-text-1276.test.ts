@@ -43,6 +43,19 @@ describe("csvCellForWrite numericText", () => {
     }
   });
 
+  test("a formula leader followed by a digit is never mistaken for a number", () => {
+    for (const text of ["=5", "@5", "\t5", "\r5", "+=5", "-=5", "%5", "|5"]) {
+      const written = csvCellForWrite(text, opt);
+
+      expect(written).toBe(csvCellForWrite(text));
+    }
+    for (const text of ["=5", "@5", "\t5", "\r5"]) {
+      expect(csvCellForWrite(text, opt).replace(/^"/, "").startsWith("'")).toBe(
+        true
+      );
+    }
+  });
+
   test("a non-string value and the default mode are unchanged", () => {
     expect(csvCellForWrite(-5, opt)).toBe("-5");
     expect(csvCellForWrite("-12.50")).toBe("'-12.50");

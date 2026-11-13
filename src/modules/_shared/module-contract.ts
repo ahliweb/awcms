@@ -965,6 +965,15 @@ export type HighVolumeTableDescriptor = {
   ownerModuleKey: string;
   scope: LifecycleTableScope;
   cursorColumn: string;
+  /**
+   * SQL type of `cursorColumn`; defaults to `"timestamptz"`. `"date"` is for a
+   * daily aggregate (a reporting projection's `day`). A `date` cursor is
+   * purge-only: the registry gate refuses `archive.archivable: true` with it,
+   * because the archive resume cursor (a JS `Date`, strictly "cursor >= last")
+   * cannot step through many rows sharing one day without a composite
+   * `(cursor, id)` cursor (Issue #1276).
+   */
+  cursorColumnType?: "timestamptz" | "date";
   /** Defaults to `"tenant_id"` when `scope === "tenant"`. */
   tenantColumn?: string;
   retentionClass: LifecycleRetentionClass;
