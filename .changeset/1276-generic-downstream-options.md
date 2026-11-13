@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(data-lifecycle, payroll-boundary, csv): three generic options carried downstream (Issue #1276). (1) The generic archive/purge engine and the dry-run planner cast the cutoff, resume and archived-through parameters of every cursor comparison (`$N::timestamptz`), so a descriptor whose cursor column is `date` runs instead of failing with `22007`; a no-op for a `timestamptz` cursor. `runGenericArchivePass` and `runGenericPurgePass` are now exported for tests. (2) `NON_PAYROLL_TABLE_NAME_EXCEPTIONS` in `payroll-data-boundary.ts`: a registered, reasoned list of exact non-payroll table names (plus `<table>_...` objects whose remainder is not itself a payroll name), consulted by `isPayrollTable` before the patterns; empty today, validated at load (reason required, never a required payroll table, must be a real pattern hit). (3) `csvCellForWrite(value, { numericText: true })` writes a string that is only an optionally signed decimal as is; everything else is neutralised as before. No behaviour change for existing callers; no migration.
