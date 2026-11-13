@@ -295,6 +295,104 @@ export function needsAppConnectionString(
   });
 }
 
+/**
+ * The scheduled jobs that run as `awcms_app` ON PURPOSE (Issue #1132 keeps the
+ * app connection out of every crontab job; each entry here is a recorded
+ * exception to that rule). A crontab job that keeps `DATABASE_URL` and is not
+ * named here fails `tests/jobs-app-role-exceptions.test.ts`; an entry that is no
+ * longer scheduled, no longer keeps the credential, or has no reason or ADR fails
+ * it too. Add an entry only with an Accepted ADR that says why the worker role
+ * cannot do the job and why the extra login is safe.
+ */
+export const APP_ROLE_SCHEDULED_EXCEPTIONS: readonly {
+  target: string;
+  /** The Accepted ADR that admits the exception, e.g. `ADR-0147`. */
+  adr: string;
+  /** The one script in the job's reach that opens the app connection. */
+  entrypoint: string;
+  reason: string;
+}[] = [
+  {
+    target: "hr-commission:intents:post",
+    adr: "ADR-0147",
+    entrypoint: "scripts/hr-commission-intents-post.ts",
+    reason:
+      "posts commission accruals; the payroll boundary lets only awcms_app touch an accrual (Issue #1189)"
+  },
+  {
+    target: "omnichannel-inbox:sla",
+    adr: "ADR-0160",
+    entrypoint: "scripts/omnichannel-inbox-sla.ts",
+    reason:
+      "re-checks an assignee's role grants and enqueues the SLA e-mail; awcms_worker can read neither the role-grant tables nor insert an e-mail (Issue #1164)"
+  },
+  {
+    target: "email:senders:verify",
+    adr: "ADR-0162",
+    entrypoint: "scripts/email-senders-verify.ts",
+    reason:
+      "records channel-account health and status, which only awcms_app may write (a worker that could would mark an unverified sender verified); the provider calls are read-only GETs (Issue #1160, owner decision of 11 November 2026)"
+  }
+];
+
+/**
+ * Holds `exceptions` to the crontab in both directions. Pure, so a test can feed
+ * it a mutated list. `scheduled` is every target on the crontab, `keepers` is
+ * `appConnectionTargets()`, and `appClientFiles(target)` is the files in that
+ * target's import closure that open the app connection.
+ */
+export function validateAppRoleExceptions(
+  exceptions: readonly {
+    target: string;
+    adr: string;
+    entrypoint: string;
+    reason: string;
+  }[],
+  scheduled: readonly string[],
+  keepers: ReadonlySet<string>,
+  appClientFiles: (target: string) => readonly string[]
+): string[] {
+  const problems: string[] = [];
+  const named = new Set(exceptions.map((entry) => entry.target));
+
+  if (named.size !== exceptions.length) {
+    problems.push("an app-role exception is listed twice");
+  }
+
+  for (const target of scheduled) {
+    if (keepers.has(target) && !named.has(target)) {
+      problems.push(
+        `${target} is scheduled and keeps DATABASE_URL (awcms_app) but is not in APP_ROLE_SCHEDULED_EXCEPTIONS`
+      );
+    }
+  }
+
+  for (const entry of exceptions) {
+    if (!/^ADR-\d{4}$/.test(entry.adr)) {
+      problems.push(`${entry.target}: adr must look like ADR-0147`);
+    }
+    if (entry.reason.trim().length < 40) {
+      problems.push(`${entry.target}: the reason is missing or too short`);
+    }
+    if (!scheduled.includes(entry.target)) {
+      problems.push(`${entry.target}: listed but not on the crontab (stale)`);
+    }
+    if (!keepers.has(entry.target)) {
+      problems.push(
+        `${entry.target}: listed but does not keep DATABASE_URL (stale)`
+      );
+    }
+    const files = appClientFiles(entry.target);
+    if (files.length !== 1 || files[0] !== entry.entrypoint) {
+      problems.push(
+        `${entry.target}: the only file opening the app connection must be ${entry.entrypoint}; found ${JSON.stringify(files)}`
+      );
+    }
+  }
+
+  return problems;
+}
+
 /** Every target that keeps `DATABASE_URL` regardless of `WORKER_DATABASE_URL`, sorted. */
 export function appConnectionTargets(
   packageScripts: Record<string, string>,

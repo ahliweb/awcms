@@ -105,6 +105,12 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # their retention windows (legal-hold gated, bounded batches).
 20 3 * * * /usr/bin/flock -n $AWCMS_LOCK/email-queue-purge.lock $AWCMS_RUN_JOB email:queue:purge >> $AWCMS_JOB_LOG/email-queue-purge.log 2>&1
 
+# email — Read each tenant Mailketing account's credit balance and verified
+# senders (read-only GET /credits and GET /senders) and record them as account
+# health; a sender becomes usable only when the provider reports it verified
+# (Issue #1160).
+0 * * * * /usr/bin/flock -n $AWCMS_LOCK/email-senders-verify.lock $AWCMS_RUN_JOB email:senders:verify >> $AWCMS_JOB_LOG/email-senders-verify.log 2>&1
+
 # form_drafts — Expire overdue draft rows, then physically delete
 # expired/abandoned drafts past the retention cutoff, for every active tenant.
 15 3 * * * /usr/bin/flock -n $AWCMS_LOCK/form-drafts-purge.lock $AWCMS_RUN_JOB form-drafts:purge >> $AWCMS_JOB_LOG/form-drafts-purge.log 2>&1
@@ -306,15 +312,6 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # email:provider:health
 #   An operator probe used while diagnosing delivery problems, and a deploy
 #   smoke check. On a timer it would poll a third-party API for no consumer.
-
-# email:senders:verify
-#   It WRITES channel-account health and status, which only awcms_app may (a
-#   worker that could would be able to mark an unverified sender verified), and
-#   Issue #1132 keeps the app connection out of every crontab job. An operator
-#   schedules it from the deployment's full environment, like
-#   channel-accounts:secrets:rekey; until a decision admits an app-role
-#   scheduled exception (as ADR-0147 did for one job), it is not on the
-#   generated crontab.
 
 # email:templates:seed-defaults
 #   Runs once per tenant, right after that tenant is created. There is nothing

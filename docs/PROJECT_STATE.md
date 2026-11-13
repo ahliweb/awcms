@@ -135,7 +135,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                                                                                                                                                   | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Base modules                      | **40** (see the list in ARCHITECTURE.md)                                                                                                                                                                     | `src/modules/index.ts`                                                                  |
 | Migrations                        | **276** (`sql/001`–`386`)                                                                                                                                                                                    | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0161** (`0000` = template; highest ADR status: **Accepted**)                                                                                                                                      | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0162** (`0000` = template; highest ADR status: **Accepted**)                                                                                                                                      | `ls docs/adr/`                                                                          |
 | Admin screens                     | **82** `.astro` files in `src/pages/admin/`; **6 of 40** modules without `navigation:` (`crm-follow-up`, `crm-leads`, `omnichannel-inbox`, `social-publishing`, `telegram-engagement`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **104** (61.199 lines) — on typechecking see §6                                                                                                                                                              | `find src -name '*.astro'`                                                              |
 | Gates                             | **69** in the `bun run check` chain                                                                                                                                                                          | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -405,6 +405,18 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **`email:senders:verify` SCHEDULED — 14 November 2026 (#1160, ADR-0162).**
+  Carries out the owner decision of 11 November 2026 (ADR-0159 entry below).
+  The job is now on the generated crontab hourly (`0 * * * *`), as the third
+  scheduled `awcms_app` job after ADR-0147 and ADR-0160; it stays a no-op unless
+  `EMAIL_SENDER_ROUTING_ENABLED` is `true`. The exception mechanism is no longer
+  a hand-written set inside two tests: `APP_ROLE_SCHEDULED_EXCEPTIONS` in
+  `scripts/jobs-env-allowlist.ts` names each one with its ADR and reason, and
+  `tests/jobs-app-role-exceptions.test.ts` holds it to the crontab both ways
+  (an unlisted app-role job, or a stale entry, goes red). Open: ADR-0162 O1,
+  moving the job to a dedicated database role. Operator action: reinstall the
+  generated `ops/awcms-jobs.crontab`; no migration.
 
 - **ADR-0160 ACCEPTED — 11 November 2026 (#1164, PR #1275).** The owner
   (ahliweb) accepted ADR-0160: the `omnichannel_inbox` module (a body-free,
