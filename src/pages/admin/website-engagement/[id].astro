@@ -35,7 +35,6 @@ import {
 import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
 import { loadSubmissionDetail } from "../../../modules/website-engagement/application/screen-loaders";
 import { WITHDRAWAL_REASONS } from "../../../modules/website-engagement/domain/website-engagement-constants";
-import { isUuid } from "../../../modules/website-engagement/domain/source-validation";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
@@ -54,7 +53,6 @@ const WITHDRAW_GUARD = {
 
 const PATH = "/admin/website-engagement";
 const rawId = Astro.params.id ?? null;
-const submissionId = isUuid(rawId) ? rawId.toLowerCase() : null;
 
 const screen = await loadAdminScreen({
   ssr,
@@ -64,7 +62,7 @@ const screen = await loadAdminScreen({
     loadSubmissionDetail({
       tx,
       tenantId: ssr.tenantId,
-      submissionId,
+      submissionId: rawId,
       withdrawGuard: WITHDRAW_GUARD,
       can
     }),

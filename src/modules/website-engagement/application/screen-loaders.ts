@@ -27,7 +27,10 @@ import {
 import { listSources, type SourceView } from "./source-directory";
 import { withEffectiveChallenge } from "./route-support";
 import { resolveWebsiteEngagementRings } from "../domain/engagement-config";
-import { validateListSubmissionsQuery } from "../domain/source-validation";
+import {
+  isUuid,
+  validateListSubmissionsQuery
+} from "../domain/source-validation";
 import {
   SUBMISSION_KINDS,
   type ChallengeMode,
@@ -151,16 +154,23 @@ export type SubmissionDetailData =
 export async function loadSubmissionDetail(input: {
   tx: Sql;
   tenantId: string;
+  /** Raw path parameter; normalised here so no caller can forget to. */
   submissionId: string | null;
   withdrawGuard: EngagementGuard;
   can: EngagementCan;
 }): Promise<SubmissionDetailData> {
   const { tx, tenantId, submissionId, can } = input;
 
-  if (submissionId === null) return { found: false };
+  // A malformed id never reaches the database (22P02 would be a distinct
+  // "could not be loaded" state plus a log line per request): it is the same
+  // "not found" as an unknown id or another tenant's id.
+  if (!isUuid(submissionId)) return { found: false };
 
-  // Another tenant's id, an unknown id and a malformed one are one answer.
-  const submission = await fetchSubmission(tx, tenantId, submissionId);
+  const submission = await fetchSubmission(
+    tx,
+    tenantId,
+    submissionId.toLowerCase()
+  );
 
   if (!submission) return { found: false };
 
