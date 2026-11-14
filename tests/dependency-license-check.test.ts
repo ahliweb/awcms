@@ -75,6 +75,11 @@ function evaluate(
 describe("bun.lock parsing", () => {
   test("accepts trailing commas but not a comma inside a string", () => {
     expect(parseJsonc('{"a": ["x,}", 1,],}')).toEqual({ a: ["x,}", 1] });
+    // An escaped quote does not end the string, so a `,]` after it is still text.
+    expect(parseJsonc('{"a": "x\\",]", "b": 1,}')).toEqual({
+      a: 'x",]',
+      b: 1
+    });
   });
 
   test("reads name, version, integrity, edges and platform constraint", () => {
@@ -273,6 +278,60 @@ describe("evaluation", () => {
     ]);
 
     expect(report.staleExceptions).toEqual([]);
+  });
+
+  test("an exception satisfied only by an INSTALLED package that is already allowed is stale", () => {
+    // `c` is installed and MIT: nothing needed the exception, and only a
+    // package that is NOT installed (a platform variant) may keep one alive.
+    const report = evaluate(ALL_MIT, [
+      {
+        packageName: "c",
+        license: "GPL-3.0-only",
+        reason: "r",
+        owner: "o",
+        reviewDate: "2027-01-01"
+      }
+    ]);
+
+    expect(report.staleExceptions).toHaveLength(1);
+    expect(report.failures.join("\n")).toContain("stale license exception");
+  });
+
+  test("a review date must be a real date and near, or the exception never expires", () => {
+    const exception = (reviewDate: string): LicenseException => ({
+      packageName: "c",
+      license: "GPL-3.0-only",
+      reason: "r",
+      owner: "o",
+      reviewDate
+    });
+    const read = (p: string) =>
+      p === "node_modules/c" ? { license: "GPL-3.0-only" } : ALL_MIT(p);
+
+    for (const bad of [
+      "never",
+      "+002027-01-01",
+      "9999-12-31",
+      "2026-13-45",
+      "",
+      "2099-01-01"
+    ]) {
+      const report = evaluate(read, [exception(bad)], "2026-11-14");
+
+      expect(report.invalidExceptions).toHaveLength(1);
+      expect(report.failures.join("\n")).toContain("invalid license exception");
+    }
+
+    expect(
+      evaluate(read, [exception("2027-11-14")], "2026-11-14").failures
+    ).toEqual([]);
+  });
+
+  test("no copyleft license is allowed globally: each is a dated exception", () => {
+    expect(ALLOWED_LICENSES).not.toContain("MPL-2.0");
+    expect(ALLOWED_LICENSES.some((id) => /GPL|MPL|EPL|CDDL/.test(id))).toBe(
+      false
+    );
   });
 
   test("prefix matching is a prefix, not a substring", () => {

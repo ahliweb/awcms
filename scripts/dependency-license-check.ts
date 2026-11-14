@@ -476,6 +476,11 @@ export function exceptionMatches(
 // Evaluation
 // ---------------------------------------------------------------------------
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** How far ahead an exception's `reviewDate` may be set. */
+export const MAX_EXCEPTION_HORIZON_DAYS = 400;
+
 export type Component = LockPackage & {
   /** null = could not be read (installed package missing or no license field). */
   license: string | null;
@@ -492,6 +497,8 @@ export type LicenseReport = {
   notInstalled: string[];
   /** Exception entries nothing matched. */
   staleExceptions: string[];
+  /** Exceptions whose `reviewDate` is not a real, near date. */
+  invalidExceptions: string[];
   expiredExceptions: string[];
   /** Count of packages per declared license (for the summary). */
   byLicense: Record<string, number>;
@@ -587,8 +594,32 @@ export function evaluateLicenses(input: {
       (exception) =>
         `${exception.packageName} (${exception.license}) matches no package in the lock`
     );
+  // A review date is a deadline, so it must be a real date and near enough to
+  // be one: `"never"` sorts after every ISO date and would never expire, and a
+  // year-9999 date is the same thing spelled as a number.
+  const horizon = new Date(
+    Date.parse(`${input.today}T00:00:00Z`) +
+      MAX_EXCEPTION_HORIZON_DAYS * 86_400_000
+  )
+    .toISOString()
+    .slice(0, 10);
+  const invalidExceptions = input.exceptions
+    .filter(
+      (exception) =>
+        !ISO_DATE.test(exception.reviewDate) ||
+        Number.isNaN(Date.parse(`${exception.reviewDate}T00:00:00Z`)) ||
+        exception.reviewDate > horizon
+    )
+    .map(
+      (exception) =>
+        `${exception.packageName} (${exception.license}): review date "${exception.reviewDate}" is not a YYYY-MM-DD date within ${MAX_EXCEPTION_HORIZON_DAYS} days`
+    );
   const expiredExceptions = input.exceptions
-    .filter((exception) => exception.reviewDate < input.today)
+    .filter(
+      (exception) =>
+        ISO_DATE.test(exception.reviewDate) &&
+        exception.reviewDate < input.today
+    )
     .map(
       (exception) =>
         `${exception.packageName} (${exception.license}): review date ${exception.reviewDate} has passed`
@@ -598,6 +629,7 @@ export function evaluateLicenses(input: {
     ...violations.map((line) => `license outside the allow-list: ${line}`),
     ...unreadable.map((line) => `license UNKNOWN: ${line}`),
     ...staleExceptions.map((line) => `stale license exception: ${line}`),
+    ...invalidExceptions.map((line) => `invalid license exception: ${line}`),
     ...expiredExceptions.map((line) => `expired license exception: ${line}`)
   ];
 
@@ -607,6 +639,7 @@ export function evaluateLicenses(input: {
     unreadable,
     notInstalled,
     staleExceptions,
+    invalidExceptions,
     expiredExceptions,
     byLicense,
     failures
@@ -749,6 +782,14 @@ export function licenseFindings(report: LicenseReport): FindingFile {
       key: `license:stale-exception:${line.split(" ")[0]}`,
       title: `Stale license exception: ${line}`,
       detail: `${line}. Remove the entry from \`scripts/dependency-license-policy.ts\`.`
+    });
+  }
+
+  for (const line of report.invalidExceptions) {
+    findings.push({
+      key: `license:invalid-exception:${line.split(" ")[0]}`,
+      title: `Invalid license exception: ${line}`,
+      detail: `${line}. Set a real review date in \`scripts/dependency-license-policy.ts\` in a reviewed PR.`
     });
   }
 

@@ -176,7 +176,16 @@ dependency edges resolved with the lock's nesting).
   (or `family-*`), the license it declares, why it is acceptable, owner, review
   date. It admits that package at that license only: a package that changes
   license is a violation again. An exception that matches nothing is stale and
-  fails; one past its review date fails.
+  fails; one past its review date fails, and so does one whose date is not a
+  real `YYYY-MM-DD` within 400 days (a `"never"` would otherwise never expire).
+- **No copyleft is allowed globally.** `MPL-2.0` and `LGPL` packages are each a
+  dated exception, so a new one stops the gate instead of passing on a list
+  written for another package. What redistribution means is recorded in the
+  policy file: `Dockerfile.production` copies the `--production` `node_modules`
+  into the runtime image, so runtime-reachable packages (`lightningcss`, reached
+  through `astro` -> `vite`, and the `sharp` libvips binaries) ARE shipped, each
+  with its own license file and unmodified; the test-only `axe-core` packages are
+  not. Modifying or bundling any of them needs an ADR before a new date.
 - **Unreadable is not clean.** A package whose license cannot be read (not on
   disk, no field) is reported `UNKNOWN` and fails; run `bun install` first.
   Optional packages that a plain install does not put on disk (platform
@@ -192,21 +201,36 @@ dependency edges resolved with the lock's nesting).
 ## Provider API changelogs
 
 `scripts/provider-api-register.ts` records, per provider surface the code talks
-to (Meta Graph for Facebook Pages, Meta WhatsApp Cloud, Telegram Bot API,
-Mailketing, Google FCM HTTP v1, and TikTok as `planned`), the version or surface in
+to (Meta Graph for Facebook Pages, Meta WhatsApp Cloud, Fonnte, StarSender,
+Telegram Bot API, Mailketing, Google FCM HTTP v1, Cloudflare API, Cloudflare
+Turnstile, the GitHub REST API, and TikTok as `planned`), the version or surface in
 use, the changelog URL, the owner, and the date a maintainer last read that
 changelog. `bun run deps:provider-changelog:check` enforces:
 
-1. **Register -> code.** Each `pins` literal must still be in its file. Change a
-   version in code without the register and the gate fails.
+1. **Register -> code.** Each `pins` literal must appear **exactly once** in its
+   file, so a literal repeated (or quoted in a comment) cannot let one copy be
+   bumped unnoticed; pin a single exported constant. Change a version in code
+   without the register and the gate fails. The pin sees the code default, not a
+   deployment's environment override (for example `WHATSAPP_META_API_VERSION`):
+   ask what is deployed at review time.
 2. **Code -> register.** Every non-test source file that names a provider host
    must be listed by an active entry. A new connector nobody registered fails.
+   That rule can only see hosts already in `PROVIDER_HOSTS`, so
+   `tests/provider-changelog-check.test.ts` also extracts every `https://` host
+   in non-test source and requires it to be a provider host or listed in that
+   test's `NOT_A_PROVIDER` map with a reason: a new outbound integration cannot
+   slip in without someone choosing.
    A `planned` entry owns no file; its host appearing in source fails until the
    entry is flipped to `active` with a first review.
 3. **The clock.** `lastReview` (or `recordedOn` while it is `null`) plus
    `maxAgeDays` is the deadline; past it the gate is red. Within 14 days it is a
    warning and the weekly workflow files an issue. `--skip-age` runs rules 1 and 2
-   only.
+   only. The clock has no other lever: `recordedOn` and `lastReview` may not be in
+   the future and `maxAgeDays` is capped at 180. Entries carry different
+   intervals (90 to 150 days) so they do not all fall due on one day and turn
+   every open PR red together; that the age check is part of `bun run check` at
+   all is a deliberate trade-off, and its warning arrives through the weekly
+   issue, which fails the job (not silently) if it cannot be filed.
 
 `lastReview` is set by a person who read the changelog, never by a script and
 never carried forward to turn the gate green; `null` means "recorded from the
@@ -229,7 +253,13 @@ only write the workflow has (`issues: write`, on that job alone).
   again on the next run.
 - **No spam.** At most 10 per run (`--max-create`); the rest are deferred, and
   filed on later runs. It never edits, comments on or closes an issue. If the
-  open-issue listing fails or may be truncated, nothing is filed.
+  open-issue listing fails or may be truncated, nothing is filed. The workflow
+  step runs under `shell: bash` (`-eo pipefail`) so that failure, or a failed
+  create, turns the job red instead of vanishing behind `| tee`.
+- **Third-party text is not trusted.** The marker is only honoured as the first
+  line of a body, and finding text (a dependency's `license` field, an advisory
+  title) has comment delimiters defanged and `@` neutralised outside code spans
+  before it goes into a public issue.
 - Dry run by default (`bun run deps:issues:sync --findings f.json --freshness m.json`);
   `--create` writes. A manual `workflow_dispatch` files issues only with the
   `create_issues` input.

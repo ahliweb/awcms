@@ -724,6 +724,9 @@ describe("structural facts", () => {
     const files = walk("src")
       .concat(walk("scripts"))
       .filter((file) => /\.(ts|astro)$/.test(file))
+      // The provider changelog register names every provider host by design
+      // (it is the list of them), and calls none of them.
+      .filter((file) => file !== "scripts/provider-api-register.ts")
       .filter((file) =>
         readFileSync(file, "utf8").includes("api.starsender.online")
       );

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](dependency-governance.md)
 
-<!-- i18n-source-hash: sha256:04e47cd62de130cf2c025fbcf49e54aa67c85730726a24d99ee065c443f1245f -->
+<!-- i18n-source-hash: sha256:b480a62846fca8a16be40e3ee5e94a1b75bd869a9734b18a44927f9a1934c036 -->
 
 # Tata kelola dependensi — audit kesegaran dan upgrade atomik
 
@@ -183,7 +183,18 @@ dan sisi dependensi yang diselesaikan mengikuti penyarangan lock).
   paket (atau `keluarga-*`), lisensi yang dideklarasikannya, alasan dapat diterima,
   pemilik, tanggal tinjau. Ia hanya meloloskan paket itu pada lisensi itu: paket yang
   berganti lisensi menjadi pelanggaran lagi. Pengecualian yang tak cocok dengan apa
-  pun itu basi dan gagal; yang lewat tanggal tinjau juga gagal.
+  pun itu basi dan gagal; yang lewat tanggal tinjau juga gagal, begitu pula yang
+  tanggalnya bukan `YYYY-MM-DD` sungguhan dalam 400 hari (`"never"` kalau tidak
+  tak akan pernah kedaluwarsa).
+- **Tidak ada copyleft yang diizinkan secara global.** Paket `MPL-2.0` dan `LGPL`
+  masing-masing adalah pengecualian bertanggal, jadi paket baru menghentikan
+  gerbang alih-alih lolos lewat daftar yang ditulis untuk paket lain. Arti
+  redistribusi dicatat di berkas kebijakan: `Dockerfile.production` menyalin
+  `node_modules` `--production` ke image runtime, sehingga paket yang terjangkau
+  runtime (`lightningcss`, dijangkau lewat `astro` -> `vite`, dan biner libvips
+  milik `sharp`) IKUT terkirim, masing-masing dengan berkas lisensinya sendiri dan
+  tanpa modifikasi; paket `axe-core` khusus tes tidak. Memodifikasi atau
+  membundel salah satunya butuh ADR sebelum tanggal baru.
 - **Tak terbaca bukan bersih.** Paket yang lisensinya tak bisa dibaca (tak ada di
   disk, tak ada field) dilaporkan `UNKNOWN` dan gagal; jalankan `bun install` dulu.
   Paket opsional yang tak dipasang instalasi biasa (biner platform, fallback wasm)
@@ -199,21 +210,38 @@ dan sisi dependensi yang diselesaikan mengikuti penyarangan lock).
 ## Changelog API provider
 
 `scripts/provider-api-register.ts` mencatat, per permukaan provider yang diajak
-bicara kode (Meta Graph untuk Facebook Pages, Meta WhatsApp Cloud, Telegram Bot
-API, Mailketing, Google FCM HTTP v1, dan TikTok sebagai `planned`), versi atau
+bicara kode (Meta Graph untuk Facebook Pages, Meta WhatsApp Cloud, Fonnte,
+StarSender, Telegram Bot API, Mailketing, Google FCM HTTP v1, Cloudflare API,
+Cloudflare Turnstile, GitHub REST API, dan TikTok sebagai `planned`), versi atau
 permukaan yang dipakai, URL changelog, pemilik, dan tanggal terakhir seorang
 maintainer membaca changelog itu. `bun run deps:provider-changelog:check`
 menegakkan:
 
-1. **Register -> kode.** Tiap literal `pins` harus masih ada di berkasnya. Mengubah
-   versi di kode tanpa register membuat gerbang gagal.
+1. **Register -> kode.** Tiap literal `pins` harus muncul **tepat satu kali** di
+   berkasnya, sehingga literal yang berulang (atau dikutip di komentar) tak
+   membiarkan satu salinan dinaikkan tanpa diketahui; pin satu konstanta yang
+   diekspor. Mengubah versi di kode tanpa register membuat gerbang gagal. Pin
+   hanya melihat nilai bawaan kode, bukan override lingkungan deployment
+   (misalnya `WHATSAPP_META_API_VERSION`): tanyakan nilai yang terpasang saat
+   tinjauan.
 2. **Kode -> register.** Setiap berkas sumber non-tes yang menyebut host provider
-   harus didaftarkan entri aktif. Konektor baru yang tak didaftarkan gagal. Entri
+   harus didaftarkan entri aktif. Konektor baru yang tak didaftarkan gagal. Aturan
+   itu hanya melihat host yang sudah ada di `PROVIDER_HOSTS`, maka
+   `tests/provider-changelog-check.test.ts` juga mengekstrak setiap host `https://`
+   di sumber non-tes dan mewajibkannya menjadi host provider atau tercantum di
+   peta `NOT_A_PROVIDER` tes itu beserta alasannya: integrasi keluar baru tak bisa
+   menyelinap tanpa ada yang memilih. Entri
    `planned` tidak memiliki berkas; host-nya muncul di sumber gagal sampai entri
    dijadikan `active` dengan tinjauan pertama.
 3. **Jam.** `lastReview` (atau `recordedOn` selama `null`) ditambah `maxAgeDays`
    adalah tenggatnya; lewat itu gerbang merah. Dalam 14 hari ia peringatan dan
    workflow mingguan membuat issue. `--skip-age` hanya menjalankan aturan 1 dan 2.
+   Jam tak punya tuas lain: `recordedOn` dan `lastReview` tak boleh di masa depan
+   dan `maxAgeDays` dibatasi 180. Entri membawa interval berbeda (90 sampai 150
+   hari) agar tidak jatuh tempo pada hari yang sama dan memerahkan semua PR
+   terbuka sekaligus; bahwa pemeriksaan usia ada di `bun run check` adalah
+   pertukaran yang disengaja, dan peringatannya datang lewat issue mingguan, yang
+   membuat job gagal (bukan senyap) bila issue tak bisa dibuat.
 
 `lastReview` diisi orang yang membaca changelog, tidak pernah oleh skrip dan tidak
 pernah dimajukan demi menghijaukan gerbang; `null` berarti "dicatat dari kode,
@@ -237,7 +265,13 @@ penulisan yang dimiliki workflow (`issues: write`, hanya pada job itu).
 - **Tanpa spam.** Paling banyak 10 per putaran (`--max-create`); sisanya ditunda
   dan dibuat pada putaran berikutnya. Ia tak pernah mengedit, berkomentar, atau
   menutup issue. Bila daftar issue terbuka gagal diambil atau mungkin terpotong,
-  tidak ada yang dibuat.
+  tidak ada yang dibuat. Langkah workflow berjalan dengan `shell: bash`
+  (`-eo pipefail`) agar kegagalan itu, atau create yang gagal, memerahkan job
+  alih-alih lenyap di balik `| tee`.
+- **Teks pihak ketiga tidak dipercaya.** Penanda hanya dihormati sebagai baris
+  pertama badan, dan teks temuan (field `license` dependensi, judul advisory)
+  dinetralkan penanda komentarnya dan `@`-nya di luar code span sebelum masuk ke
+  issue publik.
 - Dry run secara bawaan (`bun run deps:issues:sync --findings f.json --freshness m.json`);
   `--create` menulis. `workflow_dispatch` manual membuat issue hanya dengan input
   `create_issues`.

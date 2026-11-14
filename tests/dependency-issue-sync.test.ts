@@ -4,16 +4,23 @@
  * GitHub, no network.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import {
   findingFingerprint,
   findingMarker,
   markersIn,
+  neutralizeUntrusted,
   type Finding,
   type FindingFile
 } from "../scripts/lib/dependency-finding";
 import {
+  createIssues,
   freshnessFindings,
+  ISSUE_LABEL,
+  listOpenIssues,
+  type GhRunner,
   issueBody,
   issueTitle,
   planIssues,
@@ -193,5 +200,175 @@ describe("issue text", () => {
 
     expect(title.startsWith("deps: ")).toBe(true);
     expect(title.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("third-party text cannot steer the planner or notify strangers", () => {
+  const victim = f("license:violation:victim");
+
+  test("a marker for another finding planted in the body's prose is not a marker", () => {
+    const hostile: Finding = {
+      key: "license:violation:attacker",
+      title: "t",
+      detail: `A package whose license is ${findingMarker(victim.key)} and more`
+    };
+    const body = issueBody(hostile, "src");
+
+    expect([...markersIn(body)]).toEqual([findingFingerprint(hostile.key)]);
+    expect(
+      planIssues({
+        files: [{ source: "t", findings: [victim] }],
+        openIssues: [{ number: 42, title: "x", body }],
+        maxCreate: 5
+      }).toCreate
+    ).toHaveLength(1);
+  });
+
+  test("a marker anywhere but the first line, or with trailing text, is ignored", () => {
+    const marker = findingMarker("k");
+
+    expect(markersIn(`intro\n${marker}`).size).toBe(0);
+    expect(markersIn(`${marker} trailing`).size).toBe(0);
+    expect(markersIn(`${marker}\nmore`).size).toBe(1);
+  });
+
+  test("comment delimiters are defanged and a bare @ no longer mentions anyone", () => {
+    const out = neutralizeUntrusted(
+      "x <!-- deps-finding:0123456789abcdef --> @img/sharp-libvips-* and `@keep/code`"
+    );
+
+    expect(out).not.toContain("<!--");
+    expect(out).not.toContain("-->");
+    expect(out.replace(/`[^`]*`/g, "")).not.toMatch(/@[a-z]/i);
+    expect(out).toContain("`@keep/code`");
+  });
+
+  test("the issue body applies it to the finding text but keeps its own marker", () => {
+    const body = issueBody(
+      { key: "k", title: "t", detail: "bad --> @octocat <!-- x" },
+      "src"
+    );
+
+    expect(body.split("\n")[0]).toBe(findingMarker("k"));
+    expect(body).not.toMatch(/@octocat/);
+    expect(body.match(/<!--/g)).toHaveLength(1);
+  });
+});
+
+describe("the gh seam fails closed and asks for what it claims", () => {
+  const ok = (stdout: string): GhRunner => {
+    const calls: string[][] = [];
+    const run: GhRunner = async (args) => {
+      calls.push([...args]);
+      return stdout;
+    };
+
+    return Object.assign(run, { calls });
+  };
+
+  test("only label-carrying open issues are listed, with the documented limit", async () => {
+    const run = ok("[]") as GhRunner & { calls: string[][] };
+
+    await listOpenIssues(undefined, run);
+
+    const args = run.calls[0] as string[];
+
+    expect(args.slice(0, 2)).toEqual(["issue", "list"]);
+    expect(args[args.indexOf("--label") + 1]).toBe(ISSUE_LABEL);
+    expect(ISSUE_LABEL).toBe("dependency-finding");
+    expect(args[args.indexOf("--state") + 1]).toBe("open");
+    expect(args[args.indexOf("--limit") + 1]).toBe("1000");
+  });
+
+  test("a failed listing throws instead of reading as 'nothing open'", async () => {
+    const run: GhRunner = async () => {
+      throw new Error("gh failed (1): boom");
+    };
+
+    await expect(listOpenIssues(undefined, run)).rejects.toThrow("boom");
+  });
+
+  test("a listing as long as the limit is possibly truncated and refuses", async () => {
+    const full = JSON.stringify(
+      Array.from({ length: 1000 }, (_, i) => ({
+        number: i + 1,
+        title: "t",
+        body: ""
+      }))
+    );
+
+    await expect(listOpenIssues(undefined, ok(full))).rejects.toThrow(
+      "truncated"
+    );
+    expect(
+      await listOpenIssues(
+        undefined,
+        ok(JSON.stringify([{ number: 1, title: "t", body: "" }]))
+      )
+    ).toHaveLength(1);
+  });
+
+  test("a failing label or issue create propagates, so the run is red", async () => {
+    const plan = [{ finding: f("k"), source: "s" }];
+    const failing: GhRunner = async (args) => {
+      if (args[0] === "issue") {
+        throw new Error("create failed");
+      }
+
+      return "";
+    };
+
+    await expect(
+      createIssues(plan, undefined, failing, () => {})
+    ).rejects.toThrow("create failed");
+    await expect(
+      createIssues(
+        plan,
+        undefined,
+        async () => {
+          throw new Error("label failed");
+        },
+        () => {}
+      )
+    ).rejects.toThrow("label failed");
+  });
+
+  test("created issues carry the label and the marker as the first body line", async () => {
+    const calls: string[][] = [];
+
+    await createIssues(
+      [{ finding: f("k"), source: "s" }],
+      "o/r",
+      async (args, repo) => {
+        calls.push([...args, String(repo)]);
+        return "https://example.test/1\n";
+      },
+      () => {}
+    );
+
+    const create = calls.find((c) => c[0] === "issue") as string[];
+
+    expect(create[create.indexOf("--label") + 1]).toBe(ISSUE_LABEL);
+    expect(
+      (create[create.indexOf("--body") + 1] as string).split("\n")[0]
+    ).toBe(findingMarker("k"));
+  });
+});
+
+describe("the workflow step that files issues", () => {
+  const workflow = readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      "../.github/workflows/dependency-freshness.yml"
+    ),
+    "utf8"
+  );
+  const step = workflow.slice(workflow.indexOf("- name: File issues"));
+
+  test("runs under pipefail, so a failed sync is not swallowed by `| tee`", () => {
+    // GitHub's default shell for `run:` is `bash -e {0}` WITHOUT pipefail: the
+    // pipeline's status would be tee's, and a failed filing run would be green.
+    expect(step).toContain("| tee");
+    expect(step).toMatch(/shell:\s*bash\b/);
   });
 });

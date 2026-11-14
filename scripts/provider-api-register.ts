@@ -66,7 +66,12 @@ export const PROVIDER_HOSTS: readonly string[] = [
   "www.googleapis.com",
   "oauth2.googleapis.com",
   "open.tiktokapis.com",
-  "business-api.tiktok.com"
+  "business-api.tiktok.com",
+  "api.fonnte.com",
+  "api.starsender.online",
+  "api.cloudflare.com",
+  "challenges.cloudflare.com",
+  "api.github.com"
 ];
 
 /** Warn this many days before a review is due. */
@@ -109,12 +114,8 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
       "https://developers.facebook.com/docs/whatsapp/cloud-api/changelog",
     pins: [
       {
-        file: "src/modules/whatsapp-delivery/infrastructure/whatsapp-provider-resolver.ts",
-        literal: '"v21.0"'
-      },
-      {
-        file: "src/modules/whatsapp-delivery/infrastructure/whatsapp-sender-providers.ts",
-        literal: '"v21.0"'
+        file: "src/modules/whatsapp-delivery/domain/whatsapp-config.ts",
+        literal: 'WHATSAPP_META_DEFAULT_API_VERSION = "v21.0"'
       }
     ],
     files: [
@@ -124,7 +125,7 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
     lastReview: null,
     maxAgeDays: 90,
     owner: "maintainer",
-    note: "The default here (v21.0) is older than the Graph version the Facebook Pages connector uses (v27.0). Whether that gap is intended is a question for the first review."
+    note: "The pin is the code default only: a deployment may override it with `WHATSAPP_META_API_VERSION`, which the gate cannot see, so at review also ask what the deployed value is. The default here (v21.0) is older than the Graph version the Facebook Pages connector uses (v27.0). Whether that gap is intended is a question for the first review."
   },
   {
     id: "telegram-bot-api",
@@ -184,7 +185,7 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
     ],
     recordedOn: "2026-11-14",
     lastReview: null,
-    maxAgeDays: 90,
+    maxAgeDays: 120,
     owner: "maintainer",
     note: "The provider publishes docs, not a dated changelog; compare the docs against the contract file at each review."
   },
@@ -204,7 +205,8 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
     pins: [
       {
         file: "src/modules/push-delivery/domain/fcm-credentials.ts",
-        literal: "/v1/projects/"
+        literal:
+          "https://fcm.googleapis.com/v1/projects/${encodeURIComponent(credential.projectId)}/messages:send"
       },
       {
         file: "src/modules/push-delivery/domain/fcm-credentials.ts",
@@ -218,8 +220,136 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
     ],
     recordedOn: "2026-11-14",
     lastReview: null,
-    maxAgeDays: 90,
+    maxAgeDays: 120,
     owner: "maintainer"
+  },
+  {
+    id: "fonnte-whatsapp",
+    hosts: ["api.fonnte.com"],
+    provider: "Fonnte",
+    surface: "WhatsApp send (`POST /send`), an unofficial gateway",
+    status: "active",
+    usedVersion: "Unversioned HTTP API (`/send`)",
+    changelogUrl: "https://docs.fonnte.com/",
+    pins: [
+      {
+        file: "src/modules/whatsapp-delivery/infrastructure/fonnte-provider.ts",
+        literal: 'FONNTE_SEND_URL = "https://api.fonnte.com/send"'
+      }
+    ],
+    files: ["src/modules/whatsapp-delivery/infrastructure/fonnte-provider.ts"],
+    recordedOn: "2026-11-14",
+    lastReview: null,
+    maxAgeDays: 90,
+    owner: "maintainer",
+    note: "Unofficial gateway with no dated changelog; compare its docs with the adapter at each review."
+  },
+  {
+    id: "starsender-whatsapp",
+    hosts: ["api.starsender.online"],
+    provider: "StarSender",
+    surface: "WhatsApp send (`POST /api/send`), an unofficial gateway",
+    status: "active",
+    usedVersion: "Unversioned HTTP API (`/api/send`)",
+    changelogUrl: "https://docs.starsender.online/",
+    pins: [
+      {
+        file: "src/modules/whatsapp-delivery/domain/starsender-contract.ts",
+        literal:
+          'STARSENDER_SEND_URL = "https://api.starsender.online/api/send"'
+      }
+    ],
+    files: ["src/modules/whatsapp-delivery/domain/starsender-contract.ts"],
+    recordedOn: "2026-11-14",
+    lastReview: null,
+    maxAgeDays: 90,
+    owner: "maintainer",
+    note: "The contract file records that its evidence is one public docs page; re-read that page at each review."
+  },
+  {
+    id: "cloudflare-api",
+    hosts: ["api.cloudflare.com"],
+    provider: "Cloudflare API",
+    surface: "Tenant-domain DNS records and CDN cache purge",
+    status: "active",
+    usedVersion: "REST `/client/v4`",
+    changelogUrl: "https://developers.cloudflare.com/changelog/",
+    pins: [
+      {
+        file: "src/modules/tenant-domain/infrastructure/cloudflare-dns-adapter.ts",
+        literal: 'DEFAULT_API_BASE_URL = "https://api.cloudflare.com/client/v4"'
+      },
+      {
+        file: "src/lib/edge-cache/cdn-purge-config.ts",
+        literal: 'DEFAULT_CDN_API_BASE = "https://api.cloudflare.com/client/v4"'
+      }
+    ],
+    files: [
+      "src/lib/edge-cache/cdn-purge-config.ts",
+      "src/modules/tenant-domain/infrastructure/cloudflare-dns-adapter.ts"
+    ],
+    recordedOn: "2026-11-14",
+    lastReview: null,
+    maxAgeDays: 150,
+    owner: "maintainer"
+  },
+  {
+    id: "cloudflare-turnstile",
+    hosts: ["challenges.cloudflare.com"],
+    provider: "Cloudflare Turnstile",
+    surface:
+      "Server-side token verification (`siteverify`) and the client widget script, a login/registration abuse control",
+    status: "active",
+    usedVersion: "Turnstile `v0` (siteverify and widget script)",
+    changelogUrl: "https://developers.cloudflare.com/turnstile/changelog/",
+    pins: [
+      {
+        file: "src/lib/security/turnstile.ts",
+        literal:
+          '  "https://challenges.cloudflare.com/turnstile/v0/siteverify";'
+      }
+    ],
+    files: [
+      "src/lib/security/security-headers.ts",
+      "src/lib/security/turnstile.ts",
+      "src/pages/forgot-password.astro",
+      "src/pages/login.astro",
+      "src/pages/register.astro"
+    ],
+    recordedOn: "2026-11-14",
+    lastReview: null,
+    maxAgeDays: 150,
+    owner: "maintainer",
+    note: "A security control: a silent change to the verification response would fail open or closed on every login."
+  },
+  {
+    id: "github-rest",
+    hosts: ["api.github.com"],
+    provider: "GitHub REST API",
+    surface: "Repository progress poller (read-only, opt-in per tenant)",
+    status: "active",
+    usedVersion: "REST, `X-GitHub-Api-Version: 2022-11-28`",
+    changelogUrl:
+      "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+    pins: [
+      {
+        file: "src/modules/omes-control/application/repository-progress-poller.ts",
+        literal: '"X-GitHub-Api-Version": "2022-11-28"'
+      },
+      {
+        file: "src/modules/omes-control/application/repository-progress-poller.ts",
+        literal: 'GITHUB_API_BASE = "https://api.github.com"'
+      }
+    ],
+    files: [
+      "src/modules/omes-control/application/repository-progress-poller.ts",
+      "src/modules/omes-control/module.ts"
+    ],
+    recordedOn: "2026-11-14",
+    lastReview: null,
+    maxAgeDays: 150,
+    owner: "maintainer",
+    note: "GitHub supports an old API version for at least 24 months after a new one; the review is whether 2022-11-28 is still listed as supported."
   },
   {
     id: "tiktok-content-posting",

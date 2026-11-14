@@ -24,7 +24,7 @@
  * workflow, but not a failure: a deadline that goes red at the same moment for
  * every open PR is a deadline people learn to resent.
  */
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -38,6 +38,16 @@ import {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
+
+/**
+ * Longest review interval an entry may declare. Without a ceiling the clock is
+ * a dial: `maxAgeDays: 1000000` is a review that never comes due.
+ */
+export const MAX_AGE_DAYS_CEILING = 180;
+
+export function validMaxAge(days: number): boolean {
+  return Number.isFinite(days) && days > 0 && days <= MAX_AGE_DAYS_CEILING;
+}
 
 export type ReviewState =
   "ok" | "due-soon" | "overdue" | "not-applicable" | "invalid";
@@ -87,9 +97,13 @@ export function evaluateEntry(
 
   const basis = entry.lastReview ?? entry.recordedOn;
 
-  // A malformed date has already been reported as a failure; it must not also
-  // crash the run and hide every other finding.
-  if (!ISO_DATE.test(basis) || Number.isNaN(Date.parse(`${basis}T00:00:00Z`))) {
+  // A malformed date or interval has already been reported as a failure; it
+  // must not also crash the run and hide every other finding.
+  if (
+    !ISO_DATE.test(basis) ||
+    Number.isNaN(Date.parse(`${basis}T00:00:00Z`)) ||
+    !validMaxAge(entry.maxAgeDays)
+  ) {
     return {
       entry,
       review: "invalid",
@@ -109,6 +123,10 @@ export function evaluateEntry(
     daysLeft,
     neverReviewed: entry.lastReview === null
   };
+}
+
+function countOccurrences(text: string, literal: string): number {
+  return literal === "" ? 0 : text.split(literal).length - 1;
 }
 
 export function evaluateRegister(input: {
@@ -157,11 +175,21 @@ export function evaluateRegister(input: {
       }
     }
 
-    if (!(entry.maxAgeDays > 0)) {
+    if (!validMaxAge(entry.maxAgeDays)) {
       fail(
         `provider:bad-age:${entry.id}`,
-        `Provider register ${entry.id}: maxAgeDays must be positive`,
-        "A review interval of zero or less makes the deadline meaningless."
+        `Provider register ${entry.id}: maxAgeDays must be between 1 and ${MAX_AGE_DAYS_CEILING}`,
+        "A review interval of zero or less makes the deadline meaningless, and one beyond the ceiling is a deadline that never arrives."
+      );
+    }
+
+    // `recordedOn` is the clock's start while nobody has reviewed yet, so it
+    // is as much a deferral lever as `lastReview`.
+    if (ISO_DATE.test(entry.recordedOn) && entry.recordedOn > input.today) {
+      fail(
+        `provider:future-recorded:${entry.id}`,
+        `Provider register ${entry.id}: recordedOn ${entry.recordedOn} is in the future`,
+        "A date ahead of today is a typo or an attempt to defer the deadline."
       );
     }
 
@@ -192,11 +220,11 @@ export function evaluateRegister(input: {
             `Provider register ${entry.id}: pinned file ${pin.file} does not exist`,
             "The code moved or was deleted. Update the pin and re-read the provider changelog if the version changed."
           );
-        } else if (!text.includes(pin.literal)) {
+        } else if (countOccurrences(text, pin.literal) !== 1) {
           fail(
             `provider:pin-stale:${entry.id}:${pin.file}`,
-            `Provider register ${entry.id}: \`${pin.literal}\` is no longer in ${pin.file}`,
-            `The code no longer matches the register entry "${entry.usedVersion}". ` +
+            `Provider register ${entry.id}: \`${pin.literal}\` must appear exactly once in ${pin.file}`,
+            `The code no longer matches the register entry "${entry.usedVersion}" (or the literal now appears more than once, so bumping one occurrence would pass unnoticed). ` +
               "Update `usedVersion` and the pin, and read the provider changelog for the new version in the same PR."
           );
         }
@@ -351,22 +379,31 @@ export function collectSources(
 ): Map<string, string> {
   const result = new Map<string, string>();
 
+  // `withFileTypes` classifies each entry from the directory read itself: no
+  // `stat` between "is it a file" and "read it" (a race CodeQL flags), and a
+  // symlink is neither a directory nor a file, so the walk never leaves `root`.
   const walk = (directory: string) => {
-    for (const name of readdirSync(directory)) {
-      const absolute = path.join(directory, name);
-      const stat = statSync(absolute);
+    for (const dirent of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, dirent.name);
 
-      if (stat.isDirectory()) {
-        if (name !== "node_modules") {
+      if (dirent.isDirectory()) {
+        if (dirent.name !== "node_modules") {
           walk(absolute);
         }
 
         continue;
       }
 
+      if (!dirent.isFile()) {
+        continue;
+      }
+
       const relative = path.relative(root, absolute).split(path.sep).join("/");
 
-      if (SOURCE_EXTENSIONS.has(path.extname(name)) && !isTest(relative)) {
+      if (
+        SOURCE_EXTENSIONS.has(path.extname(dirent.name)) &&
+        !isTest(relative)
+      ) {
         result.set(relative, readFileSync(absolute, "utf8"));
       }
     }

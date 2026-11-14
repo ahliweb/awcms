@@ -4,13 +4,22 @@
  * file that names a provider host nobody registered), and the review clock.
  */
 import { describe, expect, test } from "bun:test";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   addDays,
   collectSources,
   evaluateEntry,
-  evaluateRegister
+  evaluateRegister,
+  MAX_AGE_DAYS_CEILING
 } from "../scripts/provider-changelog-check";
 import {
   PROVIDER_HOSTS,
@@ -75,7 +84,7 @@ describe("register -> code", () => {
       sources: { [FILE]: 'const VERSION = "v4"; const HOST = "api.demo.test";' }
     });
 
-    expect(report.failures.join("\n")).toContain("no longer in");
+    expect(report.failures.join("\n")).toContain("must appear exactly once");
   });
 
   test("a pinned file that disappeared fails", () => {
@@ -266,6 +275,210 @@ describe("the repository's own register, against the real source tree", () => {
       }
 
       expect(e.changelogUrl).toMatch(/^https:\/\//);
+    }
+  });
+});
+
+/**
+ * The code -> register rule only sees hosts that are ALREADY in
+ * `PROVIDER_HOSTS`, so a provider nobody listed is invisible to it. This test
+ * closes that: every host named by an `https://` literal in non-test source is
+ * either a provider host or appears below with the reason it is not one.
+ * Adding a new outbound integration without choosing fails here.
+ */
+const NOT_A_PROVIDER: Record<string, readonly string[]> = {
+  "XML/JSON namespaces and spec links, never fetched": [
+    "www.w3.org",
+    "www.sitemaps.org",
+    "www.google.com",
+    "jsonfeed.org",
+    "schema.org",
+    "prometheus.io",
+    "webkit.org"
+  ],
+  "outbound links built for the reader's browser (share, deep link, profile URL), no server call":
+    [
+      "t.me",
+      "wa.me",
+      "twitter.com",
+      "www.facebook.com",
+      "www.linkedin.com",
+      "github.com"
+    ],
+  "embed allow-list or output rewriting, the browser fetches it": [
+    "www.youtube-nocookie.com"
+  ],
+  "Web Push endpoint recognised in a subscription the browser supplies (RFC 8030), not an API this code is a client of":
+    ["updates.push.services.mozilla.com"],
+  "documentation reference in a comment": ["docs.starsender.online"],
+  "illustrative host in a comment, a test double or a doc example": [
+    "a.co",
+    "abc123.r2.cloudflarestorage.com",
+    "app.example.com.evil.test",
+    "awcms.ahlikoding.com",
+    "cms.example",
+    "evil.com",
+    "evil.test",
+    "internal.invalid",
+    "media.example.com",
+    "media.example.test",
+    "media.example.test.evil.com",
+    "news.example",
+    "placeholder.invalid",
+    "push-target-path.invalid",
+    "redirect-normalize.invalid",
+    "seo-distribution.invalid",
+    "tenant.example",
+    "www.seputarborneo.com"
+  ]
+};
+
+describe("every outbound host in source is a provider or consciously not one", () => {
+  const root = path.resolve(import.meta.dirname, "..");
+  const sources = collectSources(root, "src");
+  const found = new Set<string>();
+
+  for (const text of sources.values()) {
+    for (const match of text.matchAll(
+      /https?:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi
+    )) {
+      found.add((match[1] as string).toLowerCase());
+    }
+  }
+
+  const known = new Set<string>([
+    ...PROVIDER_HOSTS,
+    ...Object.values(NOT_A_PROVIDER).flat()
+  ]);
+
+  test("no host is unaccounted for", () => {
+    expect([...found].filter((host) => !known.has(host)).sort()).toEqual([]);
+  });
+
+  test("the allow-list has no entry the source no longer names", () => {
+    expect(
+      Object.values(NOT_A_PROVIDER)
+        .flat()
+        .filter((host) => !found.has(host))
+    ).toEqual([]);
+  });
+
+  test("the five providers the first pass missed are registered", () => {
+    for (const host of [
+      "api.fonnte.com",
+      "api.starsender.online",
+      "api.cloudflare.com",
+      "challenges.cloudflare.com",
+      "api.github.com"
+    ]) {
+      expect(PROVIDER_HOSTS).toContain(host);
+      expect(
+        PROVIDER_REGISTER.some(
+          (e) => e.status === "active" && e.hosts.includes(host)
+        )
+      ).toBe(true);
+    }
+  });
+});
+
+describe("the review clock cannot be deferred through its other levers", () => {
+  const base = { today: "2026-11-14", warnDays: WARN_DAYS, checkAge: true };
+
+  function run(e: ProviderEntry) {
+    return evaluateRegister({
+      ...base,
+      register: [e],
+      providerHosts: ["api.demo.test"],
+      sources: new Map([[FILE, 'const VERSION = "v3"; // api.demo.test']]),
+      readFile: () => 'const VERSION = "v3"; // api.demo.test'
+    });
+  }
+
+  test("a recordedOn in the future fails", () => {
+    const report = run(entry({ recordedOn: "2099-01-01", lastReview: null }));
+
+    expect(report.failures.join("\n")).toContain("recordedOn");
+  });
+
+  test("an interval above the ceiling fails and a huge or infinite one cannot crash the run", () => {
+    for (const maxAgeDays of [
+      MAX_AGE_DAYS_CEILING + 1,
+      1e6,
+      1e12,
+      Number.POSITIVE_INFINITY,
+      Number.NaN
+    ]) {
+      const report = run(entry({ maxAgeDays }));
+
+      expect(report.failures.join("\n")).toContain("maxAgeDays");
+    }
+
+    expect(run(entry({ maxAgeDays: MAX_AGE_DAYS_CEILING })).failures).toEqual(
+      []
+    );
+  });
+});
+
+describe("pins must identify one place", () => {
+  const withText = (text: string) =>
+    evaluateRegister({
+      register: [entry()],
+      providerHosts: ["api.demo.test"],
+      sources: new Map([[FILE, `${text} // api.demo.test`]]),
+      readFile: () => text,
+      today: "2026-11-14",
+      warnDays: WARN_DAYS,
+      checkAge: false
+    }).failures;
+
+  test("a literal that appears twice does not pass, bumping one copy would go unnoticed", () => {
+    expect(withText('VERSION = "v3"; OTHER = VERSION = "v3"')).toHaveLength(1);
+  });
+
+  test("a literal that appears once passes and one that is gone fails", () => {
+    expect(withText('VERSION = "v3"')).toEqual([]);
+    expect(withText("nothing")).toHaveLength(1);
+  });
+});
+
+describe("a listed file that does not exist fails", () => {
+  test("file-missing is reported, not skipped", () => {
+    const report = evaluateRegister({
+      register: [entry({ files: [FILE, "src/modules/x/gone.ts"] })],
+      providerHosts: ["api.demo.test"],
+      sources: new Map([[FILE, 'VERSION = "v3" api.demo.test']]),
+      readFile: (relative) =>
+        relative === FILE ? 'VERSION = "v3" api.demo.test' : undefined,
+      today: "2026-11-14",
+      warnDays: WARN_DAYS,
+      checkAge: false
+    });
+
+    expect(report.failures.join("\n")).toContain("gone.ts");
+  });
+});
+
+describe("collectSources", () => {
+  test("never follows a symlink out of the root", () => {
+    const base = mkdtempSync(path.join(tmpdir(), "collect-sources-"));
+
+    try {
+      const root = path.join(base, "root");
+      const outside = path.join(base, "outside");
+
+      mkdirSync(path.join(root, "src"), { recursive: true });
+      mkdirSync(outside);
+      writeFileSync(path.join(root, "src", "a.ts"), "api.demo.test");
+      writeFileSync(path.join(outside, "secret.ts"), "api.demo.test");
+      symlinkSync(outside, path.join(root, "src", "link"));
+      symlinkSync(
+        path.join(outside, "secret.ts"),
+        path.join(root, "src", "b.ts")
+      );
+
+      expect([...collectSources(root, "src").keys()]).toEqual(["src/a.ts"]);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
     }
   });
 });

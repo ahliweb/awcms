@@ -40,13 +40,33 @@ export function findingMarker(key: string): string {
   return `<!-- ${MARKER_PREFIX}${findingFingerprint(key)} -->`;
 }
 
-const MARKER_PATTERN = new RegExp(
-  `<!-- ${MARKER_PREFIX}([0-9a-f]{16}) -->`,
-  "g"
-);
+/**
+ * The marker is the FIRST LINE of the body and nothing else on it. Issue
+ * bodies are partly third-party text (a dependency's `license` field, an
+ * advisory title): matching a marker anywhere would let that text carry
+ * another finding's marker and keep it from ever being filed again.
+ */
+const MARKER_LINE = new RegExp(`^<!-- ${MARKER_PREFIX}([0-9a-f]{16}) -->\\s*$`);
 
 export function markersIn(body: string): Set<string> {
-  return new Set(
-    Array.from(body.matchAll(MARKER_PATTERN), (match) => match[1] as string)
-  );
+  const match = MARKER_LINE.exec(body.split("\n", 1)[0] ?? "");
+
+  return new Set(match ? [match[1] as string] : []);
+}
+
+/**
+ * Makes text that came from outside the repository safe to put in a public
+ * issue: it cannot open or close an HTML comment (the marker's own syntax) and
+ * it cannot @mention an account. Text inside a backtick code span keeps its
+ * `@`, which GitHub does not turn into a mention there.
+ */
+export function neutralizeUntrusted(text: string): string {
+  return text
+    .replace(/<!--/g, "&lt;!--")
+    .replace(/-->/g, "--&gt;")
+    .split(/(`[^`\n]*`)/)
+    .map((part, index) =>
+      index % 2 === 1 ? part : part.replace(/@/g, "@\u200b")
+    )
+    .join("");
 }

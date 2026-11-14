@@ -37,6 +37,7 @@ import {
   findingFingerprint,
   findingMarker,
   markersIn,
+  neutralizeUntrusted,
   type Finding,
   type FindingFile
 } from "./lib/dependency-finding";
@@ -142,7 +143,7 @@ export function issueBody(finding: Finding, source: string): string {
   return [
     findingMarker(finding.key),
     "",
-    finding.detail,
+    neutralizeUntrusted(finding.detail),
     "",
     "---",
     `Filed automatically by the scheduled dependency-governance workflow (${source}, Issue #1173). ` +
@@ -155,10 +156,13 @@ export function issueBody(finding: Finding, source: string): string {
 // gh
 // ---------------------------------------------------------------------------
 
-async function gh(
+/** The `gh` invocation, injectable so tests can pin what is asked and how failure is handled. */
+export type GhRunner = (
   args: readonly string[],
   repo: string | undefined
-): Promise<string> {
+) => Promise<string>;
+
+const gh: GhRunner = async (args, repo) => {
   const child = Bun.spawn(["gh", ...args, ...(repo ? ["--repo", repo] : [])], {
     stdout: "pipe",
     stderr: "pipe"
@@ -174,12 +178,13 @@ async function gh(
   }
 
   return stdout;
-}
+};
 
 export async function listOpenIssues(
-  repo: string | undefined
+  repo: string | undefined,
+  run: GhRunner = gh
 ): Promise<OpenIssue[]> {
-  const stdout = await gh(
+  const stdout = await run(
     [
       "issue",
       "list",
@@ -203,6 +208,53 @@ export async function listOpenIssues(
   }
 
   return issues;
+}
+
+/**
+ * Creates the planned issues. Any `gh` failure throws: the caller turns that
+ * into a non-zero exit, so a run that could not file what it found is red.
+ */
+export async function createIssues(
+  toCreate: IssuePlan["toCreate"],
+  repo: string | undefined,
+  run: GhRunner = gh,
+  log: (line: string) => void = (line) => process.stdout.write(line)
+): Promise<void> {
+  // The label must exist before an issue can carry it; creating it is
+  // idempotent (`--force` updates instead of failing).
+  await run(
+    [
+      "label",
+      "create",
+      ISSUE_LABEL,
+      "--description",
+      "Filed by the scheduled dependency-governance workflow (one per finding)",
+      "--color",
+      "0366d6",
+      "--force"
+    ],
+    repo
+  );
+
+  for (const { finding, source } of toCreate) {
+    const url = (
+      await run(
+        [
+          "issue",
+          "create",
+          "--title",
+          issueTitle(finding),
+          "--body",
+          issueBody(finding, source),
+          "--label",
+          ISSUE_LABEL
+        ],
+        repo
+      )
+    ).trim();
+
+    log(`  filed ${url}: ${finding.key}\n`);
+  }
 }
 
 function argValues(args: readonly string[], flag: string): string[] {
@@ -266,41 +318,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // The label must exist before an issue can carry it; creating it is
-  // idempotent (`--force` updates instead of failing).
-  await gh(
-    [
-      "label",
-      "create",
-      ISSUE_LABEL,
-      "--description",
-      "Filed by the scheduled dependency-governance workflow (one per finding)",
-      "--color",
-      "0366d6",
-      "--force"
-    ],
-    repo
-  );
-
-  for (const { finding, source } of plan.toCreate) {
-    const url = (
-      await gh(
-        [
-          "issue",
-          "create",
-          "--title",
-          issueTitle(finding),
-          "--body",
-          issueBody(finding, source),
-          "--label",
-          ISSUE_LABEL
-        ],
-        repo
-      )
-    ).trim();
-
-    process.stdout.write(`  filed ${url}: ${finding.key}\n`);
-  }
+  await createIssues(plan.toCreate, repo);
 }
 
 if (import.meta.main) {

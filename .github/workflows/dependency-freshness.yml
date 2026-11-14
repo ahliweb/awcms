@@ -128,6 +128,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+        # Explicit `bash` makes GitHub run `bash -eo pipefail`. The default shell
+        # is `bash -e` without pipefail, where `| tee` below would replace the
+        # sync's exit status with tee's and a failed filing run would be green.
+        shell: bash
         run: |
           args=()
           for file in manifests/dependency-license.json manifests/dependency-provider.json; do
