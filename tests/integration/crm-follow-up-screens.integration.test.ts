@@ -656,6 +656,85 @@ suite("crm_follow_up screens (#1165, ADR-0159)", () => {
     expect(await detailOf(manager.token, null)).toEqual(notFound);
   });
 
+  test("each control follows its OWN permission, not a neighbour's", async () => {
+    await enableTenantSwitch(tenantId);
+    const owner1 = await seedUser(tenantId, "owner1", []);
+    const updateOnly = await seedUser(tenantId, "update-only", [
+      READ_TASKS,
+      UPDATE_TASKS
+    ]);
+    const stopOnly = await seedUser(tenantId, "stop-only", [
+      READ_TASKS,
+      CREATE_STOP
+    ]);
+    const readOnly = await seedUser(tenantId, "read-only", [READ_TASKS]);
+    const withRules = await seedUser(tenantId, "with-rules", [
+      READ_TASKS,
+      READ_RULES
+    ]);
+    await newRule(tenantId, ownerTenantUserId, "future");
+    const task = await newTask(tenantId, owner1.tenantUserId, "lead_created");
+
+    // Holding tasks.update never shows the stop form, and holding
+    // stop_signals.create never shows the close controls.
+    expect(await detailOf(updateOnly.token, task.taskId)).toMatchObject({
+      canUpdate: true,
+      canStop: false
+    });
+    expect(await detailOf(stopOnly.token, task.taskId)).toMatchObject({
+      canUpdate: false,
+      canStop: true
+    });
+    expect(await detailOf(readOnly.token, task.taskId)).toMatchObject({
+      canUpdate: false,
+      canStop: false
+    });
+
+    // The rules link follows rules.read alone.
+    expect(await worklist(readOnly.token)).toMatchObject({
+      canSeeRules: false
+    });
+    expect(await worklist(withRules.token)).toMatchObject({
+      canSeeRules: true
+    });
+  });
+
+  test("a stop signal of another tenant on the SAME lead id is not on this tenant's detail (the loader's own predicate)", async () => {
+    // The loaders run on the handler connection, which is a superuser in the
+    // harness, so FORCE RLS is NOT what this test measures; RLS as
+    // `awcms_app` is measured in crm-follow-up-engine.integration.test.ts.
+    // Here the directory's own `tenant_id` predicate is the only thing that
+    // can keep tenant B's signal out.
+    await enableTenantSwitch(tenantId);
+    const staffB = await seedUser(tenantB, "staff-b", []);
+    const manager = await seedUser(tenantId, "manager", [
+      READ_TASKS,
+      CREATE_STOP
+    ]);
+    await newRule(tenantId, ownerTenantUserId, "future");
+    const task = await newTask(tenantId, manager.tenantUserId, "lead_created");
+
+    await admin()`
+      INSERT INTO awcms_crm_follow_up_stop_signals
+        (tenant_id, lead_id, kind, source, recorded_by, occurred_at)
+      VALUES (${tenantB}, ${task.leadId}, 'manual', 'staff',
+              ${staffB.tenantUserId}, now())
+    `;
+    await admin()`
+      INSERT INTO awcms_crm_follow_up_stop_signals
+        (tenant_id, lead_id, kind, source, recorded_by, occurred_at)
+      VALUES (${tenantId}, ${task.leadId}, 'manual', 'staff',
+              ${manager.tenantUserId}, now())
+    `;
+
+    const detail = (await detailOf(manager.token, task.taskId)) as {
+      stopSignals: { leadId: string }[];
+    };
+
+    // Only this tenant's own signal: two rows exist for the lead id.
+    expect(detail.stopSignals).toHaveLength(1);
+  });
+
   test("the tenant switch is reported, so the screen can say why a write is refused", async () => {
     const manager = await seedUser(tenantId, "manager", [
       READ_TASKS,

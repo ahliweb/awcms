@@ -146,6 +146,19 @@ describe("the screens gate on keys that really exist", () => {
     }
   });
 
+  test("the markup renders each control on exactly its own flag", () => {
+    // The loaders' flags are pinned by behaviour; these pin that the markup
+    // reads them alone (an `||` or a literal would widen a control silently).
+    expect(detail).toContain("{(detail.canUpdate || detail.canStop) && (");
+    expect(detail).toContain("{detail.canStop && (");
+    expect(detail).toContain("{detail.canUpdate && (");
+    expect(rules).toContain("{data.canConfigure && (");
+    expect(loaders).toContain("canStop: await can(input.stopGuard)");
+    expect(loaders).toContain("canUpdate: await can(input.updateGuard)");
+    expect(loaders).toContain("canSeeRules: await can(input.rulesReadGuard)");
+    expect(loaders).toContain("canConfigure: await can(input.configureGuard)");
+  });
+
   test("the screens are off with the deployment switch, checked AFTER authorization", () => {
     // The switch lives in the loaders, which run only inside `loadAdminScreen`'s
     // `load` (after it allowed the page); the pages hold no read that could skip it.

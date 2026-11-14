@@ -20,6 +20,12 @@
  * `GET /tasks` lists the tenant's queue. What this module's screens keep is
  * tenant isolation (the directories' own `tenant_id` predicate plus FORCE RLS)
  * and per-permission controls, both pinned by tests.
+ *
+ * One deliberate deviation from "exactly what the API shows": the tenant's own
+ * switch (`tenantEnabled`) is shown to a holder of `tasks.read`, although
+ * `GET /settings` needs `rules.read`. It is one boolean, it only explains why a
+ * write is refused, and a `tasks.update` holder learns it anyway from the
+ * `409 CRM_FOLLOW_UP_TENANT_DISABLED` answer.
  */
 import {
   CRM_FOLLOW_UP_MODULE_KEY,
