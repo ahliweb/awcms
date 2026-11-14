@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+security(readiness): `security:readiness` now catches a schema-level `CREATE` for a restricted role and a widened tenant isolation policy (Issue #1279, X3/X4 of the #1274 audit; both mutations left the full run green before). New critical check "No restricted role can CREATE in the schema or the database" (schema and database ACLs including `PUBLIC`, plus the effective privilege of every `awcms_*` role, definer owner and the connecting role; exact allow-list, TEMP deliberately not reported). New critical check "Every FORCE-RLS table keeps its canonical tenant isolation policy": every FORCE-RLS table must carry the canonical permissive `*_tenant_isolation` FOR ALL policy (exact `pg_get_expr` match, three reviewed fail-closed spellings) and every other permissive policy must be one of the 14 reviewed role-scoped exceptions pinned exactly, plus a rolled-back probe that `awcms_app` and `awcms_social_source_check` read only their own tenant's `awcms_blog_posts` and `awcms_news_media_objects` rows. No schema, API or event change; a new permissive role-scoped policy now needs an entry in `REVIEWED_PERMISSIVE_POLICIES`.
