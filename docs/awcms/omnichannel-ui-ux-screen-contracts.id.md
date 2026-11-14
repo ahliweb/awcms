@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-ui-ux-screen-contracts.md)
 
-<!-- i18n-source-hash: sha256:5ca1f3b737e8fce81a0115689802bd4ca4202b5730a280d6fd956e667a64e108 -->
+<!-- i18n-source-hash: sha256:10136d9a2245d79d3c3e780854fa8eacdd2f8d2919cfb05b29c20671d3a96c94 -->
 
 # AWCMS — Kontrak UI/UX upstream Omnichannel v1.0
 
@@ -30,7 +30,7 @@ Bun stabil terverifikasi **1.4.4** (22 Okt), kini dipin di repositori ([#1172](h
 | UP-12 | Facebook/IG/TikTok/YouTube/LinkedIn/Threads     | RENCANA/RISET                                                                                                                                              | #1145–#1152              |
 | UP-13 | Lead/prospect/pipeline                          | RENCANA                                                                                                                                                    | #1163/#1166              |
 | UP-14 | Unified inbox/assignment/SLA                    | SEBAGIAN (#1164: antrean, detail, tugaskan-ke-saya, status, label, catatan respons, kebijakan SLA, bangun ulang; tanpa split pane, catatan, balasan cepat) | #1144/#1164              |
-| UP-15 | Follow-up rules/task/calendar                   | RENCANA                                                                                                                                                    | #1165                    |
+| UP-15 | Follow-up rules/task/calendar                   | SEBAGIAN (#1165: daftar kerja, detail tugas, penghentian, aturan baca-saja; belum ada editor)                                                              | #1165                    |
 | UP-16 | SSE/WS progress gateway                         | BELUM ADA, ADR lebih dulu                                                                                                                                  | #1168/#1171              |
 
 ## 3. Kontrak alur per layar

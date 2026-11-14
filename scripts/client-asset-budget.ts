@@ -1295,8 +1295,30 @@ export const READER_BUDGET_BYTES = 24_000;
  * Rebase note: `main` had moved to 381,350 B, so this branch's own raise
  * (+1,120 B, written against 379,850 B) is stacked on it, giving
  * 382,470 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1165** (the follow-up screens): +2,500 B (365,600 ->
+ * 368,100), measured 368,053 locally with this change (`main` sat about 40 B
+ * under its budget), with 47 B of margin for the local/CI build difference.
+ * Two page scripts, each on its own screen only: the task detail
+ * (`/admin/crm-follow-up/[id]`: complete, cancel and the stop signal, each with
+ * an `Idempotency-Key`, a confirmation and one mapped error sentence) and the
+ * rules screen (the tenant switch), plus a three-function pure helper
+ * (`crm-follow-up-screen.ts`) the switch script imports. The worklist ships no
+ * script. The lifecycle is the shared `admin-form-client.ts`, the key source
+ * the shared `admin-idempotency-key.ts` and the confirmation the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * Rebase note: `main` had moved to 379,850 B, so this branch's own raise (the
+ * +2,500 B above, written against 365,600 B) is stacked on it. Re-measured on
+ * the rebased bundle: 381,571 B locally (`main` alone sat about 40 B under
+ * 379,850, so the follow-up screens cost about 1,720 B), budget set to 381,710
+ * B (measured + 139 B for the local/CI build difference).
+ *
+ * Rebase note: `main` had moved to 382,470 B, so this branch's own raise
+ * (+1,860 B, written against 379,850 B) is stacked on it, giving
+ * 384,330 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 382_470;
+export const APP_BUDGET_BYTES = 384_330;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
