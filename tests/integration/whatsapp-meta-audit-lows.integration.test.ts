@@ -32,6 +32,7 @@ import {
   getWorkerRoleSql,
   integrationEnabled,
   reassertRuntimeRoleLogins,
+  rescopeChannelAccount,
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase,
@@ -1155,10 +1156,20 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
         ]);
         expect(held.blockedRows).toBe(0);
 
+        const parentId = (
+          (await getAdminSql()`
+            SELECT parent_account_id AS id FROM awcms_channel_accounts
+            WHERE id = ${numberId}
+          `) as { id: string }[]
+        )[0]!.id;
+
+        await rescopeChannelAccount(parentId, {
+          type: "brand",
+          id: "b1298000-0000-4000-8000-0000000000bb"
+        });
+
         const scoped = await verdictFor(
-          `UPDATE awcms_channel_accounts SET status = 'connected',
-             business_scope_type = 'brand',
-             business_scope_id = 'b1298000-0000-4000-8000-0000000000bb'
+          `UPDATE awcms_channel_accounts SET status = 'connected'
            WHERE id = ${parent}`
         );
 
@@ -1171,9 +1182,16 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
         ]);
         expect(scoped.blockedRows).toBe(2);
       } finally {
+        const restoreId = (
+          (await getAdminSql()`
+            SELECT parent_account_id AS id FROM awcms_channel_accounts
+            WHERE id = ${numberId}
+          `) as { id: string }[]
+        )[0]!.id;
+
+        await rescopeChannelAccount(restoreId, null);
         await getAdminSql().unsafe(
-          `UPDATE awcms_channel_accounts SET status = 'connected',
-             business_scope_type = NULL, business_scope_id = NULL
+          `UPDATE awcms_channel_accounts SET status = 'connected'
            WHERE id = ${parent}`
         );
       }

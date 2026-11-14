@@ -248,6 +248,29 @@ export function getAdminSql(): Bun.SQL {
 }
 
 /**
+ * Re-scopes a channel account the way a defect or a compromised owner role
+ * could: with the identity guard switched off inside ONE transaction. Since
+ * #1215 the guard refuses a scope rewrite for EVERY role (sql/398), so a
+ * scenario that needs "the scope changed after a child was registered" must
+ * disable it here; production trigger stays untouched. `null` clears the scope.
+ */
+export async function rescopeChannelAccount(
+  id: string,
+  scope: { type: string; id: string } | null
+): Promise<void> {
+  await getAdminSql().begin(async (tx) => {
+    await tx`ALTER TABLE awcms_channel_accounts DISABLE TRIGGER awcms_channel_accounts_identity_guard`;
+    await tx`
+      UPDATE awcms_channel_accounts
+      SET business_scope_type = ${scope?.type ?? null},
+          business_scope_id = ${scope?.id ?? null}
+      WHERE id = ${id}
+    `;
+    await tx`ALTER TABLE awcms_channel_accounts ENABLE TRIGGER awcms_channel_accounts_identity_guard`;
+  });
+}
+
+/**
  * The connection that OWNS every table — non-superuser, NOBYPASSRLS, and the
  * migration owner. The only posture in which `FORCE ROW LEVEL SECURITY`
  * (migration 017 / PR #139) is what stands between two tenants' rows, so every

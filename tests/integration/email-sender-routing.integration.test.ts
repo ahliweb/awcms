@@ -36,6 +36,7 @@ import {
   getWorkerRoleSql,
   integrationEnabled,
   reassertRuntimeRoleLogins,
+  rescopeChannelAccount,
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase,
@@ -1067,12 +1068,7 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
       `) as { id: string }[];
       const id = rows[0]!.id;
 
-      await getAdminSql()`
-        UPDATE awcms_channel_accounts
-        SET business_scope_type = ${SCOPE_X.type},
-            business_scope_id = ${SCOPE_X.id}
-        WHERE id = ${fx(TENANT_A).accounts[1]!.id}
-      `;
+      await rescopeChannelAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
       await getAdminSql()`
         INSERT INTO awcms_channel_account_capabilities
           (tenant_id, account_id, capability, state, evidence_kind,
@@ -1158,12 +1154,7 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
     });
 
     test("createAccount refuses a child outside its parent's scope", async () => {
-      await getAdminSql()`
-        UPDATE awcms_channel_accounts
-        SET business_scope_type = ${SCOPE_X.type},
-            business_scope_id = ${SCOPE_X.id}
-        WHERE id = ${fx(TENANT_A).accounts[1]!.id}
-      `;
+      await rescopeChannelAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
 
       const { createAccount } =
         await import("../../src/modules/channel-accounts/application/account-directory");

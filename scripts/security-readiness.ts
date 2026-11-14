@@ -45,6 +45,10 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
+import {
+  pinChannelAccountsAccessGuards,
+  probeChannelAccountsAccessGuards
+} from "./lib/channel-accounts-access-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
@@ -8038,6 +8042,49 @@ export async function checkTelegramEngagementDispatchRole(options?: {
 }
 
 /**
+ * Channel-account access guards (Issue #1215 M-c, `sql/398` and `sql/399`): an
+ * account is `assigned` by default, an assigned account cannot lose its last
+ * owner by a demotion, an erasure that orphans one leaves an audit row, and an
+ * account's business scope and identity cannot be rewritten. Exact pins on the
+ * column, the CHECK and the four trigger functions, plus a rolled-back
+ * behavioural probe: a pin alone passes a hollowed-out function that keeps its
+ * shape. Runs as whichever role the checking connection is; the guards are
+ * triggers, so they fire for every role.
+ */
+export async function checkChannelAccountsAccessGuards(): Promise<SecurityCheckResult> {
+  const name = "Channel accounts are assigned by default and keep their owner";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings = await pinChannelAccountsAccessGuards(sql);
+    const probe = await probeChannelAccountsAccessGuards(sql);
+
+    if (probe !== null) findings.push(...probe);
+
+    return findings.length === 0
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence: `access_mode defaults to the closed mode behind its CHECK and the four guard triggers (identity and scope, owned switch, last-owner demotion, orphan audit) equal their reviewed bodies${probe === null ? "; the rolled-back behavioural probe was NOT run (this connection cannot seed a throwaway tenant), so only the exact pins stood" : ", and a rolled-back probe confirmed what they refuse and what they allow"}.`
+        }
+      : { name, severity, status: "fail", evidence: findings.join("; ") };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the channel account access guards: ${errorMessage(error)}`
+    };
+  }
+}
+
+/**
  * The #1271 audit, L3: the behavioural probes of the dedicated roles
  * (`awcms_worker`'s secret view, `awcms_social_dispatch`'s secret view and
  * write boundary, `awcms_telegram_engagement_dispatch`) run only when the
@@ -8114,6 +8161,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkWorkerSetupRoleGrants(),
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
+    await checkChannelAccountsAccessGuards(),
     await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
     checkAbacDefaultDeny(),

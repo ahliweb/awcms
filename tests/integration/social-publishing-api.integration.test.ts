@@ -250,9 +250,9 @@ async function seedAccount(
   const account = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name,
-       auth_mode, status, connection_id)
+       auth_mode, status, connection_id, access_mode)
     VALUES (${tenantId}, ${provider}, ${kind}, ${externalId}, ${`n-${externalId}`},
-            'oauth2', 'connected', ${connection[0]!.id})
+            'oauth2', 'connected', ${connection[0]!.id}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 

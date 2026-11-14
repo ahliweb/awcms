@@ -15208,7 +15208,7 @@ Account and credential CONTROL PLANE of the omnichannel foundation (channel_acco
 - **operationId**: `listChannelAccounts`
 - **Security**: bearerAuth + tenantHeader
 
-An account with assignees is listed only to its assignees and to holders of `channel_accounts.assignments.assign`. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
+An `assigned` account (the default) is listed only to its assignees and to holders of `channel_accounts.assignments.assign`; a `tenant_wide` account to every holder of the read permission. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
 
 **Parameters**
 
@@ -15325,6 +15325,34 @@ Refused while the account is `connected` or `degraded` (disconnect it first) and
 | 409    | `ACCOUNT_STATE_INVALID`, `HAS_CHILD_ACCOUNTS` or `IDEMPOTENCY_CONFLICT`.               | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
+### `PUT /api/v1/channel-accounts/accounts/{id}/access-mode` — Choose who may see and operate the account.
+
+- **operationId**: `setChannelAccountAccessMode`
+- **Security**: bearerAuth + tenantHeader
+
+`assigned` (the default, fail-closed) restricts the account to its assignees and the holders of `channel_accounts.assignments.assign`; `tenant_wide` lets the permission alone decide. Switching to `assigned` needs an owner to exist (`422 OWNER_REQUIRED`). Audited at `warning` when the mode changes; the same mode again changes nothing. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                            | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The mode now in force.                                                                 | object                                 |
+| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
+| 422    | `OWNER_REQUIRED` (switching to `assigned` needs an owner).                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/channel-accounts/accounts/{id}/assignments` — Who may operate this account.
 
 - **operationId**: `listChannelAccountAssignments`
@@ -15348,7 +15376,7 @@ Requires `channel_accounts.accounts.read`.
 - **operationId**: `setChannelAccountAssignment`
 - **Security**: bearerAuth + tenantHeader
 
-An upsert per person. From the first assignment on, the account is visible and operable only to its assignees and holders of `channel_accounts.assignments.assign`. Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+An upsert per person. On an `assigned` account (the default) only its assignees and holders of `channel_accounts.assignments.assign` can see and operate it. Demoting the last owner of an `assigned` account is refused (`409 LAST_OWNER`). Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
 
 **Parameters**
 
@@ -15360,23 +15388,23 @@ An upsert per person. From the first assignment on, the account is visible and o
 
 **Responses**
 
-| Status | Description                                                                            | Schema                                 |
-| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The assignment.                                                                        | object                                 |
-| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
-| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
-| 422    | `USER_NOT_FOUND` (the person is not in this tenant).                                   | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                      | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The assignment.                                                                                  | object                                 |
+| 400    | Validation error.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the person is the only owner of an `assigned` account). | [`ApiError`](#standard-error-envelope) |
+| 422    | `USER_NOT_FOUND` (the person is not in this tenant).                                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.           | [`ApiError`](#standard-error-envelope) |
 
 ### `DELETE /api/v1/channel-accounts/accounts/{id}/assignments/{assignmentId}` — Remove one assignee.
 
 - **operationId**: `removeChannelAccountAssignment`
 - **Security**: bearerAuth + tenantHeader
 
-Removing the LAST assignee returns the account to tenant-wide visibility, which is intended and is why this is audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+Removing the LAST OWNER of an `assigned` account is refused (`409 LAST_OWNER`): an account is never left without somebody who answers for it and never falls open by losing its assignees. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
 
 **Parameters**
 
@@ -15386,15 +15414,15 @@ Removing the LAST assignee returns the account to tenant-wide visibility, which 
 
 **Responses**
 
-| Status | Description                                                                            | Schema                                 |
-| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Removed.                                                                               | object                                 |
-| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
-| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                        | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Removed.                                                                                           | object                                 |
+| 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the assignee is the only owner of an `assigned` account). | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.             | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/channel-accounts/accounts/{id}/attest-device` — Attest that an unofficial-provider device is paired (operator-attested, not verified).
 

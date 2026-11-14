@@ -2,6 +2,7 @@ import { fail, ok } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import {
   deleteAccount,
+  fetchAccessMode,
   toPublicAccount,
   updateAccount
 } from "../../../../../../modules/channel-accounts/application/account-directory";
@@ -48,7 +49,10 @@ export const GET = defineTenantRoute({
 
     if ("denied" in loaded) return loaded.denied;
 
-    return ok(toPublicAccount(loaded.account));
+    return ok({
+      ...toPublicAccount(loaded.account),
+      accessMode: await fetchAccessMode(context.tx, context.tenantId, id)
+    });
   }
 });
 

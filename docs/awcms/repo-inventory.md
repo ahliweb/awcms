@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 281   |
+| Migrations                          | 283   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 852   |
-| Route files                         | 685   |
+| Test files                          | 853   |
+| Route files                         | 686   |
 | ADR                                 | 326   |
 
 ### Modules
@@ -346,6 +346,8 @@
 | 279 | `sql/393_awcms_whatsapp_meta_webhook_clock_and_replay.sql`             |
 | 280 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
 | 281 | `sql/397_awcms_blog_revisions_worker_grant.sql`                        |
+| 282 | `sql/398_awcms_channel_accounts_access_mode.sql`                       |
+| 283 | `sql/399_awcms_channel_accounts_last_owner_guard.sql`                  |
 
 ### Tables & Row-Level Security
 
@@ -633,7 +635,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 632        |
+| `(root)`      | 633        |
 | `e2e`         | 30         |
 | `integration` | 189        |
 | `unit`        | 1          |
@@ -642,7 +644,7 @@
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 567   |
+| `/api/v1/**`    | 568   |
 | `/admin/**`     | 87    |
 | publik / anonim | 31    |
 

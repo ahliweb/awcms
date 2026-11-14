@@ -14,6 +14,7 @@ import {
   keysetCursorCreatedAtSql
 } from "../../_shared/keyset-pagination";
 import type {
+  ChannelAccessMode,
   ChannelAssignmentKind,
   ChannelAuthMode,
   ChannelHealthState,
@@ -22,6 +23,7 @@ import type {
 import { checkAccountShape } from "../domain/provider-matrix";
 import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import type {
+  AccessModeInput,
   AssignmentInput,
   CreateAccountInput,
   ListAccountsQuery,
@@ -51,6 +53,19 @@ export type AccountView = {
   version: number;
 };
 
+/**
+ * The view the registry's own routes return, with the access mode (#1215 M-c).
+ * It is NOT part of {@link AccountView}/{@link AccountRecord} on purpose:
+ * `fetchAccountRecord` is also run by dedicated database roles whose column
+ * grants (sql/322, sql/353, sql/373) are pinned exactly, and a column they are
+ * not granted would make every one of their reads fail. Only the paths that run
+ * as the application role select it.
+ */
+export type AccountWithMode = AccountView & {
+  /** Who may see and operate it: `assigned` (default, fail-closed) or `tenant_wide`. */
+  accessMode: ChannelAccessMode;
+};
+
 type AccountRow = {
   id: string;
   business_scope_type: string | null;
@@ -70,6 +85,8 @@ type AccountRow = {
   created_at: Date;
   updated_at: Date;
   version: number;
+  /** Selected only by the application-role paths (see {@link AccountWithMode}). */
+  access_mode?: ChannelAccessMode;
   created_at_cursor?: string;
 };
 
@@ -96,6 +113,10 @@ function toView(row: AccountRow): AccountView {
     updatedAt: row.updated_at.toISOString(),
     version: row.version
   };
+}
+
+function toViewWithMode(row: AccountRow): AccountWithMode {
+  return { ...toView(row), accessMode: row.access_mode ?? "assigned" };
 }
 
 /** What the capability and credential paths need from an account, including the secret reference (internal use only). */
@@ -151,15 +172,34 @@ export async function fetchAccountRecord(
   return rows.length === 0 ? null : toRecord(rows[0]!);
 }
 
+/** The account's access mode, for the application-role paths that show it (`null`: not a live account of this tenant). */
+export async function fetchAccessMode(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string
+): Promise<ChannelAccessMode | null> {
+  const rows = (await tx`
+    SELECT access_mode FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId} AND deleted_at IS NULL
+  `) as { access_mode: ChannelAccessMode }[];
+
+  return rows.length === 0 ? null : rows[0]!.access_mode;
+}
+
 // ---------------------------------------------------------------------------
 // Visibility: assignments are ADDITIVE to the permission checks
 // ---------------------------------------------------------------------------
 
 /**
- * An account with NO assignment is tenant-wide: the permission alone decides.
- * An account with at least one assignment is restricted to its assignees, plus
- * anyone who holds `assignments.manage` (`bypass`, resolved by the route from the
- * permission check, never from a client flag).
+ * The account's `access_mode` decides (#1215 M-c), never the absence of rows:
+ *
+ *  - `tenant_wide`: the permission alone decides, every caller passes;
+ *  - `assigned` (the default): only an assignee of at least `minimumKind`, plus
+ *    anyone who holds `assignments.assign` (`bypass`, resolved by the route from
+ *    the chokepoint, never from a client flag). An assigned account with no
+ *    assignee is therefore administrators-only: it never falls open.
+ *
+ * An account that does not exist (or is deleted) is not visible.
  */
 export async function isAccountVisibleTo(
   tx: Bun.SQL,
@@ -169,24 +209,26 @@ export async function isAccountVisibleTo(
   bypass: boolean,
   minimumKind: ChannelAssignmentKind = "viewer"
 ): Promise<boolean> {
+  const rows = (await tx`
+    SELECT acc.access_mode,
+           EXISTS (
+             SELECT 1 FROM awcms_channel_account_assignments AS a
+             WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id
+               AND a.tenant_user_id = ${tenantUserId}
+               AND (${minimumKind}::text = 'viewer'
+                    OR (a.kind IN ('owner', 'operator')
+                        AND ${minimumKind}::text = 'operator')
+                    OR (a.kind = 'owner' AND ${minimumKind}::text = 'owner'))
+           ) AS mine
+    FROM awcms_channel_accounts AS acc
+    WHERE acc.tenant_id = ${tenantId} AND acc.id = ${accountId}
+      AND acc.deleted_at IS NULL
+  `) as { access_mode: ChannelAccessMode; mine: boolean }[];
+
+  if (rows.length === 0) return false;
   if (bypass) return true;
 
-  const rows = (await tx`
-    SELECT
-      count(*)::int AS total,
-      count(*) FILTER (
-        WHERE tenant_user_id = ${tenantUserId}
-          AND (${minimumKind} = 'viewer'
-               OR kind IN ('owner', 'operator') AND ${minimumKind} = 'operator'
-               OR kind = 'owner' AND ${minimumKind} = 'owner')
-      )::int AS mine
-    FROM awcms_channel_account_assignments
-    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
-  `) as { total: number; mine: number }[];
-
-  const row = rows[0]!;
-
-  return row.total === 0 || row.mine > 0;
+  return rows[0]!.access_mode === "tenant_wide" || rows[0]!.mine;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +236,7 @@ export async function isAccountVisibleTo(
 // ---------------------------------------------------------------------------
 
 export type CreateAccountOutcome =
-  | { outcome: "created"; account: AccountView }
+  | { outcome: "created"; account: AccountWithMode }
   | {
       outcome: "refused";
       code:
@@ -349,7 +391,7 @@ export async function createAccount(
               account_kind, external_id, display_name, auth_mode,
               connection_id, parent_account_id, secret_id, status,
               status_reason, connected_at, revoked_at, created_at,
-              updated_at, version
+              updated_at, version, access_mode
   `) as AccountRow[];
 
   // One generic answer for "already yours" and "another tenant holds it": the
@@ -358,11 +400,22 @@ export async function createAccount(
     return { outcome: "refused", code: "ACCOUNT_ALREADY_REGISTERED" };
   }
 
-  return { outcome: "created", account: toView(rows[0]!) };
+  // M-c: a new account starts `assigned` (the column default), so it has to
+  // start with somebody who answers for it: its creator is its first owner.
+  // Without this the creator would register an account only an administrator
+  // could then see.
+  await tx`
+    INSERT INTO awcms_channel_account_assignments
+      (tenant_id, account_id, tenant_user_id, kind, created_by)
+    VALUES (${tenantId}, ${rows[0]!.id}, ${actorTenantUserId}, 'owner',
+            ${actorTenantUserId})
+  `;
+
+  return { outcome: "created", account: toViewWithMode(rows[0]!) };
 }
 
 export type ListAccountsResult =
-  | { ok: true; items: AccountView[]; nextCursor: string | null }
+  | { ok: true; items: AccountWithMode[]; nextCursor: string | null }
   | { ok: false; code: "INVALID_CURSOR" };
 
 export async function listAccounts(
@@ -390,6 +443,7 @@ export async function listAccounts(
            acc.auth_mode, acc.connection_id, acc.parent_account_id,
            acc.secret_id, acc.status, acc.status_reason, acc.connected_at,
            acc.revoked_at, acc.created_at, acc.updated_at, acc.version,
+           acc.access_mode,
            ${tx.unsafe(keysetCursorCreatedAtSql("acc"))} AS created_at_cursor
     FROM awcms_channel_accounts AS acc
     WHERE acc.tenant_id = ${tenantId}
@@ -401,9 +455,7 @@ export async function listAccounts(
               (${cursor?.createdAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
       AND (
         ${viewer.bypass}::boolean
-        OR NOT EXISTS (
-          SELECT 1 FROM awcms_channel_account_assignments AS a
-          WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id)
+        OR acc.access_mode = 'tenant_wide'
         OR EXISTS (
           SELECT 1 FROM awcms_channel_account_assignments AS a
           WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id
@@ -415,7 +467,7 @@ export async function listAccounts(
 
   const page = rows.slice(0, query.limit);
   const last = page[page.length - 1];
-  const items: AccountView[] = [];
+  const items: AccountWithMode[] = [];
   const decided = new Map<string, boolean>();
 
   for (const row of page) {
@@ -438,7 +490,7 @@ export async function listAccounts(
       if (!allowed) continue;
     }
 
-    items.push(toView(row));
+    items.push(toViewWithMode(row));
   }
 
   // The cursor follows the RAW page, so a page that lost rows to the scope
@@ -454,7 +506,7 @@ export async function listAccounts(
 }
 
 export type UpdateAccountOutcome =
-  | { outcome: "updated"; account: AccountView }
+  | { outcome: "updated"; account: AccountWithMode }
   | { outcome: "not_found" }
   | { outcome: "refused"; code: "ACCOUNT_STATE_INVALID" };
 
@@ -498,12 +550,12 @@ export async function updateAccount(
               account_kind, external_id, display_name, auth_mode,
               connection_id, parent_account_id, secret_id, status,
               status_reason, connected_at, revoked_at, created_at,
-              updated_at, version
+              updated_at, version, access_mode
   `) as AccountRow[];
 
   return rows.length === 0
     ? { outcome: "not_found" }
-    : { outcome: "updated", account: toView(rows[0]!) };
+    : { outcome: "updated", account: toViewWithMode(rows[0]!) };
 }
 
 // ---------------------------------------------------------------------------
@@ -696,9 +748,7 @@ export async function listConnectionAccountBindings(
            acc.business_scope_id,
            (
              ${viewer.bypass}::boolean
-             OR NOT EXISTS (
-               SELECT 1 FROM awcms_channel_account_assignments AS a
-               WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id)
+             OR acc.access_mode = 'tenant_wide'
              OR EXISTS (
                SELECT 1 FROM awcms_channel_account_assignments AS a
                WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id
@@ -1043,9 +1093,57 @@ export async function listAssignments(
 
 export type AssignOutcome =
   | { outcome: "assigned"; assignment: AssignmentView }
-  | { outcome: "refused"; code: "USER_NOT_FOUND" };
+  | { outcome: "refused"; code: "USER_NOT_FOUND" | "LAST_OWNER" };
 
-/** Upserts one assignee. The user must belong to THIS tenant (composite FK + this check gives a clean refusal instead of a constraint error). */
+/**
+ * Takes the account row lock and returns its mode (`null` when the account is
+ * not live). Every writer of assignments goes through it first, so "is this the
+ * last owner?" is decided with the other owners' writers held off: two
+ * concurrent removals of two owners cannot each see the other remain. The
+ * database guards (sql/399) are the second wall.
+ */
+async function lockAccountMode(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string
+): Promise<ChannelAccessMode | null> {
+  const rows = (await tx`
+    SELECT access_mode FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId} AND deleted_at IS NULL
+    FOR UPDATE
+  `) as { access_mode: ChannelAccessMode }[];
+
+  return rows.length === 0 ? null : rows[0]!.access_mode;
+}
+
+/**
+ * The owner rows are SHARE-locked (not only read): a data-subject erasure
+ * deletes assignments without taking the account lock, and the lock makes it
+ * wait for this transaction, so it sees the state this decision produced (and
+ * its orphan-audit trigger fires) instead of both sides counting an owner that
+ * the other is about to remove (sql/398, sql/399).
+ */
+async function otherOwnerExists(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string,
+  exceptTenantUserId: string
+): Promise<boolean> {
+  const rows = (await tx`
+    SELECT 1 FROM awcms_channel_account_assignments
+    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+      AND kind = 'owner' AND tenant_user_id <> ${exceptTenantUserId}
+    FOR SHARE
+  `) as unknown[];
+
+  return rows.length > 0;
+}
+
+/**
+ * Upserts one assignee. The user must belong to THIS tenant (composite FK + this
+ * check gives a clean refusal instead of a constraint error). Demoting the last
+ * owner of an `assigned` account is refused (#1215 M-c).
+ */
 export async function assignAccount(
   tx: Bun.SQL,
   tenantId: string,
@@ -1060,6 +1158,23 @@ export async function assignAccount(
 
   if (user.length === 0) return { outcome: "refused", code: "USER_NOT_FOUND" };
 
+  if (input.kind !== "owner") {
+    const mode = await lockAccountMode(tx, tenantId, accountId);
+    const current = (await tx`
+      SELECT kind FROM awcms_channel_account_assignments
+      WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+        AND tenant_user_id = ${input.tenantUserId}
+    `) as { kind: ChannelAssignmentKind }[];
+
+    if (
+      mode === "assigned" &&
+      current[0]?.kind === "owner" &&
+      !(await otherOwnerExists(tx, tenantId, accountId, input.tenantUserId))
+    ) {
+      return { outcome: "refused", code: "LAST_OWNER" };
+    }
+  }
+
   const rows = (await tx`
     INSERT INTO awcms_channel_account_assignments
       (tenant_id, account_id, tenant_user_id, kind, created_by)
@@ -1073,12 +1188,42 @@ export async function assignAccount(
   return { outcome: "assigned", assignment: toAssignment(rows[0]!) };
 }
 
+export type UnassignOutcome = "removed" | "not_found" | "last_owner";
+
+/**
+ * Removes one assignee. Removing the LAST OWNER of an `assigned` account is
+ * refused (#1215 M-c): the account would be left with nobody who answers for it.
+ * (An erasure of the person is not this path: it must always complete, and the
+ * database leaves an audit row when it orphans an account, sql/399.)
+ */
 export async function unassignAccount(
   tx: Bun.SQL,
   tenantId: string,
   accountId: string,
   assignmentId: string
-): Promise<boolean> {
+): Promise<UnassignOutcome> {
+  const mode = await lockAccountMode(tx, tenantId, accountId);
+  const target = (await tx`
+    SELECT kind, tenant_user_id FROM awcms_channel_account_assignments
+    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+      AND id = ${assignmentId}
+  `) as { kind: ChannelAssignmentKind; tenant_user_id: string }[];
+
+  if (target.length === 0) return "not_found";
+
+  if (
+    mode === "assigned" &&
+    target[0]!.kind === "owner" &&
+    !(await otherOwnerExists(
+      tx,
+      tenantId,
+      accountId,
+      target[0]!.tenant_user_id
+    ))
+  ) {
+    return "last_owner";
+  }
+
   const rows = (await tx`
     DELETE FROM awcms_channel_account_assignments
     WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
@@ -1086,5 +1231,53 @@ export async function unassignAccount(
     RETURNING id
   `) as unknown[];
 
-  return rows.length > 0;
+  return rows.length > 0 ? "removed" : "not_found";
+}
+
+export type SetAccessModeOutcome =
+  | { outcome: "set"; accessMode: ChannelAccessMode; changed: boolean }
+  | { outcome: "refused"; code: "OWNER_REQUIRED" | "NOT_FOUND" };
+
+/**
+ * Sets the account's access mode (#1215 M-c). Switching to `assigned` needs an
+ * owner to exist, so the switch cannot create an account only an administrator
+ * can reach; the database refuses it too (sql/398). Idempotent: setting the
+ * mode it already has changes nothing and reports `changed: false`.
+ */
+export async function setAccountAccessMode(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  accountId: string,
+  input: AccessModeInput
+): Promise<SetAccessModeOutcome> {
+  const current = await lockAccountMode(tx, tenantId, accountId);
+
+  if (current === null) return { outcome: "refused", code: "NOT_FOUND" };
+
+  if (current === input.mode) {
+    return { outcome: "set", accessMode: current, changed: false };
+  }
+
+  if (input.mode === "assigned") {
+    const owners = (await tx`
+      SELECT 1 FROM awcms_channel_account_assignments
+      WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+        AND kind = 'owner'
+      FOR SHARE
+    `) as unknown[];
+
+    if (owners.length === 0) {
+      return { outcome: "refused", code: "OWNER_REQUIRED" };
+    }
+  }
+
+  await tx`
+    UPDATE awcms_channel_accounts
+    SET access_mode = ${input.mode}, updated_by = ${actorTenantUserId},
+        updated_at = now(), version = version + 1
+    WHERE tenant_id = ${tenantId} AND id = ${accountId} AND deleted_at IS NULL
+  `;
+
+  return { outcome: "set", accessMode: input.mode, changed: true };
 }
