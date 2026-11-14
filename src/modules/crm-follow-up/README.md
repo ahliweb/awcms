@@ -8,7 +8,19 @@ It **never sends anything to the lead**, stores **no lead copy** (a task carries
 
 ## Status
 
-`experimental`, **off at three levels**: `CRM_FOLLOW_UP_ENABLED=true` (deployment; otherwise every route answers `503 CRM_FOLLOW_UP_DISABLED` after authorization, the consumer ignores every event and the job visits no tenant), Module Management's per-tenant enable, and the module's own tenant switch (`PATCH /api/v1/crm-follow-up/settings`, default off). No navigation entry and no admin screen yet (all five permissions are in `NOT_YET_SCREENED`).
+`experimental`, **off at three levels**: `CRM_FOLLOW_UP_ENABLED=true` (deployment; otherwise every route answers `503 CRM_FOLLOW_UP_DISABLED` after authorization, the consumer ignores every event and the job visits no tenant), Module Management's per-tenant enable, and the module's own tenant switch (`PATCH /api/v1/crm-follow-up/settings`, default off). `active` with three admin screens (below); with the deployment switch off they say so instead of failing.
+
+## Admin screens
+
+SYSTEM admin ([ADR-0051](../../../docs/adr/0051-admin-screens-consolidated-in-awcms.md)), server-rendered data pages ([ADR-0149](../../../docs/adr/0149-the-admin-data-page-is-a-server-rendered-keyset-paged-pattern-with-shared-primitives.md)). Each page reads through `application/screen-loaders.ts`, which calls the SAME directory functions the API routes call, so what a screen shows is what the API shows; a behavioural integration test runs those loaders through the real `loadAdminScreen` chokepoint with real sessions.
+
+| Screen                       | Permission   | What it does                                                                                                                                                                                                           |
+| ---------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/admin/crm-follow-up`       | `tasks.read` | The worklist. Default view is the live work (open and escalated, merged in due order); filters for status, "assigned to me" (the daily worklist, resolved from the session) and overdue; keyset-paged, bounded load    |
+| `/admin/crm-follow-up/{id}`  | `tasks.read` | One task: summary, append-only history, staff notices with their closed settlement, the lead's stop signals. `tasks.update` adds complete (closed outcome) and cancel; `stop_signals.create` adds "stop for this lead" |
+| `/admin/crm-follow-up/rules` | `rules.read` | The rule catalogue and, with `?rule=`, one rule's definition and immutable revision history. `rules.configure` adds the tenant switch (audited at warning, `Idempotency-Key`, confirmation)                            |
+
+Every write carries an `Idempotency-Key`; task writes carry `expectedVersion` (a second staff member gets `VERSION_CONFLICT`, never a silent overwrite). While the tenant switch is off the controls are disabled with the reason. "Reassign" is shown disabled: no endpoint moves a task by hand. A staff member is "You" or "Another staff member", never a name, and nothing about the prospect is rendered (nothing is stored). There is no business-scope dimension to confine on: a task holds only an opaque lead id, exactly as `GET /tasks` lists the tenant's queue.
 
 ## How it works
 
@@ -41,6 +53,6 @@ It **never sends anything to the lead**, stores **no lead copy** (a task carries
 
 ## Recorded follow-ups
 
-- The SYSTEM admin screens (worklist, overdue queue, rule editor with revision history and simulation, stop signals, tenant switch) and the navigation entry, which flip the module to `active`.
+- The rule editor on `/admin/crm-follow-up/rules`: create a rule, publish a revision, archive, and the simulation form. The endpoints exist (`POST /rules`, `/rules/{id}/revisions`, `/rules/{id}/archive`, `POST /rules/simulate`); the screen is read-only for rules today and says so.
 - The status-aware retention sweep (ADR-0159 O4); until then the seven tables are listed in `BOUNDED_BY_DESIGN`.
 - Reply and consent-withdrawal stops from the inbound boundary (#1144/#1164) and the channel consent modules, through a port (O2); today staff record them through the API.

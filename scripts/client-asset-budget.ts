@@ -1188,8 +1188,20 @@ export const READER_BUDGET_BYTES = 24_000;
  * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
+ *
+ * **Raised for Issue #1165** (the follow-up screens): +2,500 B (365,600 ->
+ * 368,100), measured 368,053 locally with this change (`main` sat about 40 B
+ * under its budget), with 47 B of margin for the local/CI build difference.
+ * Two page scripts, each on its own screen only: the task detail
+ * (`/admin/crm-follow-up/[id]`: complete, cancel and the stop signal, each with
+ * an `Idempotency-Key`, a confirmation and one mapped error sentence) and the
+ * rules screen (the tenant switch), plus a three-function pure helper
+ * (`crm-follow-up-screen.ts`) the switch script imports. The worklist ships no
+ * script. The lifecycle is the shared `admin-form-client.ts`, the key source
+ * the shared `admin-idempotency-key.ts` and the confirmation the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 368_100;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

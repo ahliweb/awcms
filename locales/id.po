@@ -9509,3 +9509,413 @@ msgstr "{sent} terkirim, {failed} gagal, {waiting} menunggu"
 
 msgid "Refresh progress"
 msgstr "Muat ulang progres"
+
+msgid "Escalated"
+msgstr "Dieskalasi"
+
+msgid "Reached the lead"
+msgstr "Berhasil menghubungi prospek"
+
+msgid "No answer"
+msgstr "Tidak ada jawaban"
+
+msgid "Not interested"
+msgstr "Tidak berminat"
+
+msgid "Lead created"
+msgstr "Prospek dibuat"
+
+msgid "Stage entered"
+msgstr "Memasuki tahap"
+
+msgid "Lead assigned"
+msgstr "Prospek ditugaskan"
+
+msgid "Lead converted"
+msgstr "Prospek dikonversi"
+
+msgid "Lead lost"
+msgstr "Prospek hilang"
+
+msgid "Lead merged"
+msgstr "Prospek digabung"
+
+msgid "Reply received"
+msgstr "Balasan diterima"
+
+msgid "Consent withdrawn"
+msgstr "Persetujuan ditarik"
+
+msgid "Sender blocked"
+msgstr "Pengirim diblokir"
+
+msgid "Stopped by staff"
+msgstr "Dihentikan oleh staf"
+
+msgid "Reassigned"
+msgstr "Ditugaskan ulang"
+
+msgid "Started by a rule"
+msgstr "Dimulai oleh aturan"
+
+msgid "The lead's owner changed"
+msgstr "Pemilik prospek berubah"
+
+msgid "The assignee is no longer active"
+msgstr "Penerima tugas tidak lagi aktif"
+
+msgid "Cancelled by staff"
+msgstr "Dibatalkan oleh staf"
+
+msgid "Stopped: {reason}"
+msgstr "Dihentikan: {reason}"
+
+msgid "Assignment notice"
+msgstr "Pemberitahuan penugasan"
+
+msgid "Due notice"
+msgstr "Pemberitahuan jatuh tempo"
+
+msgid "Escalation notice"
+msgstr "Pemberitahuan eskalasi"
+
+msgid "Waiting to be sent"
+msgstr "Menunggu dikirim"
+
+msgid "Handed to e-mail"
+msgstr "Diserahkan ke e-mail"
+
+msgid "Not sent"
+msgstr "Tidak dikirim"
+
+msgid "The task was closed"
+msgstr "Tugas telah ditutup"
+
+msgid "Follow-up for the lead was stopped"
+msgstr "Tindak lanjut untuk prospek dihentikan"
+
+msgid "The recipient is no longer active"
+msgstr "Penerima tidak lagi aktif"
+
+msgid "The task moved to someone else"
+msgstr "Tugas dipindahkan ke orang lain"
+
+msgid "The rule's calendar has no working time"
+msgstr "Kalender aturan tidak memiliki waktu kerja"
+
+msgid "No e-mail template is set up"
+msgstr "Belum ada templat e-mail yang disiapkan"
+
+msgid "The lead's owner"
+msgstr "Pemilik prospek"
+
+msgid "A fixed person"
+msgstr "Orang tetap"
+
+msgid "New"
+msgstr "Baru"
+
+msgid "Working"
+msgstr "Dikerjakan"
+
+msgid "Qualified"
+msgstr "Terkualifikasi"
+
+msgid "Converted"
+msgstr "Terkonversi"
+
+msgid "Lost"
+msgstr "Hilang"
+
+msgid "Disqualified"
+msgstr "Didiskualifikasi"
+
+msgid "Monday"
+msgstr "Senin"
+
+msgid "Tuesday"
+msgstr "Selasa"
+
+msgid "Wednesday"
+msgstr "Rabu"
+
+msgid "Thursday"
+msgstr "Kamis"
+
+msgid "Friday"
+msgstr "Jumat"
+
+msgid "Saturday"
+msgstr "Sabtu"
+
+msgid "Sunday"
+msgstr "Minggu"
+
+msgid "Unassigned"
+msgstr "Belum ditugaskan"
+
+msgid "You"
+msgstr "Anda"
+
+msgid "Another staff member"
+msgstr "Staf lain"
+
+msgid "Assignee: {value}"
+msgstr "Penerima tugas: {value}"
+
+msgid "Assigned to me"
+msgstr "Ditugaskan kepada saya"
+
+msgid "Due: {value}"
+msgstr "Jatuh tempo: {value}"
+
+msgid "Follow-up worklist"
+msgstr "Daftar kerja tindak lanjut"
+
+msgid "The follow-up tasks staff have to do, who they are assigned to and when they are due. Nothing about the prospect is shown."
+msgstr "Tugas tindak lanjut yang harus dikerjakan staf, kepada siapa ditugaskan, dan kapan jatuh tempo. Tidak ada data prospek yang ditampilkan."
+
+msgid "You do not have permission to view follow-up tasks."
+msgstr "Anda tidak memiliki izin untuk melihat tugas tindak lanjut."
+
+msgid "The follow-up worklist could not be loaded right now. Please try again later."
+msgstr "Daftar kerja tindak lanjut tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Follow-up tasks are switched off on this deployment, so no task is created or listed."
+msgstr "Tugas tindak lanjut dimatikan pada deployment ini, sehingga tidak ada tugas yang dibuat atau ditampilkan."
+
+msgid "Soonest due first. Choose Assigned to me for your daily worklist, or Overdue for what is late."
+msgstr "Yang paling cepat jatuh tempo lebih dulu. Pilih Ditugaskan kepada saya untuk daftar kerja harian Anda, atau Terlambat untuk yang tertunda."
+
+msgid "Rules and settings"
+msgstr "Aturan dan pengaturan"
+
+msgid "Follow-up is switched off for this organisation. No new task is created, and tasks cannot be completed or cancelled until it is switched on."
+msgstr "Tindak lanjut dimatikan untuk organisasi ini. Tidak ada tugas baru yang dibuat, dan tugas tidak dapat diselesaikan atau dibatalkan sampai dinyalakan."
+
+msgid "There are more tasks than this screen loads. Showing the {count} due soonest. The status, assignee and overdue filters cover every task; search covers only these. The API lists the rest."
+msgstr "Tugas lebih banyak daripada yang dimuat layar ini. Menampilkan {count} yang paling cepat jatuh tempo. Filter status, penerima tugas, dan keterlambatan mencakup semua tugas; pencarian hanya mencakup ini. API mendaftar sisanya."
+
+msgid "Search tasks"
+msgstr "Cari tugas"
+
+msgid "Open and escalated"
+msgstr "Terbuka dan dieskalasi"
+
+msgid "Assignee"
+msgstr "Penerima tugas"
+
+msgid "Anyone"
+msgstr "Siapa saja"
+
+msgid "Any due date"
+msgstr "Semua tenggat"
+
+msgid "Task"
+msgstr "Tugas"
+
+msgid "Started by"
+msgstr "Dimulai oleh"
+
+msgid "No follow-up tasks"
+msgstr "Tidak ada tugas tindak lanjut"
+
+msgid "Tasks appear here when a rule matches a lead event, such as a lead being created, entering a stage or being assigned."
+msgstr "Tugas muncul di sini saat sebuah aturan cocok dengan peristiwa prospek, seperti prospek dibuat, memasuki tahap, atau ditugaskan."
+
+msgid "Follow-up task"
+msgstr "Tugas tindak lanjut"
+
+msgid "State, history and actions of one follow-up task. Nothing about the prospect is shown."
+msgstr "Status, riwayat, dan tindakan satu tugas tindak lanjut. Tidak ada data prospek yang ditampilkan."
+
+msgid "Back to the worklist"
+msgstr "Kembali ke daftar kerja"
+
+msgid "The task could not be loaded right now. Please try again later."
+msgstr "Tugas tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Follow-up tasks are switched off on this deployment."
+msgstr "Tugas tindak lanjut dimatikan pada deployment ini."
+
+msgid "That task was not found."
+msgstr "Tugas itu tidak ditemukan."
+
+msgid "Escalates"
+msgstr "Eskalasi"
+
+msgid "Escalated at {time}"
+msgstr "Dieskalasi pada {time}"
+
+msgid "Lead"
+msgstr "Prospek"
+
+msgid "Cancelled because"
+msgstr "Dibatalkan karena"
+
+msgid "This module sends nothing to the lead. Staff notices go out by e-mail; contact the lead through your own channel, then record the result here."
+msgstr "Modul ini tidak mengirim apa pun ke prospek. Pemberitahuan staf dikirim lewat e-mail; hubungi prospek melalui kanal Anda sendiri, lalu catat hasilnya di sini."
+
+msgid "Follow-up is switched off for this organisation, so tasks cannot be completed or cancelled and stops cannot be recorded."
+msgstr "Tindak lanjut dimatikan untuk organisasi ini, sehingga tugas tidak dapat diselesaikan atau dibatalkan dan penghentian tidak dapat dicatat."
+
+msgid "This task is closed and cannot be changed."
+msgstr "Tugas ini sudah ditutup dan tidak dapat diubah."
+
+msgid "Complete task"
+msgstr "Selesaikan tugas"
+
+msgid "Cancel task"
+msgstr "Batalkan tugas"
+
+msgid "Not available: a task follows the lead's owner (or the rule's fixed person). Change the lead's owner to move it."
+msgstr "Tidak tersedia: tugas mengikuti pemilik prospek (atau orang tetap pada aturan). Ubah pemilik prospek untuk memindahkannya."
+
+msgid "Stop follow-up for this lead"
+msgstr "Hentikan tindak lanjut untuk prospek ini"
+
+msgid "A stop is permanent. It cancels every open task of this lead and its waiting notices, and no new task is created for the lead."
+msgstr "Penghentian bersifat permanen. Semua tugas terbuka prospek ini dan pemberitahuan yang menunggu dibatalkan, dan tidak ada tugas baru dibuat untuk prospek ini."
+
+msgid "Record stop"
+msgstr "Catat penghentian"
+
+msgid "By"
+msgstr "Oleh"
+
+msgid "No history yet."
+msgstr "Belum ada riwayat."
+
+msgid "Staff notices"
+msgstr "Pemberitahuan staf"
+
+msgid "Notice"
+msgstr "Pemberitahuan"
+
+msgid "No staff notice was scheduled for this task."
+msgstr "Tidak ada pemberitahuan staf yang dijadwalkan untuk tugas ini."
+
+msgid "Stop signals for this lead"
+msgstr "Sinyal penghentian untuk prospek ini"
+
+msgid "Follow-up for this lead has not been stopped."
+msgstr "Tindak lanjut untuk prospek ini belum dihentikan."
+
+msgid "Stopped because"
+msgstr "Dihentikan karena"
+
+msgid "Lead event"
+msgstr "Peristiwa prospek"
+
+msgid "{hours} h {minutes} min of working time"
+msgstr "{hours} j {minutes} mnt waktu kerja"
+
+msgid "Follow-up rules"
+msgstr "Aturan tindak lanjut"
+
+msgid "The rules that turn lead events into follow-up tasks, their immutable revisions, and the organisation's follow-up switch."
+msgstr "Aturan yang mengubah peristiwa prospek menjadi tugas tindak lanjut, revisinya yang tidak dapat diubah, dan saklar tindak lanjut organisasi."
+
+msgid "You do not have permission to view follow-up rules."
+msgstr "Anda tidak memiliki izin untuk melihat aturan tindak lanjut."
+
+msgid "The rules could not be loaded right now. Please try again later."
+msgstr "Aturan tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Follow-up for this organisation"
+msgstr "Tindak lanjut untuk organisasi ini"
+
+msgid "Rules create tasks, due tasks are escalated and staff are notified."
+msgstr "Aturan membuat tugas, tugas yang jatuh tempo dieskalasi, dan staf diberi tahu."
+
+msgid "While follow-up is off no task is created and no notice is sent. Rules can still be read."
+msgstr "Selama tindak lanjut mati, tidak ada tugas dibuat dan tidak ada pemberitahuan dikirim. Aturan tetap dapat dibaca."
+
+msgid "Staff notices per person per hour: {count}"
+msgstr "Pemberitahuan staf per orang per jam: {count}"
+
+msgid "Switch follow-up off"
+msgstr "Matikan tindak lanjut"
+
+msgid "Switch follow-up on"
+msgstr "Nyalakan tindak lanjut"
+
+msgid "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
+msgstr "Revisi aturan yang sudah diterbitkan tidak pernah berubah. Membuat atau mengubah aturan belum tersedia di layar ini."
+
+msgid "Starts when"
+msgstr "Dimulai saat"
+
+msgid "Due after"
+msgstr "Jatuh tempo setelah"
+
+msgid "Revision"
+msgstr "Revisi"
+
+msgid "No follow-up rules yet."
+msgstr "Belum ada aturan tindak lanjut."
+
+msgid "That rule was not found."
+msgstr "Aturan itu tidak ditemukan."
+
+msgid "Only for stage category"
+msgstr "Hanya untuk kategori tahap"
+
+msgid "Only for stage"
+msgstr "Hanya untuk tahap"
+
+msgid "Only for pipeline"
+msgstr "Hanya untuk pipeline"
+
+msgid "Task title"
+msgstr "Judul tugas"
+
+msgid "Assigned to"
+msgstr "Ditugaskan kepada"
+
+msgid "Escalates after"
+msgstr "Eskalasi setelah"
+
+msgid "Never"
+msgstr "Tidak pernah"
+
+msgid "When assigned"
+msgstr "Saat ditugaskan"
+
+msgid "When due"
+msgstr "Saat jatuh tempo"
+
+msgid "Open tasks per lead, at most"
+msgstr "Tugas terbuka per prospek, paling banyak"
+
+msgid "Working time"
+msgstr "Waktu kerja"
+
+msgid "Holidays"
+msgstr "Hari libur"
+
+msgid "Fingerprint"
+msgstr "Sidik"
+
+msgid "Follow-up"
+msgstr "Tindak lanjut"
+
+msgid "{count} task matches your search and filters"
+msgid_plural "{count} tasks match your search and filters"
+msgstr[0] "{count} tugas cocok dengan pencarian dan filter Anda"
+
+msgid "{count} task"
+msgid_plural "{count} tasks"
+msgstr[0] "{count} tugas"
+
+msgid "{count} history entry (oldest first)"
+msgid_plural "{count} history entries (oldest first)"
+msgstr[0] "{count} entri riwayat (terlama lebih dulu)"
+
+msgid "{count} staff notice"
+msgid_plural "{count} staff notices"
+msgstr[0] "{count} pemberitahuan staf"
+
+msgid "{count} rule"
+msgid_plural "{count} rules"
+msgstr[0] "{count} aturan"

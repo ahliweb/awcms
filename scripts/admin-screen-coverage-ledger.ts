@@ -346,17 +346,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "telegram_engagement.contacts.delete",
   "telegram_engagement.contacts.read",
   "telegram_engagement.messages.create",
-  // crm_follow_up (5) — ADR-0159 (Proposed) / Issue #1165. API-first and
-  // `experimental`: the operator screens (the worklist and overdue queue with
-  // complete/cancel, the rule editor with its revision history and simulation,
-  // a lead's stop signals, the tenant switch) are the recorded follow-up that
-  // flips the module to `active` and adds its navigation entry in the same
-  // change. SYSTEM admin, built here.
-  "crm_follow_up.rules.configure",
-  "crm_follow_up.rules.read",
-  "crm_follow_up.stop_signals.create",
-  "crm_follow_up.tasks.read",
-  "crm_follow_up.tasks.update",
 
   // email Mailketing webhook (3) — Issue #1161, ADR-0151 section 5. API-first:
   // the callback URL management and the quarantine review queue ("provider-

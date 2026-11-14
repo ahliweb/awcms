@@ -375,8 +375,8 @@ describe("descriptor and contracts", () => {
       expect(published.has(type)).toBe(true);
     }
     expect([...consumer.eventTypes]).toEqual([...CONSUMED_LEAD_EVENT_TYPES]);
-    expect(crmFollowUpModule.status).toBe("experimental");
-    expect(crmFollowUpModule.navigation ?? []).toHaveLength(0);
+    expect(crmFollowUpModule.status).toBe("active");
+    expect(crmFollowUpModule.navigation ?? []).toHaveLength(2);
   });
 
   test("the notice categories carry no slot for anything about the lead", () => {
