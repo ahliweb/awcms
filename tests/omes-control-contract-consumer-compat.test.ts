@@ -387,6 +387,53 @@ describe("deploy preflight (scripts/omes-contract-preflight.ts)", () => {
     }
   });
 
+  test("the producer-compatibility check is wired into the standalone preflight (drift fails runOmesContractPreflight)", () => {
+    const root = scratchRoot((r) =>
+      writeFileSync(
+        path.join(
+          r,
+          VENDORED_PRODUCER_COMPAT_DIR,
+          "fixtures/worker-compatibility-manifest/valid-stable.json"
+        ),
+        "{}\n"
+      )
+    );
+    try {
+      const r = runOmesContractPreflight(root, { openApiText });
+      expect(r.failures.join("\n")).toContain("producer compatibility");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a worker elsewhere in the range does not inherit the v0.6.0 evidence line", () => {
+    const at = evaluateWorkerCompatibility({
+      ...GOOD_WORKER,
+      omes_version: DECLARED_WORKER_EVIDENCE.releaseTag.replace(/^v/, "")
+    });
+    expect(at).toEqual({
+      status: "compatible",
+      evidence: DECLARED_WORKER_RANGE.evidence
+    });
+    const later = evaluateWorkerCompatibility({
+      ...GOOD_WORKER,
+      omes_version: "0.6.3"
+    });
+    expect(later).toEqual({ status: "compatible", evidence: null });
+    const root = scratchRoot();
+    try {
+      const r = runOmesContractPreflight(root, {
+        openApiText,
+        workerDescriptor: { ...GOOD_WORKER, omes_version: "0.6.3" }
+      });
+      expect(r.failures).toEqual([]);
+      expect(r.notes.join(" ")).toContain("no release evidence");
+      expect(r.notes.join(" ")).not.toContain("equals the vendored copy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("a hand-edited vendored schema is refused (drift)", () => {
     const root = scratchRoot((r) =>
       writeFileSync(

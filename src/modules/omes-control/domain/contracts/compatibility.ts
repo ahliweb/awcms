@@ -291,5 +291,13 @@ export function evaluateWorkerCompatibility(
     }
   }
 
-  return { status: "compatible", evidence: DECLARED_WORKER_RANGE.evidence };
+  // The recorded evidence is about ONE tag. A worker elsewhere in the declared
+  // range is accepted by the range alone and must not inherit the tag's
+  // evidence line (that would attribute a v0.6.0 comparison to e.g. 0.6.3).
+  const releaseTag = parseStableSemver(DECLARED_WORKER_EVIDENCE.releaseTag);
+  const evidence =
+    worker !== null && releaseTag !== null && compare(worker, releaseTag) === 0
+      ? DECLARED_WORKER_RANGE.evidence
+      : null;
+  return { status: "compatible", evidence };
 }

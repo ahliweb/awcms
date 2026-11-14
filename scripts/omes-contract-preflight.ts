@@ -211,7 +211,7 @@ export function runOmesContractPreflight(
     if (verdict.status === "compatible") {
       notes.push(
         verdict.evidence === null
-          ? `worker accepted by the DECLARED range [${DECLARED_WORKER_RANGE.minInclusive}, ${DECLARED_WORKER_RANGE.maxExclusive}); no tagged-release evidence is recorded (compatibility.ts DECLARED_WORKER_RANGE.evidence is null)`
+          ? `worker accepted by the DECLARED range [${DECLARED_WORKER_RANGE.minInclusive}, ${DECLARED_WORKER_RANGE.maxExclusive}); no release evidence is recorded for this exact version (the recorded evidence covers only ${DECLARED_WORKER_EVIDENCE.releaseTag})`
           : `worker accepted by the declared range; evidence: ${verdict.evidence}; build unverified (no manifest-verified build, verifiedBuilds is empty)`
       );
     } else {
