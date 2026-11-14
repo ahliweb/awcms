@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0162-email-senders-verify-is-scheduled-hourly-as-a-named-app-role-exception.md)
 
-<!-- i18n-source-hash: sha256:da1622135527b0dec689856bef1ff3fee827c638964650cd11e426826d28f8f4 -->
+<!-- i18n-source-hash: sha256:197cf00d6c86f5fe6b92bfa34079d42052bc8419f0083da4958bd26c9cbbc4a9 -->
 
 # ADR-0162 — `email:senders:verify` dijadwalkan per jam sebagai pengecualian `awcms_app` bernama, dan job terjadwal berperan app adalah daftar tercatat yang diuji dua arah
 
-- **Status:** Diterima
+- **Status:** Diterima (jadwal dan mekanisme pengecualian); pilihan `awcms_app` sebagai role job ini bersifat sementara menunggu konfirmasi pemilik (O1)
 - **Tanggal:** 2026-11-14
-- **Pengambil keputusan:** ahliweb (pemilik). Keputusannya sendiri diambil 11 November 2026 saat ADR-0159 diterima: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). ADR ini mencatatnya beserta batasnya; ia tidak menambah kewenangan baru.
+- **Pengambil keputusan:** ahliweb (pemilik). Keputusannya sendiri diambil 11 November 2026 saat ADR-0159 diterima: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). Pemilik memutuskan BAHWA job ini dijadwalkan; pilihan login `awcms_app` sebagai role-nya dibuat di PR implementasi, bukan oleh pemilik, dan **sementara** sampai pemilik mengonfirmasi (lihat O1). ADR ini karena itu tidak mengklaim tanpa kewenangan baru: untuk pertama kalinya ia menaruh login app dan key ring rahasia dalam satu container terjadwal.
 - **Menyelesaikan:** separuh jadwal Issue #1160 (job dan routing pengirim sudah ada; job itu `manual`).
 - **Memperluas:** [ADR-0147](0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md) (job `awcms_app` terjadwal pertama, yang dulu tunggal), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.id.md) §2 dan §6 (akun Mailketing tenant dan pengirim terverifikasi), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §5 (rahasia kanal, key ring).
 - **Terkait:** Issue #1132 (koneksi app ditahan dari setiap job crontab), [ADR-0160](0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.id.md) (job `awcms_app` terjadwal kedua).
@@ -40,7 +40,13 @@ Dua aturan membuatnya `manual`:
 
 ## Keputusan terbuka
 
-**O1.** Memindahkan `email:senders:verify` ke role database khusus (lebih ketat dari ADR ini). Sampai pemilik memintanya, pengecualian berlaku dan perilaku gagal-tertutup di atas adalah kontrolnya.
+**O1 (butuh pemilik).** Konfirmasi `awcms_app` sebagai role job ini, atau pindahkan `email:senders:verify` ke role database khusus `awcms_email_senders_verify` (pola `awcms_social_dispatch`): `SELECT` RESTRICTIVE hanya atas secret `api_token` akun Mailketing `esp_account`, `UPDATE` hanya kolom kesehatan dan status (nilai dibatasi CHECK), dan runner menahan semua login bersama. Itu migrasi, role, pin readiness, dan tes penyalahgunaan, jadi menjadi isu tersendiri. Sampai pemilik memutuskan, pengecualian berlaku, dengan kontrol berikut:
+
+- runner menahan `WORKER_DATABASE_URL` dari job ini (diturunkan dari import closure, `appRoleTargetsWithoutWorkerClient`), sehingga container memegang login app dan key ring tanpa kredensial ketiga;
+- job keluar non-nol saat tak bisa bekerja sama sekali (tenant gagal, secret store tak tersedia, ada akun tetapi tak satu pun diperiksa), sehingga pemantauan cron melihat ring yang hilang atau salah, bukan sukses senyap tiap jam;
+- daftar pengecualian digerbangi ADR yang sungguh berstatus Diterima/Accepted, dan pendeteksi koneksi app juga menangkap impor beralias klien app.
+
+Sisa yang diketahui: dependensi terkompromi di closure job, atau eksekusi kode di container-nya, dapat membaca rahasia kanal semua tenant lewat `awcms_app` selama job berjalan. Proses web memegang pasangan yang sama terus-menerus, tetapi job menambah satu paparan terjadwal kedua.
 
 ## Konsekuensi
 

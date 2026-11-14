@@ -37,6 +37,7 @@ import path from "node:path";
 import {
   APP_ROLE_SCHEDULED_EXCEPTIONS,
   appConnectionTargets,
+  appRoleTargetsWithoutWorkerClient,
   dedicatedRoleTargets,
   renderRunnerDedicatedRoles
 } from "../scripts/jobs-env-allowlist";
@@ -857,6 +858,22 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
       APP_ROLE_SCHEDULED_EXCEPTIONS.map((entry) => entry.target)
     );
 
+    // An app-role job that never opens the worker connection is withheld
+    // WORKER_DATABASE_URL too (audit L-5 of PR #1301); derived, not listed.
+    const packageScripts = (
+      JSON.parse(readFileSync("package.json", "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    const NO_WORKER_JOBS = new Set(
+      appRoleTargetsWithoutWorkerClient(
+        APP_ROLE_SCHEDULED_EXCEPTIONS,
+        packageScripts
+      )
+    );
+
+    expect(NO_WORKER_JOBS.has("email:senders:verify")).toBe(true);
+
     for (const job of scheduled) {
       const { lines, exitCode } = await runSelection(
         [APP, WORKER].join("\n"),
@@ -864,6 +881,12 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
       );
 
       expect(exitCode).toBe(0);
+
+      if (NO_WORKER_JOBS.has(job)) {
+        expect(names(lines), job).toContain("DATABASE_URL");
+        expect(names(lines), job).not.toContain("WORKER_DATABASE_URL");
+        continue;
+      }
 
       if (APP_ROLE_SCHEDULED_JOBS.has(job)) {
         expect(names(lines), job).toContain("DATABASE_URL");

@@ -12,7 +12,10 @@ import { readFileSync } from "node:fs";
 
 import {
   APP_ROLE_SCHEDULED_EXCEPTIONS,
+  adrIsAccepted,
   appConnectionTargets,
+  appRoleTargetsWithoutWorkerClient,
+  opensAppConnection,
   validateAppRoleExceptions
 } from "../scripts/jobs-env-allowlist";
 import {
@@ -40,9 +43,7 @@ function appClientFiles(target: string): string[] {
   return traceImports(entry).files.filter(
     (file) =>
       file !== "src/lib/database/client.ts" &&
-      /\bget(Setup)?DatabaseClient\s*\(|["'`]DATABASE_URL["'`]/.test(
-        stripComments(readFileSync(file, "utf8"))
-      )
+      opensAppConnection(stripComments(readFileSync(file, "utf8")))
   );
 }
 
@@ -66,7 +67,7 @@ describe("APP_ROLE_SCHEDULED_EXCEPTIONS", () => {
     ]);
   });
 
-  test("email:senders:verify is on the crontab hourly, and nothing else is hourly by accident", () => {
+  test("email:senders:verify is on the crontab hourly", () => {
     const crontab = readFileSync("ops/awcms-jobs.crontab", "utf8");
     const line = crontab
       .split("\n")
@@ -78,13 +79,69 @@ describe("APP_ROLE_SCHEDULED_EXCEPTIONS", () => {
     );
   });
 
-  test("every entry names an Accepted ADR file that exists", () => {
+  test("every entry names an ADR file that exists and says Status: Accepted", () => {
     for (const entry of APP_ROLE_SCHEDULED_EXCEPTIONS) {
-      const number = entry.adr.replace("ADR-", "");
-      const file = readFileSync("docs/adr/README.md", "utf8");
-
-      expect(file, entry.adr).toContain(`[${number}](${number}-`);
+      expect(adrIsAccepted(entry.adr), entry.adr).toBe(true);
     }
+    // An ADR that is merely Proposed, or that does not exist, is not one.
+    expect(adrIsAccepted("ADR-0146")).toBe(false);
+    expect(adrIsAccepted("ADR-9999")).toBe(false);
+  });
+
+  test("MUTANT: an entry whose ADR is Proposed or missing turns it red (audit L-3)", () => {
+    const [first, ...rest] = APP_ROLE_SCHEDULED_EXCEPTIONS;
+    const proposed = [
+      { ...(first as (typeof rest)[number]), adr: "ADR-0146" },
+      ...rest
+    ];
+
+    expect(run(proposed).join("\n")).toContain(
+      "ADR-0146 is not an Accepted ADR"
+    );
+    expect(
+      run([
+        { ...(first as (typeof rest)[number]), adr: "ADR-9999" },
+        ...rest
+      ]).join("\n")
+    ).toContain("ADR-9999 is not an Accepted ADR");
+  });
+
+  test("MUTANT: an aliased import of the app client still counts as opening the connection (audit L-4)", () => {
+    expect(
+      opensAppConnection(
+        'import { getDatabaseClient as openApp } from "../src/lib/database/client";\nopenApp();'
+      )
+    ).toBe(true);
+    expect(
+      opensAppConnection(
+        'import { getSetupDatabaseClient as s } from "../x/client";'
+      )
+    ).toBe(true);
+    expect(opensAppConnection("getDatabaseClient();")).toBe(true);
+    expect(opensAppConnection("const u = process.env.DATABASE_URL;")).toBe(
+      true
+    );
+    expect(
+      opensAppConnection(
+        'import { getWorkerDatabaseClient } from "../src/lib/database/client";'
+      )
+    ).toBe(false);
+  });
+
+  test("the worker login is withheld from an app-role job only when its closure never reaches the worker client (audit L-5)", () => {
+    const derived = appRoleTargetsWithoutWorkerClient(
+      APP_ROLE_SCHEDULED_EXCEPTIONS,
+      packageScripts
+    );
+
+    expect(derived).toContain("email:senders:verify");
+    // a target with no entry point is never listed
+    expect(
+      appRoleTargetsWithoutWorkerClient(
+        [{ target: "no-such-target" }],
+        packageScripts
+      )
+    ).toEqual([]);
   });
 
   test("MUTANT: a scheduled job that keeps DATABASE_URL and is not listed turns it red", () => {

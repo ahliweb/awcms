@@ -81,7 +81,7 @@
  *   bun run jobs:env-allowlist:check
  */
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -247,6 +247,24 @@ export const RUNNER_DB_END = "# END GENERATED: targets that need DATABASE_URL";
 export const DATABASE_CLIENT_FILE = "src/lib/database/client.ts";
 
 /**
+ * Whether one source file (comments already stripped) opens the app connection.
+ * Three spellings count: calling the app or the setup client,
+ * IMPORTING either name from anywhere (so `import { getDatabaseClient as open }`
+ * is caught even though the call is spelled `open(`, audit L-4 of PR #1301), and
+ * naming `DATABASE_URL`. The import form can over-report a file that imports and
+ * never calls; the failure to avoid is a job that cannot connect, so the doubt
+ * keeps the credential.
+ */
+export function opensAppConnection(source: string): boolean {
+  const call = /\b(getDatabaseClient|getSetupDatabaseClient)\s*\(/;
+  const imported =
+    /\bimport\s*(?:type\s*)?\{[^}]*\b(?:getDatabaseClient|getSetupDatabaseClient)\b[^}]*\}\s*from\b/;
+  const spelled = /\b(?:process\.)?env\.DATABASE_URL\b|["'`]DATABASE_URL["'`]/;
+
+  return call.test(source) || imported.test(source) || spelled.test(source);
+}
+
+/**
  * Which `bun run` targets can touch the `awcms_app` connection string (Issue
  * #1132, row `DATABASE_URL`).
  *
@@ -258,8 +276,8 @@ export const DATABASE_CLIENT_FILE = "src/lib/database/client.ts";
  * never uses. Whether a target needs it is a property of its import closure, so
  * it is derived rather than listed by hand:
  *
- * - it calls `getDatabaseClient(` (the app client) or `getSetupDatabaseClient(`
- *   (which also falls back to `DATABASE_URL`), outside the resolver itself;
+ * - it calls the app client (`getDatabaseClient`) or the setup client
+ *   (`getSetupDatabaseClient`, which also falls back to `DATABASE_URL`), outside the resolver itself;
  * - or a file in its closure spells the name `"DATABASE_URL"` / `env.DATABASE_URL`
  *   (a script that opens its own connection, such as the migration runner);
  * - or its closure holds something the tracer cannot follow (a computed
@@ -285,14 +303,32 @@ export function needsAppConnectionString(
   ) {
     return true;
   }
-  const call = /\b(getDatabaseClient|getSetupDatabaseClient)\s*\(/;
-  const spelled = /\b(?:process\.)?env\.DATABASE_URL\b|["'`]DATABASE_URL["'`]/;
   return trace.files.some((file) => {
     if (file === DATABASE_CLIENT_FILE) return false;
     if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file)) return false;
-    const source = stripComments(readFileSync(path.join(root, file), "utf8"));
-    return call.test(source) || spelled.test(source);
+    return opensAppConnection(
+      stripComments(readFileSync(path.join(root, file), "utf8"))
+    );
   });
+}
+
+/**
+ * Whether the ADR file `docs/adr/<number>-*.md` says `Status: Accepted`. A
+ * Proposed or Superseded ADR does not admit an app-role exception (audit L-3 of
+ * PR #1301: the index-link check accepted any ADR that merely existed).
+ */
+export function adrIsAccepted(adr: string, root = process.cwd()): boolean {
+  const number = adr.replace(/^ADR-/, "");
+  const dir = path.join(root, "docs/adr");
+  const file = readdirSync(dir).find(
+    (name) => name.startsWith(`${number}-`) && /(?<!\.id)\.md$/.test(name)
+  );
+
+  if (file === undefined) return false;
+
+  return /^- \*\*Status:\*\*\s*Accepted\b/m.test(
+    readFileSync(path.join(dir, file), "utf8")
+  );
 }
 
 /**
@@ -350,7 +386,8 @@ export function validateAppRoleExceptions(
   }[],
   scheduled: readonly string[],
   keepers: ReadonlySet<string>,
-  appClientFiles: (target: string) => readonly string[]
+  appClientFiles: (target: string) => readonly string[],
+  adrAccepted: (adr: string) => boolean = (adr) => adrIsAccepted(adr)
 ): string[] {
   const problems: string[] = [];
   const named = new Set(exceptions.map((entry) => entry.target));
@@ -370,6 +407,9 @@ export function validateAppRoleExceptions(
   for (const entry of exceptions) {
     if (!/^ADR-\d{4}$/.test(entry.adr)) {
       problems.push(`${entry.target}: adr must look like ADR-0147`);
+    }
+    if (/^ADR-\d{4}$/.test(entry.adr) && !adrAccepted(entry.adr)) {
+      problems.push(`${entry.target}: ${entry.adr} is not an Accepted ADR`);
     }
     if (entry.reason.trim().length < 40) {
       problems.push(`${entry.target}: the reason is missing or too short`);
@@ -562,6 +602,90 @@ export function renderRunnerDedicatedRoles(targets: readonly string[]): string {
     "    ;;",
     "esac",
     RUNNER_DEDICATED_END
+  ].join("\n");
+}
+
+/** The markers around the generated worker-login decision in `ops/run-job.sh`. */
+export const RUNNER_NOWORKER_BEGIN =
+  "# BEGIN GENERATED: app-role jobs that never open the worker connection (bun run jobs:env-allowlist:generate)";
+export const RUNNER_NOWORKER_END =
+  "# END GENERATED: app-role jobs that never open the worker connection";
+
+/**
+ * App-role exceptions whose import closure never touches the worker client
+ * (`getWorkerDatabaseClient` or the name `WORKER_DATABASE_URL`) and holds
+ * nothing the tracer cannot follow. Such a job runs as `awcms_app` only, so the
+ * runner withholds `WORKER_DATABASE_URL` from it: a container that holds the
+ * app login and the secret ring has no use for a third credential (audit L-5 of
+ * PR #1301). A target whose closure DOES reach the worker client keeps it.
+ */
+export function appRoleTargetsWithoutWorkerClient(
+  exceptions: readonly { target: string }[],
+  packageScripts: Record<string, string>,
+  root = process.cwd()
+): string[] {
+  const targets: string[] = [];
+
+  for (const { target } of exceptions) {
+    const entry = resolveTargetEntry(target, packageScripts);
+
+    if (entry === null) continue;
+
+    const trace = traceImports(entry, root);
+
+    if (
+      trace.dynamic.length > 0 ||
+      trace.escapes.length > 0 ||
+      trace.unresolved.length > 0
+    ) {
+      continue;
+    }
+
+    const reachesWorker = trace.files.some((file) => {
+      if (file === DATABASE_CLIENT_FILE) return false;
+      if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file)) return false;
+
+      return /\bgetWorkerDatabaseClient\b|\bWORKER_DATABASE_URL\b/.test(
+        stripComments(readFileSync(path.join(root, file), "utf8"))
+      );
+    });
+
+    if (!reachesWorker) targets.push(target);
+  }
+
+  return sortedCodePoints(targets);
+}
+
+/** The shell that sets `WITHHOLD_WORKER_DATABASE_URL=1` for those targets. */
+export function renderRunnerNoWorker(targets: readonly string[]): string {
+  const names = sortedCodePoints(targets);
+  const bad = names.filter(
+    (name) => !/^[A-Za-z0-9][A-Za-z0-9:_-]*$/.test(name)
+  );
+
+  if (bad.length > 0) {
+    throw new Error(
+      `the no-worker target list must hold plain package-script names; got ${JSON.stringify(bad)}`
+    );
+  }
+
+  return [
+    RUNNER_NOWORKER_BEGIN,
+    "# Source: appRoleTargetsWithoutWorkerClient() in scripts/jobs-env-allowlist.ts, derived",
+    "# from each app-role exception's import closure. Do not edit between the markers; regenerate.",
+    'case "$JOB" in',
+    ...(names.length > 0
+      ? [
+          `  ${names.join(" | ")})`,
+          "    WITHHOLD_WORKER_DATABASE_URL=1",
+          "    ;;"
+        ]
+      : []),
+    "  *)",
+    "    WITHHOLD_WORKER_DATABASE_URL=0",
+    "    ;;",
+    "esac",
+    RUNNER_NOWORKER_END
   ].join("\n");
 }
 
@@ -1631,11 +1755,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const noWorker = spliceBetween(
+    runnerWithDedicated,
+    RUNNER_NOWORKER_BEGIN,
+    RUNNER_NOWORKER_END,
+    renderRunnerNoWorker(
+      appRoleTargetsWithoutWorkerClient(
+        APP_ROLE_SCHEDULED_EXCEPTIONS,
+        packageScripts,
+        ROOT
+      )
+    )
+  );
+
+  if (noWorker === null) {
+    console.error(
+      `jobs:env-allowlist FAILED — ${RUNNER} lacks the generated block between\n  ${RUNNER_NOWORKER_BEGIN}\n  ${RUNNER_NOWORKER_END}\n` +
+        "  Without it an app-role job would receive WORKER_DATABASE_URL it never uses."
+    );
+    process.exit(1);
+  }
+
   const fingerprint = envFingerprint(names, pairs);
   const outputs = [
     { file: OUTPUT, rendered: renderGlobal(names, fingerprint) },
     { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) },
-    { file: RUNNER, rendered: runnerWithDedicated }
+    { file: RUNNER, rendered: noWorker }
   ];
 
   if (CHECK_ONLY) {

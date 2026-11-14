@@ -327,8 +327,7 @@ JSON or in the browser.
 Open decisions (fail-closed choices taken, need maintainer confirmation):
 the live `/senders` and `/credits` response shapes are unverified (the parsers
 only accept explicit `verified: true` / `status: "verified"` and a numeric
-balance); `email:senders:verify` runs as `awcms_app` on the crontab (ADR-0162; moving it
-to a dedicated database role is open decision O1 there); a 401/403 at send time does not degrade the
+balance); `email:senders:verify` runs as `awcms_app` on the crontab, a choice made in the implementing PR and provisional until the owner confirms it (ADR-0162 O1: confirm, or move it to a dedicated database role; meanwhile the runner withholds `WORKER_DATABASE_URL` from it and the job exits non-zero when the secret store is unavailable or nothing could be probed); a 401/403 at send time does not degrade the
 account immediately (the worker cannot write health; the per-account breaker
 stops the lane and the next verify pass records it); workflow notifications do
 not consult the default policy (only announcements do).

@@ -71,10 +71,36 @@ export type EmailSenderVerifySummary = {
   accounts: number;
   accountsProbed: number;
   accountsSkipped: number;
+  /**
+   * Accounts skipped because the secret store could not hand over the token (no
+   * key ring, a ring that cannot decrypt, a store error). The job cannot do its
+   * work at all in that case, so the run must fail loudly (audit L-1 of PR #1301).
+   */
+  secretStoreFailures: number;
   sendersVerified: number;
   sendersUnverified: number;
   sendersUnknown: number;
 };
+
+/**
+ * Whether a whole run must exit non-zero. A run that skips every account
+ * because the ring is missing or wrong used to exit 0 hourly while every
+ * tenant's sender went stale and held (audit L-1 of PR #1301); cron monitoring
+ * sees only the exit code.
+ */
+export function emailSendersVerifyRunFailed(
+  totals: Pick<
+    EmailSenderVerifySummary,
+    "accounts" | "accountsProbed" | "secretStoreFailures"
+  >,
+  failedTenants: number
+): boolean {
+  return (
+    failedTenants > 0 ||
+    totals.secretStoreFailures > 0 ||
+    (totals.accounts > 0 && totals.accountsProbed === 0)
+  );
+}
 
 export async function verifyEmailSendersForTenant(
   sql: Bun.SQL,
@@ -86,6 +112,7 @@ export async function verifyEmailSendersForTenant(
     accounts: 0,
     accountsProbed: 0,
     accountsSkipped: 0,
+    secretStoreFailures: 0,
     sendersVerified: 0,
     sendersUnverified: 0,
     sendersUnknown: 0
@@ -113,6 +140,9 @@ export async function verifyEmailSendersForTenant(
 
     if (!credential.ok || !isMailketingTokenHeaderSafe(credential.credential)) {
       summary.accountsSkipped += 1;
+      if (!credential.ok && credential.reason === "SECRET_STORE_UNAVAILABLE") {
+        summary.secretStoreFailures += 1;
+      }
       log("warning", "email.senders_verify.account_skipped", {
         tenantId,
         moduleKey: MODULE_KEY,

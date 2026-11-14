@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1c00293e19baa31f6c498b29dc8378d026f18caf7d1a67cc0612bc31c1ae0056 -->
+<!-- i18n-source-hash: sha256:55c41554c9868f860d2146eed5d4dd22d9835f784def9b3bc84b6cadc62fa433 -->
 
 # Email
 
@@ -345,8 +345,7 @@ token di JSON pengaturan atau di browser.
 Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 bentuk respons live `/senders` dan `/credits` belum diverifikasi (parser hanya
 menerima `verified: true` / `status: "verified"` eksplisit dan saldo numerik);
-`email:senders:verify` berjalan sebagai `awcms_app` di crontab (ADR-0162;
-memindahkannya ke role database khusus adalah keputusan terbuka O1 di sana); 401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
+`email:senders:verify` berjalan sebagai `awcms_app` di crontab, pilihan yang dibuat di PR implementasi dan sementara sampai pemilik mengonfirmasi (ADR-0162 O1: konfirmasi, atau pindahkan ke role database khusus; sementara itu runner menahan `WORKER_DATABASE_URL` darinya dan job keluar non-nol bila secret store tak tersedia atau tak ada yang bisa diperiksa); 401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
 health; breaker per akun menghentikan jalur dan putaran verify berikutnya
 mencatatnya); notifikasi workflow tidak memakai kebijakan default (hanya
 pengumuman).

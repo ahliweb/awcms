@@ -2,9 +2,9 @@
 
 # ADR-0162 — `email:senders:verify` is scheduled hourly as a named `awcms_app` exception, and app-role scheduled jobs are a recorded, two-way-tested list
 
-- **Status:** Accepted
+- **Status:** Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)
 - **Date:** 2026-11-14
-- **Decision maker:** ahliweb (owner). The decision itself was taken on 11 November 2026 when ADR-0159 was accepted: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). This ADR records it and its limits; it adds no new authority.
+- **Decision maker:** ahliweb (owner). The decision itself was taken on 11 November 2026 when ADR-0159 was accepted: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). The owner decided THAT it is scheduled; the choice of the `awcms_app` login to run it as was made in the implementing PR, not by the owner, and is **provisional** until the owner confirms it (see O1 and the audit addendum). This ADR therefore does not claim to add no authority: it puts the app login and the secret key ring in one scheduled container for the first time.
 - **Resolves:** the schedule half of Issue #1160 (the job and the sender routing exist; the job was `manual`).
 - **Extends:** [ADR-0147](0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md) (the first, then single, scheduled `awcms_app` job), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md) §2 and §6 (tenant Mailketing accounts and verified senders), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §5 (channel secrets, the key ring).
 - **Related:** Issue #1132 (the app connection is withheld from every crontab job), [ADR-0160](0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.md) (the second scheduled `awcms_app` job).
@@ -38,7 +38,13 @@ Two rules made it `manual`:
 
 ## Open decision
 
-**O1.** Move `email:senders:verify` to a dedicated database role (stricter than this ADR). Until the owner asks, the exception stands and the fail-closed behaviours above are the control.
+**O1 (needs the owner).** Confirm `awcms_app` as this job's role, or move `email:senders:verify` to a dedicated database role `awcms_email_senders_verify` (pattern `awcms_social_dispatch`): a RESTRICTIVE `SELECT` on the `api_token` secret of Mailketing `esp_account` accounts only, `UPDATE` of the health and status columns only (values bounded by CHECK), and the runner withholding every shared login. That is a migration, a role, readiness pins and abuse tests, so it is its own issue. Until the owner decides, the exception stands, and these controls apply:
+
+- the runner withholds `WORKER_DATABASE_URL` from this job (derived from its import closure, `appRoleTargetsWithoutWorkerClient`), so the container holds the app login and the key ring and no third credential;
+- the job exits non-zero when it cannot do its work at all (a failed tenant, an unavailable secret store, accounts present but none probed), so cron monitoring sees a missing or wrong ring instead of a silent hourly success;
+- the exception list is gated on an ADR that really says `Status: Accepted`, and the app-connection detector also catches an aliased import of the app client.
+
+Known residue: a compromised dependency in the job's closure, or code execution in its container, can read every tenant's channel secrets through `awcms_app` while it runs. The web process holds the same pair continuously, but the job adds a second, scheduled exposure.
 
 ## Consequences
 
