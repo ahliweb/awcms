@@ -9851,3 +9851,259 @@ msgstr "Anda tidak memiliki izin untuk melihat kotak masuk."
 
 msgid "You do not have permission to view the inbox settings."
 msgstr "Anda tidak memiliki izin untuk melihat pengaturan kotak masuk."
+
+msgid "A check older than {minutes} minutes is out of date and holds sending, exactly as the queue does. Credit below {floor} holds every sender of that account."
+msgstr "Pemeriksaan yang lebih lama dari {minutes} menit sudah kedaluwarsa dan menahan pengiriman, persis seperti antrean. Kredit di bawah {floor} menahan setiap pengirim pada akun tersebut."
+
+msgid "A sender is usable only when the provider reported it verified, recently, and its account has credit. The default is chosen per brand; messages already queued keep the sender they were given and are never moved to another."
+msgstr "Pengirim hanya dapat dipakai bila penyedia melaporkannya terverifikasi baru-baru ini dan akunnya punya kredit. Default dipilih per merek; pesan yang sudah antre tetap memakai pengirim yang diberikan dan tidak pernah dipindahkan ke pengirim lain."
+
+msgid "A tenant sender is the default; the deployment sender is used only where a message asks for it."
+msgstr "Pengirim tenant adalah default; pengirim deployment hanya dipakai bila sebuah pesan memintanya."
+
+msgid "A test send needs an allow-listed address and a confirmation step that do not exist yet."
+msgstr "Kirim uji memerlukan alamat dalam daftar izin dan langkah konfirmasi yang belum tersedia."
+
+msgid "{balance} credits"
+msgstr "{balance} kredit"
+
+msgid "{balance} credits, below the {floor} needed to send"
+msgstr "{balance} kredit, di bawah {floor} yang diperlukan untuk mengirim"
+
+msgid "{balance} credits (out of date)"
+msgstr "{balance} kredit (kedaluwarsa)"
+
+msgid "Brand or scope: {type} {id}"
+msgstr "Merek atau cakupan: {type} {id}"
+
+msgid "Cannot send right now"
+msgstr "Tidak dapat mengirim saat ini"
+
+msgid "Can send now"
+msgstr "Dapat mengirim sekarang"
+
+msgid "Channel accounts are not available"
+msgstr "Akun kanal tidak tersedia"
+
+msgid "Channel accounts are switched off on this deployment, so tenant email senders cannot be connected or listed."
+msgstr "Akun kanal dimatikan pada deployment ini, sehingga pengirim email tenant tidak dapat dihubungkan atau ditampilkan."
+
+msgid "Channel accounts (connect, replace credential, disconnect)"
+msgstr "Akun kanal (hubungkan, ganti kredensial, putuskan)"
+
+msgid "Check out of date"
+msgstr "Pemeriksaan kedaluwarsa"
+
+msgid "{count} sender"
+msgid_plural "{count} senders"
+msgstr[0] "{count} pengirim"
+
+msgid "Credential rejected by the provider"
+msgstr "Kredensial ditolak oleh penyedia"
+
+msgid "Credit"
+msgstr "Kredit"
+
+msgid "Default"
+msgstr "Default"
+
+msgid "Default for its scope"
+msgstr "Default untuk cakupannya"
+
+msgid "Deployment sender"
+msgstr "Pengirim deployment"
+
+msgid "Deployment sender: API {version}"
+msgstr "Pengirim deployment: API {version}"
+
+msgid "Email senders"
+msgstr "Pengirim email"
+
+msgid "Email senders could not be loaded right now. Please try again later."
+msgstr "Pengirim email tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Email suppression list"
+msgstr "Daftar penekanan email"
+
+msgid "Held: sender verification is out of date"
+msgstr "Ditahan: verifikasi pengirim kedaluwarsa"
+
+msgid "Held: sender verification is unknown"
+msgstr "Ditahan: verifikasi pengirim tidak diketahui"
+
+msgid "Held: the account credit is out of date"
+msgstr "Ditahan: kredit akun kedaluwarsa"
+
+msgid "Held: the account credit is too low"
+msgstr "Ditahan: kredit akun terlalu rendah"
+
+msgid "Held: the account credit is unknown"
+msgstr "Ditahan: kredit akun tidak diketahui"
+
+msgid "Held: the provider does not list this sender as verified"
+msgstr "Ditahan: penyedia tidak mencantumkan pengirim ini sebagai terverifikasi"
+
+msgid "hourly limit of {limit} reached"
+msgstr "batas {limit} per jam tercapai"
+
+msgid "Last checked"
+msgstr "Terakhir diperiksa"
+
+msgid "Mailketing accounts"
+msgstr "Akun Mailketing"
+
+msgid "Mailketing API version"
+msgstr "Versi API Mailketing"
+
+msgid "Mailketing offers no documented API for creating lists or campaigns, so it is not shown as working. Use the provider's own dashboard."
+msgstr "Mailketing tidak menyediakan API terdokumentasi untuk membuat daftar atau kampanye, sehingga tidak ditampilkan sebagai berfungsi. Gunakan dasbor milik penyedia."
+
+msgid "Mailketing sends outbound mail only. These senders have no inbox: replies are not received here."
+msgstr "Mailketing hanya mengirim email keluar. Pengirim ini tidak punya kotak masuk: balasan tidak diterima di sini."
+
+msgid "Mail with no sender named goes out from the deployment sender."
+msgstr "Email tanpa pengirim yang disebutkan keluar dari pengirim deployment."
+
+msgid "Manage Mailketing lists and campaigns"
+msgstr "Kelola daftar dan kampanye Mailketing"
+
+msgid "Never checked"
+msgstr "Belum pernah diperiksa"
+
+msgid "No Mailketing account is connected for this tenant yet."
+msgstr "Belum ada akun Mailketing yang terhubung untuk tenant ini."
+
+msgid "No messages in the last 35 days"
+msgstr "Tidak ada pesan dalam 35 hari terakhir"
+
+msgid "No sender identity is registered for this tenant."
+msgstr "Belum ada identitas pengirim yang terdaftar untuk tenant ini."
+
+msgid "Not available yet"
+msgstr "Belum tersedia"
+
+msgid "Not connected yet"
+msgstr "Belum terhubung"
+
+msgid "Not known"
+msgstr "Tidak diketahui"
+
+msgid "Not verified by the provider"
+msgstr "Belum diverifikasi oleh penyedia"
+
+msgid "Older than the {minutes}-minute window"
+msgstr "Lebih lama dari jendela {minutes} menit"
+
+msgid "oldest waiting since {time}"
+msgstr "menunggu terlama sejak {time}"
+
+msgid "Only a connected sender can be the default."
+msgstr "Hanya pengirim yang terhubung yang dapat menjadi default."
+
+msgid "Only a sender that may send right now can be the default. Run the sender verification first."
+msgstr "Hanya pengirim yang boleh mengirim saat ini yang dapat menjadi default. Jalankan verifikasi pengirim terlebih dahulu."
+
+msgid "Out of credit"
+msgstr "Kredit habis"
+
+msgid "Provider answer not recognised"
+msgstr "Jawaban penyedia tidak dikenali"
+
+msgid "Ready"
+msgstr "Siap"
+
+msgid "Related email screens"
+msgstr "Layar email terkait"
+
+msgid "Send a test email"
+msgstr "Kirim email uji"
+
+msgid "Sender"
+msgstr "Pengirim"
+
+msgid "Sender identities"
+msgstr "Identitas pengirim"
+
+msgid "Senders"
+msgstr "Pengirim"
+
+msgid "Sending email is not granted to this sender"
+msgstr "Pengiriman email tidak diberikan kepada pengirim ini"
+
+msgid "Tenant senders: API v2"
+msgstr "Pengirim tenant: API v2"
+
+msgid "Tenant senders are switched off on this deployment."
+msgstr "Pengirim tenant dimatikan pada deployment ini."
+
+msgid "Tenant senders are switched off on this deployment: mail goes out from the deployment sender only, and the default cannot be changed."
+msgstr "Pengirim tenant dimatikan pada deployment ini: email hanya keluar dari pengirim deployment, dan default tidak dapat diubah."
+
+msgid "That sender cannot be the default: it must be a connected, verified sender of this tenant that may send now, within its brand."
+msgstr "Pengirim itu tidak dapat menjadi default: harus pengirim tenant ini yang terhubung, terverifikasi, boleh mengirim sekarang, dan berada dalam mereknya."
+
+msgid "The account credential cannot be used right now"
+msgstr "Kredensial akun tidak dapat dipakai saat ini"
+
+msgid "The channel account registry could not be loaded, so sender status is not known. This is not the same as having no senders."
+msgstr "Registri akun kanal tidak dapat dimuat, sehingga status pengirim tidak diketahui. Ini tidak sama dengan tidak memiliki pengirim."
+
+msgid "The default sender was changed. It applies to messages queued from now on."
+msgstr "Pengirim default diubah. Berlaku untuk pesan yang diantrekan mulai sekarang."
+
+msgid "The deployment sender is not Mailketing, so there is no API version to migrate."
+msgstr "Pengirim deployment bukan Mailketing, sehingga tidak ada versi API yang perlu dimigrasikan."
+
+msgid "The deployment sender still uses Mailketing API v1. v2 is the target; v1 is a limited rollback path only. Switch after the sandbox check and confirm it with a real send. Tenant-owned senders already use v2."
+msgstr "Pengirim deployment masih memakai API Mailketing v1. v2 adalah targetnya; v1 hanya jalur pemulihan terbatas. Beralih setelah pemeriksaan sandbox dan konfirmasikan dengan pengiriman nyata. Pengirim milik tenant sudah memakai v2."
+
+msgid "The deployment sender uses Mailketing API v2, but the live check has not been acknowledged (EMAIL_MAILKETING_V2_VERIFIED). v2 is not approved for production until it is."
+msgstr "Pengirim deployment memakai API Mailketing v2, tetapi pemeriksaan langsung belum diakui (EMAIL_MAILKETING_V2_VERIFIED). v2 belum disetujui untuk produksi sampai diakui."
+
+msgid "The deployment sender uses the verified Mailketing API v2."
+msgstr "Pengirim deployment memakai API Mailketing v2 yang terverifikasi."
+
+msgid "The deployment's Mailketing API version setting is not v1 or v2, so the deployment sender does not send until it is fixed."
+msgstr "Pengaturan versi API Mailketing deployment bukan v1 atau v2, sehingga pengirim deployment tidak mengirim sampai diperbaiki."
+
+msgid "The Mailketing account is not connected yet"
+msgstr "Akun Mailketing belum terhubung"
+
+msgid "The Mailketing accounts and sender identities of this tenant: whether each may send right now, its credit, when it was last checked and its queue. Credentials are never shown."
+msgstr "Akun Mailketing dan identitas pengirim tenant ini: apakah masing-masing boleh mengirim saat ini, kreditnya, kapan terakhir diperiksa, dan antreannya. Kredensial tidak pernah ditampilkan."
+
+msgid "These are not offered because nothing safe stands behind them yet. They are shown so you know they are missing, not forgotten."
+msgstr "Ini tidak ditawarkan karena belum ada dasar yang aman. Ditampilkan agar Anda tahu bahwa ini belum ada, bukan terlupakan."
+
+msgid "This sender cannot be made the default."
+msgstr "Pengirim ini tidak dapat dijadikan default."
+
+msgid "This tenant has more Mailketing accounts than this screen loads. The newest are shown; the API lists the rest."
+msgstr "Tenant ini memiliki lebih banyak akun Mailketing daripada yang dimuat layar ini. Yang terbaru ditampilkan; API menampilkan sisanya."
+
+msgid "Verification failing"
+msgstr "Verifikasi gagal"
+
+msgid "Verified by the provider"
+msgstr "Terverifikasi oleh penyedia"
+
+msgid "via {account}"
+msgstr "melalui {account}"
+
+msgid "{waiting} waiting, {sending} sending, {failed} failed today"
+msgstr "{waiting} menunggu, {sending} dikirim, {failed} gagal hari ini"
+
+msgid "Within the {minutes}-minute window"
+msgstr "Dalam jendela {minutes} menit"
+
+msgid "You are not assigned to operate this sender."
+msgstr "Anda tidak ditugaskan untuk mengoperasikan pengirim ini."
+
+msgid "You do not have permission to view email senders."
+msgstr "Anda tidak memiliki izin untuk melihat pengirim email."
+
+msgid "You do not hold this sender's business scope."
+msgstr "Anda tidak memegang cakupan bisnis pengirim ini."
+
+msgid "You may view senders but not change the default."
+msgstr "Anda dapat melihat pengirim tetapi tidak dapat mengubah default."

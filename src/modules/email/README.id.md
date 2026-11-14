@@ -337,8 +337,7 @@ token di JSON pengaturan atau di browser.
   diklaim. Peralihan = menyalakan flag setelah akun dan pengirim terverifikasi;
   rollback = mematikannya (tak ada data yang disalin; baris tenant yang
   mengantre menunggu, dan gagal begitu berumur satu jam).
-- **Bukan di sini:** layar admin (#1162; permission-nya sudah di-seed dan
-  ditegakkan API), purpose marketing dan gerbang persetujuannya (CHECK
+- **Bukan di sini:** purpose marketing dan gerbang persetujuannya (CHECK
   `purpose` hanya menerima `transactional`/`security`). Webhook: lihat bagian
   berikutnya (#1161).
 
@@ -504,9 +503,78 @@ Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
   eksplisit; payload Mailketing yang didokumentasikan tidak membawanya
   (`2026-08-18 10:30:00`), jadi bentuk persis itu diterima sebagai UTC dengan
   toleransi masa depan yang lebar. Bentuk lain apa pun dibuang sebagai basi.
-- Layar admin adalah Issue #1162 (permission tercatat di `NOT_YET_SCREENED`).
-  Tidak ada channel AsyncAPI yang ditambah: tidak ada yang menerbitkan domain
-  event di sini.
+- URL callback webhook dan antrean tinjauan karantina masih belum punya layar
+  (lihat bagian berikutnya). Tidak ada channel AsyncAPI yang ditambah: tidak ada
+  yang menerbitkan domain event di sini.
+
+## Layar admin: pengirim email (Issue #1162, ADR-0151 §2, §6, §7)
+
+`/admin/email-senders` (entri navigasi dengan izin `email.senders.read`) adalah
+tampilan operasional akun Mailketing dan identitas pengirim milik tenant. Layar
+ini memakai ulang yang sudah ada, bukan konsol email kedua: template tetap di
+`/admin/email-templates`, suppression di `/admin/email-suppression`, langganan
+di `/admin/newsletter`, dan menghubungkan, mengganti kredensial, atau memutus
+akun di `/admin/channel-accounts/{id}` (halaman ini hanya menautkan ke sana dan
+tidak memegang kontrol destruktif sendiri).
+
+Yang ditampilkan, per pemanggil dan per tenant:
+
+- tiap akun Mailketing: koneksi (terhubung, kredensial ditolak, kredit habis,
+  jawaban tidak dikenali, terputus, menunggu), kredit dan kapan terakhir
+  diperiksa, jumlah pengirim, cakupan bisnis, dan label **API v2** (pengirim
+  tenant selalu memakai v2);
+- tiap identitas pengirim: verifikasi yang terakhir dilaporkan penyedia
+  (terverifikasi, belum terverifikasi, pemeriksaan kedaluwarsa, belum pernah
+  diperiksa, gagal), alasan tahan dari dispatcher sendiri, pemeriksaan terakhir,
+  antrean (menunggu, dikirim, gagal sehari terakhir, menunggu terlama, batas per
+  jam) dan apakah ia default mereknya; alamat disamarkan (`n•••@domain`);
+- jalur pengirim deployment dan apakah ia default tingkat tenant, untuk
+  pemanggil yang tidak dikurung ke cakupan bisnis;
+- **peringatan migrasi** v1 ke v2 pada pengirim deployment: bukan Mailketing,
+  masih v1, v2 belum diverifikasi (`EMAIL_MAILKETING_V2_VERIFIED` bukan `true`),
+  versi tidak valid, v2 terverifikasi.
+
+**Basi tidak sama dengan tidak diketahui.** Pemeriksaan yang lebih tua dari
+`EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` terbaca "kedaluwarsa", pemeriksaan yang
+tak pernah terjadi terbaca "belum pernah diperiksa", dan keduanya tidak pernah
+ditampilkan sebagai terverifikasi. "Dapat mengirim sekarang" adalah
+`evaluateEmailSenderHealth`, gerbang yang sama yang dipakai dispatcher untuk
+menahan email (`domain/email-senders-view.ts`), sehingga halaman tidak bisa
+berkata "siap" untuk pengirim yang akan ditahan antrean.
+
+**Visibilitas adalah milik API, bukan salinan.** Akun berasal dari registri kanal
+dengan aturannya sendiri (gerbang penugasan, cakupan bisnis diputuskan per baris
+di chokepoint akses); jalur dan kebijakan melewati `filterVisibleEmailSenders`,
+fungsi yang kini juga dipanggil `GET /api/v1/email/senders`. Orang dari tenant
+lain, pemanggil yang dikurung ke merek lain, dan orang yang tidak ditugaskan
+pada sebuah akun tidak melihat apa pun darinya. Akun yang login Mailketing-nya
+tidak boleh dilihat pemanggil tidak menyumbang fakta kredit: pengirimnya
+terbaca "kredit tidak diketahui" dan ditahan. Registri kanal yang tidak dapat
+dimuat adalah "tidak tersedia", bukan daftar kosong.
+
+**Satu-satunya kontrol adalah "Jadikan pengirim default"** (`PUT
+/api/v1/email/sender-policy`, bergerbang izin, idempoten, diaudit pada
+`warning`). Ditawarkan hanya bila endpoint itu akan menerimanya, dan selain itu
+ditampilkan **nonaktif beserta alasannya** (tidak diizinkan, routing mati, belum
+terhubung, belum siap, tidak ditugaskan sebagai operator, cakupan merek tidak
+dipegang). Berlaku untuk pesan berikutnya saja.
+
+**Ditampilkan sebagai belum tersedia, nonaktif dan dijelaskan:** kirim uji
+(butuh alamat daftar izin dan langkah konfirmasi yang belum ada) dan pengelolaan
+daftar/kampanye jarak jauh (Mailketing tidak punya API terdokumentasi untuk itu).
+Mailketing hanya keluar; halaman menyatakan tidak ada kotak masuk.
+
+Bukan di sini (tindak lanjut tercatat #1162): pengelolaan URL callback webhook
+Mailketing dan antrean tinjauan karantina event penyedia (`email.webhook.*`,
+`email.provider_events.approve`), daftar antrean tingkat pesan, "pakai pengirim
+deployment" sebagai default eksplisit, wizard hubungkan (`channel_accounts`
+#1154), kirim uji, dan alur persetujuan untuk pemutusan atau rotasi (endpoint-nya
+ada di `channel_accounts` dengan step-up dan audit).
+
+Keputusan terbuka: alamat pengirim disamarkan di layar ini (API tidak pernah
+mengembalikannya); apakah operator perlu melihatnya utuh adalah keputusan
+produk. Layar memuat paling banyak 100 akun Mailketing dan menyatakan bila ada
+lebih banyak.
 
 ## Perilaku saat nonaktif / offline-LAN
 

@@ -9894,4 +9894,260 @@ msgid "You do not have permission to view the inbox."
 msgstr ""
 
 msgid "You do not have permission to view the inbox settings."
+
+msgid "A check older than {minutes} minutes is out of date and holds sending, exactly as the queue does. Credit below {floor} holds every sender of that account."
+msgstr ""
+
+msgid "A sender is usable only when the provider reported it verified, recently, and its account has credit. The default is chosen per brand; messages already queued keep the sender they were given and are never moved to another."
+msgstr ""
+
+msgid "A tenant sender is the default; the deployment sender is used only where a message asks for it."
+msgstr ""
+
+msgid "A test send needs an allow-listed address and a confirmation step that do not exist yet."
+msgstr ""
+
+msgid "{balance} credits"
+msgstr ""
+
+msgid "{balance} credits, below the {floor} needed to send"
+msgstr ""
+
+msgid "{balance} credits (out of date)"
+msgstr ""
+
+msgid "Brand or scope: {type} {id}"
+msgstr ""
+
+msgid "Cannot send right now"
+msgstr ""
+
+msgid "Can send now"
+msgstr ""
+
+msgid "Channel accounts are not available"
+msgstr ""
+
+msgid "Channel accounts are switched off on this deployment, so tenant email senders cannot be connected or listed."
+msgstr ""
+
+msgid "Channel accounts (connect, replace credential, disconnect)"
+msgstr ""
+
+msgid "Check out of date"
+msgstr ""
+
+msgid "{count} sender"
+msgid_plural "{count} senders"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Credential rejected by the provider"
+msgstr ""
+
+msgid "Credit"
+msgstr ""
+
+msgid "Default"
+msgstr ""
+
+msgid "Default for its scope"
+msgstr ""
+
+msgid "Deployment sender"
+msgstr ""
+
+msgid "Deployment sender: API {version}"
+msgstr ""
+
+msgid "Email senders"
+msgstr ""
+
+msgid "Email senders could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Email suppression list"
+msgstr ""
+
+msgid "Held: sender verification is out of date"
+msgstr ""
+
+msgid "Held: sender verification is unknown"
+msgstr ""
+
+msgid "Held: the account credit is out of date"
+msgstr ""
+
+msgid "Held: the account credit is too low"
+msgstr ""
+
+msgid "Held: the account credit is unknown"
+msgstr ""
+
+msgid "Held: the provider does not list this sender as verified"
+msgstr ""
+
+msgid "hourly limit of {limit} reached"
+msgstr ""
+
+msgid "Last checked"
+msgstr ""
+
+msgid "Mailketing accounts"
+msgstr ""
+
+msgid "Mailketing API version"
+msgstr ""
+
+msgid "Mailketing offers no documented API for creating lists or campaigns, so it is not shown as working. Use the provider's own dashboard."
+msgstr ""
+
+msgid "Mailketing sends outbound mail only. These senders have no inbox: replies are not received here."
+msgstr ""
+
+msgid "Mail with no sender named goes out from the deployment sender."
+msgstr ""
+
+msgid "Manage Mailketing lists and campaigns"
+msgstr ""
+
+msgid "Never checked"
+msgstr ""
+
+msgid "No Mailketing account is connected for this tenant yet."
+msgstr ""
+
+msgid "No messages in the last 35 days"
+msgstr ""
+
+msgid "No sender identity is registered for this tenant."
+msgstr ""
+
+msgid "Not available yet"
+msgstr ""
+
+msgid "Not connected yet"
+msgstr ""
+
+msgid "Not known"
+msgstr ""
+
+msgid "Not verified by the provider"
+msgstr ""
+
+msgid "Older than the {minutes}-minute window"
+msgstr ""
+
+msgid "oldest waiting since {time}"
+msgstr ""
+
+msgid "Only a connected sender can be the default."
+msgstr ""
+
+msgid "Only a sender that may send right now can be the default. Run the sender verification first."
+msgstr ""
+
+msgid "Out of credit"
+msgstr ""
+
+msgid "Provider answer not recognised"
+msgstr ""
+
+msgid "Ready"
+msgstr ""
+
+msgid "Related email screens"
+msgstr ""
+
+msgid "Send a test email"
+msgstr ""
+
+msgid "Sender"
+msgstr ""
+
+msgid "Sender identities"
+msgstr ""
+
+msgid "Senders"
+msgstr ""
+
+msgid "Sending email is not granted to this sender"
+msgstr ""
+
+msgid "Tenant senders: API v2"
+msgstr ""
+
+msgid "Tenant senders are switched off on this deployment."
+msgstr ""
+
+msgid "Tenant senders are switched off on this deployment: mail goes out from the deployment sender only, and the default cannot be changed."
+msgstr ""
+
+msgid "That sender cannot be the default: it must be a connected, verified sender of this tenant that may send now, within its brand."
+msgstr ""
+
+msgid "The account credential cannot be used right now"
+msgstr ""
+
+msgid "The channel account registry could not be loaded, so sender status is not known. This is not the same as having no senders."
+msgstr ""
+
+msgid "The default sender was changed. It applies to messages queued from now on."
+msgstr ""
+
+msgid "The deployment sender is not Mailketing, so there is no API version to migrate."
+msgstr ""
+
+msgid "The deployment sender still uses Mailketing API v1. v2 is the target; v1 is a limited rollback path only. Switch after the sandbox check and confirm it with a real send. Tenant-owned senders already use v2."
+msgstr ""
+
+msgid "The deployment sender uses Mailketing API v2, but the live check has not been acknowledged (EMAIL_MAILKETING_V2_VERIFIED). v2 is not approved for production until it is."
+msgstr ""
+
+msgid "The deployment sender uses the verified Mailketing API v2."
+msgstr ""
+
+msgid "The deployment's Mailketing API version setting is not v1 or v2, so the deployment sender does not send until it is fixed."
+msgstr ""
+
+msgid "The Mailketing account is not connected yet"
+msgstr ""
+
+msgid "The Mailketing accounts and sender identities of this tenant: whether each may send right now, its credit, when it was last checked and its queue. Credentials are never shown."
+msgstr ""
+
+msgid "These are not offered because nothing safe stands behind them yet. They are shown so you know they are missing, not forgotten."
+msgstr ""
+
+msgid "This sender cannot be made the default."
+msgstr ""
+
+msgid "This tenant has more Mailketing accounts than this screen loads. The newest are shown; the API lists the rest."
+msgstr ""
+
+msgid "Verification failing"
+msgstr ""
+
+msgid "Verified by the provider"
+msgstr ""
+
+msgid "via {account}"
+msgstr ""
+
+msgid "{waiting} waiting, {sending} sending, {failed} failed today"
+msgstr ""
+
+msgid "Within the {minutes}-minute window"
+msgstr ""
+
+msgid "You are not assigned to operate this sender."
+msgstr ""
+
+msgid "You do not have permission to view email senders."
+msgstr ""
+
+msgid "You do not hold this sender's business scope."
+msgstr ""
+
+msgid "You may view senders but not change the default."
 msgstr ""

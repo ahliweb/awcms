@@ -319,8 +319,7 @@ JSON or in the browser.
   Cut-over is turning the flag on after accounts and senders are verified;
   rollback is turning it off (nothing is copied; queued tenant rows wait, and
   fail once they are an hour old).
-- **Not here:** the admin screens (#1162; the permissions are seeded and
-  enforced by the API now), marketing purpose and its consent gate (the
+- **Not here:** marketing purpose and its consent gate (the
   `purpose` CHECK admits only `transactional`/`security`). Webhooks: see the
   next section (#1161).
 
@@ -473,8 +472,75 @@ Open decisions (fail-closed choices taken, need maintainer confirmation):
   with an explicit zone; Mailketing's documented payloads carry none
   (`2026-08-18 10:30:00`), so that exact form is accepted as UTC with a wide
   future skew. Every other form is discarded as stale.
-- The admin screen is Issue #1162 (permissions listed in `NOT_YET_SCREENED`).
-  No AsyncAPI channel is added: nothing here publishes a domain event.
+- The webhook callback URLs and the quarantine review queue still have no
+  screen (see the next section). No AsyncAPI channel is added: nothing here
+  publishes a domain event.
+
+## Admin screen: email senders (Issue #1162, ADR-0151 §2, §6, §7)
+
+`/admin/email-senders` (nav entry gated on `email.senders.read`) is the
+operations view of the tenant's Mailketing accounts and sender identities. It
+reuses what exists rather than building a second mail console: templates stay
+on `/admin/email-templates`, suppression on `/admin/email-suppression`,
+subscriptions on `/admin/newsletter`, and connecting, replacing a credential or
+disconnecting an account on `/admin/channel-accounts/{id}` (the page links
+there; it holds no destructive control of its own).
+
+What it shows, per caller and per tenant:
+
+- each Mailketing account: connection (connected, credential rejected, out of
+  credit, answer not recognised, disconnected, pending), credit and when it was
+  last checked, number of senders, bound business scope, and an **API v2**
+  label (tenant senders always use v2);
+- each sender identity: the verification the provider last reported
+  (verified, not verified, check out of date, never checked, failing), the
+  dispatcher's own hold reason, last check, queue (waiting, sending, failed in
+  the last day, oldest waiting, hourly cap) and whether it is the default of its
+  brand; the address is masked (`n•••@domain`);
+- the deployment sender's lane and whether it is the tenant-wide default, for a
+  caller who is not confined to business scopes;
+- the v1 to v2 **migration notice** of the deployment sender: not Mailketing,
+  still v1, v2 unverified (`EMAIL_MAILKETING_V2_VERIFIED` not `true`), invalid
+  version, v2 verified.
+
+**Stale is not unknown.** A check older than
+`EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` reads "out of date", a check that never
+happened reads "never checked", and neither is shown as verified. "Can send
+now" is `evaluateEmailSenderHealth`, the same gate the dispatcher holds mail by
+(`domain/email-senders-view.ts`), so the page cannot say "ready" about a sender
+the queue would hold.
+
+**Visibility is the API's, not a copy.** Accounts come from the channel registry
+under its own rules (assignment gate, business scope decided per row at the
+access chokepoint); lanes and policies go through `filterVisibleEmailSenders`,
+the function `GET /api/v1/email/senders` now also calls. A person of another
+tenant, a caller confined to another brand, and a person an account is not
+assigned to see nothing of it. An account whose Mailketing login the caller may
+not see contributes no credit fact: its senders read "credit unknown" and are
+held. A channel registry that cannot be loaded is "unavailable", never an empty
+list.
+
+**The one control is "Make default sender"** (`PUT /api/v1/email/sender-policy`,
+which is permission-gated, idempotent, audited at `warning`). It is offered only
+where that endpoint would accept it, and otherwise rendered **disabled with its
+reason** (not permitted, routing off, not connected, not ready, not assigned as
+operator, brand scope not held). It applies to later messages only.
+
+**Shown as not available yet, disabled and explained:** a test send (needs an
+allow-listed address and a confirmation step that do not exist) and remote
+list/campaign management (Mailketing has no documented API for it). Mailketing
+is outbound only; the page says there is no inbox.
+
+Not here (recorded follow-ups of #1162): the Mailketing webhook callback
+management and the provider-event quarantine review queue
+(`email.webhook.*`, `email.provider_events.approve`), a message-level queue
+list, "use the deployment sender" as an explicit default, a connect wizard
+(`channel_accounts` #1154), a test send, and an approval flow for disconnect or
+rotation (the endpoints exist under `channel_accounts` with step-up and audit).
+
+Open decisions: the sender address is masked on this screen (the API never
+returns it); whether operators should see it whole is a product decision. The
+screen loads at most 100 Mailketing accounts and says when there are more.
 
 ## Disabled / offline-LAN behavior
 
