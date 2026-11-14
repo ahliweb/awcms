@@ -522,6 +522,9 @@ msgstr ""
 msgid "Two-factor authentication is already switched on for your account."
 msgstr ""
 
+msgid "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+msgstr ""
+
 msgid "Could not start setup. Please try again."
 msgstr ""
 

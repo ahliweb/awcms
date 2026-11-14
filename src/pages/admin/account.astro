@@ -285,6 +285,9 @@ const themeOptions = [
       "Sign in again through your identity provider, then set up two-factor authentication."
     )}
     data-mfa-bad-code={t("That code is not right. Try the next one.")}
+    data-mfa-qr-label={t(
+      "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+    )}
     data-mfa-verify-failed={t("Could not confirm the code. Please try again.")}
     data-mfa-disable-failed={t(
       "Could not turn off two-factor authentication. Please try again."
@@ -609,6 +612,7 @@ const themeOptions = [
           "Add this secret to your authenticator app, then enter the six-digit code it shows."
         )}
       </p>
+      <div class="account-qr" id="account-mfa-qr"></div>
       <p class="account-secret">
         <code id="account-mfa-secret"></code>
       </p>
@@ -785,6 +789,18 @@ const themeOptions = [
 </AdminLayout>
 
 <style>
+  .account-qr :global(svg) {
+    display: block;
+    width: 12rem;
+    max-width: 100%;
+    height: auto;
+    margin-block: var(--sp-2);
+  }
+
+  .account-qr:empty {
+    display: none;
+  }
+
   .account-secret code {
     font-size: var(--fs-lg);
     letter-spacing: 0.08em;
