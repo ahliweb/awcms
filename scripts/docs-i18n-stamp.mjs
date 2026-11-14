@@ -204,6 +204,32 @@ function readFileIfPresent(path) {
 }
 
 /**
+ * Where `ROOT` sits inside its git work tree, as git spells it (`""` at the
+ * top level, `"apps/cms/"` when this tool is embedded as a subdirectory).
+ *
+ * `git ls-files` and `git show HEAD:./path` are relative to the working
+ * directory, but `git status --porcelain` is ALWAYS relative to the repository
+ * top. In a repository that embeds this tree below its top those two
+ * vocabularies disagree, so a modified mirror was never recognised as modified
+ * and the stamp refused (or, worse, mis-judged) every edited translation.
+ *
+ * @returns {string}
+ */
+function repoPrefix() {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-prefix"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+const REPO_PREFIX = repoPrefix();
+
+/**
  * Paths git reports as modified, staged, or untracked in this working tree.
  *
  * Computed once: `git status --porcelain` over the whole repository is one
@@ -224,7 +250,14 @@ function workingTreeChanges() {
   // is the changed file, and the old one no longer exists.
   for (const entry of output.split("\0")) {
     if (entry.length < 4) continue;
-    paths.add(entry.slice(3));
+    const path = entry.slice(3);
+    // Re-express top-relative paths as cwd-relative ones, the form every other
+    // path in this file uses. A path outside the prefix is not ours.
+    paths.add(
+      REPO_PREFIX && path.startsWith(REPO_PREFIX)
+        ? path.slice(REPO_PREFIX.length)
+        : path
+    );
   }
 
   return paths;
@@ -239,7 +272,7 @@ function workingTreeChanges() {
  */
 function committedContent(path) {
   try {
-    return execFileSync("git", ["show", `HEAD:${path}`], {
+    return execFileSync("git", ["show", `HEAD:./${path}`], {
       cwd: ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
