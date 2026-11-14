@@ -487,12 +487,13 @@ permissions and its own audit story.
   `auth.invitation` template → `delivery: "unavailable"` in the response (the caller is an
   authenticated admin; hiding it would only leave them waiting for a link that
   will never arrive).
-- **There is no admin screen yet** for invitations — its four permissions sit in the
-  `NOT_YET_SCREENED` ledger, the same order as ADR-0056 (`media_library`
-  got its API surface first, its screen followed). The path is deliberately not
-  written here: `skills:check` demands that every backticked `/admin/…` URL
-  resolves to a real page, and naming it now would be exactly the
-  confident lie that gate exists to prevent.
+- **Admin screen** — `/admin/invitations` lists, creates, resends and revokes
+  (Issue #541); every success reloads the page and says so through the shared
+  flash primitive in `src/lib/ui/admin-form-client.ts`, which carries only a
+  catalog key across the reload and shows the page's own translated sentence for
+  it. `/admin/users` offers an "Invite user" link to it, shown only to a caller
+  holding BOTH `invitations.create` and `invitations.read` (the destination
+  renders nothing without `read`). UX only: the endpoints decide every request.
 
 ## Not yet available (Sprint 3+)
 

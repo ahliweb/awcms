@@ -322,6 +322,72 @@ export function messageBox(id: string): MessageBox {
   };
 }
 
+const FLASH_STORAGE_KEY = "awcms.admin.flash";
+const FLASH_KEY_PATTERN = /^[a-z0-9-]{1,40}$/;
+
+/**
+ * Remembers WHICH of the page's own messages to show, then reloads — so a
+ * successful mutation that reloads the page is no longer silent.
+ *
+ * ## What is stored, and what is deliberately not
+ *
+ * `sessionStorage` holds a short CATALOG KEY (`^[a-z0-9-]{1,40}$`), never the
+ * message text and never data from the response. The text itself is rendered
+ * server-side, already translated, into `data-flash-<key>` attributes on the
+ * status element, so {@link showFlash} can only ever show a sentence the page
+ * itself shipped: a key nothing declared shows nothing, and no free text from
+ * storage reaches the DOM. Nothing sensitive may be passed here — an invitation
+ * address, a token or a secret does not belong in this call, and a screen that
+ * handles secrets (the channel-account manager) does not use it at all and
+ * keeps its stateless `?notice=` allow-list instead.
+ *
+ * Storage can throw (blocked site data): the reload still happens and the
+ * message is simply lost, the silence this replaces — never a broken page.
+ */
+export function flashAndReload(key: string): void {
+  try {
+    if (FLASH_KEY_PATTERN.test(key)) {
+      sessionStorage.setItem(FLASH_STORAGE_KEY, key);
+    }
+  } catch {
+    /* blocked storage: reload without the message */
+  }
+
+  holdForNavigation();
+  window.location.reload();
+}
+
+/**
+ * Shows, and forgets, the message {@link flashAndReload} left behind, in the
+ * status element `id`. The stored key is removed as soon as it is read,
+ * whether or not it matched, so a message appears once and a stale key cannot
+ * resurface on a later page. Scrolls the element into view because the reload
+ * restores scroll position and a notice above a long table would otherwise
+ * appear where nobody is looking.
+ */
+export function showFlash(id: string): void {
+  try {
+    const key = sessionStorage.getItem(FLASH_STORAGE_KEY);
+
+    if (key === null) return;
+    sessionStorage.removeItem(FLASH_STORAGE_KEY);
+
+    const element = document.getElementById(id);
+    const message =
+      element && FLASH_KEY_PATTERN.test(key)
+        ? element.getAttribute(`data-flash-${key}`)
+        : null;
+
+    if (!element || !message) return;
+
+    element.textContent = message;
+    element.hidden = false;
+    element.scrollIntoView({ block: "nearest" });
+  } catch {
+    /* blocked storage: nothing was remembered */
+  }
+}
+
 /**
  * Reads a text field out of a `FormData` the way every admin form wants it:
  * a string, never `null`, never a `File`, trimmed.

@@ -1883,6 +1883,18 @@ msgstr "Interval (menit)"
 msgid "Invite somebody"
 msgstr "Undang seseorang"
 
+msgid "Invitation sent."
+msgstr "Undangan terkirim."
+
+msgid "Invitation sent again."
+msgstr "Undangan dikirim ulang."
+
+msgid "Invitation revoked."
+msgstr "Undangan dicabut."
+
+msgid "Invite user"
+msgstr "Undang pengguna"
+
 msgid "IP hash"
 msgstr "Hash IP"
 

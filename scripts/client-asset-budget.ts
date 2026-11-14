@@ -1170,6 +1170,15 @@ export const READER_BUDGET_BYTES = 24_000;
  * this screen's own behaviour: no other screen replaces a secret or confirms a
  * terminal action by typing.
  *
+ * **Raised for Issue #1328** (flash message after a reloading mutation): +500 B
+ * (365,600 -> 366,100), measured 366,022 locally with this change (+422 B over
+ * `main`, which sat under its budget), with 78 B of margin for the local/CI
+ * build difference. It is two small functions, `flashAndReload` and
+ * `showFlash`, in the SHARED `admin-form-client.ts` (so they are imported, not
+ * copied, by every screen that adopts them), plus the three call sites and the
+ * sentence attributes on `/admin/invitations` and the one link on
+ * `/admin/users`. Nothing is duplicated per screen.
+ *
  * **Raised for Issue #1238** (the over-cap refusal said "2 MiB over the 2 MiB
  * limit"): +320 B (362,560 -> 362,880), of which 316 B measured locally (362,533
  * on `main`, 362,849 with this change; `main` sat 27 B under its budget) and 4 B
@@ -1189,7 +1198,7 @@ export const READER_BUDGET_BYTES = 24_000;
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 366_100;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
