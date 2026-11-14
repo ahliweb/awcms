@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:dbd5b6495ceb9b7bf50ef5337169ced8829fc80e20504308994c57dceb4a97ee -->
+<!-- i18n-source-hash: sha256:af5966984b4212fa8b56253d1ec50330c0a949731a6f2f4f4865ee27b81b88a2 -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-237 titik masuk di 81 berkas; 233 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-233 itu dijaga `lockElement`/`mutateAndReload` pada 218, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 233 dari 237 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+241 titik masuk di 83 berkas; 237 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-237 itu dijaga `lockElement`/`mutateAndReload` pada 222, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 237 dari 241 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                             | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -163,6 +163,10 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/channel-accounts/[id].astro`      | `.js-channel-default-sender`                   | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/comments.astro`                   | `[data-comments-queue] button[data-action]`    | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/comments.astro`                   | `[data-bulk-bar] button[data-bulk-action]`     | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-follow-up/[id].astro`         | `crm-follow-up-complete-form`                  | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-follow-up/[id].astro`         | `.js-follow-up-cancel`                         | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-follow-up/[id].astro`         | `crm-follow-up-stop-form`                      | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-follow-up/rules.astro`        | `.js-follow-up-switch`                         | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/crm-leads/[id].astro`             | `crm-lead-move-form`                           | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/crm-leads/[id].astro`             | `.js-lead-assign-me`                           | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/crm-leads/[id].astro`             | `.js-lead-unassign`                            | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
