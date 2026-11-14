@@ -222,10 +222,10 @@ async function seedSender(
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
        account_kind, external_id, display_name, auth_mode, status,
-       parent_account_id)
+       parent_account_id, access_mode)
     VALUES (${tenant}, ${officeId ? "office" : null}, ${officeId},
             'whatsapp_cloud', 'waba_phone_number', ${String(phone)},
-            ${`n-${phone}`}, 'api_token', 'connected', ${wabaId})
+            ${`n-${phone}`}, 'api_token', 'connected', ${wabaId}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 

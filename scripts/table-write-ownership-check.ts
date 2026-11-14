@@ -208,6 +208,24 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "succeed, and roll back with the rest."
   })),
   ...[
+    "awcms_channel_account_assignments",
+    "awcms_profiles",
+    "awcms_identities",
+    "awcms_tenant_users"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/channel-accounts-access-guards.ts` (used by " +
+      "`security:readiness`, Issue #1215 M-c) seeds one throwaway tenant, two " +
+      "people, an account and its assignments INSIDE one transaction it ALWAYS " +
+      "rolls back (it throws a sentinel), then attempts the writes the database " +
+      "guards must refuse (demoting the last owner, an unowned switch to " +
+      "`assigned`, re-pointing an assignment) and the ones they must allow. " +
+      "Nothing is ever committed: it is a behavioural probe of triggers, not a " +
+      "second writer of these tables. Confined to that one function."
+  })),
+  ...[
     "awcms_channel_webhook_subscriptions",
     "awcms_whatsapp_service_windows",
     "awcms_whatsapp_webhook_receipts",

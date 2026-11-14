@@ -16,9 +16,10 @@ type Prepared = { id: string; assignmentId: string; idempotencyKey: string };
 
 /**
  * `DELETE /api/v1/channel-accounts/accounts/{id}/assignments/{assignmentId}`
- * (Issue #1140) — remove one assignee. Removing the LAST assignee returns the
- * account to tenant-wide visibility, which is intended and is why this is audited
- * at `warning` like the grant. An unknown assignment is `404`.
+ * (Issue #1140) — remove one assignee. Removing the LAST OWNER of an `assigned`
+ * account is refused (`409 LAST_OWNER`, #1215 M-c): an account is never left
+ * without somebody who answers for it, and never falls open by losing its
+ * assignees. Audited at `warning` like the grant. An unknown assignment is `404`.
  */
 export const DELETE = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -66,7 +67,15 @@ export const DELETE = defineTenantRoute<Prepared>({
           prepared.assignmentId
         );
 
-        if (!removed) {
+        if (removed === "last_owner") {
+          return fail(
+            409,
+            "LAST_OWNER",
+            "The last owner of an assigned account cannot be removed; make another person an owner first."
+          );
+        }
+
+        if (removed === "not_found") {
           return fail(404, "RESOURCE_NOT_FOUND", "Assignment not found.");
         }
 

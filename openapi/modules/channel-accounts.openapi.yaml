@@ -71,8 +71,9 @@ paths:
         - Channel Accounts
       summary: The tenant's connected accounts, newest first (keyset).
       description: >-
-        An account with assignees is listed only to its assignees and to holders
-        of `channel_accounts.assignments.assign`. Never contains a credential or its
+        An `assigned` account (the default) is listed only to its assignees and to
+        holders of `channel_accounts.assignments.assign`; a `tenant_wide` account
+        to every holder of the read permission. Never contains a credential or its
         reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
       parameters:
         - name: provider
@@ -1240,10 +1241,11 @@ paths:
         - Channel Accounts
       summary: Make a person of this tenant an owner, operator or viewer of the account.
       description: >-
-        An upsert per person. From the first assignment on, the account is
-        visible and operable only to its assignees and holders of
-        `channel_accounts.assignments.assign`. Additive to the permission checks,
-        never a substitute. Audited at `warning`. `Idempotency-Key` required.
+        An upsert per person. On an `assigned` account (the default) only its
+        assignees and holders of `channel_accounts.assignments.assign` can see and
+        operate it. Demoting the last owner of an `assigned` account is refused
+        (`409 LAST_OWNER`). Additive to the permission checks, never a
+        substitute. Audited at `warning`. `Idempotency-Key` required.
         Requires `channel_accounts.assignments.assign`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1288,7 +1290,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: "`IDEMPOTENCY_CONFLICT`."
+          description: "`IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the person is the only owner of an `assigned` account)."
           content:
             application/json:
               schema:
@@ -1325,9 +1327,10 @@ paths:
         - Channel Accounts
       summary: Remove one assignee.
       description: >-
-        Removing the LAST assignee returns the account to tenant-wide
-        visibility, which is intended and is why this is audited at `warning`.
-        `Idempotency-Key` required. Requires
+        Removing the LAST OWNER of an `assigned` account is refused
+        (`409 LAST_OWNER`): an account is never left without somebody who answers
+        for it and never falls open by losing its assignees. Audited at
+        `warning`. `Idempotency-Key` required. Requires
         `channel_accounts.assignments.assign`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1362,7 +1365,89 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
+          description: "`IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the assignee is the only owner of an `assigned` account)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/access-mode:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: setChannelAccountAccessMode
+      tags:
+        - Channel Accounts
+      summary: Choose who may see and operate the account.
+      description: >-
+        `assigned` (the default, fail-closed) restricts the account to its
+        assignees and the holders of `channel_accounts.assignments.assign`;
+        `tenant_wide` lets the permission alone decide. Switching to `assigned`
+        needs an owner to exist (`422 OWNER_REQUIRED`). Audited at `warning` when
+        the mode changes; the same mode again changes nothing. `Idempotency-Key`
+        required. Requires `channel_accounts.assignments.assign`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              additionalProperties: false
+              properties:
+                mode:
+                  $ref: "#/components/schemas/ChannelAccountAccessMode"
+      responses:
+        "200":
+          description: The mode now in force.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accountId:
+                        type: string
+                        format: uuid
+                      accessMode:
+                        $ref: "#/components/schemas/ChannelAccountAccessMode"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
           description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`OWNER_REQUIRED` (switching to `assigned` needs an owner)."
           content:
             application/json:
               schema:
@@ -1846,6 +1931,18 @@ components:
           format: date-time
         version:
           type: integer
+        accessMode:
+          $ref: "#/components/schemas/ChannelAccountAccessMode"
+    ChannelAccountAccessMode:
+      type: string
+      enum:
+        - assigned
+        - tenant_wide
+      description: >-
+        Who may see and operate the account. `assigned` (the default) is closed:
+        its assignees and the holders of `channel_accounts.assignments.assign`
+        only, so an assigned account with no assignee is administrators-only.
+        `tenant_wide` is an explicit, audited choice.
     CreateChannelAccountRequest:
       type: object
       required:

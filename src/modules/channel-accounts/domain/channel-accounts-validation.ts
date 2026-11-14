@@ -7,10 +7,12 @@
  * silently ignored, or silently stored somewhere it should not be.
  */
 import {
+  ACCESS_MODES,
   ASSIGNMENT_KINDS,
   AUTH_MODES,
   MAX_SCOPES,
   MAX_SECRET_LENGTH,
+  type ChannelAccessMode,
   type ChannelAssignmentKind,
   type ChannelAuthMode
 } from "./channel-accounts-constants";
@@ -476,6 +478,37 @@ export function validateAssignment(raw: unknown): Validated<AssignmentInput> {
           kind: raw.kind as ChannelAssignmentKind
         }
       };
+}
+
+// ---------------------------------------------------------------------------
+// Access mode
+// ---------------------------------------------------------------------------
+
+export type AccessModeInput = { mode: ChannelAccessMode };
+
+export function validateAccessMode(raw: unknown): Validated<AccessModeInput> {
+  if (!isRecord(raw)) {
+    return {
+      valid: false,
+      errors: [{ field: "body", message: "Must be a JSON object." }]
+    };
+  }
+
+  const errors = unknownFields(raw, ["mode"]);
+
+  if (
+    typeof raw.mode !== "string" ||
+    !(ACCESS_MODES as readonly string[]).includes(raw.mode)
+  ) {
+    errors.push({
+      field: "mode",
+      message: `Must be one of ${ACCESS_MODES.join(", ")}.`
+    });
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : { valid: true, value: { mode: raw.mode as ChannelAccessMode } };
 }
 
 // ---------------------------------------------------------------------------

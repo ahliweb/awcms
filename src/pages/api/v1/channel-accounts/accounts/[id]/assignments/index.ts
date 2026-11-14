@@ -54,9 +54,9 @@ type Prepared = {
 /**
  * `POST /api/v1/channel-accounts/accounts/{id}/assignments` (Issue #1140) —
  * make a person of this tenant an `owner`, `operator` or `viewer` of the account
- * (an upsert per person). From the first assignment on, the account is visible
- * and operable only to its assignees and to holders of `assignments.manage`.
- * Additive to the permission checks, never a substitute: an assignee still needs
+ * (an upsert per person). On an `assigned` account (the default) only its
+ * assignees and the holders of `assignments.assign` can see and operate it; the
+ * last owner cannot be demoted (`409 LAST_OWNER`). Additive to the permission checks, never a substitute: an assignee still needs
  * the permission for each action. Audited at `warning`: it widens who can use a
  * sender identity.
  */
@@ -108,7 +108,13 @@ export const POST = defineTenantRoute<Prepared>({
         );
 
         if (result.outcome === "refused") {
-          return fail(422, result.code, "The person is not in this tenant.");
+          return result.code === "LAST_OWNER"
+            ? fail(
+                409,
+                "LAST_OWNER",
+                "The last owner of an assigned account cannot be demoted; make another person an owner first."
+              )
+            : fail(422, result.code, "The person is not in this tenant.");
         }
 
         await auditChannelAccounts(context, {
