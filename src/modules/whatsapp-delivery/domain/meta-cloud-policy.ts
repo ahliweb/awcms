@@ -330,6 +330,19 @@ export function parseMessagingLimitTier(
 /** Most actions one webhook may produce; the rest are dropped and counted. Meta batches far fewer. */
 export const META_WEBHOOK_MAX_ACTIONS = 500;
 
+/**
+ * #1298 L2. The oldest `entry.time` whose WABA-level changes (template status,
+ * messaging limit, account restriction) a webhook may still apply. Meta retries
+ * a delivery for up to seven days and the body-hash receipts are kept for eight
+ * (`WHATSAPP_WEBHOOK_RECEIPT_RETENTION_DAYS`), so an entry older than this
+ * horizon cannot be a first delivery, and no receipt can still vouch that it was
+ * seen: it is either a replay of a captured signed body after the receipts were
+ * purged, or against a rotated token, or a delivery so late its content is
+ * stale. It is dropped (counted as ignored), never applied. Kept strictly below
+ * the receipt retention, so the two windows overlap by a day and leave no gap.
+ */
+export const META_ENTRY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 const WAMID = /^[A-Za-z0-9._=:+/-]{1,200}$/;
 const PHONE_DIGITS = /^[1-9][0-9]{6,14}$/;
 const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
@@ -451,6 +464,15 @@ export function parseMetaWebhook(
     const statedTime = unixSeconds(entry.time);
     const entryTime =
       statedTime && statedTime.getTime() <= now.getTime() ? statedTime : now;
+    // #1298 L2: a WABA-level change needs a STATED time inside the horizon. A
+    // missing or unreadable time used to default to "now" (so a captured body
+    // stripped of its time applied as brand new); a stale one was applied as
+    // old. Both are refused for the three state-changing kinds. Statuses and
+    // inbound messages are unaffected: statuses only move forward by rank and
+    // an inbound message carries its own (clamped) timestamp.
+    const stateFresh =
+      statedTime !== null &&
+      now.getTime() - statedTime.getTime() <= META_ENTRY_MAX_AGE_MS;
 
     for (const rawChange of changes.slice(0, 100)) {
       const change = asRecord(rawChange);
@@ -537,6 +559,11 @@ export function parseMetaWebhook(
         }
 
         case "message_template_status_update": {
+          if (!stateFresh) {
+            result.ignored += 1;
+            continue;
+          }
+
           const status = value.event;
           const category = value.message_template_category;
           const name = value.message_template_name;
@@ -566,6 +593,11 @@ export function parseMetaWebhook(
         }
 
         case "phone_number_quality_update": {
+          if (!stateFresh) {
+            result.ignored += 1;
+            continue;
+          }
+
           const tier = parseMessagingLimitTier(value);
 
           if (!tier) {
@@ -578,6 +610,11 @@ export function parseMetaWebhook(
         }
 
         case "account_update": {
+          if (!stateFresh) {
+            result.ignored += 1;
+            continue;
+          }
+
           const signal = classifyMetaAccountUpdate(value);
 
           if (signal.kind === "ignore") {

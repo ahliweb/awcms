@@ -139,6 +139,7 @@ describe("fetchModuleJobs", () => {
         "bun run telegram-engagement:dispatch",
         "bun run tenant-domain:dns:sync",
         "bun run whatsapp:dispatch",
+        "bun run whatsapp:meta:preflight",
         "bun run whatsapp:queue:purge",
         "bun run workflow:escalations:dispatch"
       ].sort()
