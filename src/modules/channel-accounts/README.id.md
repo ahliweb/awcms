@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2a4bd86a77206bc9ba0678bb4316ce86056558449e87b179fef211f1ff000e71 -->
+<!-- i18n-source-hash: sha256:48c2dab3b15c7d2d262666deb03543f0cdd5f3a44e2fdad715c700af4360a9ac -->
 
 # `channel_accounts`
 
@@ -131,17 +131,17 @@ Break-glass connection menanyakan pertanyaan tingkat tenant lebih dulu (satu kep
 
 Visibilitas dulu disimpulkan dari **ketiadaan** baris (tanpa assignee berarti terbuka bagi seluruh tenant), sehingga menghapus assignee terakhir, atau menghapus data orang yang menjadi assignee itu, diam-diam membuka sebuah identitas pengirim. Kini ia kolom, `awcms_channel_accounts.access_mode` (`sql/398`), dan defaultnya yang tertutup:
 
-| `access_mode`        | Siapa yang melihat dan mengoperasikan akun                                                                            |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `assigned` (default) | assignee-nya (pada jenis yang dibutuhkan aksi) dan pemegang `assignments.assign`; tanpa assignee: hanya administrator |
-| `tenant_wide`        | izin saja yang memutuskan (perilaku lama "tanpa assignee"), dipilih dengan sengaja dan diaudit                        |
+| `access_mode`        | Siapa yang melihat dan mengoperasikan akun                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `assigned` (default) | assignee-nya (pada jenis yang dibutuhkan aksi) dan pemegang `assignments.assign`; tanpa assignee sama sekali: hanya administrator |
+| `tenant_wide`        | izin saja yang memutuskan (perilaku lama "tanpa assignee"), dipilih dengan sengaja dan diaudit                                    |
 
 - Akun baru berstatus `assigned` dan **pembuatnya menjadi owner pertama** (`createAccount`), sehingga mendaftarkan akun tidak menyerahkannya kepada administrator saja. Setiap baris yang sudah ada saat `sql/398` berjalan menjadi `assigned` (fail-closed; modul dikirim mati).
 - `PUT /accounts/{id}/access-mode` (`assignments.assign`, `Idempotency-Key`) mengganti mode; baris audit (`channel_accounts.account.access_mode_set`, `warning`) hanya ditulis bila mode berubah. Berpindah ke `assigned` butuh owner yang sudah ada (`422 OWNER_REQUIRED`).
 - **Owner terakhir akun `assigned` tidak dapat dihapus atau diturunkan** lewat API (`409 LAST_OWNER`). Penulisnya mengambil kunci baris akun lebih dulu, sehingga dua penghapusan bersamaan atas dua owner tidak dapat masing-masing melihat yang lain masih ada. Database adalah dinding kedua (`sql/398` menolak perpindahan ke `assigned` tanpa owner; `sql/399` menolak penurunan owner terakhir dan pemindahan sebuah assignment).
-- **Erasure harus selalu selesai**, sehingga menghapus owner terakhir TIDAK ditolak di database: `sql/399` justru meninggalkan satu baris audit `warning`, `channel_accounts.account.owner_orphaned`, yang hanya memuat id akun (tidak pernah orangnya). Akun tetap fail-closed: tanpa assignee ia hanya terlihat oleh administrator tenant, yang dapat menunjuk owner baru.
+- **Erasure harus selalu selesai**, sehingga menghapus owner terakhir TIDAK ditolak di database: `sql/399` justru meninggalkan satu baris audit `warning`, `channel_accounts.account.owner_orphaned`, yang hanya memuat id akun (tidak pernah orangnya). Akun tetap fail-closed: ia hanya terjangkau oleh assignee yang tersisa (viewer dan operator yang masih ada) dan administrator tenant, yang dapat menunjuk owner baru. (Kedua guard penghitung owner mengunci baris owner dengan SHARE, sehingga erasure yang berpacu dengan penurunan atau pergantian mode menunggunya dan selalu meninggalkan jejak ini bila ia meng-orphan akun `assigned`.)
 - `awcms_channel_accounts.business_scope_*` kini immutable untuk setiap role (`sql/398`, guard identitas yang sama dengan identitas akun).
-- Modul lain yang bertanya "bolehkah pemanggil memakai akun ini?" (`whatsapp_delivery`, `email`, `social_publishing`, `telegram_engagement`, `omnichannel_inbox`) lewat `isAccountVisibleTo`, sehingga mewarisi aturannya; tidak ada yang mengimplementasikannya ulang.
+- Modul lain yang bertanya "bolehkah pemanggil memakai akun ini?" (`whatsapp_delivery`, `email`, `social_publishing`, `telegram_engagement`) lewat `isAccountVisibleTo`, sehingga mewarisi aturannya; tidak ada yang mengimplementasikannya ulang. `omnichannel_inbox` **tidak**: ia tidak mengirim apa pun, jadi hanya menerapkan aturan business scope, dan pemegang izin inbox dalam scope yang sama tetap melihat percakapan akun `assigned`. Membuat percakapan mengikuti assignment adalah keputusan pemilik yang terpisah.
 
 ## Sisa pekerjaan dan pertanyaan terbuka (#1215, keputusan pemilik)
 

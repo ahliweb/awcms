@@ -223,7 +223,9 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "guards must refuse (demoting the last owner, an unowned switch to " +
       "`assigned`, re-pointing an assignment) and the ones they must allow. " +
       "Nothing is ever committed: it is a behavioural probe of triggers, not a " +
-      "second writer of these tables. Confined to that one function."
+      "second writer of these tables. Confined to that one FILE: the " +
+      "gate excuses per owner, so `tests/table-write-ownership.test.ts` is " +
+      "what enforces it by naming the file (#1215 audit L4)."
   })),
   ...[
     "awcms_channel_webhook_subscriptions",

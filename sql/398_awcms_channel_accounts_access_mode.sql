@@ -81,15 +81,22 @@ SET search_path = public, pg_temp
 AS $function$
 BEGIN
   IF NEW.access_mode = 'assigned'
-     AND OLD.access_mode IS DISTINCT FROM 'assigned'
-     AND NOT EXISTS (
-       SELECT 1 FROM awcms_channel_account_assignments AS a
-       WHERE a.tenant_id = NEW.tenant_id
-         AND a.account_id = NEW.id
-         AND a.kind = 'owner'
-     ) THEN
-    RAISE EXCEPTION 'an account can only become assigned when it has an owner'
-      USING ERRCODE = '23514';
+     AND OLD.access_mode IS DISTINCT FROM 'assigned' THEN
+    -- The owner rows are SHARE-locked, not merely read: a concurrent DELETE of
+    -- the only owner (a data-subject erasure takes no account lock) then waits
+    -- for this transaction, and its orphan-audit trigger sees the account as
+    -- 'assigned' and writes the trace. A plain read let both succeed unseen.
+    PERFORM 1
+    FROM awcms_channel_account_assignments AS a
+    WHERE a.tenant_id = NEW.tenant_id
+      AND a.account_id = NEW.id
+      AND a.kind = 'owner'
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'an account can only become assigned when it has an owner'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
 
   RETURN NEW;

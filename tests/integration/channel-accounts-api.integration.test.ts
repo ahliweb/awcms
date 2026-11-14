@@ -3126,6 +3126,205 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect((await setMode(id, "everyone")).status).toBe(400);
     });
 
+    test("#1215 audit M1: an administrator confined to office A cannot open office B's account to the whole tenant: the same 404 as an unknown or foreign id, the mode is untouched, nothing is audited", async () => {
+      if (!handlerReady) return;
+
+      const sql = admin();
+      const offices = (await sql`
+        INSERT INTO awcms_offices (tenant_id, office_code, office_name)
+        VALUES (${env.tenantId}, 'mc-sa', 'Office mc-sa'),
+               (${env.tenantId}, 'mc-sb', 'Office mc-sb')
+        RETURNING id, office_code
+      `) as { id: string; office_code: string }[];
+      const officeA = offices.find((o) => o.office_code === "mc-sa")!.id;
+      const officeB = offices.find((o) => o.office_code === "mc-sb")!.id;
+      // An administrator by permission (tenant-wide `assignments.assign`), but
+      // confined to one office by an active business-scope assignment.
+      const confined = await seedUser(env.tenantId, "mc-confined", [
+        "channel_accounts.assignments.assign",
+        "channel_accounts.accounts.read"
+      ]);
+
+      await sql`
+        INSERT INTO awcms_business_scope_assignments
+          (tenant_id, tenant_user_id, scope_type, scope_id,
+           granted_by_tenant_user_id)
+        VALUES (${env.tenantId}, ${confined.tenantUserId}, 'office', ${officeA},
+                ${env.ownerTenantUserId})
+      `;
+
+      async function scopedAccount(externalId: string, officeId: string) {
+        const rows = (await sql`
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name,
+             auth_mode, business_scope_type, business_scope_id, access_mode)
+          VALUES (${env.tenantId}, 'starsender', 'device', ${externalId},
+                  ${externalId}, 'device_key', 'office', ${officeId},
+                  'assigned')
+          RETURNING id
+        `) as { id: string }[];
+
+        await sql`
+          INSERT INTO awcms_channel_account_assignments
+            (tenant_id, account_id, tenant_user_id, kind)
+          VALUES (${env.tenantId}, ${rows[0]!.id}, ${env.ownerTenantUserId},
+                  'owner')
+        `;
+
+        return rows[0]!.id;
+      }
+
+      const modeOf = async (id: string) =>
+        (
+          (await sql`SELECT access_mode FROM awcms_channel_accounts WHERE id = ${id}`) as {
+            access_mode: string;
+          }[]
+        )[0]!.access_mode;
+      const audits = async (id: string) =>
+        (
+          (await sql`
+            SELECT 1 FROM awcms_audit_events
+            WHERE action = 'channel_accounts.account.access_mode_set'
+              AND resource_id = ${id}
+          `) as unknown[]
+        ).length;
+      const inB = await scopedAccount("mc-scope-b", officeB);
+      const inA = await scopedAccount("mc-scope-a", officeA);
+      const tenant2 = crypto.randomUUID();
+
+      await sql`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenant2}, 'ca-mc-scope', 'CA MC Scope')
+      `;
+
+      const foreign = await seedUser(tenant2, "mc-foreign", ALL_PERMISSIONS);
+      const refused = await setMode(inB, "tenant_wide", confined.token);
+      const unknown = await setMode(
+        crypto.randomUUID(),
+        "tenant_wide",
+        confined.token
+      );
+
+      const foreignTenant = await call(putAccessMode, {
+        method: "PUT",
+        path: `${BASE}/accounts/${inB}/access-mode`,
+        params: { id: inB },
+        token: foreign.token,
+        tenantId: tenant2,
+        body: { mode: "tenant_wide" }
+      });
+
+      expect(refused.status).toBe(404);
+      expect(refused.body).toEqual(unknown.body);
+      expect(foreignTenant.status).toBe(404);
+      expect(foreignTenant.body).toEqual(unknown.body);
+      expect(await modeOf(inB)).toBe("assigned");
+      expect(await audits(inB)).toBe(0);
+
+      // The same person, same permission, on an account of their OWN office:
+      // allowed. So the 404 above is the scope gate and nothing else.
+      expect((await setMode(inA, "tenant_wide", confined.token)).status).toBe(
+        200
+      );
+      expect(await modeOf(inA)).toBe("tenant_wide");
+
+      // An administrator who holds office B's scope can (no break-glass around
+      // the scope: the administrator is no exception).
+      const holderB = await seedUser(env.tenantId, "mc-holder-b", [
+        "channel_accounts.assignments.assign"
+      ]);
+
+      await sql`
+        INSERT INTO awcms_business_scope_assignments
+          (tenant_id, tenant_user_id, scope_type, scope_id,
+           granted_by_tenant_user_id)
+        VALUES (${env.tenantId}, ${holderB.tenantUserId}, 'office', ${officeB},
+                ${env.ownerTenantUserId})
+      `;
+
+      expect((await setMode(inB, "tenant_wide", holderB.token)).status).toBe(
+        200
+      );
+      expect(await modeOf(inB)).toBe("tenant_wide");
+    });
+
+    test("#1215 audit L1: an erasure racing a mode switch or an unassignment waits for it, so an orphaned `assigned` account always leaves its audit row", async () => {
+      if (!handlerReady) return;
+
+      const sql = admin();
+      const { unassignAccount } =
+        await import("../../src/modules/channel-accounts/application/account-directory");
+      const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      // (1) tenant_wide + one owner. A switches the account to `assigned`
+      // (the guard counted the owner); while A is still open, an erasure
+      // deletes that owner without any account lock.
+      const a = await closed("mc-race-a");
+      const [ownerA] = await assignments(a);
+
+      await sql`UPDATE awcms_channel_accounts SET access_mode = 'tenant_wide' WHERE id = ${a}`;
+
+      let switched!: () => void;
+      const switchedSignal = new Promise<void>((r) => (switched = r));
+      const switchTx = sql.begin(async (tx) => {
+        await tx`UPDATE awcms_channel_accounts SET access_mode = 'assigned' WHERE id = ${a}`;
+        switched();
+        await settle(700);
+      });
+
+      await switchedSignal;
+
+      const erase = sql`DELETE FROM awcms_channel_account_assignments WHERE id = ${ownerA!.id}`;
+
+      await Promise.all([switchTx, erase]);
+
+      // Whatever the interleaving, the invariant holds: an `assigned` account
+      // with no owner has its trace.
+      const modeA = (
+        (await sql`SELECT access_mode FROM awcms_channel_accounts WHERE id = ${a}`) as {
+          access_mode: string;
+        }[]
+      )[0]!.access_mode;
+
+      expect(modeA).toBe("assigned");
+      expect(await orphanAudits(a)).toBe(1);
+
+      // (2) `assigned` + owners X and Y. The API unassigns Y (it counted X);
+      // while it is open, an erasure deletes X.
+      const b = await closed("mc-race-b");
+      const second = await seedUser(env.tenantId, "mc-race-y", []);
+
+      expect((await assignRoute(b, second.tenantUserId, "owner")).status).toBe(
+        200
+      );
+
+      const rows = await assignments(b);
+      const y = rows.find((r) => r.tenantUserId === second.tenantUserId)!;
+      const x = rows.find((r) => r.tenantUserId !== second.tenantUserId)!;
+      let unassigned!: () => void;
+      const unassignedSignal = new Promise<void>((r) => (unassigned = r));
+      const unassignTx = sql.begin(async (tx) => {
+        expect(await unassignAccount(tx, env.tenantId, b, y.id)).toBe(
+          "removed"
+        );
+        unassigned();
+        await settle(700);
+      });
+
+      await unassignedSignal;
+
+      const eraseX = sql`DELETE FROM awcms_channel_account_assignments WHERE id = ${x.id}`;
+
+      await Promise.all([unassignTx, eraseX]);
+
+      expect(
+        (
+          (await sql`SELECT 1 FROM awcms_channel_account_assignments WHERE account_id = ${b} AND kind = 'owner'`) as unknown[]
+        ).length
+      ).toBe(0);
+      expect(await orphanAudits(b)).toBe(1);
+    }, 30000);
+
     test("the database refuses what the application would: demoting the last owner, an unowned switch to assigned, and a business-scope rewrite", async () => {
       if (!handlerReady) return;
 

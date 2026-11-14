@@ -18,8 +18,15 @@
 --     `assigned` account with no owner, one `warning` audit row
 --     (`channel_accounts.account.owner_orphaned`) is written in the same
 --     transaction. The row carries the account id only, never the person. The
---     account itself stays fail-closed: with no assignee it is visible to the
---     tenant administrators alone.
+--     account itself stays fail-closed: only its remaining assignees (if any)
+--     and the tenant administrators can reach it.
+--   * The owner rows these guards (and sql/398's) look at are SHARE-locked, not
+--     just read. An erasure takes no account lock, so without it a concurrent
+--     erasure of one owner and a demotion/mode switch that counted that owner
+--     could each succeed unseen, leaving an ownerless `assigned` account with no
+--     audit row. A DELETE waits for the share lock holder and then sees the
+--     committed state; the lock order is account row first (API, guards), and
+--     the erasure holds nothing while it waits, so there is no deadlock.
 --
 -- Pure DDL, no rows written. Every function pins `search_path`.
 
@@ -46,15 +53,21 @@ BEGIN
       AND deleted_at IS NULL
     FOR UPDATE;
 
-    IF v_mode = 'assigned' AND NOT EXISTS (
-      SELECT 1 FROM awcms_channel_account_assignments AS a
+    IF v_mode = 'assigned' THEN
+      -- SHARE-locked, so a concurrent erasure of "the other owner" waits for
+      -- this transaction instead of both seeing the other remain.
+      PERFORM 1
+      FROM awcms_channel_account_assignments AS a
       WHERE a.tenant_id = OLD.tenant_id
         AND a.account_id = OLD.account_id
         AND a.kind = 'owner'
         AND a.id <> OLD.id
-    ) THEN
-      RAISE EXCEPTION 'the last owner of an assigned channel account cannot be demoted'
-        USING ERRCODE = '23514';
+      FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'the last owner of an assigned channel account cannot be demoted'
+          USING ERRCODE = '23514';
+      END IF;
     END IF;
   END IF;
 
@@ -94,7 +107,7 @@ BEGIN
       (OLD.tenant_id, 'channel_accounts',
        'channel_accounts.account.owner_orphaned', 'channel_account',
        OLD.account_id::text, 'warning',
-       'An assigned channel account lost its last owner; it is now visible to administrators only.',
+       'An assigned channel account lost its last owner; only its remaining assignees and the tenant administrators can reach it.',
        jsonb_build_object('accountId', OLD.account_id));
   END IF;
 
