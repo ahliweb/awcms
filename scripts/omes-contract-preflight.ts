@@ -24,14 +24,18 @@
  * It never fetches `omes/main` (or anything else): the only contract it
  * knows is the vendored, pinned snapshot.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
   DECLARED_CONTRACT,
+  DECLARED_PRODUCER_COMPAT,
+  DECLARED_WORKER_EVIDENCE,
   DECLARED_WORKER_RANGE,
   aggregateContractDigest,
-  evaluateWorkerCompatibility
+  evaluateWorkerCompatibility,
+  omesWorkerContractDigest
 } from "../src/modules/omes-control/domain/contracts/compatibility";
 import {
   PIN_MANIFEST_FILENAME,
@@ -46,6 +50,92 @@ export const REQUIRED_WORKER_PATHS = [
   "/api/v1/omes/worker/result",
   "/api/v1/omes/worker/heartbeat"
 ] as const;
+
+/** Where the producer-side compatibility artifacts are vendored (own PIN, own source commit). */
+export const VENDORED_PRODUCER_COMPAT_DIR = path.join(
+  "src",
+  "modules",
+  "omes-control",
+  "contracts",
+  "compatibility",
+  "v1"
+);
+
+function listFilesRelative(dir: string, prefix = ""): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(path.join(dir, prefix), {
+    withFileTypes: true
+  })) {
+    const rel = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...listFilesRelative(dir, rel));
+    else out.push(rel);
+  }
+  return out.sort();
+}
+
+/**
+ * Verifies the vendored producer compatibility artifacts: every PIN-listed
+ * file hashes to what the PIN says, no unpinned file sits beside them, and the
+ * PIN equals the hand-declared {@link DECLARED_PRODUCER_COMPAT}. Read-only.
+ */
+export function checkProducerCompatPin(rootDir: string): string[] {
+  const failures: string[] = [];
+  const dir = path.join(rootDir, VENDORED_PRODUCER_COMPAT_DIR);
+  const pinPath = path.join(dir, PIN_MANIFEST_FILENAME);
+  if (!existsSync(pinPath)) {
+    return [`producer compatibility PIN is missing: ${pinPath}`];
+  }
+  let pin: PinManifest;
+  try {
+    pin = JSON.parse(readFileSync(pinPath, "utf8")) as PinManifest;
+  } catch (err) {
+    return [
+      `producer compatibility PIN is unreadable: ${(err as Error).message}`
+    ];
+  }
+  const files = pin.files ?? {};
+  for (const [name, sha] of Object.entries(files)) {
+    const file = path.join(dir, name);
+    if (!existsSync(file)) {
+      failures.push(`producer compatibility file ${name} is missing`);
+      continue;
+    }
+    const actual = createHash("sha256")
+      .update(readFileSync(file))
+      .digest("hex");
+    if (actual !== sha) {
+      failures.push(
+        `producer compatibility file ${name} does not match the PIN (drift)`
+      );
+    }
+  }
+  for (const rel of listFilesRelative(dir)) {
+    if (rel !== PIN_MANIFEST_FILENAME && !(rel in files)) {
+      failures.push(
+        `producer compatibility file ${rel} is not listed in the PIN`
+      );
+    }
+  }
+  const declared: Array<[string, unknown, unknown]> = [
+    ["sourceRepo", pin.sourceRepo, DECLARED_PRODUCER_COMPAT.sourceRepo],
+    ["area", pin.area, DECLARED_PRODUCER_COMPAT.area],
+    ["version", pin.version, DECLARED_PRODUCER_COMPAT.version],
+    ["sourceCommit", pin.sourceCommit, DECLARED_PRODUCER_COMPAT.sourceCommit],
+    [
+      "aggregate digest",
+      aggregateContractDigest(files),
+      DECLARED_PRODUCER_COMPAT.aggregateDigest
+    ]
+  ];
+  for (const [field, got, want] of declared) {
+    if (got !== want) {
+      failures.push(
+        `producer compatibility PIN ${field} is ${JSON.stringify(got)} but compatibility.ts declares ${JSON.stringify(want)}`
+      );
+    }
+  }
+  return failures;
+}
 
 export type PreflightResult = { failures: string[]; notes: string[] };
 
@@ -87,10 +177,18 @@ export function runOmesContractPreflight(
           `aggregate contract digest is ${digest} but compatibility.ts declares ${DECLARED_CONTRACT.aggregateDigest}`
         );
       }
+      const workerDigest = omesWorkerContractDigest(pin.files ?? {});
+      if (workerDigest !== DECLARED_WORKER_EVIDENCE.workerContractDigest) {
+        failures.push(
+          `worker contract digest (OMES formula) is ${String(workerDigest)} but the recorded ${DECLARED_WORKER_EVIDENCE.releaseTag} evidence is ${DECLARED_WORKER_EVIDENCE.workerContractDigest} - re-derive DECLARED_WORKER_EVIDENCE against the new contract before bumping`
+        );
+      }
     } catch {
       // checkContractsDrift already reported the unreadable manifest.
     }
   }
+
+  failures.push(...checkProducerCompatPin(rootDir));
 
   const openApiPath = path.join(
     rootDir,
@@ -113,8 +211,8 @@ export function runOmesContractPreflight(
     if (verdict.status === "compatible") {
       notes.push(
         verdict.evidence === null
-          ? `worker accepted by the DECLARED range [${DECLARED_WORKER_RANGE.minInclusive}, ${DECLARED_WORKER_RANGE.maxExclusive}); no tagged-release evidence is recorded (compatibility.ts DECLARED_WORKER_RANGE.evidence is null)`
-          : `worker accepted; evidence: ${verdict.evidence}`
+          ? `worker accepted by the DECLARED range [${DECLARED_WORKER_RANGE.minInclusive}, ${DECLARED_WORKER_RANGE.maxExclusive}); no release evidence is recorded for this exact version (the recorded evidence covers only ${DECLARED_WORKER_EVIDENCE.releaseTag})`
+          : `worker accepted by the declared range; evidence: ${verdict.evidence}; build unverified (no manifest-verified build, verifiedBuilds is empty)`
       );
     } else {
       for (const d of verdict.detail) {

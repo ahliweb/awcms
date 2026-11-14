@@ -566,7 +566,9 @@ describe("the dedicated-role job (ADR-0157 section 6)", () => {
     expect(dedicated.targets).not.toContain(
       "social-publishing:retention:purge"
     );
-  });
+    // The transitive import walk over every job takes ~4s on an idle machine
+    // (same on main), so the 5s default left no headroom under CI load.
+  }, 60_000);
 
   test("the job holds the key ring and its own login, and the runner withholds every shared login from it", () => {
     const pairs = scopedPairs().filter(
