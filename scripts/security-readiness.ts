@@ -2030,6 +2030,15 @@ export const WORKER_COLUMN_GRANTS: Record<
     UPDATE: ["status", "decided_by", "decided_at", "updated_at"]
   },
   awcms_hr_employments: { UPDATE: ["updated_at"] },
+  // sql/387 (Issue ahliweb/awcms#1335): the omes_control workflow-verdict settler
+  // moves a pending request / egress approval to the workflow's verdict. The
+  // request itself (operation, parameters, requester, link) is not writable.
+  awcms_omes_operation_requests: {
+    UPDATE: ["status", "approved_by", "updated_at"]
+  },
+  awcms_omes_ai_egress_approvals: {
+    UPDATE: ["decision", "decided_at", "updated_at"]
+  },
   // sql/316 (Issue #1189, ADR-0147): the commission intake switch. The port and
   // the intake insert trigger read exactly these two columns; the intake system
   // actor and the stamps are not readable by the worker.

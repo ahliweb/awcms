@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:89a0706d2518c7a849fcd268d1ee0af313e15283425ad34eca7ba8fd9af4d09b -->
+<!-- i18n-source-hash: sha256:4d8011a5f4f8f692dc2519236fcc4cde9f88b2af27303b6c4a643282b0c89e87 -->
 
 # `omes_control`
 
@@ -52,6 +52,8 @@ Setiap operasi digerbangi permission-nya sendiri (`OMES_OPERATION_GUARD`, guard 
 ## Operasi destruktif melewati `workflow-approval`, tidak pernah approver kedua
 
 `stop` dan `rollback` (serta `POST .../backups/{id}/restore`, yang sengaja **bukan** bagian dari enum operasi-aman — kontrak OMES mengecualikan `restore` dari pengajuan yang menghadap Control Center) bersifat destruktif. Mengajukan salah satunya memanggil `startWorkflowInstance` terhadap definisi `workflow` (workflow-approval) milik tenant sendiri yang sudah dipublikasikan di bawah kunci `omes_control.destructive_operation`. Tenant tanpa definisi aktif di bawah kunci itu mendapat `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` dan **tidak ada yang disimpan** — tidak pernah jatuh diam-diam ke auto-approval. Keputusan workflow itu sendiri adalah satu-satunya otoritas persetujuan manusia; `omes_control` tidak pernah mengimplementasikan yang kedua.
+
+**Verdict lanjutan workflow diterapkan oleh consumer (Issue ahliweb/awcms#1335).** Permintaan operasi destruktif (atau persetujuan egress AI) tetap `requested` (`pending` untuk egress) hanya selama instance workflow masih pending; tidak pernah disetujui otomatis. Verdict yang tiba sinkron (graf tanpa approver) langsung tercermin saat pengajuan. Keputusan manusia yang datang KEMUDIAN diterapkan oleh consumer domain-event `omes_control.workflow_verdict_settler` (`application/omes-workflow-settlement.ts`), yang menangani `awcms.workflow.instance.approved|rejected|cancelled` v1.0 pada koneksi `awcms_worker` (`sql/387`, hanya UPDATE tingkat kolom). Di bawah kunci baris, dan hanya untuk baris yang masih pending dengan `workflow_instance_id` sama dengan instance event pada tenant event: approved memindahkan permintaan operasi ke `approved` (egress: `approved` dengan `decided_at`), dan rejected atau cancelled ke `rejected` (egress: `denied`). `approved_by` mencatat **manusia yang menyetujui** (keputusan approve terbaru pada instance), bukan pemohon; persetujuan tanpa manusia di baliknya, atau yang melibatkan pemohon (langsung atau sebagai pemberi delegasi), TIDAK diterapkan: baris tetap pending, satu baris audit peringatan (`omes_control.workflow_verdict.left_pending`) menyebut hasilnya dan seseorang menyelesaikannya. Event ulang, baris yang sudah selesai, instance tenant lain atau instance modul lain tidak berefek. Consumer tidak pernah membuat job: promosi permintaan `approved` tetap di `worker-job-queue.ts`. Baris audit hanya memuat id dan hasil. `workflow` tetap integrasi lunak (bukan edge `dependencies`; consumer membaca baris instance dan keputusan lewat id dan tidak mengimpor apa pun dari modul workflow); `domain_event_runtime` adalah dependency, sesuai kontrak consumer.
 
 ## Idempotency, rate limiting, redaksi
 

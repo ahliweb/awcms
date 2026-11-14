@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 276   |
+| Migrations                          | 277   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 832   |
+| Test files                          | 833   |
 | Route files                         | 681   |
 | ADR                                 | 324   |
 
@@ -45,7 +45,7 @@
 | `comments`             | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime`                             |
 | `idn_admin_regions`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`                                                                                              |
 | `push_delivery`        | 0.1.0   | active       | —      | no   | `tenant_admin`, `logging`                                                                                                      |
-| `omes_control`         | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`                                                                                              |
+| `omes_control`         | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `domain_event_runtime`                                                                      |
 | `inventory`            | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`, `reporting`                                              |
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory`             |
 | `hr_workforce`         | 0.2.0   | active       | domain | no   | `tenant_admin`, `profile_identity`, `domain_event_runtime`                                                                     |
@@ -341,6 +341,7 @@
 | 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
 | 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
 | 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
+| 277 | `sql/387_awcms_omes_workflow_verdict_worker_grants.sql`                |
 
 ### Tables & Row-Level Security
 
@@ -630,7 +631,7 @@
 | ------------- | ---------- |
 | `(root)`      | 619        |
 | `e2e`         | 30         |
-| `integration` | 182        |
+| `integration` | 183        |
 | `unit`        | 1          |
 
 ### Routes
