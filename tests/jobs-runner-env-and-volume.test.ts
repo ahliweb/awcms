@@ -35,7 +35,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  APP_ROLE_SCHEDULED_EXCEPTIONS,
   appConnectionTargets,
+  appRoleTargetsWithoutWorkerClient,
   dedicatedRoleTargets,
   renderRunnerDedicatedRoles
 } from "../scripts/jobs-env-allowlist";
@@ -849,17 +851,28 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
     ];
     expect(scheduled.length).toBeGreaterThan(20);
 
-    // The ONE scheduled job that runs as awcms_app on purpose: it posts the
-    // commission intake queue into the accrual ledger, and the payroll boundary
-    // lets only the request role touch an accrual (ADR-0147, Issue #1189). Every
-    // other scheduled job is withheld DATABASE_URL.
-    // ADR-0160 (Issue #1164) adds the second: the inbox SLA job re-checks an
-    // assignee's role grants and enqueues the breach e-mail, which only the
-    // request role may read and write.
-    const APP_ROLE_SCHEDULED_JOBS = new Set([
-      "hr-commission:intents:post",
-      "omnichannel-inbox:sla"
-    ]);
+    // The scheduled jobs that run as awcms_app on purpose are the named,
+    // reasoned entries of APP_ROLE_SCHEDULED_EXCEPTIONS (ADR-0147, ADR-0160,
+    // ADR-0162); every other scheduled job is withheld DATABASE_URL.
+    const APP_ROLE_SCHEDULED_JOBS = new Set(
+      APP_ROLE_SCHEDULED_EXCEPTIONS.map((entry) => entry.target)
+    );
+
+    // An app-role job that never opens the worker connection is withheld
+    // WORKER_DATABASE_URL too (audit L-5 of PR #1301); derived, not listed.
+    const packageScripts = (
+      JSON.parse(readFileSync("package.json", "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    const NO_WORKER_JOBS = new Set(
+      appRoleTargetsWithoutWorkerClient(
+        APP_ROLE_SCHEDULED_EXCEPTIONS,
+        packageScripts
+      )
+    );
+
+    expect(NO_WORKER_JOBS.has("email:senders:verify")).toBe(true);
 
     for (const job of scheduled) {
       const { lines, exitCode } = await runSelection(
@@ -868,6 +881,12 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
       );
 
       expect(exitCode).toBe(0);
+
+      if (NO_WORKER_JOBS.has(job)) {
+        expect(names(lines), job).toContain("DATABASE_URL");
+        expect(names(lines), job).not.toContain("WORKER_DATABASE_URL");
+        continue;
+      }
 
       if (APP_ROLE_SCHEDULED_JOBS.has(job)) {
         expect(names(lines), job).toContain("DATABASE_URL");

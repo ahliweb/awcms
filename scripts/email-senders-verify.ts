@@ -29,7 +29,10 @@ import {
   MAILKETING_V2_UNVERIFIED_WARNING,
   isMailketingV2Verified
 } from "../src/modules/email/domain/mailketing-v2-contract";
-import { verifyEmailSendersForTenant } from "../src/modules/email/application/email-sender-verify";
+import {
+  emailSendersVerifyRunFailed,
+  verifyEmailSendersForTenant
+} from "../src/modules/email/application/email-sender-verify";
 
 type TenantRow = { id: string };
 
@@ -56,6 +59,7 @@ async function main() {
       accounts: 0,
       accountsProbed: 0,
       accountsSkipped: 0,
+      secretStoreFailures: 0,
       sendersVerified: 0,
       sendersUnverified: 0,
       sendersUnknown: 0
@@ -82,14 +86,19 @@ async function main() {
     console.log(
       `email:senders:verify complete — tenants=${tenants.length} ` +
         `accounts=${totals.accounts} probed=${totals.accountsProbed} ` +
-        `skipped=${totals.accountsSkipped} verified=${totals.sendersVerified} ` +
+        `skipped=${totals.accountsSkipped} secretStoreFailures=${totals.secretStoreFailures} verified=${totals.sendersVerified} ` +
         `unverified=${totals.sendersUnverified} unknown=${totals.sendersUnknown} ` +
         `failedTenants=${failedTenants}`
     );
 
-    if (failedTenants > 0) process.exitCode = 1;
+    if (emailSendersVerifyRunFailed(totals, failedTenants)) {
+      process.exitCode = 1;
+    }
   } catch (error) {
     logScriptFailure("email:senders:verify FAILED", error);
+    // Audit L-2/L-1 of PR #1301: a failure here (the tenant list could not be
+    // read) used to leave the exit code 0, which cron monitoring reads as success.
+    process.exitCode = 1;
   } finally {
     await sql.close({ timeout: 1 });
   }
