@@ -1116,6 +1116,13 @@ async function lockAccountMode(
   return rows.length === 0 ? null : rows[0]!.access_mode;
 }
 
+/**
+ * The owner rows are SHARE-locked (not only read): a data-subject erasure
+ * deletes assignments without taking the account lock, and the lock makes it
+ * wait for this transaction, so it sees the state this decision produced (and
+ * its orphan-audit trigger fires) instead of both sides counting an owner that
+ * the other is about to remove (sql/398, sql/399).
+ */
 async function otherOwnerExists(
   tx: Bun.SQL,
   tenantId: string,
@@ -1126,7 +1133,7 @@ async function otherOwnerExists(
     SELECT 1 FROM awcms_channel_account_assignments
     WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
       AND kind = 'owner' AND tenant_user_id <> ${exceptTenantUserId}
-    LIMIT 1
+    FOR SHARE
   `) as unknown[];
 
   return rows.length > 0;
@@ -1257,7 +1264,7 @@ export async function setAccountAccessMode(
       SELECT 1 FROM awcms_channel_account_assignments
       WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
         AND kind = 'owner'
-      LIMIT 1
+      FOR SHARE
     `) as unknown[];
 
     if (owners.length === 0) {

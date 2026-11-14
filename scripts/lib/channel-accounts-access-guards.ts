@@ -43,15 +43,22 @@ END;
 const AWCMS_CHANNEL_ACCOUNTS_ACCESS_MODE_GUARD_BODY = `
 BEGIN
   IF NEW.access_mode = 'assigned'
-     AND OLD.access_mode IS DISTINCT FROM 'assigned'
-     AND NOT EXISTS (
-       SELECT 1 FROM awcms_channel_account_assignments AS a
-       WHERE a.tenant_id = NEW.tenant_id
-         AND a.account_id = NEW.id
-         AND a.kind = 'owner'
-     ) THEN
-    RAISE EXCEPTION 'an account can only become assigned when it has an owner'
-      USING ERRCODE = '23514';
+     AND OLD.access_mode IS DISTINCT FROM 'assigned' THEN
+    -- The owner rows are SHARE-locked, not merely read: a concurrent DELETE of
+    -- the only owner (a data-subject erasure takes no account lock) then waits
+    -- for this transaction, and its orphan-audit trigger sees the account as
+    -- 'assigned' and writes the trace. A plain read let both succeed unseen.
+    PERFORM 1
+    FROM awcms_channel_account_assignments AS a
+    WHERE a.tenant_id = NEW.tenant_id
+      AND a.account_id = NEW.id
+      AND a.kind = 'owner'
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'an account can only become assigned when it has an owner'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -77,15 +84,21 @@ BEGIN
       AND deleted_at IS NULL
     FOR UPDATE;
 
-    IF v_mode = 'assigned' AND NOT EXISTS (
-      SELECT 1 FROM awcms_channel_account_assignments AS a
+    IF v_mode = 'assigned' THEN
+      -- SHARE-locked, so a concurrent erasure of "the other owner" waits for
+      -- this transaction instead of both seeing the other remain.
+      PERFORM 1
+      FROM awcms_channel_account_assignments AS a
       WHERE a.tenant_id = OLD.tenant_id
         AND a.account_id = OLD.account_id
         AND a.kind = 'owner'
         AND a.id <> OLD.id
-    ) THEN
-      RAISE EXCEPTION 'the last owner of an assigned channel account cannot be demoted'
-        USING ERRCODE = '23514';
+      FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'the last owner of an assigned channel account cannot be demoted'
+          USING ERRCODE = '23514';
+      END IF;
     END IF;
   END IF;
 
@@ -116,7 +129,7 @@ BEGIN
       (OLD.tenant_id, 'channel_accounts',
        'channel_accounts.account.owner_orphaned', 'channel_account',
        OLD.account_id::text, 'warning',
-       'An assigned channel account lost its last owner; it is now visible to administrators only.',
+       'An assigned channel account lost its last owner; only its remaining assignees and the tenant administrators can reach it.',
        jsonb_build_object('accountId', OLD.account_id));
   END IF;
 
