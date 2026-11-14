@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:7995abdfbb4ee1a5d0fa74f01c6395a771d1aac74a302ac9ef4cfd81073e490b -->
+<!-- i18n-source-hash: sha256:b0b69bd976af21ccb88c58d96b3cbda9390df1f45e945bb55e15dfe7fabbda29 -->
 
 # AWCMS — Project State & Continuation
 
@@ -136,7 +136,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                                                                                               | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                                                                                               | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Modul base                         | **40** (lihat daftar di ARCHITECTURE.md)                                                                                                                                                                         | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **281** (`sql/001`–`397`)                                                                                                                                                                                        | `ls sql/`                                                                               |
+| Migrasi                            | **282** (`sql/001`–`408`)                                                                                                                                                                                        | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0162** (`0000` = template; status ADR tertinggi: **Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **86** berkas `.astro` di `src/pages/admin/`; **5 dari 40** modul tanpa `navigation:` (`crm-follow-up`, `crm-leads`, `social-publishing`, `telegram-engagement`, `website-engagement`)                           | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **108** (63.865 baris) — soal typecheck lihat §6                                                                                                                                                                 | `find src -name '*.astro'`                                                              |
