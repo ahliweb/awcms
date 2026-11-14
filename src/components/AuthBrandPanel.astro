@@ -22,17 +22,20 @@
  * The panel is also hidden below 900px (see `auth.css`), where a decorative
  * half-screen would push the form itself below the fold on a phone.
  *
- * ## Strings are literal English, deliberately
+ * ## Strings follow the `locale` prop (ADR-0095)
  *
- * Every one of these five pages is literal English today — `login.astro` writes
- * `<h1>Sign in</h1>`, not `{t("Sign in")}` — because the unauthenticated
- * surface has no resolved session and therefore no stored locale preference to
- * resolve one from. `i18n:screens:check` scans `src/pages/admin/` only, and its
- * ledger is at zero; adding `t()` here would be a scope change to the auth
- * surface rather than part of this redesign, and half-translating it would be
- * worse than either end state.
+ * `/login`, `/forgot-password` and `/reset-password` resolve their language
+ * with `resolveAuthPageLocale` and pass it here; the panel then translates its
+ * own default copy and chips under the `login` context. A page that passes no
+ * `locale` (`/register`, `/accept-invitation` — still literal English) gets
+ * English, so the panel never speaks a language its page does not.
  */
+import { getTranslatorFor } from "../lib/i18n";
+import type { Locale } from "../lib/i18n/locales";
+
 interface Props {
+  /** The page's resolved language; absent means English. */
+  locale?: Locale;
   /**
    * Optional override of the headline, for a page where "sign in" is not what
    * is about to happen (accepting an invitation, say). Defaults to the
@@ -42,9 +45,17 @@ interface Props {
   subline?: string;
 }
 
+const { tx } = getTranslatorFor(Astro.props.locale);
+
 const {
-  headline = "One admin surface for every tenant, module and audit trail.",
-  subline = "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+  headline = tx(
+    "login",
+    "One admin surface for every tenant, module and audit trail."
+  ),
+  subline = tx(
+    "login",
+    "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+  )
 } = Astro.props;
 
 /**
@@ -56,9 +67,9 @@ const {
  * bad thing to ship; these are the three things it most demonstrably does.
  */
 const CAPABILITIES = [
-  "Multi-tenant",
-  "ABAC access control",
-  "Full audit trail"
+  tx("login", "Multi-tenant"),
+  tx("login", "ABAC access control"),
+  tx("login", "Full audit trail")
 ];
 
 /**

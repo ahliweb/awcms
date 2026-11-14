@@ -10153,4 +10153,244 @@ msgid "You do not hold this sender's business scope."
 msgstr ""
 
 msgid "You may view senders but not change the default."
+
+#. Pre-session auth pages (/login, /forgot-password, /reset-password) — ADR-0095
+msgctxt "login"
+msgid "Sign in"
+msgstr ""
+
+msgctxt "login"
+msgid "Welcome back. Sign in to your workspace."
+msgstr ""
+
+msgctxt "login"
+msgid "Signing in to"
+msgstr ""
+
+msgctxt "login"
+msgid "Password"
+msgstr ""
+
+msgctxt "login"
+msgid "Forgot your password?"
+msgstr ""
+
+msgctxt "login"
+msgid "Sign in failed. Check your details and try again."
+msgstr ""
+
+msgctxt "login"
+msgid "One admin surface for every tenant, module and audit trail."
+msgstr ""
+
+msgctxt "login"
+msgid "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+msgstr ""
+
+msgctxt "login"
+msgid "Multi-tenant"
+msgstr ""
+
+msgctxt "login"
+msgid "ABAC access control"
+msgstr ""
+
+msgctxt "login"
+msgid "Full audit trail"
+msgstr ""
+
+msgctxt "login"
+msgid "Organization"
+msgstr ""
+
+msgctxt "login"
+msgid "Choose your organization"
+msgstr ""
+
+msgctxt "login"
+msgid "Tenant ID"
+msgstr ""
+
+msgctxt "login"
+msgid "Login identifier"
+msgstr ""
+
+msgctxt "login"
+msgid "Show"
+msgstr ""
+
+msgctxt "login"
+msgid "Hide"
+msgstr ""
+
+msgctxt "login"
+msgid "Show password"
+msgstr ""
+
+msgctxt "login"
+msgid "Hide password"
+msgstr ""
+
+msgctxt "login"
+msgid "Account recovery"
+msgstr ""
+
+msgctxt "login"
+msgid "Secured workspace access"
+msgstr ""
+
+msgctxt "login"
+msgid "Please wait…"
+msgstr ""
+
+msgctxt "login"
+msgid "Network error. Please try again."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Reset your password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Locked out? A reset link is one step away."
+msgstr ""
+
+msgctxt "recovery"
+msgid "We send a single-use link to the address on file. Nothing about your account changes until you use it."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Enter the identifier you sign in with. If it belongs to an account, we'll email a link to set a new password."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Recovering for"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Send reset link"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Back to sign in"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Too many requests. Please wait a few minutes and try again."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Could not send the reset link. Check your details and try again."
+msgstr ""
+
+msgctxt "recovery"
+msgid "If an account exists for that identifier, password reset instructions have been sent."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Set a new password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Choose a new password."
+msgstr ""
+
+msgctxt "recovery"
+msgid "The link that brought you here works once and expires; setting a password signs out every other session."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Choose a new password for your account. Signing you out everywhere is part of the reset."
+msgstr ""
+
+msgctxt "recovery"
+msgid "This password reset link is invalid or has expired."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Request a new link"
+msgstr ""
+
+msgctxt "recovery"
+msgid "New password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "At least {count} characters."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Confirm new password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Set new password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Sign in with your new password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Password must be at least {count} characters."
+msgstr ""
+
+msgctxt "recovery"
+msgid "The two passwords do not match."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Too many attempts. Please wait a few minutes and try again."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Your password has been changed and every session was signed out."
+msgstr ""
+
+msgctxt "recovery"
+msgid "Organization"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Choose your organization"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Tenant ID"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Login identifier"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Show"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Hide"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Show password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Hide password"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Account recovery"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Secured workspace access"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Please wait…"
+msgstr ""
+
+msgctxt "recovery"
+msgid "Network error. Please try again."
 msgstr ""
