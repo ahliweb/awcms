@@ -704,6 +704,13 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // an investigator can still answer "who held what in March"; every write is
   // revoked, because a row that can be added or edited is not history, and a row
   // that cannot be revoked must not be one the runtime can create.
+  // Issue #1341 / `sql/408`. NOT retired -- the audit trail, actively written on
+  // every sensitive action. Narrowed to SELECT + INSERT: a row the runtime can
+  // UPDATE or DELETE is not evidence, and a compromised web process must not be
+  // able to rewrite or erase the record of what it did. Retention is the one
+  // legitimate DELETE and it belongs to `awcms_worker` (`WORKER_ROLE_GRANTS`).
+  // `sql/019` granted all four verbs schema-wide, so only the REVOKE achieves it.
+  awcms_audit_events: ["SELECT", "INSERT"],
   awcms_access_assignments: ["SELECT"],
   // ADR-0087 / `sql/114`. The tenant-scoped MFA factor and its recovery codes,
   // superseded by the principal-scoped pair. Retained populated as history (the
@@ -1192,6 +1199,19 @@ type RoleGrantRow = {
   ins: boolean;
   upd: boolean;
   del: boolean;
+  /**
+   * Privileges the four-verb columns above cannot see (Issue #1341 audit M1).
+   * `has_table_privilege(..., 'UPDATE')` is false for a COLUMN-level grant, so
+   * `GRANT UPDATE (message) ON awcms_audit_events` left the gate green while
+   * the role could rewrite the column; TRUNCATE ignores RLS, so a table-wide
+   * TRUNCATE grant lets one tenant's context empty every tenant's rows.
+   */
+  trunc: boolean;
+  trig: boolean;
+  refs: boolean;
+  col_ins: boolean;
+  col_upd: boolean;
+  col_refs: boolean;
 };
 
 /**
@@ -1292,7 +1312,13 @@ export async function checkRuntimeRoleGrants(
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'SELECT') AS sel,
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS ins,
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS upd,
-        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'TRUNCATE') AS trunc,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'TRIGGER') AS trig,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'REFERENCES') AS refs,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS col_ins,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS col_upd,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'REFERENCES') AS col_refs
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
@@ -1366,9 +1392,23 @@ export async function checkRuntimeRoleGrants(
           );
         }
 
+        // Beyond the four verbs: a narrowed table must also hold NO TRUNCATE,
+        // TRIGGER or REFERENCES, and no COLUMN-level INSERT/UPDATE/REFERENCES
+        // that its declaration does not already grant table-wide. Column
+        // grants are the sneaky one: `has_table_privilege` stays false for
+        // them (audit M1).
+        if (row.trunc) excess.push("TRUNCATE");
+        if (row.trig) excess.push("TRIGGER");
+        if (row.refs) excess.push("REFERENCES");
+        if (row.col_refs && !row.refs) excess.push("column-level REFERENCES");
+        if (row.col_ins && !privileges.INSERT)
+          excess.push("column-level INSERT");
+        if (row.col_upd && !privileges.UPDATE)
+          excess.push("column-level UPDATE");
+
         if (excess.length > 0) {
           overGranted.push(
-            `${row.relname} (retired read-only table still has ${excess.join(", ")})`
+            `${row.relname} (narrowed table holds privileges beyond its declaration: ${excess.join(", ")})`
           );
         }
 
@@ -1389,7 +1429,7 @@ export async function checkRuntimeRoleGrants(
 
       if (overGranted.length > 0) {
         parts.push(
-          `over-granted on global RLS-free or retired read-only table(s): ${overGranted.join("; ")}`
+          `over-granted on global RLS-free or narrowed table(s): ${overGranted.join("; ")}`
         );
       }
 
@@ -1419,7 +1459,7 @@ export async function checkRuntimeRoleGrants(
     const retiredTables = Object.keys(retiredTablePrivileges).join(", ");
     const retiredNote =
       retiredTables.length > 0
-        ? ` Retired read-only table(s) hold exactly their declared privileges (${retiredTables}).`
+        ? ` Narrowed table(s) hold exactly their declared privileges (${retiredTables}).`
         : "";
 
     return {
@@ -4880,6 +4920,134 @@ export async function checkWorkerSetupRoleGrants(
 }
 
 // ---------------------------------------------------------------------------
+// 7c-bis. Worker jobs are reachable when the web connection IS `awcms_app`
+//         (critical) — Issue #1341 audit M2
+// ---------------------------------------------------------------------------
+
+/**
+ * `getWorkerDatabaseClient` falls back to `DATABASE_URL` when
+ * `WORKER_DATABASE_URL` is empty (`src/lib/database/client.ts`). That is a
+ * supported default while the web connection is the schema owner, which holds
+ * everything. Once `DATABASE_URL` is the NARROWED `awcms_app` login, though, the
+ * fallback means every unattended job runs as `awcms_app` and hits `permission
+ * denied` on each verb that only `awcms_worker` is meant to hold (for instance
+ * the audit retention DELETE on `awcms_audit_events`, since `sql/408`): the
+ * jobs fail, retention stops, and the readiness gate used to stay green.
+ *
+ * Reports every table where the declared worker matrix grants a verb the
+ * connected `awcms_app` does not, but ONLY in that exact configuration. Any
+ * other connection (the owner, a dedicated worker URL) is out of scope here;
+ * `checkWorkerSetupRoleGrants` covers the worker role itself.
+ */
+export async function checkWorkerJobsReachableWithoutWorkerUrl(options?: {
+  workerGrants?: Record<string, string[]>;
+  workerDatabaseUrl?: string | undefined;
+  /** Injectable for tests that must connect AS `awcms_app`. */
+  client?: Bun.SQL;
+}): Promise<SecurityCheckResult> {
+  const name =
+    "Worker jobs are reachable when the web connection is the narrowed app role";
+  const severity: CheckSeverity = "critical";
+  const workerGrants = options?.workerGrants ?? WORKER_ROLE_GRANTS;
+  const configured =
+    options && "workerDatabaseUrl" in options
+      ? options.workerDatabaseUrl
+      : process.env.WORKER_DATABASE_URL;
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    if (configured !== undefined && configured.trim().length > 0) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence:
+          "WORKER_DATABASE_URL is set, so unattended jobs do not inherit the web connection."
+      };
+    }
+
+    const sql = options?.client ?? getDatabaseClient();
+    const whoRows = (await sql`SELECT current_user AS who`) as {
+      who: string;
+    }[];
+
+    if (whoRows[0]?.who !== LEAST_PRIVILEGE_APP_ROLE) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `The web connection is not "${LEAST_PRIVILEGE_APP_ROLE}" (it is the schema owner), so the WORKER_DATABASE_URL fallback holds every verb. Nothing to verify.`
+      };
+    }
+
+    const rows = (await sql`
+      SELECT
+        c.relname,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'SELECT') AS sel,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS ins,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS upd,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+        AND n.nspname = current_schema()
+    `) as {
+      relname: string;
+      sel: boolean;
+      ins: boolean;
+      upd: boolean;
+      del: boolean;
+    }[];
+
+    const missing: string[] = [];
+
+    for (const row of rows) {
+      const needed = workerGrants[row.relname];
+
+      if (needed === undefined) continue;
+
+      const held: Record<string, boolean> = {
+        SELECT: row.sel,
+        INSERT: row.ins,
+        UPDATE: row.upd,
+        DELETE: row.del
+      };
+      const lacking = needed.filter((privilege) => !held[privilege]);
+
+      if (lacking.length > 0) {
+        missing.push(`${row.relname} (${lacking.join(", ")})`);
+      }
+    }
+
+    if (missing.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `DATABASE_URL is the narrowed "${LEAST_PRIVILEGE_APP_ROLE}" login and WORKER_DATABASE_URL is empty, so unattended jobs fall back to it and hit "permission denied": ${missing.join("; ")}. Point WORKER_DATABASE_URL at the "${WORKER_ROLE}" login before or together with the migration that narrowed the table.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `DATABASE_URL is "${LEAST_PRIVILEGE_APP_ROLE}" with no WORKER_DATABASE_URL, and it still holds every verb the worker jobs use.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify worker job reachability: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 7d. Worker roles cannot read a credential column (critical) — Issue #1078
 // ---------------------------------------------------------------------------
 
@@ -8112,6 +8280,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkLeastPrivilegeRoleProvisioned(),
     await checkRuntimeRoleGrants(),
     await checkWorkerSetupRoleGrants(),
+    await checkWorkerJobsReachableWithoutWorkerUrl(),
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
     await checkDedicatedRoleProbesRan(),
