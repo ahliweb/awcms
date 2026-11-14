@@ -33,6 +33,12 @@ import {
   sendJson,
   sendJsonForData
 } from "./admin-form-client";
+import {
+  clearEnrolmentSecret,
+  finishEnrolment,
+  renderEnrolmentQr as renderEnrolmentQrInto,
+  restoreAfterPageCache
+} from "./enrolment-qr";
 
 /** Translated strings the page rendered for us, with English fallbacks. */
 function message(key: string, fallback: string): string {
@@ -199,6 +205,22 @@ function show(id: string): void {
   if (element) element.hidden = false;
 }
 
+function renderEnrolmentQr(otpauthUri: string): void {
+  renderEnrolmentQrInto(
+    document,
+    otpauthUri,
+    message(
+      "mfaQrLabel",
+      "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+    )
+  );
+}
+
+window.addEventListener("pagehide", () => clearEnrolmentSecret(document));
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) restoreAfterPageCache(document);
+});
+
 function renderRecoveryCodes(codes: readonly string[]): void {
   const list = document.getElementById("account-mfa-recovery-list");
   if (!list) return;
@@ -273,6 +295,7 @@ onSubmit("account-mfa-start-form", async ({ data, submit }) => {
 
   const secret = document.getElementById("account-mfa-secret");
   if (secret) secret.textContent = result.data.secret;
+  renderEnrolmentQr(result.data.otpauthUri);
 
   const startForm = document.getElementById("account-mfa-start-form");
   if (startForm) startForm.hidden = true;
@@ -311,6 +334,12 @@ onSubmit("account-mfa-verify-form", async ({ data, submit }) => {
 
   const form = document.getElementById("account-mfa-verify-form");
   if (form) form.hidden = true;
+
+  // Enrolment is complete: the secret and its QR are no longer needed.
+  finishEnrolment(document);
+  const enrolment = document.getElementById("account-mfa-enrolment");
+  const enrolmentHint = enrolment?.querySelector(".admin-card-hint");
+  if (enrolmentHint instanceof HTMLElement) enrolmentHint.hidden = true;
 
   renderRecoveryCodes(result.data.recoveryCodes);
 });

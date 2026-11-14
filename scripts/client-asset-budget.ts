@@ -1188,8 +1188,18 @@ export const READER_BUDGET_BYTES = 24_000;
  * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
+ *
+ * **Raised for Issue #1316** (TOTP enrolment QR): +6,500 B (365,600 -> 372,100),
+ * measured 372,060 locally with this change, with about 40 B of margin for the
+ * local/CI build difference. It is ONE module, `src/lib/qr/qr-code.ts`, a
+ * dependency-free byte-mode/ECC-M encoder (versions 1-15) imported by
+ * `/admin/account` only. Encoding locally is the point: the otpauth URI carries
+ * the shared TOTP secret, so a third-party QR service or an image URL is not an
+ * option, and a library would cost more than this and add a dependency. No other
+ * screen consumes it. The audit follow-up (page-cache restore + the DOM half in
+ * `enrolment-qr.ts`) raised it again to 372,600 B, measured 372,327 locally.
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 372_600;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -519,6 +519,9 @@ msgstr "Tidak dapat mengubah kata sandi Anda. Silakan coba lagi."
 msgid "Two-factor authentication is already switched on for your account."
 msgstr "Autentikasi dua faktor sudah aktif untuk akun Anda."
 
+msgid "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+msgstr "Kode QR untuk aplikasi autentikator Anda. Jika tidak dapat dipindai, ketik rahasia yang ditampilkan di bawah ke dalam aplikasi."
+
 msgid "Could not start setup. Please try again."
 msgstr "Tidak dapat memulai penyiapan. Silakan coba lagi."
 
