@@ -223,7 +223,7 @@ describeOrSkip(
         );
 
         expect(findings.join(" | ")).toContain(
-          "awcms_worker can CREATE on schema public (directly or through a membership)"
+          "awcms_worker can CREATE on schema public (directly, through a membership, or as its owner)"
         );
       } finally {
         await withAdmin((sql) =>
@@ -234,6 +234,227 @@ describeOrSkip(
           `)
         );
       }
+    });
+
+    async function sqlAsAdmin(statements: string): Promise<void> {
+      await withAdmin((sql) => sql.unsafe(statements));
+    }
+
+    async function findings(migrators: readonly string[] = []) {
+      return (
+        await withAdmin((sql) =>
+          findRestrictedCreatePrivileges(sql, DEFINER_OWNER_ROLES, migrators)
+        )
+      ).join(" | ");
+    }
+
+    test("X3 (H1): a restricted role that OWNS the schema or the database fails", async () => {
+      const db = (await withAdmin(
+        (sql) => sql`SELECT current_database() AS d`
+      )) as { d: string }[];
+      const database = `"${db[0]!.d}"`;
+      const originalDatabaseOwner = (
+        (await withAdmin(
+          (sql) =>
+            sql`SELECT datdba::regrole::text AS o FROM pg_database WHERE datname = current_database()`
+        )) as { o: string }[]
+      )[0]!.o;
+      const quoted = (role: string) => `"${role.replace(/"/g, '""')}"`;
+
+      await mutated(
+        "ALTER SCHEMA public OWNER TO awcms_social_dispatch",
+        "ALTER SCHEMA public OWNER TO pg_database_owner",
+        async () => {
+          expect(await findings()).toContain("awcms_social_dispatch");
+        }
+      );
+      for (const role of ["awcms_worker", "awcms_app"]) {
+        await mutated(
+          `ALTER DATABASE ${database} OWNER TO ${role}`,
+          `ALTER DATABASE ${database} OWNER TO ${quoted(originalDatabaseOwner)}`,
+          async () => {
+            expect(await findings()).toContain(
+              `${role} can CREATE on the database`
+            );
+            // PG15+: the owner is also a member of pg_database_owner, so it
+            // can CREATE in the schema through that membership.
+            expect(await findings()).toContain(
+              `${role} can CREATE on schema public`
+            );
+          }
+        );
+      }
+      expect(await findings()).toBe("");
+    });
+
+    test("X3 (M1): a role with an unrelated name that inherits CREATE through a membership fails, and an allow-listed migrator does not", async () => {
+      const owner = (
+        (await withAdmin(
+          (sql) =>
+            sql`SELECT nspowner::regrole::text AS o FROM pg_namespace WHERE nspname = 'public'`
+        )) as { o: string }[]
+      )[0]!.o;
+
+      await sqlAsAdmin(`
+        CREATE ROLE rdy_creator NOLOGIN;
+        GRANT CREATE ON SCHEMA public TO rdy_creator;
+        CREATE ROLE rdy_evil LOGIN IN ROLE rdy_creator;
+      `);
+      try {
+        expect(await findings()).toContain(
+          "rdy_evil can CREATE on schema public"
+        );
+        // The explicit allow-list is the ONLY way out.
+        expect(await findings(["rdy_evil", "rdy_creator"])).toBe("");
+      } finally {
+        await sqlAsAdmin(`
+          DROP ROLE rdy_evil;
+          REVOKE CREATE ON SCHEMA public FROM rdy_creator;
+          DROP ROLE rdy_creator;
+        `);
+      }
+      expect(owner.length).toBeGreaterThan(0);
+      expect(await findings()).toBe("");
+    });
+
+    test("X3 (M1): a NOLOGIN owner of a SECURITY DEFINER function that inherits CREATE fails", async () => {
+      await sqlAsAdmin(`
+        CREATE ROLE rdy_creator NOLOGIN;
+        GRANT CREATE ON SCHEMA public TO rdy_creator;
+        CREATE ROLE rdy_definer NOLOGIN IN ROLE rdy_creator;
+        CREATE FUNCTION public.rdy_secdef() RETURNS int LANGUAGE sql SECURITY DEFINER
+          SET search_path = public, pg_temp AS 'SELECT 1';
+        ALTER FUNCTION public.rdy_secdef() OWNER TO rdy_definer;
+        REVOKE CREATE ON SCHEMA public FROM rdy_creator;
+        CREATE ROLE rdy_holder NOLOGIN;
+        GRANT CREATE ON SCHEMA public TO rdy_holder;
+        GRANT rdy_holder TO rdy_definer;
+      `);
+      try {
+        expect(await findings()).toContain(
+          "rdy_definer can CREATE on schema public"
+        );
+        // A plain NOLOGIN role that owns nothing is out of scope.
+        expect(await findings()).not.toContain("rdy_creator can CREATE");
+      } finally {
+        await sqlAsAdmin(`
+          DROP FUNCTION public.rdy_secdef();
+          REVOKE rdy_holder FROM rdy_definer;
+          REVOKE CREATE ON SCHEMA public FROM rdy_holder;
+          DROP ROLE rdy_holder;
+          DROP ROLE rdy_definer;
+          DROP ROLE rdy_creator;
+        `);
+      }
+      expect(await findings()).toBe("");
+    });
+
+    test("X3 (L6): a SECURITY DEFINER function that does not pin exactly search_path = public, pg_temp fails", async () => {
+      await sqlAsAdmin(`
+        CREATE FUNCTION public.rdy_unpinned() RETURNS int LANGUAGE sql SECURITY DEFINER
+          SET search_path = public AS 'SELECT 1';
+      `);
+      try {
+        expect(await findings()).toContain(
+          "rdy_unpinned() does not pin exactly search_path = public, pg_temp"
+        );
+      } finally {
+        await sqlAsAdmin("DROP FUNCTION public.rdy_unpinned()");
+      }
+      expect(await findings()).toBe("");
+    });
+
+    test("X4 (M2): a listed role that is BYPASSRLS is a finding, not a skipped role; evidence names who was probed", async () => {
+      await mutated(
+        "ALTER ROLE awcms_app BYPASSRLS",
+        "ALTER ROLE awcms_app NOBYPASSRLS",
+        async () => {
+          const probe = await withAdmin((sql) =>
+            probeTenantIsolationUnderDefinerRead(sql, [
+              "awcms_app",
+              "awcms_social_source_check"
+            ])
+          );
+
+          expect(probe.findings.join(" | ")).toContain(
+            "awcms_app is BYPASSRLS"
+          );
+          expect(probe.probedRoles).toEqual(["awcms_social_source_check"]);
+          expect(probe.skippedRoles).toEqual(["awcms_app"]);
+
+          // Through the check wrapper: this mutation is caught ONLY by the
+          // probe (no policy changed), so it proves the findings are wired in.
+          const result = await checkTenantIsolationPoliciesCanonical();
+
+          expect(result.status).toBe("fail");
+          expect(result.evidence).toContain("awcms_app is BYPASSRLS");
+        }
+      );
+
+      const clean = await checkTenantIsolationPoliciesCanonical();
+
+      expect(clean.status).toBe("pass");
+      expect(clean.evidence).toContain("awcms_app, awcms_social_source_check");
+    });
+
+    test("X4 (L3): the probe has a positive control and the wrapper reports a probe-only finding", async () => {
+      // USING (false) keeps the exact-pin silent only if it is canonical, so
+      // use a mutation the pin cannot see: RLS switched OFF while FORCE stays.
+      await mutated(
+        "ALTER TABLE awcms_blog_posts DISABLE ROW LEVEL SECURITY",
+        "ALTER TABLE awcms_blog_posts ENABLE ROW LEVEL SECURITY",
+        async () => {
+          const result = await checkTenantIsolationPoliciesCanonical();
+
+          expect(result.status).toBe("fail");
+          expect(result.evidence).toContain(
+            "reads ANOTHER tenant's awcms_blog_posts row"
+          );
+        }
+      );
+
+      const restore = await restoreStatement();
+
+      await mutated(
+        "ALTER POLICY awcms_blog_posts_tenant_isolation ON awcms_blog_posts USING (false)",
+        restore,
+        async () => {
+          const probe = await withAdmin((sql) =>
+            probeTenantIsolationUnderDefinerRead(sql, ["awcms_app"])
+          );
+
+          expect(probe.findings.join(" | ")).toContain(
+            "awcms_app cannot see its own tenant's awcms_blog_posts row (the isolation probe is blind)"
+          );
+        }
+      );
+    });
+
+    test("X4 (L1): a schema named after the connecting role cannot redirect the pin, and zero tables is a finding", async () => {
+      const user = (
+        (await withAdmin((sql) => sql`SELECT current_user AS u`)) as {
+          u: string;
+        }[]
+      )[0]!.u;
+
+      await sqlAsAdmin(`CREATE SCHEMA "${user}"`);
+      try {
+        const { checkedTables, findings: drift } = await withAdmin(
+          findTenantIsolationPolicyDrift
+        );
+
+        expect(checkedTables).toBeGreaterThan(0);
+        expect(drift).toEqual([]);
+      } finally {
+        await sqlAsAdmin(`DROP SCHEMA "${user}"`);
+      }
+
+      // A catalog with no FORCE-RLS table must not pass vacuously.
+      const stub = (async () => []) as unknown as Bun.SQL;
+      const none = await findTenantIsolationPolicyDrift(stub);
+
+      expect(none.checkedTables).toBe(0);
+      expect(none.findings.join(" | ")).toContain("checked nothing");
     });
 
     async function restoreStatement(): Promise<string> {
@@ -366,8 +587,8 @@ describeOrSkip(
             []
           );
           expect(
-            await probeTenantIsolationUnderDefinerRead(sql, ["awcms_app"])
-          ).toEqual({ ran: false, findings: [] });
+            (await probeTenantIsolationUnderDefinerRead(sql, ["awcms_app"])).ran
+          ).toBe(false);
         } finally {
           await sql.close({ timeout: 1 });
         }

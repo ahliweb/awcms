@@ -23,18 +23,36 @@ class ProbeRollback extends Error {}
  * owner and by nobody else: not `PUBLIC`, not the runtime, worker, setup or
  * dedicated dispatch roles, not any NOLOGIN definer-owner role.
  *
- * The allow-list is exact and holds ONE entry: the owner of the schema and the
- * owner of the database (the migrator). Superusers hold it implicitly and are
- * outside what a GRANT can change. TEMP is deliberately not reported: PostgreSQL
- * grants it to PUBLIC by default and `pg_temp` is the LAST entry of every pinned
- * search_path, so a temp object cannot shadow a `public` one.
+ * The allow-list is explicit: the owner of the schema and of the database (the
+ * migrator) plus the roles named in `migrators` (a deployment whose migrator is
+ * a LOGIN member of a NOLOGIN owner role). The owner is exempt BY ROLE, never by
+ * identity alone: an owner that is itself a restricted role (`awcms_*` or a
+ * documented definer owner) is reported, because `ALTER SCHEMA public OWNER TO
+ * awcms_worker` and `ALTER DATABASE ... OWNER TO awcms_app` (the latter makes it
+ * a member of `pg_database_owner`, the PG15+ owner of `public`) grant CREATE as
+ * surely as a GRANT does. Superusers hold it implicitly and are outside what a
+ * GRANT can change.
+ *
+ * The effective-privilege stage covers every non-superuser role that can LOG IN
+ * as well as the restricted roles, so a throwaway `rdy_evil` that is a member of
+ * the owner is reported even though its name says nothing.
+ *
+ * TEMP is not reported as a privilege: PostgreSQL grants it to PUBLIC by default
+ * and `pg_temp` is the LAST entry of every pinned search_path. That premise is
+ * enforced here instead (stage 3): every SECURITY DEFINER function must carry
+ * exactly `search_path=public, pg_temp`, else a temp table could shadow a
+ * `public` one inside a definer body.
+ *
+ * The schema is the literal `public`, never `current_schema()`: a schema named
+ * after the connecting role ("$user") would otherwise redirect every query here.
  *
  * Returns the findings (empty when clean). Never throws on a clean database; a
  * driver error propagates to the caller, which reports it as a failure.
  */
 export async function findRestrictedCreatePrivileges(
   sql: Bun.SQL,
-  definerOwners: readonly string[]
+  definerOwners: readonly string[],
+  migrators: readonly string[] = []
 ): Promise<string[]> {
   const findings: string[] = [];
 
@@ -44,16 +62,15 @@ export async function findRestrictedCreatePrivileges(
     SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS grantee
     FROM pg_namespace n,
          LATERAL aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a
-    WHERE n.nspname = current_schema()
+    WHERE n.nspname = 'public'
       AND a.privilege_type = 'CREATE'
       AND a.grantee <> n.nspowner
+      AND (a.grantee = 0 OR pg_get_userbyid(a.grantee) <> ALL(${sql.array([...migrators], "text")}))
     ORDER BY 1
   `) as { grantee: string }[];
 
   for (const row of schemaGrants) {
-    findings.push(
-      `${row.grantee} holds CREATE on schema ${await currentSchemaName(sql)}`
-    );
+    findings.push(`${row.grantee} holds CREATE on schema public`);
   }
 
   const databaseGrants = (await sql`
@@ -63,6 +80,7 @@ export async function findRestrictedCreatePrivileges(
     WHERE d.datname = current_database()
       AND a.privilege_type = 'CREATE'
       AND a.grantee <> d.datdba
+      AND (a.grantee = 0 OR pg_get_userbyid(a.grantee) <> ALL(${sql.array([...migrators], "text")}))
     ORDER BY 1
   `) as { grantee: string }[];
 
@@ -70,30 +88,39 @@ export async function findRestrictedCreatePrivileges(
     findings.push(`${row.grantee} holds CREATE on the database`);
   }
 
-  // 2. The EFFECTIVE privilege of every AWCMS role: catches a grant that arrives
-  //    through membership (`GRANT <owner-ish role> TO awcms_worker`) which no
-  //    ACL names. Scope = every `awcms_*` role, every documented definer owner,
-  //    every owner of a SECURITY DEFINER function in the schema, and the role
-  //    this check connects as. Superusers and the database/schema owner are the
-  //    legitimate holders.
+  // 2. The EFFECTIVE privilege: catches a grant that arrives through membership
+  //    (`GRANT <owner-ish role> TO <anyone>`) which no ACL names. Scope = every
+  //    non-superuser role that can LOG IN, every `awcms_*` role, every documented
+  //    definer owner, every owner of a SECURITY DEFINER function in the schema
+  //    and the role this check connects as. Exempt: superusers, the allow-listed
+  //    migrators and the schema/database owner, the owner only while it is NOT
+  //    itself a restricted role (see the header).
   const effective = (await sql`
     SELECT r.rolname,
-           has_schema_privilege(r.oid, current_schema(), 'CREATE') AS on_schema,
+           has_schema_privilege(r.oid, 'public', 'CREATE') AS on_schema,
            has_database_privilege(r.oid, current_database(), 'CREATE') AS on_database
     FROM pg_roles r
     WHERE NOT r.rolsuper
       AND r.rolname NOT LIKE 'pg\_%'
-      AND r.oid <> (SELECT datdba FROM pg_database WHERE datname = current_database())
-      AND r.oid <> (SELECT nspowner FROM pg_namespace WHERE nspname = current_schema())
+      AND r.rolname <> ALL(${sql.array([...migrators], "text")})
       AND (
-        r.rolname LIKE 'awcms\_%'
+        r.oid NOT IN (
+          (SELECT datdba FROM pg_database WHERE datname = current_database()),
+          (SELECT nspowner FROM pg_namespace WHERE nspname = 'public')
+        )
+        OR r.rolname LIKE 'awcms\_%'
+        OR r.rolname = ANY(${sql.array([...definerOwners], "text")})
+      )
+      AND (
+        r.rolcanlogin
+        OR r.rolname LIKE 'awcms\_%'
         OR r.rolname = current_user
         OR r.rolname = ANY(${sql.array([...definerOwners], "text")})
         OR r.oid IN (
           SELECT p.proowner
           FROM pg_proc p
           JOIN pg_namespace pn ON pn.oid = p.pronamespace
-          WHERE p.prosecdef AND pn.nspname = current_schema()
+          WHERE p.prosecdef AND pn.nspname = 'public'
             AND NOT EXISTS (
               SELECT 1 FROM pg_depend d
               WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
@@ -107,25 +134,41 @@ export async function findRestrictedCreatePrivileges(
   for (const row of effective) {
     if (row.on_schema) {
       findings.push(
-        `${row.rolname} can CREATE on schema ${await currentSchemaName(sql)} (directly or through a membership)`
+        `${row.rolname} can CREATE on schema public (directly, through a membership, or as its owner)`
       );
     }
     if (row.on_database) {
       findings.push(
-        `${row.rolname} can CREATE on the database (directly or through a membership)`
+        `${row.rolname} can CREATE on the database (directly, through a membership, or as its owner)`
       );
     }
   }
 
+  // 3. The premise behind not reporting TEMP: every SECURITY DEFINER function
+  //    pins exactly `search_path=public, pg_temp`. A function without it (or
+  //    with `public` alone, which makes pg_temp implicitly FIRST for relations)
+  //    lets a temp object shadow a `public` table inside the definer body.
+  const unpinned = (await sql`
+    SELECT p.oid::regprocedure::text AS fn
+    FROM pg_proc p
+    JOIN pg_namespace pn ON pn.oid = p.pronamespace
+    WHERE p.prosecdef AND pn.nspname = 'public'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
+          AND d.deptype = 'e'
+      )
+      AND p.proconfig IS DISTINCT FROM ARRAY['search_path=public, pg_temp']
+    ORDER BY 1
+  `) as { fn: string }[];
+
+  for (const row of unpinned) {
+    findings.push(
+      `SECURITY DEFINER function ${row.fn} does not pin exactly search_path = public, pg_temp`
+    );
+  }
+
   return [...new Set(findings)];
-}
-
-async function currentSchemaName(sql: Bun.SQL): Promise<string> {
-  const rows = (await sql`SELECT current_schema() AS name`) as {
-    name: string;
-  }[];
-
-  return rows[0]?.name ?? "public";
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +480,7 @@ export async function findTenantIsolationPolicyDrift(
       SELECT c.relname
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = current_schema()
+      WHERE n.nspname = 'public'
         AND c.relkind IN ('r', 'p')
         AND c.relrowsecurity AND c.relforcerowsecurity
       ORDER BY c.relname
@@ -458,16 +501,23 @@ export async function findTenantIsolationPolicyDrift(
     FROM pg_policy p
     JOIN pg_class c ON c.oid = p.polrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = current_schema()
+    WHERE n.nspname = 'public'
       AND c.relforcerowsecurity
       AND p.polpermissive
     ORDER BY c.relname, p.polname
   `) as PolicyRow[];
 
-  return {
-    checkedTables: tables.length,
-    findings: evaluateTenantIsolationPolicies(tables, rows)
-  };
+  const findings = evaluateTenantIsolationPolicies(tables, rows);
+
+  // A pin over zero tables passes vacuously; a database that has FORCE-RLS
+  // tables at all must show them here.
+  if (tables.length === 0) {
+    findings.push(
+      "no FORCE-RLS table was found in schema public, so the tenant isolation pin checked nothing"
+    );
+  }
+
+  return { checkedTables: tables.length, findings };
 }
 
 /**
@@ -481,24 +531,53 @@ export async function findTenantIsolationPolicyDrift(
  * Needs a superuser connection to seed and to assume the roles; otherwise the
  * probe does not run (`ran: false`) and the exact expression pin above is the
  * guard.
+ *
+ * A listed role that is a superuser or holds BYPASSRLS is a FINDING, not a role
+ * to skip: it reads every tenant's rows whatever the policies say, so its
+ * isolation cannot be probed and does not exist. The result names the roles that
+ * were probed and the ones that could not be (not provisioned, no read grant),
+ * so a caller's evidence never claims a probe that did not happen.
  */
 export async function probeTenantIsolationUnderDefinerRead(
   sql: Bun.SQL,
   roles: readonly string[]
-): Promise<{ ran: boolean; findings: string[] }> {
+): Promise<{
+  ran: boolean;
+  findings: string[];
+  probedRoles: string[];
+  skippedRoles: string[];
+}> {
   const can = (await sql`
     SELECT rolsuper AS can FROM pg_roles WHERE rolname = current_user
   `) as { can: boolean }[];
 
-  if (!can[0]?.can) return { ran: false, findings: [] };
+  if (!can[0]?.can) {
+    return {
+      ran: false,
+      findings: [],
+      probedRoles: [],
+      skippedRoles: [...roles]
+    };
+  }
 
   const existing = (await sql`
-    SELECT rolname FROM pg_roles
+    SELECT rolname, rolsuper, rolbypassrls FROM pg_roles
     WHERE rolname = ANY(${sql.array([...roles], "text")})
-      AND NOT rolsuper AND NOT rolbypassrls
     ORDER BY rolname
-  `) as { rolname: string }[];
+  `) as { rolname: string; rolsuper: boolean; rolbypassrls: boolean }[];
   const findings: string[] = [];
+  const probedRoles = new Set<string>();
+  const exempt = new Set<string>();
+
+  for (const row of existing) {
+    if (row.rolsuper || row.rolbypassrls) {
+      exempt.add(row.rolname);
+      findings.push(
+        `${row.rolname} is ${row.rolsuper ? "a superuser" : "BYPASSRLS"}: it reads every tenant's rows whatever the policies say, so tenant isolation cannot hold for it`
+      );
+    }
+  }
+
   let probed = 0;
 
   try {
@@ -511,7 +590,7 @@ export async function probeTenantIsolationUnderDefinerRead(
         const code = `rdy-${id.slice(0, 8)}`;
 
         await tx`
-          INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+          INSERT INTO public.awcms_tenants (id, tenant_code, tenant_name)
           VALUES (${id}, ${code}, ${code})
         `;
       }
@@ -520,7 +599,7 @@ export async function probeTenantIsolationUnderDefinerRead(
         await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
 
         const rows = (await tx`
-          INSERT INTO awcms_blog_posts
+          INSERT INTO public.awcms_blog_posts
             (tenant_id, author_tenant_user_id, title, slug, content_json,
              content_text, status, visibility, published_at)
           VALUES (${tenantId}, ${actor}, 'probe', ${`probe-${tenantId.slice(0, 8)}`},
@@ -536,7 +615,7 @@ export async function probeTenantIsolationUnderDefinerRead(
         const id = crypto.randomUUID();
 
         await tx`
-          INSERT INTO awcms_news_media_objects
+          INSERT INTO public.awcms_news_media_objects
             (id, tenant_id, bucket_name, object_key, public_url, mime_type,
              status, created_by_tenant_user_id, copyright_status,
              rights_verification_status)
@@ -561,6 +640,8 @@ export async function probeTenantIsolationUnderDefinerRead(
       await tx`SELECT set_config('app.current_tenant_id', ${mine}, true)`;
 
       for (const { rolname } of existing) {
+        if (exempt.has(rolname)) continue;
+
         for (const table of [
           "awcms_blog_posts",
           "awcms_news_media_objects"
@@ -571,22 +652,34 @@ export async function probeTenantIsolationUnderDefinerRead(
 
           if (!allowed[0]?.ok) continue;
 
-          // A role without the grant cannot be probed on this table; the
-          // sentinel savepoint keeps one refused read from aborting the rest.
+          // One savepoint per read: a refused read rolls back to it (and the
+          // SET LOCAL ROLE with it) instead of aborting the transaction and
+          // hiding the real error behind "current transaction is aborted".
           let seen: string[] = [];
 
-          await tx.unsafe(`SET LOCAL ROLE "${rolname.replace(/"/g, '""')}"`);
           try {
-            const rows = (await tx.unsafe(
-              `SELECT id::text AS id FROM ${table} WHERE id = ANY($1::uuid[])`,
-              [`{${mineIds[table]},${otherIds[table]}}`]
-            )) as { id: string }[];
+            seen = await tx.savepoint(async (sp) => {
+              await sp.unsafe(
+                `SET LOCAL ROLE "${rolname.replace(/"/g, '""')}"`
+              );
 
-            seen = rows.map((row) => row.id);
-          } finally {
-            await tx.unsafe("RESET ROLE");
+              const rows = (await sp.unsafe(
+                `SELECT id::text AS id FROM public."${table}" WHERE id = ANY($1::uuid[])`,
+                [`{${mineIds[table]},${otherIds[table]}}`]
+              )) as { id: string }[];
+
+              await sp.unsafe("RESET ROLE");
+
+              return rows.map((row) => row.id);
+            });
+          } catch (error) {
+            findings.push(
+              `${rolname} could not read ${table} during the isolation probe: ${error instanceof Error ? error.message : String(error)}`
+            );
+            continue;
           }
 
+          probedRoles.add(rolname);
           probed += 1;
 
           if (!seen.includes(mineIds[table])) {
@@ -610,10 +703,17 @@ export async function probeTenantIsolationUnderDefinerRead(
         ran: true,
         findings: [
           `the tenant-isolation probe could not run: ${error instanceof Error ? error.message : String(error)}`
-        ]
+        ],
+        probedRoles: [...probedRoles],
+        skippedRoles: []
       };
     }
   }
 
-  return { ran: probed > 0, findings };
+  return {
+    ran: probed > 0,
+    findings,
+    probedRoles: [...probedRoles].sort(),
+    skippedRoles: roles.filter((role) => !probedRoles.has(role))
+  };
 }
