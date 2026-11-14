@@ -243,6 +243,34 @@ describe("third-party text cannot steer the planner or notify strangers", () => 
     expect(out).toContain("`@keep/code`");
   });
 
+  test("no crafted comment or tag variant can open, so none can spoof the fingerprint", () => {
+    const fp = findingFingerprint(victim.key);
+    const variants = [
+      `<!-- deps-finding:${fp} -->`,
+      `<!--deps-finding:${fp}--!>`,
+      `<!-- deps-finding:${fp} --\n>`,
+      `</script >`,
+      `</script\t\nfoo="bar">`,
+      `<scr<!-- -->ipt>`
+    ];
+
+    for (const variant of variants) {
+      const out = neutralizeUntrusted(`a ${variant} b`);
+
+      expect(out).not.toContain("<");
+      expect(out).not.toContain(">");
+
+      const body = issueBody(
+        { key: "attacker", title: "t", detail: `${variant}\n${variant}` },
+        "src"
+      );
+
+      expect(body.match(/</g)).toHaveLength(1);
+      expect([...markersIn(body)]).toEqual([findingFingerprint("attacker")]);
+      expect(markersIn(`${findingMarker("attacker")}\n${out}`).size).toBe(1);
+    }
+  });
+
   test("the issue body applies it to the finding text but keeps its own marker", () => {
     const body = issueBody(
       { key: "k", title: "t", detail: "bad --> @octocat <!-- x" },

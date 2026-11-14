@@ -61,9 +61,14 @@ export function markersIn(body: string): Set<string> {
  * `@`, which GitHub does not turn into a mention there.
  */
 export function neutralizeUntrusted(text: string): string {
+  // No tag/comment regex on purpose: every form of an HTML comment or tag
+  // (`<!--`, `--!>`, `</script >`, ...) needs a literal `<` or `>` to exist, so
+  // escaping those two characters closes all of them at once. A pattern that
+  // tried to recognise tags would have to enumerate each variant.
   return text
-    .replace(/<!--/g, "&lt;!--")
-    .replace(/-->/g, "--&gt;")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
     .split(/(`[^`\n]*`)/)
     .map((part, index) =>
       index % 2 === 1 ? part : part.replace(/@/g, "@\u200b")
