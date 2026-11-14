@@ -1196,9 +1196,10 @@ export const READER_BUDGET_BYTES = 24_000;
  * `/admin/account` only. Encoding locally is the point: the otpauth URI carries
  * the shared TOTP secret, so a third-party QR service or an image URL is not an
  * option, and a library would cost more than this and add a dependency. No other
- * screen consumes it.
+ * screen consumes it. The audit follow-up (page-cache restore + the DOM half in
+ * `enrolment-qr.ts`) raised it again to 372,600 B, measured 372,327 locally.
  */
-export const APP_BUDGET_BYTES = 372_100;
+export const APP_BUDGET_BYTES = 372_600;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -216,10 +216,12 @@ function decode(modules: readonly (readonly boolean[])[]): {
 
 describe("QR encoder tables match the frozen ISO values", () => {
   test("block counts and ECC lengths per block (Table 9, level M)", () => {
-    expect([...ENCODER_ECC_CODEWORDS_PER_BLOCK_M]).toEqual(
+    expect(Array.from(ENCODER_ECC_CODEWORDS_PER_BLOCK_M) as number[]).toEqual(
       ECC_CODEWORDS_PER_BLOCK_M
     );
-    expect([...ENCODER_BLOCK_COUNT_M]).toEqual(BLOCK_COUNT_M);
+    expect(Array.from(ENCODER_BLOCK_COUNT_M) as number[]).toEqual(
+      BLOCK_COUNT_M
+    );
   });
 
   test("version information of every version 7-15 matches Annex D", () => {
