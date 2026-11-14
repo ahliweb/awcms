@@ -210,7 +210,11 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
   ...[
     "awcms_channel_webhook_subscriptions",
     "awcms_whatsapp_service_windows",
-    "awcms_whatsapp_webhook_receipts"
+    "awcms_whatsapp_webhook_receipts",
+    // sql/394 (#1298 audit LOW-1): the same probe also seeds a fresh sent, an
+    // old queued and an aged failed message, to prove the worker's queue
+    // DELETE floor; rolled back with the rest.
+    "awcms_whatsapp_messages"
   ].map((table) => ({
     table,
     excusedOwner: TOOLING,

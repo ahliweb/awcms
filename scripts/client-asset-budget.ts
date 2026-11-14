@@ -1188,8 +1188,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
+ *
+ * **Raised for Issue #1164** (the omnichannel inbox screens): +4,960 B (365,600
+ * -> 370,560), measured 370,523 locally with this change (`main` sat about 40 B
+ * under its budget), with 37 B of margin for the local/CI build difference. Two
+ * page scripts, each on its own screen only: the conversation detail
+ * (`/admin/omnichannel-inbox/[id]`: status, tags, record-a-response and the
+ * assignment, each mapped to a translated-in-English error sentence) and the
+ * settings (`/admin/omnichannel-inbox/settings`: policy form, tag form, two
+ * confirmed deletions and the batched rebuild loop), plus a small pure helper
+ * (`omnichannel-inbox-screen.ts`, the policy form's body builder) the settings
+ * script imports. The list screen ships no script. The lifecycle is the shared
+ * `admin-form-client.ts`, the key source is the shared
+ * `admin-idempotency-key.ts` and the confirmation is the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * **Raised again for the #1164 audit follow-up**: +160 B (370,560 -> 370,720),
+ * measured 370,615 locally (+92 B). The rebuild button now continues from where
+ * the previous click stopped (state across clicks plus a pure resume-point
+ * helper) instead of replaying the first batches forever on a large tenant.
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 370_720;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

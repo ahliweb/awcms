@@ -128,6 +128,8 @@ describe("findSharedTableWrites", () => {
       "awcms_email_provider_events",
       "awcms_whatsapp_service_windows",
       "awcms_whatsapp_webhook_receipts",
+      // #1298 LOW-1: the same probe seeds queue rows for the DELETE floor.
+      "awcms_whatsapp_messages",
       // #1146: the social dispatch write-boundary probe.
       "awcms_social_publications",
       "awcms_social_publish_jobs",

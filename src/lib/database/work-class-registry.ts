@@ -135,6 +135,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Outbox dispatcher (whatsapp:dispatch, ADR-0133), recommended every 1-2 minutes — the same profile as push/email dispatch, and every withTenantOrThrow call inside whatsapp-dispatch.ts already passes workClass: "background_sync" explicitly.'
   },
+  "scripts/whatsapp-meta-preflight.ts": {
+    workClass: "background_sync",
+    rationale:
+      'Read-only operator preflight (whatsapp:meta:preflight, Issue #1298 L5) run once before the Meta path is enabled, as awcms_worker with three SELECTs per tenant; the same profile as whatsapp:dispatch, whose verdict it predicts, and its withTenantOrThrow call passes workClass: "background_sync" explicitly.'
+  },
   // `scripts/social-publishing-dispatch.ts` is NOT listed since Issue #1146: it
   // opens no worker/setup connection (it runs only as its own role through
   // `social-publishing-dispatch-client.ts`), and every transaction inside

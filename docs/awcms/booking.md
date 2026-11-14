@@ -421,6 +421,39 @@ privileges their literals need, and `EXECUTE` is the worker's alone. Lazy
 reclaim (§5.1) is not this job: it runs inside the claim's transaction as the
 application role.
 
+**Worker-callable confirm and cancel** (Issue #1278, `sql/388`). A downstream
+consumer that confirms or cancels from `domain-events:dispatch` runs as
+`awcms_worker`, which has no privilege on these tables, so `BookingPort.confirm`
+and `.cancel` take a second path when the connection's `current_user` is
+`awcms_worker`: `awcms_booking_worker_transition(tenant, reservation, action,
+actor, correlation, reason)`, the sweep's pattern again. A dedicated NOLOGIN,
+memberless owner (`awcms_booking_transition`) holds only column-scoped `UPDATE`
+on the release and status columns plus `INSERT` on the history table;
+`search_path` is pinned; the tenant argument must equal the session's
+`app.current_tenant_id` (else 42501); `EXECUTE` is the worker's alone. `action`
+is `confirm` or `cancel` and nothing else (22023): check-in, completion and
+no-show stay without a worker path. The rule is written twice (this function and
+`transitionReservation`), so `booking-worker-transition.integration.test.ts` runs
+BOTH for every status and compares the rows they leave. The audit row
+(`recordTransitionAudit`) and the domain event are written once, by the same
+functions, from the facts the function returns. **Decision recorded:** the worker
+path stores no Idempotency-Key record (the worker has no `INSERT` on
+`awcms_idempotency_keys`, and a function that wrote one would write a hash and a
+response the caller supplies). It still HONOURS a stored record (a replay or a
+conflict), and its retry safety is layer 2, the state check: asking for the state
+already reached writes nothing. Consequences a worker consumer must know
+(audit of PR #1302, L-3): (a) a key reused for a DIFFERENT reservation is not
+detected on this path (the application path answers `IDEMPOTENCY_CONFLICT`; only
+a record the application path created is honoured); (b) a redelivered `confirm`
+after the reservation was cancelled answers `INVALID_STATE`, where the
+application path replays the stored `ok`. A consumer that performs a side effect
+(a refund, a message) on a refusal must therefore not key it on the answer alone:
+route it through `awcms_domain_event_consumer_effects` for exactly-once. The
+actor is self-asserted (a tenant user of the SAME tenant by composite FK, any
+status), as on the application path through the port; a worker that names the
+wrong user mis-attributes the audit row, it gains nothing. Both are open
+decisions; a server-side hash-storing definer function is the optional follow-up.
+
 **The exclusion constraint** (on `resource_allocations`; the staff constraint is
 identical on `staff_ref`):
 

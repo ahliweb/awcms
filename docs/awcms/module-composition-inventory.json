@@ -437,7 +437,7 @@
       "key": "omnichannel_inbox",
       "name": "Omnichannel Inbox",
       "version": "0.1.0",
-      "status": "experimental",
+      "status": "active",
       "type": "system",
       "dependencies": [
         "tenant_admin",
@@ -456,7 +456,7 @@
         }
       ],
       "permissionCount": 7,
-      "navigationCount": 0,
+      "navigationCount": 2,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
@@ -841,7 +841,7 @@
       ],
       "permissionCount": 16,
       "navigationCount": 1,
-      "jobCount": 2,
+      "jobCount": 3,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

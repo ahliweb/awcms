@@ -25,6 +25,19 @@ claim service `placeHold` and the read-only reconciliation, plus the
 SECURITY DEFINER sweep of `sql/200` (the worker holds no privilege on the
 booking tables).
 
+Worker-callable confirm and cancel (Issue #1278, `sql/388`): when the connection
+is `awcms_worker`, `BookingPort.confirm` / `.cancel` go through the narrow
+SECURITY DEFINER function `awcms_booking_worker_transition` (owner
+`awcms_booking_transition`, tenant argument must equal the session's, EXECUTE
+the worker's alone) instead of `transitionReservation`; the audit row and the
+domain event are the same. Open decision: that path stores no Idempotency-Key
+record (the worker cannot insert one); retries are safe through the state check. Consequences (audit of PR #1302, L-3/L-4):
+a key reused for a different reservation is not detected there, a redelivered
+confirm after a cancel answers `INVALID_STATE` (the application path replays
+`ok`), so route consumer side effects through `awcms_domain_event_consumer_effects`;
+the actor is self-asserted (a same-tenant user of any status). Details in
+`docs/awcms/booking.md`.
+
 Stays and blocks (Issue #940, `sql/204`; block routes and follow-ups, Issue #1012, `sql/240`, `sql/241`): a stay is claimed through the same
 allocator and `placeHold` (`stay: { checkInDate, checkOutDate }`, the second
 exclusion constraint over dates), blocked nights are allocation rows owned by a

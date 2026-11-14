@@ -1,0 +1,11 @@
+---
+"awcms": minor
+---
+
+feat(omnichannel_inbox): the operator screens for the staff work queue, and the module becomes `active` (Issue #1164, ADR-0160, UP-14). **Nothing changes for a deployment that does not set `OMNICHANNEL_INBOX_ENABLED=true`**: the routes still answer `404`, the projector and the SLA job are inert, and the new screens say the inbox is switched off.
+
+Three server-rendered pages under `/admin/omnichannel-inbox` and one sidebar entry (`omnichannel_inbox.conversations.read`): the queue (ADR-0149 data page: status, assignee, overdue, source and tag filters pushed to SQL, search and sort over at most 200 loaded rows, with a notice and no total when more exist), one conversation (state, tags, deadline, append-only history; change status, set tags, record a response, assign to me or unassign) and the settings (SLA policies: list, create the tenant default, retire; the tag catalogue: create, delete; the projection rebuild). Every screen reads through the routes' own `visibilityFor`, `listConversations`, `getConversation` and `listSlaPolicies`, so business-scope confinement and tenant isolation are the API's. No message body, name, address or Telegram id is ever rendered: a staff member is "you" or "another staff member". Each control is shown only when the full access chokepoint allows its permission and calls an endpoint that already audits; writes carry `expectedVersion` or an `Idempotency-Key`. "Assign to another person" is shown disabled, because no endpoint lists the eligible assignees.
+
+The seven `omnichannel_inbox` permissions leave the `NOT_YET_SCREENED` ledger. No migration, no API, OpenAPI or AsyncAPI change. English and Indonesian catalogue entries added; the foundation pack row for inbound conversations, the UP-14 status and the module READMEs are updated. Open decisions are unchanged (ADR-0160 Q2/Q3/Q4 stay fail-closed); a downstream commerce inbox is not projected into this inbox.
+
+The screens' read chain (visibility, listing, `can()` affordances, deployment switch) now lives in `omnichannel-inbox/application/screen-loaders.ts` so a behavioural test can run it as a confined viewer; the settings screen's rebuild button continues from where the previous click stopped instead of replaying from the first event.

@@ -774,6 +774,13 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // no DELETE at all: nothing in the request path deletes evidence, only the
   // retention job (`awcms_worker`, under a restrictive floor and a trigger) does.
   awcms_email_provider_events: ["SELECT", "INSERT", "UPDATE"],
+  // `sql/393` (Issue #1298 L4). NOT retired -- the Meta webhook body-hash
+  // receipts and 24-hour service windows, both actively written. A receipt is
+  // only ever INSERTed (its stamp is the database clock, and only the purge,
+  // as awcms_worker under a restrictive floor, deletes it); a window is
+  // upserted but never deleted by the runtime.
+  awcms_whatsapp_webhook_receipts: ["SELECT", "INSERT"],
+  awcms_whatsapp_service_windows: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_endpoints: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_contacts: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_consents: ["SELECT", "INSERT"],
@@ -1535,7 +1542,8 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // never writes them. `whatsapp:queue:purge` deletes terminal rows (the DELETE
   // is the one to notice, per sql/091). Consents and suppressions are never
   // deleted by any job.
-  awcms_whatsapp_messages: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  // UPDATE is column-only since sql/392 (Issue #1298 L3): see WORKER_COLUMN_GRANTS.
+  awcms_whatsapp_messages: ["DELETE", "INSERT", "SELECT"],
   awcms_whatsapp_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
   awcms_whatsapp_consents: ["SELECT"],
   awcms_whatsapp_suppressions: ["INSERT", "SELECT"],
@@ -2038,6 +2046,26 @@ export const WORKER_COLUMN_GRANTS: Record<
   },
   awcms_omes_ai_egress_approvals: {
     UPDATE: ["decision", "decided_at", "updated_at"]
+  },
+  // sql/392 (Issue #1298 L3): the dispatcher and the expiry sweep write exactly
+  // these columns. The provider-reported status (`provider_status*`, written by
+  // a signed webhook as awcms_app), the recipient, template, purpose and sender
+  // columns are not writable by the worker; the values it may write are bounded
+  // by the awcms_whatsapp_messages_worker_guard trigger (pinned below).
+  awcms_whatsapp_messages: {
+    UPDATE: [
+      "status",
+      "next_attempt_at",
+      "retry_count",
+      "updated_at",
+      "sent_at",
+      "provider_name",
+      "provider_message_id",
+      "body",
+      "variables",
+      "failure_code",
+      "last_error"
+    ]
   },
   // sql/316 (Issue #1189, ADR-0147): the commission intake switch. The port and
   // the intake insert trigger read exactly these two columns; the intake system
@@ -2739,8 +2767,13 @@ export type PinnedTrigger = {
   trigger: string;
   fn: string;
   body: string;
-  /** Default `insert_update`: BEFORE INSERT OR UPDATE FOR EACH ROW. */
-  events?: "insert_update" | "delete";
+  /**
+   * Default `insert_update`: BEFORE INSERT OR UPDATE FOR EACH ROW (the INSERT and
+   * UPDATE bits must be set; other bits are not examined, as before). `insert`
+   * and `update` are EXACT: the named event and no other
+   * (sql/392, sql/393).
+   */
+  events?: "insert_update" | "delete" | "insert" | "update";
 };
 
 /**
@@ -2762,6 +2795,41 @@ export const EMAIL_PROVIDER_EVENT_TRIGGERS: readonly PinnedTrigger[] = [
     fn: "awcms_email_provider_events_delete_floor",
     events: "delete",
     body: "BEGIN IF OLD.received_at >= now() - interval '30 days' OR (OLD.review_status = 'pending' AND OLD.received_at >= now() - interval '365 days') THEN RAISE EXCEPTION 'a provider event is deleted only by retention, past its window' USING ERRCODE = '23514'; END IF; RETURN OLD; END;"
+  }
+];
+
+/**
+ * sql/392 and sql/393 (Issue #1298): the value guard on the dispatcher's queue
+ * writes, the database clock of the webhook receipts (the stamp the worker's
+ * purge floor rests on) and the cap on a service window's time.
+ */
+export const WHATSAPP_META_AUDIT_TRIGGERS: readonly PinnedTrigger[] = [
+  {
+    table: "awcms_whatsapp_messages",
+    trigger: "awcms_whatsapp_messages_worker_guard",
+    fn: "awcms_whatsapp_messages_worker_guard",
+    events: "update",
+    body: "BEGIN IF current_user <> 'awcms_worker' THEN RETURN NEW; END IF; IF OLD.status IN ('sent', 'failed', 'expired', 'cancelled') THEN RAISE EXCEPTION 'the WhatsApp dispatcher does not change a terminal message' USING ERRCODE = '23514'; END IF; IF NEW.status IS DISTINCT FROM OLD.status AND NOT ( (NEW.status = 'sending' AND OLD.status IN ('queued', 'retry_wait')) OR (NEW.status IN ('retry_wait', 'sent', 'failed') AND OLD.status = 'sending') OR (NEW.status = 'cancelled' AND OLD.status IN ('queued', 'retry_wait', 'sending')) OR (NEW.status = 'expired' AND OLD.status IN ('queued', 'retry_wait', 'sending')) ) THEN RAISE EXCEPTION 'the WhatsApp dispatcher made a status change the queue does not allow' USING ERRCODE = '23514'; END IF; IF NEW.body IS DISTINCT FROM OLD.body AND NOT (NEW.body = '' AND OLD.contains_secret) THEN RAISE EXCEPTION 'the WhatsApp dispatcher may only clear the body of a secret message' USING ERRCODE = '23514'; END IF; IF NEW.variables IS DISTINCT FROM OLD.variables AND NOT (NEW.variables = '{}'::jsonb AND OLD.contains_secret) THEN RAISE EXCEPTION 'the WhatsApp dispatcher may only clear the variables of a secret message' USING ERRCODE = '23514'; END IF; IF (NEW.provider_name IS DISTINCT FROM OLD.provider_name OR NEW.provider_message_id IS DISTINCT FROM OLD.provider_message_id OR NEW.sent_at IS DISTINCT FROM OLD.sent_at) AND NOT (NEW.status = 'sent' AND OLD.status = 'sending') THEN RAISE EXCEPTION 'the WhatsApp dispatcher records a provider acceptance only when it marks a message sent' USING ERRCODE = '23514'; END IF; IF NEW.retry_count < OLD.retry_count THEN RAISE EXCEPTION 'the WhatsApp retry count never goes down' USING ERRCODE = '23514'; END IF; RETURN NEW; END;"
+  },
+  {
+    table: "awcms_whatsapp_webhook_receipts",
+    trigger: "awcms_whatsapp_webhook_receipts_clock",
+    fn: "awcms_whatsapp_webhook_receipts_clock",
+    events: "insert",
+    body: "BEGIN NEW.received_at := now(); RETURN NEW; END;"
+  },
+  {
+    table: "awcms_whatsapp_service_windows",
+    trigger: "awcms_whatsapp_service_windows_clock",
+    fn: "awcms_whatsapp_service_windows_clock",
+    body: "BEGIN NEW.last_inbound_at := LEAST(NEW.last_inbound_at, now()); RETURN NEW; END;"
+  },
+  {
+    table: "awcms_whatsapp_messages",
+    trigger: "awcms_whatsapp_messages_worker_insert_guard",
+    fn: "awcms_whatsapp_messages_worker_insert_guard",
+    events: "insert",
+    body: "BEGIN IF current_user <> 'awcms_worker' THEN RETURN NEW; END IF; IF NEW.status <> 'queued' OR NEW.provider_name IS NOT NULL OR NEW.provider_message_id IS NOT NULL OR NEW.sent_at IS NOT NULL OR NEW.provider_status IS NOT NULL OR NEW.provider_status_rank <> 0 OR NEW.failure_code IS NOT NULL OR NEW.last_error IS NOT NULL OR NEW.retry_count <> 0 THEN RAISE EXCEPTION 'the WhatsApp dispatcher role may only enqueue a fresh queued message' USING ERRCODE = '23514'; END IF; RETURN NEW; END;"
   }
 ];
 
@@ -2840,10 +2908,18 @@ export async function pinTriggerFunction(
   pin: PinnedTrigger
 ): Promise<string | null> {
   // tgtype bits: 1 ROW, 2 BEFORE, 4 INSERT, 8 DELETE, 16 UPDATE.
-  const shapeMask = pin.events === "delete" ? 1 | 2 | 8 : 1 | 2 | 4 | 16;
+  const exactEvents =
+    pin.events === "insert" ? 4 : pin.events === "update" ? 16 : null;
+  const shapeMask =
+    exactEvents !== null
+      ? 1 | 2 | 4 | 8 | 16
+      : pin.events === "delete"
+        ? 1 | 2 | 8
+        : 1 | 2 | 4 | 16;
+  const shapeWant = exactEvents !== null ? 1 | 2 | exactEvents : shapeMask;
   const rows = (await db`
     SELECT t.tgenabled <> 'D' AS enabled,
-           (t.tgtype & ${shapeMask}) = ${shapeMask} AS shape_ok,
+           (t.tgtype & ${shapeMask}) = ${shapeWant} AS shape_ok,
            t.tgfoid = to_regproc(${pin.fn}) AS fn_ok,
            p.prosrc AS body
     FROM pg_trigger t
@@ -3213,16 +3289,50 @@ export async function probeWorkerPurgeDeleteFloors(
         VALUES (${tenant}, ${account[0]!.id}, 'k1:fresh', now()),
                (${tenant}, ${account[0]!.id}, 'k1:aged', now() - interval '3 days')
       `;
+      // sql/393: the insert trigger stamps the database clock whatever the
+      // statement says, so the aged receipt is aged afterwards, as the
+      // connecting (owner) role, which is the one thing no runtime role can do.
       await tx`
         INSERT INTO awcms_whatsapp_webhook_receipts
-          (tenant_id, subscription_id, payload_sha256, received_at)
-        VALUES (${tenant}, ${subscription[0]!.id}, ${"a".repeat(64)}, now()),
-               (${tenant}, ${subscription[0]!.id}, ${"b".repeat(64)},
-                now() - interval '9 days')
+          (tenant_id, subscription_id, payload_sha256)
+        VALUES (${tenant}, ${subscription[0]!.id}, ${"a".repeat(64)}),
+               (${tenant}, ${subscription[0]!.id}, ${"b".repeat(64)})
       `;
+      await tx`
+        UPDATE awcms_whatsapp_webhook_receipts
+        SET received_at = now() - interval '9 days'
+        WHERE payload_sha256 = ${"b".repeat(64)}
+      `;
+
+      // sql/394 (#1298 audit LOW-1): a fresh sent row, a fresh failed row, a
+      // queued row (never deletable, however old) and an aged terminal row.
+      // Deployment-sender rows (no sender account), seeded as the connecting role, so neither the sender guard nor the worker insert guard is in play.
+      for (const [key, status, ageDays] of [
+        ["fresh-sent", "sent", 0],
+        ["queued-old", "queued", 40],
+        ["aged-failed", "failed", 40]
+      ] as const) {
+        await tx`
+          INSERT INTO awcms_whatsapp_messages
+            (tenant_id, idempotency_key, template_key, template_version,
+             purpose, recipient, recipient_hash, recipient_masked, body,
+             status)
+          VALUES (${tenant}, ${`probe-${key}`}, 'probe.t', 1, 'transactional',
+                  '+6280000000001', ${`k1:${key}`}, '+62***01', 'probe',
+                  ${status})
+        `;
+        await tx`
+          UPDATE awcms_whatsapp_messages
+          SET updated_at = now() - make_interval(days => ${ageDays})
+          WHERE idempotency_key = ${`probe-${key}`}
+        `;
+      }
 
       await tx.unsafe("SET LOCAL ROLE awcms_worker");
 
+      const messages = (await tx`
+        DELETE FROM awcms_whatsapp_messages RETURNING idempotency_key
+      `) as { idempotency_key: string }[];
       const windows = (await tx`
         DELETE FROM awcms_whatsapp_service_windows RETURNING recipient_hash
       `) as { recipient_hash: string }[];
@@ -3231,6 +3341,7 @@ export async function probeWorkerPurgeDeleteFloors(
       `) as { payload_sha256: string }[];
 
       deleted = [
+        ...messages.map((row) => `message:${row.idempotency_key}`),
         ...windows.map((row) => `window:${row.recipient_hash}`),
         ...receipts.map((row) => `receipt:${row.payload_sha256.slice(0, 1)}`)
       ].sort();
@@ -3246,12 +3357,12 @@ export async function probeWorkerPurgeDeleteFloors(
     }
   }
 
-  const expected = ["receipt:b", "window:k1:aged"];
+  const expected = ["message:probe-aged-failed", "receipt:b", "window:k1:aged"];
 
   if (JSON.stringify(deleted) !== JSON.stringify(expected)) {
     return {
       ran: true,
-      finding: `awcms_worker deleted [${deleted.join(", ")}] where exactly the aged window and the aged webhook receipt were expected (the purge-only DELETE floors of sql/365 are missing or wrong)`
+      finding: `awcms_worker deleted [${deleted.join(", ")}] where exactly the aged window, the aged webhook receipt and the aged terminal message were expected (the purge-only DELETE floors of sql/365 and sql/394 are missing or wrong)`
     };
   }
 
@@ -4480,7 +4591,8 @@ export async function checkWorkerSetupRoleGrants(
         FROM pg_policy p
         WHERE p.polname IN (
           'awcms_whatsapp_service_windows_worker_purge_only',
-          'awcms_whatsapp_webhook_receipts_worker_purge_only'
+          'awcms_whatsapp_webhook_receipts_worker_purge_only',
+          'awcms_whatsapp_messages_worker_purge_only'
         )
       `) as WorkerPurgePolicyRow[];
 
@@ -4521,6 +4633,12 @@ export async function checkWorkerSetupRoleGrants(
       if (floorFinding) findings.push(floorFinding);
 
       for (const pin of EMAIL_PROVIDER_EVENT_TRIGGERS) {
+        const finding = await pinTriggerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      for (const pin of WHATSAPP_META_AUDIT_TRIGGERS) {
         const finding = await pinTriggerFunction(sql, pin);
 
         if (finding) findings.push(finding);
@@ -5025,7 +5143,10 @@ export const WORKER_PURGE_POLICIES: Readonly<Record<string, string>> = {
   awcms_whatsapp_service_windows_worker_purge_only:
     "(last_inbound_at < (now() - '2 days'::interval))",
   awcms_whatsapp_webhook_receipts_worker_purge_only:
-    "(received_at < (now() - '8 days'::interval))"
+    "(received_at < (now() - '8 days'::interval))",
+  // sql/394 (#1298 audit LOW-1): terminal and older than seven days only.
+  awcms_whatsapp_messages_worker_purge_only:
+    "((status = ANY (ARRAY['sent'::text, 'failed'::text, 'cancelled'::text, 'expired'::text])) AND (updated_at < (now() - '7 days'::interval)))"
 };
 
 export function evaluateWorkerPurgePolicies(
@@ -5248,6 +5369,10 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   "awcms_booking_expiry",
   "awcms_booking_lifecycle_counter",
   "awcms_booking_reminders",
+  // sql/388 (Issue #1278): owns the worker-callable confirm/cancel of a
+  // reservation; column-scoped UPDATE on the reservation, allocation and staff
+  // assignment release columns, INSERT on the history table, nothing else.
+  "awcms_booking_transition",
   "awcms_delegated_expiry",
   "awcms_domain_bootstrap",
   // sql/306 (Issue #970): owns the operator-run erasure of one employment's

@@ -352,3 +352,10 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 #   first key to TELEGRAM_CHAT_ENCRYPTION_KEYS, until `security:readiness`
 #   reports no binding under a non-active key id, and only then is the old key
 #   removed. A timer would re-scan an unchanged table forever.
+
+# whatsapp:meta:preflight
+#   A read-only operator check (Issue #1298 L5) run once, before the
+#   tenant-owned Meta path is enabled on a deployment that already holds Meta
+#   numbers, and again after fixing what it names. Scheduling it would only
+#   repeat a report nobody is waiting for; the dispatcher already fails a bad
+#   row terminally by itself.

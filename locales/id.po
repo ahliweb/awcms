@@ -9509,3 +9509,345 @@ msgstr "{sent} terkirim, {failed} gagal, {waiting} menunggu"
 
 msgid "Refresh progress"
 msgstr "Muat ulang progres"
+
+msgid "Add tag"
+msgstr "Tambah label"
+
+msgid "All sources"
+msgstr "Semua sumber"
+
+msgid "All tags"
+msgstr "Semua label"
+
+msgid "Another staff member"
+msgstr "Staf lain"
+
+msgid "Anyone"
+msgstr "Siapa saja"
+
+msgid "Any response state"
+msgstr "Semua status respons"
+
+msgid "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
+msgstr "Berlaku untuk seluruh tenant dan menggantikan kebijakan bawaan yang aktif. Kebijakan untuk satu lingkup bisnis ditulis lewat API."
+
+msgid "Assigned"
+msgstr "Ditugaskan"
+
+msgid "Assigned to me"
+msgstr "Ditugaskan ke saya"
+
+msgid "Assignee"
+msgstr "Penerima tugas"
+
+msgid "Assignee removed (no longer eligible)"
+msgstr "Penerima tugas dicabut (tidak lagi memenuhi syarat)"
+
+msgid "Assignee: {value}"
+msgstr "Penerima tugas: {value}"
+
+msgid "Assignment"
+msgstr "Penugasan"
+
+msgid "Assign to another person"
+msgstr "Tugaskan ke orang lain"
+
+msgid "Assign to me"
+msgstr "Tugaskan ke saya"
+
+msgid "Back to the inbox"
+msgstr "Kembali ke kotak masuk"
+
+msgid "By"
+msgstr "Oleh"
+
+msgid "Can be answered"
+msgstr "Dapat dijawab"
+
+msgid "Closes at (24-hour, HH:MM)"
+msgstr "Tutup pukul (24 jam, JJ:MM)"
+
+msgid "Conversation"
+msgstr "Percakapan"
+
+msgid "Conversations"
+msgstr "Percakapan"
+
+msgid "Conversations appear here when a customer writes to a connected Telegram bot or submits a website form."
+msgstr "Percakapan muncul di sini saat pelanggan menulis ke bot Telegram yang terhubung atau mengirim formulir situs web."
+
+msgid "{count} conversation"
+msgid_plural "{count} conversations"
+msgstr[0] "{count} percakapan"
+
+msgid "{count} conversation matches your search and filters"
+msgid_plural "{count} conversations match your search and filters"
+msgstr[0] "{count} percakapan cocok dengan pencarian dan filter Anda"
+
+msgid "{count} history entry (newest first)"
+msgid_plural "{count} history entries (newest first)"
+msgstr[0] "{count} entri riwayat (terbaru lebih dulu)"
+
+msgid "{count} holiday"
+msgid_plural "{count} holidays"
+msgstr[0] "{count} hari libur"
+
+msgid "{count} tag"
+msgid_plural "{count} tags"
+msgstr[0] "{count} label"
+
+msgid "{count} working minute"
+msgid_plural "{count} working minutes"
+msgstr[0] "{count} menit kerja"
+
+msgid "Customer"
+msgstr "Pelanggan"
+
+msgid "First inbound"
+msgstr "Masuk pertama"
+
+msgid "First response"
+msgstr "Respons pertama"
+
+msgid "First response (working minutes)"
+msgstr "Respons pertama (menit kerja)"
+
+msgid "Friday"
+msgstr "Jumat"
+
+msgid "Holidays (one date per line, YYYY-MM-DD)"
+msgstr "Hari libur (satu tanggal per baris, TTTT-BB-HH)"
+
+msgid "How long staff have to answer, counted only inside working hours. A new policy replaces the active one for the same scope; replaced policies are kept so an overdue conversation always names the terms it was measured against."
+msgstr "Berapa lama staf punya waktu menjawab, dihitung hanya pada jam kerja. Kebijakan baru menggantikan yang aktif untuk lingkup yang sama; kebijakan yang diganti tetap disimpan agar percakapan yang terlambat selalu menyebut ketentuan pengukurannya."
+
+msgid "Inbox settings"
+msgstr "Pengaturan kotak masuk"
+
+msgid "Last inbound"
+msgstr "Masuk terakhir"
+
+msgid "Last response recorded"
+msgstr "Respons terakhir dicatat"
+
+msgid "Lower-case letters, digits, hyphen or underscore."
+msgstr "Huruf kecil, angka, tanda hubung, atau garis bawah."
+
+msgid "Monday"
+msgstr "Senin"
+
+msgid "New default policy"
+msgstr "Kebijakan bawaan baru"
+
+msgid "Newest inbound first. A conversation here is a work item over an opaque reference: to read or answer the customer, use the channel it arrived through, then record the response on the conversation."
+msgstr "Masuk terbaru lebih dulu. Percakapan di sini adalah butir kerja atas referensi buram: untuk membaca atau menjawab pelanggan, gunakan kanal tempat percakapan itu masuk, lalu catat responsnya pada percakapan."
+
+msgid "New tag"
+msgstr "Label baru"
+
+msgid "Next response"
+msgstr "Respons berikutnya"
+
+msgid "Next response (working minutes)"
+msgstr "Respons berikutnya (menit kerja)"
+
+msgid "No conversations yet"
+msgstr "Belum ada percakapan"
+
+msgid "No history yet."
+msgstr "Belum ada riwayat."
+
+msgid "No policy yet. Without one, conversations have no response deadline."
+msgstr "Belum ada kebijakan. Tanpa kebijakan, percakapan tidak punya tenggat respons."
+
+msgid "No response due"
+msgstr "Tidak ada respons yang jatuh tempo"
+
+msgid "No tags exist yet. An administrator creates them."
+msgstr "Belum ada label. Administrator yang membuatnya."
+
+msgid "No tags yet."
+msgstr "Belum ada label."
+
+msgid "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
+msgstr "Belum tersedia: belum ada daftar orang yang memenuhi syarat menjadi penerima tugas. Mereka dapat menugaskan percakapan ke dirinya sendiri."
+
+msgid "Omnichannel inbox"
+msgstr "Kotak masuk omnichannel"
+
+msgid "On track"
+msgstr "Sesuai jadwal"
+
+msgid "Open days"
+msgstr "Hari buka"
+
+msgid "Opens at (24-hour, HH:MM)"
+msgstr "Buka pukul (24 jam, JJ:MM)"
+
+msgid "Rebuild now"
+msgstr "Bangun ulang sekarang"
+
+msgid "Rebuild the conversation list"
+msgstr "Bangun ulang daftar percakapan"
+
+msgid "Record that I answered"
+msgstr "Catat bahwa saya sudah menjawab"
+
+msgid "Removed tag"
+msgstr "Label dihapus"
+
+msgid "Replaced the previous assignee"
+msgstr "Menggantikan penerima tugas sebelumnya"
+
+msgid "Replays the verified inbound events still inside the retention window (365 days) into the conversation list, for example after a restore. Status, assignment and tags are never changed. It runs in batches and reports what it processed."
+msgstr "Memutar ulang peristiwa masuk terverifikasi yang masih dalam jendela retensi (365 hari) ke daftar percakapan, misalnya setelah pemulihan. Status, penugasan, dan label tidak pernah diubah. Berjalan per kelompok dan melaporkan yang diproses."
+
+msgid "Response"
+msgstr "Respons"
+
+msgid "Response deadline missed"
+msgstr "Tenggat respons terlewat"
+
+msgid "Response due"
+msgstr "Respons jatuh tempo"
+
+msgid "Response policies"
+msgstr "Kebijakan respons"
+
+msgid "Response policies, the tag catalogue and the conversation projection of the omnichannel inbox."
+msgstr "Kebijakan respons, katalog label, dan proyeksi percakapan kotak masuk omnichannel."
+
+msgid "Response recorded"
+msgstr "Respons dicatat"
+
+msgid "Response: {value}"
+msgstr "Respons: {value}"
+
+msgid "Retire"
+msgstr "Pensiunkan"
+
+msgid "Retired {when}"
+msgstr "Dipensiunkan {when}"
+
+msgid "Saturday"
+msgstr "Sabtu"
+
+msgid "Save status"
+msgstr "Simpan status"
+
+msgid "Save tags"
+msgstr "Simpan label"
+
+msgid "Search conversations"
+msgstr "Cari percakapan"
+
+msgid "Source: {value}"
+msgstr "Sumber: {value}"
+
+msgid "State, history and actions of one inbox conversation. Message text and customer identifiers are never shown."
+msgstr "Status, riwayat, dan tindakan satu percakapan kotak masuk. Isi pesan dan pengenal pelanggan tidak pernah ditampilkan."
+
+msgid "Status changed"
+msgstr "Status diubah"
+
+msgid "Sunday"
+msgstr "Minggu"
+
+msgid "Tag"
+msgstr "Label"
+
+msgid "Tag added"
+msgstr "Label ditambahkan"
+
+msgid "Tag removed"
+msgstr "Label dilepas"
+
+msgid "Tags and response policies"
+msgstr "Label dan kebijakan respons"
+
+msgid "Tag: {value}"
+msgstr "Label: {value}"
+
+msgid "Telegram bot"
+msgstr "Bot Telegram"
+
+msgid "That conversation was not found."
+msgstr "Percakapan itu tidak ditemukan."
+
+msgid "The conversation could not be loaded right now. Please try again later."
+msgstr "Percakapan tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The inbox could not be loaded right now. Please try again later."
+msgstr "Kotak masuk tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The inbox sends nothing to the customer. Answer through the channel the conversation arrived on, then record the response here to stop the deadline clock."
+msgstr "Kotak masuk tidak mengirim apa pun ke pelanggan. Jawab lewat kanal tempat percakapan masuk, lalu catat respons di sini untuk menghentikan hitungan tenggat."
+
+msgid "The omnichannel inbox is switched off on this deployment."
+msgstr "Kotak masuk omnichannel dimatikan pada deployment ini."
+
+msgid "The omnichannel inbox is switched off on this deployment, so no conversation is collected or listed."
+msgstr "Kotak masuk omnichannel dimatikan pada deployment ini, sehingga tidak ada percakapan yang dikumpulkan atau ditampilkan."
+
+msgid "The person does not cover this business scope"
+msgstr "Orang tersebut tidak mencakup lingkup bisnis ini"
+
+msgid "The person lost the permission"
+msgstr "Orang tersebut kehilangan izin"
+
+msgid "The person no longer covers this business scope"
+msgstr "Orang tersebut tidak lagi mencakup lingkup bisnis ini"
+
+msgid "The person was deactivated"
+msgstr "Orang tersebut dinonaktifkan"
+
+msgid "There are more conversations than this screen loads. Showing the newest {count}. The status, assignee, overdue, source and tag filters cover every conversation; search covers only these. The API lists the rest."
+msgstr "Percakapan lebih banyak daripada yang dimuat layar ini. Menampilkan {count} terbaru. Filter status, penerima tugas, terlambat, sumber, dan label mencakup semua percakapan; pencarian hanya mencakup yang dimuat. API menampilkan sisanya."
+
+msgid "The settings could not be loaded right now. Please try again later."
+msgstr "Pengaturan tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The staff work queue over verified inbound conversations: status, assignment, tags and response deadlines. Message text and customer identifiers are never shown."
+msgstr "Antrean kerja staf atas percakapan masuk terverifikasi: status, penugasan, label, dan tenggat respons. Isi pesan dan pengenal pelanggan tidak pernah ditampilkan."
+
+msgid "This customer opted out or withdrew. The conversation cannot be answered, reopened, assigned or tagged."
+msgstr "Pelanggan ini berhenti berlangganan atau menarik persetujuan. Percakapan tidak dapat dijawab, dibuka kembali, ditugaskan, atau diberi label."
+
+msgid "Thursday"
+msgstr "Kamis"
+
+msgid "Timezone (IANA name)"
+msgstr "Zona waktu (nama IANA)"
+
+msgid "Tuesday"
+msgstr "Selasa"
+
+msgid "Unassign"
+msgstr "Batalkan penugasan"
+
+msgid "Unassigned"
+msgstr "Belum ditugaskan"
+
+msgid "Website form"
+msgstr "Formulir situs web"
+
+msgid "Wednesday"
+msgstr "Rabu"
+
+msgid "Whole tenant (default)"
+msgstr "Seluruh tenant (bawaan)"
+
+msgid "Withdrew"
+msgstr "Menarik persetujuan"
+
+msgid "Working week"
+msgstr "Pekan kerja"
+
+msgid "You"
+msgstr "Anda"
+
+msgid "You do not have permission to view the inbox."
+msgstr "Anda tidak memiliki izin untuk melihat kotak masuk."
+
+msgid "You do not have permission to view the inbox settings."
+msgstr "Anda tidak memiliki izin untuk melihat pengaturan kotak masuk."
