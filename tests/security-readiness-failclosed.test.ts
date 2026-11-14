@@ -198,77 +198,82 @@ describeOrSkip(
       expect(exact.status).toBe("pass");
     });
 
-    test("state (d): the audit trail is pinned append-only, and re-granting UPDATE/DELETE/TRUNCATE/TRIGGER/REFERENCES or a column-level UPDATE turns the gate RED (Issue #1341)", async () => {
-      // `sql/408`. The declaration alone proves nothing: it must fail when the
-      // grant it describes is undone. Each verb is returned in turn on the REAL
-      // table and revoked again in `finally`, so a failing assertion cannot
-      // leave `awcms_audit_events` writable for the rest of the process.
+    test("state (d): every append-only ledger is pinned SELECT+INSERT, and re-granting UPDATE/DELETE/TRUNCATE/TRIGGER/REFERENCES or a column-level UPDATE turns the gate RED (Issues #1341, #1346)", async () => {
+      // `sql/408` and `sql/409`. The declaration alone proves nothing: it must
+      // fail when the grant it describes is undone. Each verb is returned in
+      // turn on the REAL table and revoked again in `finally`, so a failing
+      // assertion cannot leave a ledger writable for the rest of the process.
       if (!(await awcmsAppExists())) return;
 
       // State (c) leaves its narrowed probe behind; as a tenant-scoped table
       // missing UPDATE it would fail the baseline for a reason unrelated to the
-      // audit table, so remove it first.
+      // ledgers, so remove it first.
       await sql.unsafe(`DROP TABLE IF EXISTS ${PROBE_TABLE}`);
 
-      // The pin is the exact set, not "at least SELECT".
-      expect(
-        defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges
-          .awcms_audit_events
-      ).toEqual(["SELECT", "INSERT"]);
+      // table -> a column that exists on it, for the column-level probes.
+      const LEDGERS: Record<string, string> = {
+        awcms_audit_events: "message",
+        awcms_abac_decision_logs: "action",
+        awcms_access_policy_events: "reason",
+        awcms_business_scope_assignment_events: "reason",
+        awcms_domain_events: "payload"
+      };
+
+      for (const table of Object.keys(LEDGERS)) {
+        // The pin is the exact set, not "at least SELECT".
+        expect(
+          defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges[table]
+        ).toEqual(["SELECT", "INSERT"]);
+      }
 
       const baseline = await checkRuntimeRoleGrants();
       expect(baseline.status).toBe("pass");
-      expect(baseline.evidence).toContain("awcms_audit_events");
 
-      try {
-        for (const verb of ["UPDATE", "DELETE"] as const) {
-          await sql.unsafe(`GRANT ${verb} ON awcms_audit_events TO awcms_app`);
+      for (const [table, column] of Object.entries(LEDGERS)) {
+        expect(baseline.evidence).toContain(table);
 
-          const widened = await checkRuntimeRoleGrants();
-          expect(widened.status).toBe("fail");
-          expect(widened.evidence).toContain("awcms_audit_events");
-          expect(widened.evidence).toContain(verb);
+        try {
+          for (const verb of ["UPDATE", "DELETE"] as const) {
+            await sql.unsafe(`GRANT ${verb} ON ${table} TO awcms_app`);
 
-          await sql.unsafe(
-            `REVOKE ${verb} ON awcms_audit_events FROM awcms_app`
-          );
+            const widened = await checkRuntimeRoleGrants();
+            expect(widened.status).toBe("fail");
+            expect(widened.evidence).toContain(table);
+            expect(widened.evidence).toContain(verb);
+
+            await sql.unsafe(`REVOKE ${verb} ON ${table} FROM awcms_app`);
+          }
+
+          // Privileges the four verbs cannot see (audit M1). `has_table_privilege`
+          // answers false for a COLUMN grant, and TRUNCATE ignores RLS, so each is
+          // widened on the real table and must turn the gate red on its own.
+          for (const grant of [
+            ["TRUNCATE", "TRUNCATE"],
+            ["TRIGGER", "TRIGGER"],
+            ["REFERENCES", "REFERENCES"],
+            [`UPDATE (${column})`, "column-level UPDATE"],
+            [`REFERENCES (${column})`, "column-level REFERENCES"]
+          ] as const) {
+            await sql.unsafe(`GRANT ${grant[0]} ON ${table} TO awcms_app`);
+
+            const widened = await checkRuntimeRoleGrants();
+            expect(widened.status).toBe("fail");
+            expect(widened.evidence).toContain(table);
+            expect(widened.evidence).toContain(grant[1]);
+
+            await sql.unsafe(`REVOKE ${grant[0]} ON ${table} FROM awcms_app`);
+            expect((await checkRuntimeRoleGrants()).status).toBe("pass");
+          }
+
+          // Over-narrowing is also a failure: INSERT is what every write needs.
+          await sql.unsafe(`REVOKE INSERT ON ${table} FROM awcms_app`);
+          const narrowed = await checkRuntimeRoleGrants();
+          expect(narrowed.status).toBe("fail");
+          expect(narrowed.evidence).toContain(table);
+        } finally {
+          await sql.unsafe(`REVOKE ALL ON ${table} FROM awcms_app`);
+          await sql.unsafe(`GRANT SELECT, INSERT ON ${table} TO awcms_app`);
         }
-
-        // Privileges the four verbs cannot see (audit M1). `has_table_privilege`
-        // answers false for a COLUMN grant, and TRUNCATE ignores RLS, so each is
-        // widened on the real table and must turn the gate red on its own.
-        for (const grant of [
-          ["TRUNCATE", "TRUNCATE"],
-          ["TRIGGER", "TRIGGER"],
-          ["REFERENCES", "REFERENCES"],
-          ["UPDATE (message)", "column-level UPDATE"],
-          ["REFERENCES (message)", "column-level REFERENCES"]
-        ] as const) {
-          await sql.unsafe(
-            `GRANT ${grant[0]} ON awcms_audit_events TO awcms_app`
-          );
-
-          const widened = await checkRuntimeRoleGrants();
-          expect(widened.status).toBe("fail");
-          expect(widened.evidence).toContain("awcms_audit_events");
-          expect(widened.evidence).toContain(grant[1]);
-
-          await sql.unsafe(
-            `REVOKE ${grant[0]} ON awcms_audit_events FROM awcms_app`
-          );
-          expect((await checkRuntimeRoleGrants()).status).toBe("pass");
-        }
-
-        // Over-narrowing is also a failure: INSERT is what every audit write needs.
-        await sql.unsafe(`REVOKE INSERT ON awcms_audit_events FROM awcms_app`);
-        const narrowed = await checkRuntimeRoleGrants();
-        expect(narrowed.status).toBe("fail");
-        expect(narrowed.evidence).toContain("awcms_audit_events");
-      } finally {
-        await sql.unsafe(`REVOKE ALL ON awcms_audit_events FROM awcms_app`);
-        await sql.unsafe(
-          `GRANT SELECT, INSERT ON awcms_audit_events TO awcms_app`
-        );
       }
 
       expect((await checkRuntimeRoleGrants()).status).toBe("pass");
