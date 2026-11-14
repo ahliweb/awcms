@@ -1,0 +1,567 @@
+---
+/**
+ * Omnichannel inbox — the staff work queue (Issue #1164, ADR-0160, UP-14,
+ * ADR-0149 data page).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the READ side of `omnichannel_inbox`: every conversation the caller may
+ * see, with its status, who it is assigned to, its tags and its response
+ * deadline, filterable by status, assignee, overdue, source and tag. One
+ * conversation's history and actions are on `/admin/omnichannel-inbox/{id}`;
+ * tags and SLA policies are on `/admin/omnichannel-inbox/settings`.
+ *
+ * It shows NO message body, no customer name, no Telegram id and no address:
+ * the projection never stored one (ADR-0160 section 1). A row carries only an
+ * opaque reference the arrival channel's own screen can resolve, a source kind,
+ * states and times. There is no reply box: the inbox sends nothing and has no
+ * send facade; an answer goes out through the arrival channel's own route and is
+ * then RECORDED here.
+ *
+ * ## It shows exactly what the API shows
+ *
+ * The list runs through the SAME `visibilityFor` and `listConversations` the
+ * API route uses (business-scope confinement: a confined caller sees only the
+ * scopes they cover, never a tenant-wide conversation). The status, assignee,
+ * overdue, tag and source filters are pushed to SQL; search and sort run on the
+ * loaded rows and match only what the page shows (the status, source and tag
+ * labels), never an opaque reference.
+ *
+ * ## Paging
+ *
+ * The loader reads at most 200 conversations (two keyset pages of the API's own
+ * query, newest inbound first) and the screen sorts and slices them in memory
+ * through the ADR-0149 contract. The totals are exact for the loaded rows; when
+ * more exist the page says so instead of showing a total it cannot stand behind.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  conversationStatusLabel,
+  conversationStatusTone,
+  customerStateLabel,
+  customerStateTone,
+  dueKindLabel,
+  slaStateLabel,
+  slaStateTone,
+  sourceKindLabel
+} from "../../lib/i18n/labels/omnichannel-inbox";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
+import {
+  listConversations,
+  type ConversationView
+} from "../../modules/omnichannel-inbox/application/conversation-directory";
+import { visibilityFor } from "../../modules/omnichannel-inbox/application/route-support";
+import {
+  listTags,
+  type TagView
+} from "../../modules/omnichannel-inbox/application/tag-directory";
+import { isOmnichannelInboxEnabled } from "../../modules/omnichannel-inbox/domain/inbox-config";
+import {
+  CONVERSATION_STATUSES,
+  SOURCE_KINDS
+} from "../../modules/omnichannel-inbox/domain/inbox-constants";
+import { validateListConversationsQuery } from "../../modules/omnichannel-inbox/domain/inbox-validation";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims, and held
+ * equal to the module's own guard by the page-contract test.
+ */
+const READ_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "conversations",
+  action: "read"
+} as const;
+/** Only to decide whether to LINK to the settings screen; that screen gates itself. */
+const SLA_READ_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "sla_policies",
+  action: "read"
+} as const;
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/omnichannel-inbox";
+const SPEC: DataPageSpec = {
+  filterKeys: ["status", "assignee", "sla", "source", "tag"],
+  sortKeys: ["activity", "status", "due"],
+  defaultSort: "activity",
+  defaultDir: "desc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+/** Two keyset pages of the API's own query: the bound of what this screen loads. */
+const LOAD_PAGE_SIZE = 100;
+const LOAD_PAGE_LIMIT = 2;
+
+/** The API's own query validator turns the URL filters into a typed query (an unknown value is dropped, never an error). */
+function sqlParams(cursor: string | null): URLSearchParams {
+  const params = new URLSearchParams();
+  const { status, assignee, sla, source, tag } = query.filters;
+
+  if (status && (CONVERSATION_STATUSES as readonly string[]).includes(status)) {
+    params.set("status", status);
+  }
+
+  if (assignee === "me" || assignee === "unassigned") {
+    params.set("assignee", assignee);
+  }
+
+  if (sla === "breached") params.set("slaState", "breached");
+
+  if (source && (SOURCE_KINDS as readonly string[]).includes(source)) {
+    params.set("sourceKind", source);
+  }
+
+  if (tag) params.set("tagId", tag);
+
+  params.set("limit", String(LOAD_PAGE_SIZE));
+
+  if (cursor) params.set("cursor", cursor);
+
+  return params;
+}
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, auth, can }) => {
+    // The deployment switch is checked AFTER authorization, as the API does,
+    // so an unauthorised caller learns nothing about it.
+    if (!isOmnichannelInboxEnabled()) {
+      return {
+        enabled: false as const,
+        conversations: [] as ConversationView[],
+        more: false,
+        tags: [] as TagView[],
+        me: auth.context.tenantUserId,
+        canSeeSettings: false
+      };
+    }
+
+    // The same context the routes build, so the visibility rule is the routes'
+    // own function and not a copy that could drift.
+    const context = {
+      tx,
+      tenantId: ssr.tenantId,
+      tokenHash: ssr.tokenHash,
+      auth,
+      now: new Date(),
+      request: Astro.request,
+      clientAddress: Astro.clientAddress
+    };
+    const visibility = await visibilityFor(context, READ_GUARD);
+
+    // One awaited query at a time: `tx` is one connection.
+    const conversations: ConversationView[] = [];
+    let cursor: string | null = null;
+    let more = false;
+
+    for (let page = 0; page < LOAD_PAGE_LIMIT; page += 1) {
+      const validated = validateListConversationsQuery(sqlParams(cursor));
+
+      if (!validated.valid) break;
+
+      const result = await listConversations(
+        tx,
+        ssr.tenantId,
+        visibility,
+        auth.context.tenantUserId,
+        validated.value,
+        context.now
+      );
+
+      conversations.push(...result.items);
+
+      if (result.nextCursor === null) break;
+
+      cursor = result.nextCursor;
+      more = page === LOAD_PAGE_LIMIT - 1;
+    }
+
+    return {
+      enabled: true as const,
+      conversations,
+      more,
+      tags: await listTags(tx, ssr.tenantId),
+      me: auth.context.tenantUserId,
+      canSeeSettings: await can({ ...SLA_READ_GUARD })
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omnichannel-inbox.astro: failed to load the inbox",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "an empty inbox" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const conversations: ConversationView[] = data?.conversations ?? [];
+const tags: TagView[] = data?.tags ?? [];
+const tagLabel = (id: string) =>
+  tags.find((tag) => tag.id === id)?.label ?? t("Removed tag");
+const statusLabel = (status: string) => conversationStatusLabel(t, status);
+const sourceLabel = (kind: string) => sourceKindLabel(t, kind);
+
+function assigneeText(conversation: ConversationView): string {
+  if (conversation.assigneeTenantUserId === null) return t("Unassigned");
+
+  return conversation.assigneeTenantUserId === data?.me
+    ? t("You")
+    : t("Another staff member");
+}
+
+// The search matches what the page SHOWS: status, source and tag labels.
+const needle = query.q.toLowerCase();
+const matching = conversations.filter(
+  (conversation) =>
+    needle === "" ||
+    statusLabel(conversation.status).toLowerCase().includes(needle) ||
+    sourceLabel(conversation.sourceKind).toLowerCase().includes(needle) ||
+    conversation.tagIds.some((id) =>
+      tagLabel(id).toLowerCase().includes(needle)
+    )
+);
+const page = sliceKeyset(matching, {
+  sortValue: (conversation) =>
+    query.sort === "status"
+      ? conversation.status
+      : query.sort === "due"
+        ? (conversation.sla.dueAt ?? "")
+        : conversation.lastInboundAt,
+  id: (conversation) => conversation.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(PATH, SPEC, query, change);
+const sortState = (key: string) => buildSortHeaderState(PATH, SPEC, query, key);
+const clearHref = buildClearFiltersHref(PATH, SPEC, query);
+const chips = buildActiveFilterChips(PATH, SPEC, query, (key, value) =>
+  key === "q"
+    ? t("Search: {value}", { value })
+    : key === "status"
+      ? t("Status: {value}", { value: statusLabel(value) })
+      : key === "assignee"
+        ? t("Assignee: {value}", {
+            value: value === "me" ? t("Assigned to me") : t("Unassigned")
+          })
+        : key === "sla"
+          ? t("Response: {value}", { value: t("Overdue") })
+          : key === "source"
+            ? t("Source: {value}", { value: sourceLabel(value) })
+            : t("Tag: {value}", {
+                value: tags.find((tag) => tag.id === value)?.label ?? value
+              })
+);
+const summary = filtered
+  ? tn(
+      "{count} conversation matches your search and filters",
+      "{count} conversations match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
+---
+
+<AdminLayout
+  title={t("Omnichannel inbox")}
+  description={t(
+    "The staff work queue over verified inbound conversations: status, assignment, tags and response deadlines. Message text and customer identifiers are never shown."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="omnichannel-inbox-denied">
+      {t("You do not have permission to view the inbox.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="omnichannel-inbox-error">
+      {t("The inbox could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="omnichannel-inbox-disabled">
+      {t(
+        "The omnichannel inbox is switched off on this deployment, so no conversation is collected or listed."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="omnichannel-inbox-title"
+    >
+      <h2 class="admin-section-title" id="omnichannel-inbox-title">
+        {t("Conversations")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "Newest inbound first. A conversation here is a work item over an opaque reference: to read or answer the customer, use the channel it arrived through, then record the response on the conversation."
+        )}
+        {data.canSeeSettings && (
+          <>
+            {" "}
+            <a href={`${PATH}/settings`} id="omnichannel-inbox-settings-link">
+              {t("Tags and response policies")}
+            </a>
+          </>
+        )}
+      </p>
+
+      {data.more && (
+        <p class="state-notice" id="omnichannel-inbox-truncated">
+          {t(
+            "There are more conversations than this screen loads. Showing the newest {count}. The status, assignee, overdue, source and tag filters cover every conversation; search covers only these. The API lists the rest.",
+            { count: conversations.length }
+          )}
+        </p>
+      )}
+
+      <DataListToolbar
+        action={PATH}
+        idPrefix="omnichannel-inbox"
+        landmarkLabel={t("Search conversations")}
+        searchLabel={t("Search")}
+        q={query.q}
+        filters={[
+          {
+            name: "status",
+            label: t("Status"),
+            value: query.filters.status ?? "",
+            allLabel: t("All statuses"),
+            options: CONVERSATION_STATUSES.map((status) => ({
+              value: status,
+              label: statusLabel(status)
+            }))
+          },
+          {
+            name: "assignee",
+            label: t("Assignee"),
+            value: query.filters.assignee ?? "",
+            allLabel: t("Anyone"),
+            options: [
+              { value: "me", label: t("Assigned to me") },
+              { value: "unassigned", label: t("Unassigned") }
+            ]
+          },
+          {
+            name: "sla",
+            label: t("Response"),
+            value: query.filters.sla ?? "",
+            allLabel: t("Any response state"),
+            options: [{ value: "breached", label: t("Overdue") }]
+          },
+          {
+            name: "source",
+            label: t("Source"),
+            value: query.filters.source ?? "",
+            allLabel: t("All sources"),
+            options: SOURCE_KINDS.map((kind) => ({
+              value: kind,
+              label: sourceLabel(kind)
+            }))
+          },
+          {
+            name: "tag",
+            label: t("Tag"),
+            value: query.filters.tag ?? "",
+            allLabel: t("All tags"),
+            options: tags.map((tag) => ({ value: tag.id, label: tag.label }))
+          }
+        ]}
+        sort={{
+          label: t("Sort by"),
+          value: query.sort,
+          options: [
+            { value: "activity", label: t("Last inbound") },
+            { value: "status", label: t("Status") },
+            { value: "due", label: t("Response due") }
+          ],
+          dirLabel: t("Sort order"),
+          dir: query.dir,
+          ascLabel: t("Ascending"),
+          descLabel: t("Descending")
+        }}
+        preserve={
+          query.limit === DEFAULT_DATA_PAGE_SIZE
+            ? {}
+            : { limit: String(query.limit) }
+        }
+        chips={chips}
+        clearHref={clearHref}
+        summary={summary}
+        submitLabel={t("Search")}
+        clearLabel={t("Clear filters")}
+        chipsLabel={t("Active filters")}
+        removeLabel={(label) => t("Remove filter: {label}", { label })}
+      />
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="omnichannel-inbox-table-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="omnichannel-inbox-table"
+        >
+          <caption id="omnichannel-inbox-table-caption">
+            {tn("{count} conversation", "{count} conversations", page.total, {
+              count: page.total
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Conversation")}</th>
+              <SortableHeader label={t("Status")} {...sortState("status")} />
+              <th scope="col">{t("Assignee")}</th>
+              <th scope="col">{t("Tags")}</th>
+              <SortableHeader label={t("Response due")} {...sortState("due")} />
+              <SortableHeader
+                label={t("Last inbound")}
+                {...sortState("activity")}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {page.items.length === 0 ? (
+              <DataEmptyState
+                colspan={6}
+                filtered={filtered}
+                query={query.q}
+                clearHref={clearHref}
+                title={t("No conversations yet")}
+                text={t(
+                  "Conversations appear here when a customer writes to a connected Telegram bot or submits a website form."
+                )}
+              />
+            ) : (
+              page.items.map((conversation) => (
+                <tr data-conversation-id={conversation.id}>
+                  <td data-label={t("Conversation")}>
+                    <a href={`${PATH}/${conversation.id}`}>
+                      {sourceLabel(conversation.sourceKind)}
+                    </a>
+                    <span class="cell-muted">
+                      {" "}
+                      {conversation.sourceRef.slice(0, 8)}
+                    </span>
+                    {conversation.customerState !== "active" && (
+                      <span
+                        class="admin-status-pill"
+                        data-tone={customerStateTone(
+                          conversation.customerState
+                        )}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {customerStateLabel(t, conversation.customerState)}
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    data-label={t("Status")}
+                    data-status={conversation.status}
+                  >
+                    <span
+                      class="admin-status-pill"
+                      data-tone={conversationStatusTone(conversation.status)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {statusLabel(conversation.status)}
+                    </span>
+                  </td>
+                  <td data-label={t("Assignee")}>
+                    {assigneeText(conversation)}
+                  </td>
+                  <td data-label={t("Tags")}>
+                    {conversation.tagIds.length === 0
+                      ? "—"
+                      : conversation.tagIds.map(tagLabel).join(", ")}
+                  </td>
+                  <td
+                    data-label={t("Response due")}
+                    data-sla={conversation.sla.state}
+                  >
+                    <span
+                      class="admin-status-pill"
+                      data-tone={slaStateTone(conversation.sla.state)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {slaStateLabel(t, conversation.sla.state)}
+                    </span>
+                    {conversation.sla.dueAt !== null && (
+                      <span class="cell-muted">
+                        {" "}
+                        {dueKindLabel(t, conversation.sla.dueKind)}{" "}
+                        {formatUtcMinute(conversation.sla.dueAt)}
+                      </span>
+                    )}
+                  </td>
+                  <td data-label={t("Last inbound")}>
+                    {formatUtcMinute(conversation.lastInboundAt)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <KeysetPager
+        prevHref={
+          page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+        }
+        nextHref={
+          page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+        }
+        from={page.from}
+        to={page.to}
+        total={data.more ? undefined : page.total}
+        limit={query.limit}
+        sizes={DATA_PAGE_SIZES.map((value) => ({
+          value,
+          href: href({ limit: value })
+        }))}
+      />
+    </section>
+  )}
+</AdminLayout>

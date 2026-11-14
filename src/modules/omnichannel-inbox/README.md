@@ -6,9 +6,9 @@ A tenant-scoped staff work queue over the verified inbound envelopes (Issue
 #1164, [ADR-0160](../../../docs/adr/0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.md),
 **Accepted** 2026-11-11; it refines ADR-0150 §1 for staff work state only).
 
-Ships **`experimental` and off** (`OMNICHANNEL_INBOX_ENABLED`): every route
-answers `404`, the projector consumer does nothing and `bun run
-omnichannel-inbox:sla` is inert.
+Ships **`active` and off** (`OMNICHANNEL_INBOX_ENABLED`): every route answers
+`404`, the screens say the inbox is switched off, the projector consumer does
+nothing and `bun run omnichannel-inbox:sla` is inert.
 
 ## What it is
 
@@ -124,9 +124,43 @@ conversation the purge removed.
   grant or a row trigger cannot see without re-running the projector in SQL.
   Accepted as the residual; the worker credential is an operator secret.
 
+## Screens (Issue #1164, UP-14)
+
+Server-rendered Astro pages under `/admin/omnichannel-inbox`, one sidebar entry
+(`omnichannel_inbox.conversations.read`), all reading through the routes' own
+functions (`visibilityFor`, `listConversations`, `getConversation`,
+`listSlaPolicies`), so business-scope confinement and tenant isolation are the
+API's and not a copy. They show no message body, name, address or Telegram id:
+a staff member is "you" or "another staff member".
+
+- `/admin/omnichannel-inbox` — the queue (ADR-0149 data page): filters for
+  status, assignee (me / unassigned), overdue, source and tag pushed to SQL;
+  search and sort over the loaded rows (at most 200, with a notice when more
+  exist and no total it cannot stand behind).
+- `/admin/omnichannel-inbox/{id}` — state, tags, deadline and the append-only
+  history; change status, set tags, record a response (`conversations.update`),
+  assign to me / unassign (`conversations.assign`, `Idempotency-Key`). Every
+  write carries `expectedVersion`. **"Assign to another person" is shown
+  disabled**: no endpoint lists the eligible assignees.
+- `/admin/omnichannel-inbox/settings` — SLA policies (list; create the tenant
+  default, retire), the tag catalogue (create, delete) and the projection
+  rebuild. Policies for one business scope are written through the API; the
+  scope picker is a follow-up.
+
+## Open decisions
+
+- ADR-0160 Q2/Q3/Q4 stay open and fail closed; the screens add no decision.
+- The downstream commerce inbox (an embedder's own threads) is **not** projected
+  into this inbox. Whether it ever should be is a human decision; nothing here
+  reads it.
+- Not built, on purpose: a split-pane thread view, internal notes and quick
+  replies (the inbox stores no text, ADR-0160 section 1), and a bulk-action
+  toolbar (no bulk API exists).
+
 ## Follow-ups
 
-- The operator screen (`/admin/*`); its 7 permissions are in `NOT_YET_SCREENED`.
+- A people picker for "assign to another person" needs an endpoint that lists
+  eligible assignees; a business-scope picker for scoped SLA policies.
 - A realtime "inbox hint" topic (ADR-0154 registry), an outbound "reply queued"
   event from the channel modules to replace the manual response record, and
   WhatsApp inbound once it exists.

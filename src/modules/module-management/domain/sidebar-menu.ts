@@ -309,6 +309,8 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_whatsapp": "WhatsApp delivery",
   "admin.layout.nav_telegram": "Telegram delivery",
   "admin.layout.nav_channel_accounts": "Channel accounts",
+  "admin.layout.nav_omnichannel_inbox": "Omnichannel inbox",
+  "admin.layout.nav_omnichannel_inbox_settings": "Inbox settings",
   "admin.layout.nav_sync": "Sync & storage",
   "admin.layout.nav_profiles": "Profiles",
   "admin.layout.nav_users": "Users",
@@ -419,6 +421,8 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_whatsapp": "chat",
   "admin.layout.nav_telegram": "chat",
   "admin.layout.nav_channel_accounts": "chat",
+  "admin.layout.nav_omnichannel_inbox": "chat",
+  "admin.layout.nav_omnichannel_inbox_settings": "gear",
   // Operations.
   "admin.layout.nav_visitor_analytics": "chart",
   "admin.layout.nav_data_lifecycle": "database",

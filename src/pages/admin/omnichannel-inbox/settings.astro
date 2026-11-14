@@ -1,0 +1,809 @@
+---
+/**
+ * Omnichannel inbox settings — response policies, the tag catalogue and the
+ * projection rebuild (Issue #1164, ADR-0160, UP-14).
+ *
+ * ## What each section is
+ *
+ *   - **Response policies** (`sla_policies.read` to see, `.configure` to
+ *     change): the budgets, the working week, the timezone and the holidays a
+ *     response deadline is measured against. A new policy for the same scope
+ *     retires the active one in the same transaction; a retired policy is kept so
+ *     a missed deadline always names the terms it was measured against. This
+ *     screen authors the TENANT DEFAULT policy only; a policy for one business
+ *     scope is written through the API (the scope picker is a follow-up), and the
+ *     list shows every policy the caller may see, scoped ones included.
+ *   - **Tags** (`tags.configure`): the per-tenant catalogue staff label
+ *     conversations with. Deleting a tag unlinks it from every conversation.
+ *   - **Projection rebuild** (`projection.configure`): replays the verified
+ *     inbound events still inside the retention window into the conversation
+ *     projection. Staff work state (status, assignment, tags) is never touched.
+ *
+ * The tenant default, the tag catalogue and the rebuild are TENANT-WIDE actions:
+ * the endpoints answer `403` to a scope-confined manager, and the buttons here
+ * are shown to anyone holding the permission, with that answer mapped to a
+ * sentence. The endpoint stays the authority.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { weekdayLabel } from "../../../lib/i18n/labels/omnichannel-inbox";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { openDays } from "../../../lib/ui/omnichannel-inbox-screen";
+import { visibilityFor } from "../../../modules/omnichannel-inbox/application/route-support";
+import {
+  listSlaPolicies,
+  type SlaPolicyView
+} from "../../../modules/omnichannel-inbox/application/sla-policy-directory";
+import {
+  listTags,
+  type TagView
+} from "../../../modules/omnichannel-inbox/application/tag-directory";
+import { isOmnichannelInboxEnabled } from "../../../modules/omnichannel-inbox/domain/inbox-config";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/omnichannel-inbox";
+
+/**
+ * The guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to
+ * `OMNICHANNEL_INBOX_GUARDS` and to the endpoint that enforces it.
+ */
+const SLA_READ_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "sla_policies",
+  action: "read"
+} as const;
+const SLA_CONFIGURE_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "sla_policies",
+  action: "configure"
+} as const;
+const CONVERSATIONS_READ_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "conversations",
+  action: "read"
+} as const;
+const TAGS_CONFIGURE_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "tags",
+  action: "configure"
+} as const;
+const PROJECTION_CONFIGURE_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "projection",
+  action: "configure"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: SLA_READ_GUARD,
+  load: async ({ tx, auth, can }) => {
+    if (!isOmnichannelInboxEnabled()) {
+      return {
+        enabled: false as const,
+        policies: [] as SlaPolicyView[],
+        tags: null as TagView[] | null,
+        canConfigurePolicies: false,
+        canConfigureTags: false,
+        canRebuild: false
+      };
+    }
+
+    const context = {
+      tx,
+      tenantId: ssr.tenantId,
+      tokenHash: ssr.tokenHash,
+      auth,
+      now: new Date(),
+      request: Astro.request,
+      clientAddress: Astro.clientAddress
+    };
+    // The route's own rule: the tenant default plus the scopes the caller
+    // covers (everything when acting tenant-wide).
+    const policies = await listSlaPolicies(
+      tx,
+      ssr.tenantId,
+      await visibilityFor(context, SLA_READ_GUARD)
+    );
+    // The tag list is `conversations.read` on its endpoint: a caller without it
+    // gets no catalogue section rather than an empty one.
+    const tags = (await can({ ...CONVERSATIONS_READ_GUARD }))
+      ? await listTags(tx, ssr.tenantId)
+      : null;
+
+    return {
+      enabled: true as const,
+      policies,
+      tags,
+      canConfigurePolicies: await can({ ...SLA_CONFIGURE_GUARD }),
+      canConfigureTags: await can({ ...TAGS_CONFIGURE_GUARD }),
+      canRebuild: await can({ ...PROJECTION_CONFIGURE_GUARD })
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omnichannel-inbox/settings.astro: failed to load the settings",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const policies: SlaPolicyView[] = data?.policies ?? [];
+const tags: TagView[] | null = data?.tags ?? null;
+
+function scopeText(scope: { type: string; id: string } | null): string {
+  return scope === null
+    ? t("Whole tenant (default)")
+    : t("Scope: {type}", { type: scope.type.replaceAll("_", " ") });
+}
+
+function weekText(policy: SlaPolicyView): string {
+  const days = openDays(policy.workingHours);
+
+  return days.length === 0
+    ? "—"
+    : days
+        .map((day) => `${weekdayLabel(t, day.isoWeekday)} ${day.window}`)
+        .join(", ");
+}
+---
+
+<AdminLayout
+  title={t("Inbox settings")}
+  description={t(
+    "Response policies, the tag catalogue and the conversation projection of the omnichannel inbox."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the inbox")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="omnichannel-settings-denied">
+      {t("You do not have permission to view the inbox settings.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="omnichannel-settings-error">
+      {t("The settings could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="omnichannel-settings-disabled">
+      {t("The omnichannel inbox is switched off on this deployment.")}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <>
+      <p
+        id="omnichannel-settings-error-box"
+        class="admin-create-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      ></p>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="omnichannel-policies-title"
+      >
+        <h2 class="admin-section-title" id="omnichannel-policies-title">
+          {t("Response policies")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "How long staff have to answer, counted only inside working hours. A new policy replaces the active one for the same scope; replaced policies are kept so an overdue conversation always names the terms it was measured against."
+          )}
+        </p>
+
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omnichannel-policies-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="omnichannel-policies-table"
+          >
+            <caption id="omnichannel-policies-caption">
+              {tn("{count} policy", "{count} policies", policies.length, {
+                count: policies.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Policy")}</th>
+                <th scope="col">{t("Applies to")}</th>
+                <th scope="col">{t("First response")}</th>
+                <th scope="col">{t("Next response")}</th>
+                <th scope="col">{t("Working week")}</th>
+                <th scope="col">{t("State")}</th>
+                {data.canConfigurePolicies && (
+                  <th scope="col">
+                    <span class="visually-hidden">{t("Actions")}</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {policies.length === 0 ? (
+                <tr>
+                  <td colspan={data.canConfigurePolicies ? 7 : 6}>
+                    <span class="cell-muted">
+                      {t(
+                        "No policy yet. Without one, conversations have no response deadline."
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                policies.map((policy) => (
+                  <tr data-policy-id={policy.id} data-status={policy.status}>
+                    <td data-label={t("Policy")}>
+                      {policy.name}
+                      <span class="cell-muted"> {policy.timezone}</span>
+                    </td>
+                    <td data-label={t("Applies to")}>
+                      {scopeText(policy.businessScope)}
+                    </td>
+                    <td data-label={t("First response")}>
+                      {tn(
+                        "{count} working minute",
+                        "{count} working minutes",
+                        policy.firstResponseMinutes,
+                        { count: policy.firstResponseMinutes }
+                      )}
+                    </td>
+                    <td data-label={t("Next response")}>
+                      {tn(
+                        "{count} working minute",
+                        "{count} working minutes",
+                        policy.nextResponseMinutes,
+                        { count: policy.nextResponseMinutes }
+                      )}
+                    </td>
+                    <td data-label={t("Working week")}>
+                      {weekText(policy)}
+                      {policy.holidays.length > 0 && (
+                        <span class="cell-muted">
+                          {" "}
+                          {tn(
+                            "{count} holiday",
+                            "{count} holidays",
+                            policy.holidays.length,
+                            { count: policy.holidays.length }
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label={t("State")}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          policy.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {policy.status === "active"
+                          ? t("Active")
+                          : t("Retired {when}", {
+                              when: formatUtcMinute(policy.retiredAt)
+                            })}
+                      </span>
+                    </td>
+                    {data.canConfigurePolicies && (
+                      <td>
+                        {policy.status === "active" && (
+                          <button
+                            class="btn btn-secondary js-inbox-policy-retire"
+                            type="button"
+                            data-policy-id={policy.id}
+                          >
+                            {t("Retire")}
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {data.canConfigurePolicies && (
+          <form
+            id="omnichannel-policy-form"
+            class="admin-form"
+            aria-labelledby="omnichannel-policy-form-title"
+          >
+            <h3
+              class="admin-subsection-title"
+              id="omnichannel-policy-form-title"
+            >
+              {t("New default policy")}
+            </h3>
+            <p class="admin-field-hint">
+              {t(
+                "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
+              )}
+            </p>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-name">
+                {t("Name")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-name"
+                name="name"
+                maxlength="120"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-timezone">
+                {t("Timezone (IANA name)")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-timezone"
+                name="timezone"
+                value="Asia/Jakarta"
+                maxlength="64"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-first">
+                {t("First response (working minutes)")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-first"
+                name="first"
+                type="number"
+                min="1"
+                max="43200"
+                value="60"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-next">
+                {t("Next response (working minutes)")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-next"
+                name="next"
+                type="number"
+                min="1"
+                max="43200"
+                value="240"
+                required
+              />
+            </div>
+            <fieldset class="admin-field">
+              <legend class="field-label">{t("Open days")}</legend>
+              {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    name="weekday"
+                    value={String(day)}
+                    checked={day <= 5}
+                  />
+                  {weekdayLabel(t, day)}
+                </label>
+              ))}
+            </fieldset>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-opens">
+                {t("Opens at (24-hour, HH:MM)")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-opens"
+                name="opens"
+                value="09:00"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-closes">
+                {t("Closes at (24-hour, HH:MM)")}
+              </label>
+              <input
+                class="field-input"
+                id="omnichannel-policy-closes"
+                name="closes"
+                value="17:00"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-holidays">
+                {t("Holidays (one date per line, YYYY-MM-DD)")}
+              </label>
+              <textarea
+                class="field-input"
+                id="omnichannel-policy-holidays"
+                name="holidays"
+                rows="4"
+              ></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">
+              {t("Save policy")}
+            </button>
+          </form>
+        )}
+      </section>
+
+      {tags !== null && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="omnichannel-tags-title"
+        >
+          <h2 class="admin-section-title" id="omnichannel-tags-title">
+            {t("Tags")}
+          </h2>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="omnichannel-tags-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="omnichannel-tags-table"
+            >
+              <caption id="omnichannel-tags-caption">
+                {tn("{count} tag", "{count} tags", tags.length, {
+                  count: tags.length
+                })}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Label")}</th>
+                  <th scope="col">{t("Code")}</th>
+                  <th scope="col">{t("Created")}</th>
+                  {data.canConfigureTags && (
+                    <th scope="col">
+                      <span class="visually-hidden">{t("Actions")}</span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {tags.length === 0 ? (
+                  <tr>
+                    <td colspan={data.canConfigureTags ? 4 : 3}>
+                      <span class="cell-muted">{t("No tags yet.")}</span>
+                    </td>
+                  </tr>
+                ) : (
+                  tags.map((tag) => (
+                    <tr data-tag-id={tag.id}>
+                      <td data-label={t("Label")}>{tag.label}</td>
+                      <td data-label={t("Code")}>
+                        <span class="cell-code">{tag.code}</span>
+                      </td>
+                      <td data-label={t("Created")}>
+                        {formatUtcMinute(tag.createdAt)}
+                      </td>
+                      {data.canConfigureTags && (
+                        <td>
+                          <button
+                            class="btn btn-secondary js-inbox-tag-delete"
+                            type="button"
+                            data-tag-id={tag.id}
+                          >
+                            {t("Delete")}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {data.canConfigureTags && (
+            <form
+              id="omnichannel-tag-form"
+              class="admin-form"
+              aria-labelledby="omnichannel-tag-form-title"
+            >
+              <h3
+                class="admin-subsection-title"
+                id="omnichannel-tag-form-title"
+              >
+                {t("New tag")}
+              </h3>
+              <div class="admin-field">
+                <label class="field-label" for="omnichannel-tag-code">
+                  {t("Code")}
+                </label>
+                <input
+                  class="field-input"
+                  id="omnichannel-tag-code"
+                  name="code"
+                  maxlength="48"
+                  pattern="[a-z0-9_\-]{1,48}"
+                  aria-describedby="omnichannel-tag-code-hint"
+                  required
+                />
+                <p class="admin-field-hint" id="omnichannel-tag-code-hint">
+                  {t("Lower-case letters, digits, hyphen or underscore.")}
+                </p>
+              </div>
+              <div class="admin-field">
+                <label class="field-label" for="omnichannel-tag-label">
+                  {t("Label")}
+                </label>
+                <input
+                  class="field-input"
+                  id="omnichannel-tag-label"
+                  name="label"
+                  maxlength="60"
+                  required
+                />
+              </div>
+              <button class="btn btn-primary" type="submit">
+                {t("Add tag")}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
+      {data.canRebuild && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="omnichannel-rebuild-title"
+        >
+          <h2 class="admin-section-title" id="omnichannel-rebuild-title">
+            {t("Rebuild the conversation list")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "Replays the verified inbound events still inside the retention window (365 days) into the conversation list, for example after a restore. Status, assignment and tags are never changed. It runs in batches and reports what it processed."
+            )}
+          </p>
+          <p
+            id="omnichannel-rebuild-result"
+            class="state-notice"
+            role="status"
+            hidden
+          ></p>
+          <button
+            class="btn btn-secondary js-inbox-rebuild"
+            type="button"
+            id="omnichannel-rebuild-button"
+          >
+            {t("Rebuild now")}
+          </button>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import { buildPolicyBody } from "../../../lib/ui/omnichannel-inbox-screen";
+
+  const actionError = messageBox("omnichannel-settings-error-box");
+  const BASE = "/api/v1/omnichannel-inbox";
+
+  // Every mutation here is high-risk and requires the header. One key per
+  // distinct (method, url, body): a retry replays, a different request gets a
+  // new key.
+  const keyFor = createIdempotencyKeySource();
+  const idempotency = (
+    method: string,
+    url: string,
+    body?: unknown
+  ): Record<string, string> => ({
+    "Idempotency-Key": keyFor({ method, url, body: body ?? null })
+  });
+
+  function failure(errorCode: string | null): string {
+    switch (errorCode) {
+      case "ACCESS_DENIED":
+        return "You may not do that for the whole tenant. Ask a tenant-wide administrator.";
+      case "TAG_CODE_TAKEN":
+        return "A tag with that code already exists.";
+      case "VALIDATION_ERROR":
+        return "Check the fields: the timezone must be an IANA name and the hours must make sense.";
+      case "RESOURCE_NOT_FOUND":
+        return "That item no longer exists. Reload the page.";
+      case "IDEMPOTENCY_CONFLICT":
+        return "That request conflicts with an earlier one. Reload the page and try again.";
+      default:
+        return "Could not save the change. Please try again.";
+    }
+  }
+
+  onSubmit("omnichannel-policy-form", async ({ data, submit }) => {
+    const body = buildPolicyBody({
+      name: String(data.get("name") ?? ""),
+      timezone: String(data.get("timezone") ?? ""),
+      firstResponseMinutes: Number(data.get("first")),
+      nextResponseMinutes: Number(data.get("next")),
+      openWeekdays: data.getAll("weekday").map(Number),
+      opensAt: String(data.get("opens") ?? ""),
+      closesAt: String(data.get("closes") ?? ""),
+      holidays: String(data.get("holidays") ?? "")
+    });
+
+    if (body === null) {
+      actionError.show(
+        "Pick at least one open day, and make the closing time later than the opening time."
+      );
+      return;
+    }
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson(
+          "POST",
+          `${BASE}/sla-policies`,
+          body,
+          idempotency("POST", `${BASE}/sla-policies`, body)
+        ),
+      failure
+    );
+  });
+
+  onAction(".js-inbox-policy-retire", async (button) => {
+    const id = button.dataset.policyId;
+
+    if (!id) return;
+
+    if (
+      !(await confirmAction(
+        "Retire this policy? Conversations will use the next policy that applies, or have no deadline."
+      ))
+    ) {
+      return;
+    }
+
+    const url = `${BASE}/sla-policies/${id}/retire`;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", url, {}, idempotency("POST", url, {})),
+      failure
+    );
+  });
+
+  onSubmit("omnichannel-tag-form", async ({ data, submit }) => {
+    const body = {
+      code: String(data.get("code") ?? "").trim(),
+      label: String(data.get("label") ?? "").trim()
+    };
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson(
+          "POST",
+          `${BASE}/tags`,
+          body,
+          idempotency("POST", `${BASE}/tags`, body)
+        ),
+      failure
+    );
+  });
+
+  onAction(".js-inbox-tag-delete", async (button) => {
+    const id = button.dataset.tagId;
+
+    if (!id) return;
+
+    if (
+      !(await confirmAction(
+        "Delete this tag? It is removed from every conversation that carries it."
+      ))
+    ) {
+      return;
+    }
+
+    const url = `${BASE}/tags/${id}`;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("DELETE", url, undefined, idempotency("DELETE", url)),
+      failure
+    );
+  });
+
+  // The rebuild is batched: each call replays one bounded batch and reports
+  // where it stopped. Bounded here too, so a runaway never loops forever.
+  const MAX_REBUILD_BATCHES = 50;
+
+  onAction(".js-inbox-rebuild", async (button) => {
+    actionError.clear();
+    const result = document.getElementById("omnichannel-rebuild-result");
+    const unlock = lockElement(button, "Rebuilding…");
+    let after = "0";
+    let processed = 0;
+    let created = 0;
+    let complete = false;
+
+    for (let batch = 0; batch < MAX_REBUILD_BATCHES && !complete; batch += 1) {
+      const body = { afterSequence: after };
+      const response = await sendJsonForData<{
+        processed: number;
+        created: number;
+        nextAfterSequence: string;
+        complete: boolean;
+      }>(
+        "POST",
+        `${BASE}/projection/rebuild`,
+        body,
+        idempotency("POST", `${BASE}/projection/rebuild`, body)
+      );
+
+      if (!response.ok || !response.data) {
+        actionError.show(failure(response.errorCode));
+        unlock();
+        return;
+      }
+
+      processed += response.data.processed;
+      created += response.data.created;
+      after = response.data.nextAfterSequence;
+      complete = response.data.complete;
+    }
+
+    if (result) {
+      result.textContent = complete
+        ? `Rebuild finished: ${processed} events replayed, ${created} conversations created.`
+        : `Rebuild paused after ${processed} events (${created} conversations created). Run it again to continue.`;
+      result.hidden = false;
+    }
+
+    unlock();
+  });
+</script>
