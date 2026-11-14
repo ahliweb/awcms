@@ -26,7 +26,7 @@
  *
  * | Sweep (12 due posts)              | Before | After |
  * | --------------------------------- | ------ | ----- |
- * | publish, enforcement off          |     40 |     6 |
+ * | publish, enforcement off          |     40 |     7 |
  * | publish, enforcement on           |     52 |     7 |
  * | unpublish                         |     27 |     4 |
  *
@@ -98,12 +98,13 @@ const DUE_COUNT = 12;
 
 /**
  * `SET LOCAL` + `SELECT` the due batch + blog settings + term ids for the whole
- * batch + the batched `UPDATE` + the batched audit `INSERT`.
+ * batch + the batched `UPDATE` + the batched revision `INSERT` + the batched
+ * audit `INSERT`.
  *
  * The edge cache is off in this suite, so `enqueueModuleContentPurge` is a JS
  * no-op and contributes nothing; with it on it adds ONE, not one per post.
  */
-const PUBLISH_QUERY_BUDGET = 6;
+const PUBLISH_QUERY_BUDGET = 7;
 
 /**
  * The same, plus what the checklist costs when enforcement is active: the
@@ -265,6 +266,30 @@ suite("the scheduled sweeps cost the same for twelve posts as for one", () => {
     expect(result.blockedCount).toBe(0);
     expect(await statusCounts()).toEqual({ published: DUE_COUNT });
 
+    // Each published post got ONE revision of what it went live with,
+    // attributed to its author (a background job has no human actor).
+    const revisionRows = (await getAdminSql()`
+      SELECT resource_id, revision_number, status, change_note,
+             created_by_tenant_user_id
+      FROM awcms_blog_revisions WHERE tenant_id = ${TENANT}
+    `) as {
+      resource_id: string;
+      revision_number: number;
+      status: string;
+      change_note: string;
+      created_by_tenant_user_id: string;
+    }[];
+    expect(revisionRows).toHaveLength(DUE_COUNT);
+    expect(new Set(revisionRows.map((row) => row.resource_id)).size).toBe(
+      DUE_COUNT
+    );
+    for (const row of revisionRows) {
+      expect(row.revision_number).toBe(1);
+      expect(row.status).toBe("published");
+      expect(row.change_note).toBe("Published by scheduled publish.");
+      expect(row.created_by_tenant_user_id).toBe(AUTHOR);
+    }
+
     // One row per post plus the run summary — batching the INSERT must not
     // batch away the trail.
     expect(await auditActionCounts()).toEqual({
@@ -323,6 +348,13 @@ suite("the scheduled sweeps cost the same for twelve posts as for one", () => {
     expect(result.publishedCount).toBe(0);
     expect(result.blockedCount).toBe(DUE_COUNT);
     expect(await statusCounts()).toEqual({ scheduled: DUE_COUNT });
+
+    // Nothing went live, so nothing is snapshotted.
+    const revisionCount = (await getAdminSql()`
+      SELECT count(*)::int AS count FROM awcms_blog_revisions
+      WHERE tenant_id = ${TENANT}
+    `) as { count: number }[];
+    expect(revisionCount[0]!.count).toBe(0);
     expect(await auditActionCounts()).toEqual({
       "blog.post.scheduled_publish_blocked": DUE_COUNT,
       "blog.post.scheduled_publish_executed": 1

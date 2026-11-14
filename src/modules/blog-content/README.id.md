@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:883b90fbd4779eb69cfcbc146bdf3e8ded1af98a12f0bc1582b49421d4af56ec -->
+<!-- i18n-source-hash: sha256:65be42c7df08ee0146b4b732d861487659ddb7ec4dcd8871c690674d6f5d56e6 -->
 
 # Blog Content
 
@@ -89,8 +89,8 @@ Migration 052 (Issue #641, epic `news_portal`) menambah 3 permission lagi: `inte
 - `blog-taxonomy-directory.ts` — dulu (Issue #537) hanya `fetchBlogTermsByTaxonomyType` placeholder; Issue #539 melengkapinya dengan CRUD term penuh (`createBlogTerm`, `fetchBlogTermById`, `listBlogTerms`, `updateBlogTerm`, `softDeleteBlogTerm`) plus fungsi relasi post-term (`syncPostTermAssignments`, `fetchPostTermIds`, `countExistingTerms`) — lihat §Post-term relation handling.
 - `blog-search.ts` (Issue #539) — `searchBlogContentAdmin` (semua status, guard `search.read`) dan `searchPublicBlogContent` (predikat publik, helper murni — lihat §Search).
 - `blog-revision-directory.ts` (Issue #541) — `createBlogRevision` (INSERT-only, `revision_number` = `MAX(...)+1` scoped ke `(tenant_id, resource_type, resource_id)`), `listBlogRevisions`, `fetchBlogRevisionById` (di-scope ke `resource_id` juga, bukan cuma `id` — revisionId dari post lain tidak bisa dibaca lewat URL post ini). Tidak ada fungsi update/delete di file ini sama sekali — lihat §Revisions.
-- `blog-scheduled-publish.ts` (Issue #541) — `publishDueScheduledPosts`, satu `UPDATE` set-based per tenant, dipanggil `scripts/blog-scheduled-publish.ts` — lihat §Scheduled publishing.
-- `domain/revision-policy.ts` (Issue #541) — `isSignificantContentChange` (true kalau `title`/`contentJson`/`contentText` ada di input update; field kosmetik seperti `seoTitle`/`canonicalUrl`/`slug` tidak memicu revisi baru).
+- `blog-scheduled-publish.ts` (Issue #541) — `publishDueScheduledPosts` (juga menulis satu revisi batch per post yang terbit), satu `UPDATE` set-based per tenant, dipanggil `scripts/blog-scheduled-publish.ts` — lihat §Scheduled publishing.
+- `domain/revision-policy.ts` (Issue #541) — `isSignificantContentChange` (true kalau `title`/`contentJson`/`contentText`/`bodyPortableText` ada di input update; field kosmetik seperti `seoTitle`/`canonicalUrl`/`slug` tidak memicu revisi baru).
 - `template-directory.ts`/`menu-directory.ts`/`widget-directory.ts`/`ads-directory.ts`/`theme-settings-directory.ts` (Issue #542) — CRUD directory per resource, pola identik `blog-taxonomy-directory.ts` (satu file, baca+tulis, soft-delete). `menu-directory.ts`'s `syncMenuItems` dan `ads-directory.ts`'s `syncAdPlacements` full-replace sub-resource (delete-lalu-insert), sama seperti `syncPostTermAssignments`.
 - `institution-directory.ts` (sql/131) — CRUD untuk `awcms_blog_institutions` (`createInstitution`, `fetchInstitutionById`, `fetchInstitutionBySlug`, `listInstitutions`, `updateInstitution`, `softDeleteInstitution`, `restoreInstitution`, `purgeInstitution`) plus relasi post↔institution (`syncPostInstitutionAssignments`, `fetchPostInstitutionIds`, `countExistingInstitutions`) dipakai ulang dari `blog-post-directory.ts`/`blog-page-directory.ts`. `logoMediaId`/`logoAlt` (Issue #806, sql/153) ikut di setiap jalur baca/tulis persis seperti kolom lain — tidak ada accessor terpisah.
 - `institution-logo-reference-gate.ts` (Issue #806) — `validateInstitutionLogoReferenceForFullOnlineR2Mode`, sibling single-field dari `news-media-reference-gate.ts`'s `validateNewsMediaReferencesForFullOnlineR2Mode`/equivalent-nya di `video-news-thumbnail-reference-gate.ts`: saat full-online R2-only mode aktif untuk tenant (`MediaLibraryPort.isManagedMediaEnforcementActiveForTenant`), `logoMediaId` yang ada wajib lolos `isMediaReferenceSafe` (eksis, tenant sama, verified/attached); selain itu (mayoritas deployment) field ini tetap validasi bentuk saja tanpa cek eksistensi. Dipanggil dari `POST`/`PATCH /api/v1/blog/institutions[/{id}]`, setelah validasi murni dan sebelum baris ditulis, mirroring persis tempat route post/page memanggil gate masing-masing.
@@ -419,7 +419,16 @@ Hanya rute untuk **post** — doc issue #541 §Routes cuma mendaftarkan tiga rut
 
 ### Kapan revisi baru dibuat — "significant change"
 
-`domain/revision-policy.ts`'s `isSignificantContentChange` — true kalau `PATCH` menyertakan `title`, `contentJson`, atau `contentText`; field lain (`seoTitle`, `metaDescription`, `canonicalUrl`, `visibility`, `locale`, `featuredMediaId`, `slug`, `menuOrder`, ...) tidak memicu revisi baru. `awcms_blog_revisions` tidak punya kolom `slug` (migration 026) — konsisten dengan keputusan itu. Dipanggil dari `PATCH /api/v1/blog/posts/{id}` dan `PATCH /api/v1/blog/pages/{id}`, **bukan** dari `POST` create — revisi pertama baru muncul begitu ada perubahan konten signifikan pertama setelah create, bukan snapshot draft awal.
+`domain/revision-policy.ts`'s `isSignificantContentChange` — true kalau `PATCH` menyertakan `title`, `contentJson`, `contentText`, atau `bodyPortableText` (body kanonik, ADR-0100 — editor admin dan overlay pratinjau hanya mengirim field ini saat mengoreksi body); field lain (`seoTitle`, `metaDescription`, `canonicalUrl`, `visibility`, `locale`, `featuredMediaId`, `slug`, `menuOrder`, ...) tidak memicu revisi baru. `awcms_blog_revisions` tidak punya kolom `slug` (migration 026) — konsisten dengan keputusan itu. Dipanggil dari `PATCH /api/v1/blog/posts/{id}` dan `PATCH /api/v1/blog/pages/{id}`, **bukan** dari `POST` create (tidak ada snapshot draft awal). Publish ditangani terpisah, di bawah.
+
+### Publish juga menulis revisi
+
+`createBlogRevision` dulu hanya berjalan dari kedua handler `PATCH` dan restore revisi, sehingga urutan create -> publish -> edit menghasilkan riwayat yang baris pertamanya sudah berisi teks pasca-edit: versi yang benar-benar dibaca pembaca tidak bisa dipulihkan. Kini setiap jalur yang menerbitkan menulis revisi dalam transaksi yang sama dengan transisinya:
+
+- `POST /api/v1/blog/posts/{id}/publish` dan `POST /api/v1/blog/pages/{id}/publish` — diatribusikan ke pemanggil, `changeNote: "Published."`. Publish ulang `published -> published` atas konten yang tak berubah juga menulis satu (replay dengan `Idempotency-Key` yang sama tidak).
+- Sapuan scheduled-publish (`publishDueScheduledPosts`) — diatribusikan ke penulis post itu sendiri (job latar tidak punya aktor manusia dan `created_by_tenant_user_id` NOT NULL), `changeNote: "Published by scheduled publish."`. Satu `INSERT` batch (`createBlogRevisions`) untuk seluruh run, sehingga anggaran query sapuan tetap datar (6 -> 7 untuk dua belas post maupun satu).
+
+Semantik `PATCH` sendiri (snapshot keadaan pasca-edit) tidak berubah. **Keputusan terbuka:** ini membalik catatan lama "revisi pertama baru setelah edit signifikan pertama"; tidak ada ADR yang mencatat aturan aslinya sehingga tidak perlu ADR untuk mengubahnya, tetapi maintainer mungkin ingin mencatatnya.
 
 ### Restore — append-only, tidak pernah menimpa
 
