@@ -45,6 +45,11 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
+import {
+  findRestrictedCreatePrivileges,
+  findTenantIsolationPolicyDrift,
+  probeTenantIsolationUnderDefinerRead
+} from "./lib/schema-create-and-tenant-policy-readiness";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
@@ -8236,6 +8241,16 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
       ORDER BY r.rolname
     `) as { role: string; can: boolean }[];
     const skipped = rows.filter((row) => !row.can).map((row) => row.role);
+    const superuser = (await sql`
+      SELECT rolsuper FROM pg_roles WHERE rolname = current_user
+    `) as { rolsuper: boolean }[];
+
+    // The tenant-isolation probe (#1279, X4) needs a superuser, not a member.
+    if (!superuser[0]?.rolsuper) {
+      skipped.push(
+        `the tenant-isolation probe (${LEAST_PRIVILEGE_APP_ROLE}, ${SOCIAL_SOURCE_CHECK_ROLE})`
+      );
+    }
 
     return skipped.length === 0
       ? {
@@ -8264,6 +8279,111 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
 }
 
 // ---------------------------------------------------------------------------
+// 7f. No schema/database CREATE for a restricted role (critical) — #1279 (X3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Roles allowed to hold CREATE besides the schema/database owner: a deployment
+ * whose migrator is a LOGIN member of a NOLOGIN owner role lists it in
+ * `SECURITY_READINESS_MIGRATOR_ROLES` (comma separated). Empty by default.
+ */
+function migratorRolesFromEnv(): string[] {
+  return (process.env.SECURITY_READINESS_MIGRATOR_ROLES ?? "")
+    .split(",")
+    .map((role) => role.trim())
+    .filter((role) => role.length > 0);
+}
+
+export async function checkNoRestrictedSchemaCreate(
+  definerOwners?: readonly string[],
+  migrators?: readonly string[]
+): Promise<SecurityCheckResult> {
+  const name = "No restricted role can CREATE in the schema or the database";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const findings = await findRestrictedCreatePrivileges(
+      getDatabaseClient(),
+      definerOwners ?? DEFINER_OWNER_ROLES,
+      migrators ?? migratorRolesFromEnv()
+    );
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `Every SECURITY DEFINER function pins search_path = public, pg_temp, so a role that can CREATE in the schema can plant an object they resolve. Only the schema/database owner and the explicitly allow-listed migrators may hold CREATE, and every SECURITY DEFINER function must pin exactly that search_path: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence:
+            "Only the schema and database owner (and any allow-listed migrator) hold CREATE: PUBLIC, every other LOGIN role, the runtime, worker, setup and dispatch roles and every definer owner do not (ACLs and effective privilege, membership included); every SECURITY DEFINER function pins exactly search_path = public, pg_temp."
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify schema CREATE privileges: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7g. Tenant isolation policies keep their canonical shape (critical) — #1279 (X4)
+// ---------------------------------------------------------------------------
+
+export async function checkTenantIsolationPoliciesCanonical(): Promise<SecurityCheckResult> {
+  const name =
+    "Every FORCE-RLS table keeps its canonical tenant isolation policy";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const { checkedTables, findings } =
+      await findTenantIsolationPolicyDrift(sql);
+    const probe = await probeTenantIsolationUnderDefinerRead(sql, [
+      LEAST_PRIVILEGE_APP_ROLE,
+      SOCIAL_SOURCE_CHECK_ROLE
+    ]);
+
+    findings.push(...probe.findings);
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `A permissive policy is OR-ed with the tenant isolation policy, and a SECURITY DEFINER function reads on the strength of it, so a widened or extra policy exposes other tenants: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${checkedTables} FORCE-RLS table(s): each has the canonical FOR ALL tenant isolation policy and no unreviewed permissive policy; ${probe.ran ? `the rolled-back probe saw only its own tenant's rows as ${probe.probedRoles.join(", ")}${probe.skippedRoles.length > 0 ? ` (not probed: ${probe.skippedRoles.join(", ")}, not provisioned or without a read grant)` : ""}` : "the behavioural probe did not run (the connection is not a superuser), so the exact expression pin is the only guard here"}.`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the tenant isolation policies: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -8285,6 +8405,8 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkTelegramEngagementDispatchRole(),
     await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
+    await checkNoRestrictedSchemaCreate(),
+    await checkTenantIsolationPoliciesCanonical(),
     checkAbacDefaultDeny(),
     checkDataLifecycleRegistryValid(),
     checkDataLifecycleLegalHoldReleaseSeparate(),
