@@ -263,10 +263,10 @@ async function seedEsp(
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name, auth_mode,
-       status, secret_id)
+       status, secret_id, access_mode)
     VALUES (${tenantId}, 'mailketing', 'esp_account', ${`mk-login-${accountCounter}`},
             ${options.name ?? `Mailketing ${accountCounter}`}, 'api_token',
-            'connected', ${ref?.secretId ?? null})
+            'connected', ${ref?.secretId ?? null}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 
@@ -296,11 +296,11 @@ async function seedSender(
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider, account_kind,
-       external_id, display_name, auth_mode, status, parent_account_id)
+       external_id, display_name, auth_mode, status, parent_account_id, access_mode)
     VALUES (${tenantId}, ${options.officeId ? "office" : null},
             ${options.officeId ?? null}, 'mailketing', 'sender_identity',
             ${address}, ${options.name ?? `Sender ${accountCounter}`},
-            'api_token', ${options.status ?? "connected"}, ${parentId})
+            'api_token', ${options.status ?? "connected"}, ${parentId}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
   const id = rows[0]!.id;
@@ -332,11 +332,23 @@ async function assign(
   createdBy: string,
   kind: "operator" | "viewer" = "operator"
 ) {
-  await admin()`
-    INSERT INTO awcms_channel_account_assignments
-      (tenant_id, account_id, tenant_user_id, kind, created_by)
-    VALUES (${tenantId}, ${accountId}, ${tenantUserId}, ${kind}, ${createdBy})
-  `;
+  await admin().begin(async (tx) => {
+    await tx`
+      INSERT INTO awcms_channel_account_assignments
+        (tenant_id, account_id, tenant_user_id, kind, created_by)
+      VALUES (${tenantId}, ${accountId}, ${tenantUserId}, ${kind}, ${createdBy})
+    `;
+    // Since #1215 an account is open to the permission alone only when it is
+    // `tenant_wide`; the seeders create that mode (the screen's original "no
+    // assignee = open" fixtures), and assigning somebody is what closes it.
+    // The access-mode guard wants an `owner` row for the switch, which these
+    // fixtures do not model, so it is bypassed for this fixture write only.
+    await tx`SET LOCAL session_replication_role = replica`;
+    await tx`
+      UPDATE awcms_channel_accounts SET access_mode = 'assigned'
+      WHERE tenant_id = ${tenantId} AND id = ${accountId}
+    `;
+  });
 }
 
 async function seedMessage(
