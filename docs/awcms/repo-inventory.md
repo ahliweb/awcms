@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 284   |
+| Migrations                          | 285   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 860   |
+| Test files                          | 861   |
 | Route files                         | 686   |
 | ADR                                 | 326   |
 
@@ -349,6 +349,7 @@
 | 282 | `sql/398_awcms_channel_accounts_access_mode.sql`                       |
 | 283 | `sql/399_awcms_channel_accounts_last_owner_guard.sql`                  |
 | 284 | `sql/408_awcms_audit_events_append_only_for_app_role.sql`              |
+| 285 | `sql/409_awcms_append_only_ledgers_for_app_role.sql`                   |
 
 ### Tables & Row-Level Security
 
@@ -638,7 +639,7 @@
 | ------------- | ---------- |
 | `(root)`      | 637        |
 | `e2e`         | 30         |
-| `integration` | 192        |
+| `integration` | 193        |
 | `unit`        | 1          |
 
 ### Routes
