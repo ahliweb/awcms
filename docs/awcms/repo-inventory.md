@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 276   |
+| Migrations                          | 277   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 834   |
+| Test files                          | 836   |
 | Route files                         | 681   |
 | ADR                                 | 326   |
 
@@ -341,6 +341,7 @@
 | 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
 | 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
 | 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
+| 277 | `sql/387_awcms_booking_worker_transitions.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -628,9 +629,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 621        |
+| `(root)`      | 622        |
 | `e2e`         | 30         |
-| `integration` | 182        |
+| `integration` | 183        |
 | `unit`        | 1          |
 
 ### Routes
