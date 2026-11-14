@@ -4096,6 +4096,12 @@ msgstr ""
 msgid "Upload an image"
 msgstr ""
 
+msgid "Uploading is unavailable for your role"
+msgstr ""
+
+msgid "Uploading an image needs all of media.create, media.verify and media.cancel, because a started upload must be finishable and cancellable. Your role is missing: {missing}. Ask a tenant administrator to grant them."
+msgstr ""
+
 msgid "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
 msgstr ""
 

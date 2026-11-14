@@ -4083,6 +4083,12 @@ msgstr "Lepas tautan"
 msgid "Upload an image"
 msgstr "Unggah gambar"
 
+msgid "Uploading is unavailable for your role"
+msgstr "Pengunggahan tidak tersedia untuk peran Anda"
+
+msgid "Uploading an image needs all of media.create, media.verify and media.cancel, because a started upload must be finishable and cancellable. Your role is missing: {missing}. Ask a tenant administrator to grant them."
+msgstr "Mengunggah gambar memerlukan media.create, media.verify, dan media.cancel sekaligus, karena unggahan yang dimulai harus bisa diselesaikan dan dibatalkan. Peran Anda belum memiliki: {missing}. Mintalah administrator tenant untuk memberikannya."
+
 msgid "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
 msgstr "Berkas dikirim langsung ke penyimpanan dari peramban ini. Server memeriksa byte sebenarnya saat tiba — tipenya dibaca dari isi berkas, bukan dari namanya."
 

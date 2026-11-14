@@ -46,12 +46,21 @@ const PURGE_ROUTE = "src/pages/api/v1/media/objects/[id]/purge.ts";
 const UPLOAD_SESSION_ROUTE =
   "src/pages/api/v1/media/news-images/upload-sessions/index.ts";
 
+/** The uploader's second step; its `verify` guard lives in the application. */
+const FINALIZE_GUARD_SOURCE =
+  "src/modules/media-library/application/media-finalize-upload-session.ts";
+/** The uploader's failure cleanup, guarded by `cancel`. */
+const CANCEL_ROUTE =
+  "src/pages/api/v1/media/news-images/upload-sessions/[id]/cancel.ts";
+
 const ROUTES = [
   LIST_ROUTE,
   DELETE_ROUTE,
   RESTORE_ROUTE,
   PURGE_ROUTE,
-  UPLOAD_SESSION_ROUTE
+  UPLOAD_SESSION_ROUTE,
+  FINALIZE_GUARD_SOURCE,
+  CANCEL_ROUTE
 ];
 
 /** Exactly what the page gates on, enumerated so an addition is loud. */
@@ -66,6 +75,10 @@ const PAGE_KEYS = [
   // the rule `media-permissions.ts` records after two keys survived three
   // reviews by being declared ahead of any code that checked them.
   "media_library.media.update",
+  // The uploader is three endpoints behind three keys; the panel renders only
+  // when the caller holds all of them (see `media.astro`'s header).
+  "media_library.media.verify",
+  "media_library.media.cancel",
   // Issue #794 — split OUT of `update` above, so the rights-verification
   // control can be disabled for a caller the endpoint would 403 for.
   "media_library.media.adjudicate_rights"
@@ -82,13 +95,12 @@ const PAGE_KEYS = [
  * The objection was about an unfinished flow, not about the screen, so it stops
  * applying once the flow finishes.
  *
- * `verify`/`cancel` stay absent as page gates: `cancel` is driven by the
- * uploader's own failure handling rather than by an operator clicking it, and
- * nothing on this screen verifies.
+ * `verify`/`cancel` LEFT this list too: they guard the uploader's finalize and
+ * failure-cleanup calls, so a caller holding `create` without them started
+ * sessions it could neither finish nor cancel. They are page gates now, and
+ * the uploader renders only for a caller holding all three.
  */
 const DELIBERATE_ABSENCES = [
-  "media_library.media.verify",
-  "media_library.media.cancel",
   "media_library.enforcement.read",
   "media_library.enforcement.enable"
 ] as const;
@@ -183,7 +195,7 @@ describe("/admin/media permission gates", () => {
 
     // Non-vacuous: an empty `enforced` would make the subset check pass while
     // proving nothing, the shape of gate this repo has been burned by.
-    expect(enforced.size).toBe(7);
+    expect(enforced.size).toBe(9);
 
     expect([...pageKeys].filter((key) => !enforced.has(key))).toEqual([]);
   });
@@ -407,5 +419,38 @@ describe("ADR-0021 criterion 1", () => {
     // The excuse mattered in the wrong direction too: with it, `idn_admin_regions`
     // could have LOST its screen and this test would still have passed.
     expect(withoutScreen).toEqual([]);
+  });
+});
+
+describe("/admin/media uploader gating", () => {
+  test("the uploader renders only for a caller holding create AND verify AND cancel", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // One flag per step, each resolved through the chokepoint.
+    expect(page).toMatch(/canVerify:\s*await can\(\{[^}]*action:\s*"verify"/);
+    expect(page).toMatch(/canCancel:\s*await can\(\{[^}]*action:\s*"cancel"/);
+    expect(page).toContain(
+      "const uploadEnabled = canCreate && canVerify && canCancel && uploadAvailable;"
+    );
+  });
+
+  test("a partial grant gets a notice naming what is missing, not a dead form", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    for (const key of ["media.create", "media.verify", "media.cancel"]) {
+      expect(page).toContain(`"${key}"`);
+    }
+    expect(page).toContain("Uploading is unavailable for your role");
+    expect(page).toContain('id="media-upload-unavailable"');
+    // Only a PARTIAL grant: holding none of the three stays silent.
+    expect(page).toContain("missingUploadKeys.length < 3");
+
+    for (const locale of ["locales/en.po", "locales/id.po"]) {
+      const catalogue = await readFile(locale, "utf8");
+      expect(catalogue).toContain(
+        'msgid "Uploading is unavailable for your role"'
+      );
+      expect(catalogue).toContain("Your role is missing: {missing}");
+    }
   });
 });
