@@ -25,7 +25,10 @@
  */
 import type { ResolvedWhatsappSender } from "../../_shared/ports/channel-account-port";
 import { isStarsenderAdapterEnabled } from "../../_shared/unofficial-provider-flags";
-import { resolveWhatsappSendTimeoutMs } from "../domain/whatsapp-config";
+import {
+  resolveWhatsappSendTimeoutMs,
+  WHATSAPP_META_DEFAULT_API_VERSION
+} from "../domain/whatsapp-config";
 import type { WhatsappProvider } from "../domain/whatsapp-provider-contract";
 import { createMetaCloudWhatsappProvider } from "./meta-cloud-provider";
 import { createStarsenderWhatsappProvider } from "./starsender-provider";
@@ -38,7 +41,8 @@ const API_VERSION = /^v\d+\.\d+$/;
 export function resolveWhatsappMetaApiVersion(
   env: NodeJS.ProcessEnv
 ): string | null {
-  const version = env.WHATSAPP_META_API_VERSION?.trim() || "v21.0";
+  const version =
+    env.WHATSAPP_META_API_VERSION?.trim() || WHATSAPP_META_DEFAULT_API_VERSION;
 
   return API_VERSION.test(version) ? version : null;
 }
@@ -76,7 +80,9 @@ export function buildWhatsappSenderProvider(
 ): WhatsappProvider | null {
   switch (input.sender.provider) {
     case "whatsapp_cloud": {
-      const apiVersion = input.env.WHATSAPP_META_API_VERSION?.trim() || "v21.0";
+      const apiVersion =
+        input.env.WHATSAPP_META_API_VERSION?.trim() ||
+        WHATSAPP_META_DEFAULT_API_VERSION;
 
       if (
         !PHONE_NUMBER_ID.test(input.sender.externalId) ||

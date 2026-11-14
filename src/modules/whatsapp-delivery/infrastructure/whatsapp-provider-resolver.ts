@@ -9,7 +9,8 @@
  */
 import {
   isKnownWhatsappProvider,
-  resolveWhatsappSendTimeoutMs
+  resolveWhatsappSendTimeoutMs,
+  WHATSAPP_META_DEFAULT_API_VERSION
 } from "../domain/whatsapp-config";
 import type { WhatsappProvider } from "../domain/whatsapp-provider-contract";
 import { createFonnteWhatsappProvider } from "./fonnte-provider";
@@ -60,7 +61,9 @@ export function resolveWhatsappProvider(
     case "meta": {
       const accessToken = env.WHATSAPP_META_ACCESS_TOKEN?.trim();
       const phoneNumberId = env.WHATSAPP_META_PHONE_NUMBER_ID?.trim();
-      const apiVersion = env.WHATSAPP_META_API_VERSION?.trim() || "v21.0";
+      const apiVersion =
+        env.WHATSAPP_META_API_VERSION?.trim() ||
+        WHATSAPP_META_DEFAULT_API_VERSION;
 
       if (!accessToken || !phoneNumberId) {
         return createMisconfiguredProvider(

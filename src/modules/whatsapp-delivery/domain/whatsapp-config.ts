@@ -44,6 +44,14 @@ export function isKnownWhatsappProvider(
 export const WHATSAPP_CIRCUIT_BREAKER_KEY = "whatsapp-delivery";
 
 /**
+ * The Meta Graph API version used when `WHATSAPP_META_API_VERSION` is unset.
+ * One constant, read by every path that builds a Graph URL: the provider
+ * changelog register pins THIS declaration, so a bump here is one edit and one
+ * register update, not three call sites that can drift apart.
+ */
+export const WHATSAPP_META_DEFAULT_API_VERSION = "v21.0";
+
+/**
  * The breaker of ONE tenant-owned sender. Each sender has its own, so a failing
  * number cannot stop another sender (or the deployment sender, which keeps
  * {@link WHATSAPP_CIRCUIT_BREAKER_KEY}). Keyed by the account id (a uuid), never
