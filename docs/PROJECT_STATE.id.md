@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:2b717e49ecc02ac974d2192f6c0ee0eece1b6efd3dd8a1dcda525927816df2a3 -->
+<!-- i18n-source-hash: sha256:bd780a731840d4ec51467900a85705e1f18ec0e8fd366faaa6f61fa61751f7dd -->
 
 # AWCMS — Project State & Continuation
 
@@ -139,7 +139,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **285** (`sql/001`–`409`)                                                                                                                                                                                        | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0162** (`0000` = template; status ADR tertinggi: **Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **86** berkas `.astro` di `src/pages/admin/`; **5 dari 40** modul tanpa `navigation:` (`crm-follow-up`, `crm-leads`, `social-publishing`, `telegram-engagement`, `website-engagement`)                           | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **108** (64.158 baris) — soal typecheck lihat §6                                                                                                                                                                 | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **108** (64.174 baris) — soal typecheck lihat §6                                                                                                                                                                 | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **71** di rantai `bun run check`                                                                                                                                                                                 | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                                                                                                                        | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

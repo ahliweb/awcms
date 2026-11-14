@@ -1238,8 +1238,28 @@ export const READER_BUDGET_BYTES = 24_000;
  * Rebase note: `main` had moved to 372,350 B, so this branch's own raise
  * (+500 B, written against 366,100 B) is stacked on it, giving
  * 372,850 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1316** (TOTP enrolment QR): +6,500 B (365,600 -> 372,100),
+ * measured 372,060 locally with this change, with about 40 B of margin for the
+ * local/CI build difference. It is ONE module, `src/lib/qr/qr-code.ts`, a
+ * dependency-free byte-mode/ECC-M encoder (versions 1-15) imported by
+ * `/admin/account` only. Encoding locally is the point: the otpauth URI carries
+ * the shared TOTP secret, so a third-party QR service or an image URL is not an
+ * option, and a library would cost more than this and add a dependency. No other
+ * screen consumes it.
+ *
+ * Rebase note: `main` had moved to 372,850 B, so this branch's own raise
+ * (+6,500 B, written against 365,600 B) is stacked on it, giving
+ * 379,350 B; the gate re-measures the combined bundle.
+ *
+ * screen consumes it. The audit follow-up (page-cache restore + the DOM half in
+ * `enrolment-qr.ts`) raised it again to 372,600 B, measured 372,327 locally.
+ *
+ * Rebase note: `main` had moved to 379,350 B, so this branch's own raise
+ * (+500 B, written against 372,100 B) is stacked on it, giving
+ * 379,850 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 372_850;
+export const APP_BUDGET_BYTES = 379_850;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
