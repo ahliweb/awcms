@@ -136,3 +136,61 @@ export async function tryLoadWebhookSubscriptionDirectory(): Promise<EmailWebhoo
     return null;
   }
 }
+
+/**
+ * Issue #1162: the Mailketing accounts of this tenant that the CALLER may see,
+ * for the senders screen. The routes' own visibility rules, not a copy: the
+ * assignment gate (`canSeeAllAccounts`), and the business-scope decision per
+ * row taken through the access chokepoint under `guard`
+ * (`listAccounts`' `scopeAllowed`). Never a credential or its reference: the
+ * account view carries only `hasCredential`. `null` when the channel module
+ * cannot be loaded (the screen then says "unavailable", never an empty list).
+ */
+export type EmailMailketingAccountView =
+  import("../../channel-accounts/application/account-directory").AccountView;
+
+export type EmailMailketingAccountLister = {
+  /** `CHANNEL_ACCOUNTS_ENABLED`, read per call like the channel module itself. */
+  enabled(): boolean;
+  /** At most `limit` accounts (newest first); `more` says whether the tenant has others. */
+  list(
+    context: EmailSenderAccessContext,
+    guard: EmailSenderAccessGuard,
+    limit: number
+  ): Promise<{ accounts: EmailMailketingAccountView[]; more: boolean }>;
+};
+
+export async function tryLoadMailketingAccountLister(): Promise<EmailMailketingAccountLister | null> {
+  try {
+    const [support, directory, constants] = await Promise.all([
+      import("../../channel-accounts/application/channel-accounts-route-support"),
+      import("../../channel-accounts/application/account-directory"),
+      import("../../channel-accounts/domain/channel-accounts-constants")
+    ]);
+
+    return {
+      enabled: () => constants.isChannelAccountsEnabled(),
+      list: async (context, guard, limit) => {
+        const viewer = {
+          tenantUserId: context.auth.context.tenantUserId,
+          bypass: await support.canSeeAllAccounts(context),
+          scopeAllowed: (scope: { type: string; id: string }) =>
+            support.scopeCoveredFor(context, guard, scope)
+        };
+        const result = await directory.listAccounts(
+          context.tx,
+          context.tenantId,
+          viewer,
+          { provider: "mailketing", status: null, limit, cursor: null }
+        );
+
+        // `INVALID_CURSOR` cannot happen with no cursor; read as "nothing".
+        return result.ok
+          ? { accounts: result.items, more: result.nextCursor !== null }
+          : { accounts: [], more: false };
+      }
+    };
+  } catch {
+    return null;
+  }
+}

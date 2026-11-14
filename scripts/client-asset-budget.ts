@@ -1207,8 +1207,20 @@ export const READER_BUDGET_BYTES = 24_000;
  * measured 370,615 locally (+92 B). The rebuild button now continues from where
  * the previous click stopped (state across clicks plus a pure resume-point
  * helper) instead of replaying the first batches forever on a large tenant.
+ *
+ * **Raised for Issue #1162** (`/admin/email-senders`), stacked on the #1164
+ * budget above: +1,130 B (370,720 -> 371,850), measured 371,708 locally with
+ * both changes (370,615 for #1164 alone, so the growth is the page's own 1,093 B
+ * script): the one "make default sender" action (`PUT
+ * /api/v1/email/sender-policy` with an idempotency key and the endpoint's own
+ * error codes mapped to server-rendered sentences). It duplicates no shared
+ * code: it imports `admin-form-client` and `admin-idempotency-key`, which the
+ * account screens already ship, and it is the one control of the screen on
+ * purpose (rotation and disconnect are links to the connection manager, not a
+ * second copy of their forms). 142 B of margin for the local/CI build
+ * difference.
  */
-export const APP_BUDGET_BYTES = 370_720;
+export const APP_BUDGET_BYTES = 371_850;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:c30c57502cfa2ed34708ded63726d4c94d9d7b9b24312b7a8225ec377553a342 -->
+<!-- i18n-source-hash: sha256:99643ea7995b3cca579a26fde2f37db8c13bef9b59be84966644683cb5d6a709 -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-230 titik masuk di 76 berkas; 226 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-226 itu dijaga `lockElement`/`mutateAndReload` pada 211, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 226 dari 230 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+231 titik masuk di 77 berkas; 227 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-227 itu dijaga `lockElement`/`mutateAndReload` pada 212, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 227 dari 231 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                             | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -167,6 +167,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/data-lifecycle.astro`             | `data-lifecycle-hold-form`                     | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/data-lifecycle.astro`             | `form[data-release-form]`                      | onSubmitAll             | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/domain-events.astro`              | `.consumer-resume-btn`                         | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
+| `src/pages/admin/email-senders.astro`              | `.js-email-default-sender`                     | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/email-suppression.astro`          | `add-suppression-form`                         | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/email-suppression.astro`          | `.js-remove-suppression`                       | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/email-templates.astro`            | `email-template-create-form`                   | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
