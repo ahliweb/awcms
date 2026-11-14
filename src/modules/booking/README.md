@@ -25,7 +25,7 @@ claim service `placeHold` and the read-only reconciliation, plus the
 SECURITY DEFINER sweep of `sql/200` (the worker holds no privilege on the
 booking tables).
 
-Worker-callable confirm and cancel (Issue #1278, `sql/387`): when the connection
+Worker-callable confirm and cancel (Issue #1278, `sql/388`): when the connection
 is `awcms_worker`, `BookingPort.confirm` / `.cancel` go through the narrow
 SECURITY DEFINER function `awcms_booking_worker_transition` (owner
 `awcms_booking_transition`, tenant argument must equal the session's, EXECUTE

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4758456ec017a18a54b2f4df7a7cf72520577bef3390cf5b179e905a4f3ba291 -->
+<!-- i18n-source-hash: sha256:51ec1570943b86c51359f86fd47df1d60daf03ba25091aa1adced926cbae631f -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -28,7 +28,7 @@ layanan klaim `placeHold`, dan rekonsiliasi read-only, ditambah job
 SECURITY DEFINER sempit `sql/200` (worker tak memegang privilege pada tabel
 booking).
 
-Confirm dan cancel yang bisa dipanggil worker (Issue #1278, `sql/387`): bila
+Confirm dan cancel yang bisa dipanggil worker (Issue #1278, `sql/388`): bila
 koneksi adalah `awcms_worker`, `BookingPort.confirm` / `.cancel` lewat fungsi
 SECURITY DEFINER sempit `awcms_booking_worker_transition` (owner
 `awcms_booking_transition`, argumen tenant harus sama dengan milik sesi, EXECUTE

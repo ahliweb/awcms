@@ -6,7 +6,7 @@
  * runs as the background-job role, which deliberately holds NO privilege on the
  * booking tables (`sql/200`). So `BookingPort.confirm` / `.cancel`, when the
  * connection is that role, go through ONE narrow SECURITY DEFINER function
- * (`awcms_booking_worker_transition`, `sql/387`) instead of
+ * (`awcms_booking_worker_transition`, `sql/388`) instead of
  * `transitionReservation`, following the hold-expiry sweep (`sql/200`, `sql/209`).
  *
  * ## What is shared with the application path, and what is not

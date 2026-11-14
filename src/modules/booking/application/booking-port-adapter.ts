@@ -193,7 +193,7 @@ async function once(
   /**
    * False for the worker role: it may READ the store (a replay or a conflict is
    * honoured) but holds no INSERT on it (`sql/009`/`sql/022`), and the narrow
-   * function of `sql/387` writes none. Its retry safety is layer 2, the state
+   * function of `sql/388` writes none. Its retry safety is layer 2, the state
    * check (asking for the state already reached writes nothing).
    */
   store: boolean = true
@@ -541,7 +541,7 @@ async function transition(
   reasonCode: string | null
 ): Promise<BookingOutcome> {
   // Confirm and cancel as the background-job role go through the narrow function
-  // of sql/387 (Issue #1278); every other role, and every other verb, run
+  // of sql/388 (Issue #1278); every other role, and every other verb, run
   // `transitionReservation`.
   const asWorker =
     isWorkerTransitionAction(action) && (await isWorkerConnection(tx));

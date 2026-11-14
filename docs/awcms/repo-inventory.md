@@ -341,7 +341,7 @@
 | 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
 | 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
 | 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
-| 277 | `sql/387_awcms_booking_worker_transitions.sql`                         |
+| 277 | `sql/388_awcms_booking_worker_transitions.sql`                         |
 
 ### Tables & Row-Level Security
 

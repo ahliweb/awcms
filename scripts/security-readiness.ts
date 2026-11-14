@@ -5239,7 +5239,7 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   "awcms_booking_expiry",
   "awcms_booking_lifecycle_counter",
   "awcms_booking_reminders",
-  // sql/387 (Issue #1278): owns the worker-callable confirm/cancel of a
+  // sql/388 (Issue #1278): owns the worker-callable confirm/cancel of a
   // reservation; column-scoped UPDATE on the reservation, allocation and staff
   // assignment release columns, INSERT on the history table, nothing else.
   "awcms_booking_transition",

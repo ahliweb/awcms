@@ -421,7 +421,7 @@ privileges their literals need, and `EXECUTE` is the worker's alone. Lazy
 reclaim (§5.1) is not this job: it runs inside the claim's transaction as the
 application role.
 
-**Worker-callable confirm and cancel** (Issue #1278, `sql/387`). A downstream
+**Worker-callable confirm and cancel** (Issue #1278, `sql/388`). A downstream
 consumer that confirms or cancels from `domain-events:dispatch` runs as
 `awcms_worker`, which has no privilege on these tables, so `BookingPort.confirm`
 and `.cancel` take a second path when the connection's `current_user` is

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:b285930f08769daf91437cff49acacd1b6358f6058477b2d5f318420d9d67407 -->
+<!-- i18n-source-hash: sha256:3220f1b5d86d08f0eadc0f21b3180409e05ad526af282f95a782d99972759261 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -433,7 +433,7 @@ hanya memegang privilege per-kolom yang dibutuhkan literal-literalnya, dan
 `EXECUTE` hanya milik worker. Reklamasi malas (§5.1) bukan job ini: ia berjalan
 di dalam transaksi klaim sebagai peran aplikasi.
 
-**Confirm dan cancel yang bisa dipanggil worker** (Issue #1278, `sql/387`).
+**Confirm dan cancel yang bisa dipanggil worker** (Issue #1278, `sql/388`).
 Konsumen hilir yang mengonfirmasi atau membatalkan dari `domain-events:dispatch`
 berjalan sebagai `awcms_worker`, yang tak punya privilege pada tabel ini, jadi
 `BookingPort.confirm` dan `.cancel` mengambil jalur kedua bila `current_user`

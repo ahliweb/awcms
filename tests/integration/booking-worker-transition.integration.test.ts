@@ -1,6 +1,6 @@
 /**
  * `BookingPort.confirm` / `.cancel` as the background-job role (Issue #1278,
- * ADR-0131; sql/387) against a real PostgreSQL -- WORLD-1 of the harness.
+ * ADR-0131; sql/388) against a real PostgreSQL -- WORLD-1 of the harness.
  *
  * The worker connection here is a REAL login as `awcms_worker` (not a `SET ROLE`
  * from a superuser): the function's whole point is what that role can and cannot
@@ -330,7 +330,7 @@ function viaPort(
 
 const suite = integrationEnabled ? describe : describe.skip;
 
-suite("booking worker confirm and cancel (Issue #1278, sql/387)", () => {
+suite("booking worker confirm and cancel (Issue #1278, sql/388)", () => {
   beforeAll(async () => {
     await setupIntegrationDatabase();
     await resetDatabase();
