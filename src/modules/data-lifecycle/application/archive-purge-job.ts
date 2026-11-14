@@ -30,16 +30,20 @@
  * is a configuration error this engine refuses (reported as a per-descriptor
  * error, never silently mis-executed); see module README §Limitations.
  *
- * KNOWN LIMITATION (cursor ties at a batch boundary): resume is strictly
- * "cursor > lastProcessedValue" (see `runGenericArchivePass`/
- * `runGenericPurgePass`). If more rows share the EXACT SAME cursor value than
- * fit in one `batchLimit`-sized page, the ones past the page cutoff are skipped
- * forever on resume — fail-safe in direction (rows are never purged twice or
- * purged-without-archive), but a real, undrained backlog remnant.
- * `timestamptz` has microsecond resolution, so this requires many rows genuinely
- * sharing one microsecond, which no registered descriptor's real write pattern
- * produces today. A future fix would need a composite (cursorValue, id)
- * tie-breaking cursor.
+ * KNOWN LIMITATION (cursor ties at a batch boundary): resume is "cursor >=
+ * lastProcessedValue + 1ms" and purge is "cursor <= archivedThrough + 1ms" (see
+ * `runGenericArchivePass`/`runGenericPurgePass`). If more rows share one cursor
+ * value (or fall inside the same 1ms window) than fit in one `batchLimit`-sized
+ * page, the rows past the page are skipped by the archive resume, and the purge
+ * upper bound then covers them anyway: they can be PURGED WITHOUT AN ARCHIVE
+ * (Issue #1276 audit; this header used to claim otherwise, which was wrong).
+ * `timestamptz` has microsecond resolution, so this needs many rows genuinely
+ * sharing one millisecond, which no registered descriptor's real write pattern
+ * produces today. A `date` cursor makes that the NORMAL case (every row of a
+ * day ties), so the registry gate refuses `cursorColumnType: "date"` together
+ * with `archive.archivable: true` (a date cursor is purge-only), and this file
+ * throws if such a descriptor reaches it. The real fix is a composite
+ * (cursorValue, id) tie-breaking cursor.
  *
  * CONFIRMED BUG, FIXED (millisecond/microsecond round-trip): a cursor value read
  * back from Postgres as a JS `Date` (`toDate()` below) loses everything below 1
@@ -75,7 +79,10 @@ import {
   evaluateLegalHoldForDescriptor,
   type LegalHoldRecord
 } from "../domain/legal-hold";
-import { applyCursorBoundarySafetyMargin } from "../domain/cursor-boundary";
+import {
+  applyCursorBoundarySafetyMargin,
+  cursorBoundSql
+} from "../domain/cursor-boundary";
 import { DATA_LIFECYCLE_MODULE_KEY } from "../domain/data-lifecycle-permissions";
 import type { ArchivePort } from "../domain/archive-port";
 import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../domain/known-unreadable-delegated";
@@ -126,7 +133,7 @@ function computeCutoff(descriptor: HighVolumeTableDescriptor, now: Date): Date {
  * pass, so a hold created between two passes of the SAME invocation now stops
  * the very next pass, not just the next scheduled invocation.
  */
-async function runGenericArchivePass(
+export async function runGenericArchivePass(
   sql: Bun.SQL,
   descriptor: HighVolumeTableDescriptor,
   tenantId: string,
@@ -134,6 +141,12 @@ async function runGenericArchivePass(
   archivePort: ArchivePort,
   correlationId: string
 ): Promise<{ count: number }> {
+  if (descriptor.cursorColumnType === "date" && descriptor.archive.archivable) {
+    throw new Error(
+      `data-lifecycle archive/purge: descriptor "${descriptor.key}" has a date cursor and is archivable; rows sharing a day cannot be resumed safely (purge without archive). Refusing to execute.`
+    );
+  }
+
   const tableName = assertSafeIdentifier(descriptor.tableName, "table");
   const tenantColumn = assertSafeIdentifier(
     descriptor.tenantColumn ?? "tenant_id",
@@ -166,11 +179,11 @@ async function runGenericArchivePass(
       const rows = (
         resumeAfterBound
           ? await tx.unsafe(
-              `SELECT * FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2 AND ${cursorColumn} >= $3 ORDER BY ${cursorColumn} ASC LIMIT $4`,
+              `SELECT * FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)} AND ${cursorColumn} >= ${cursorBoundSql(descriptor.cursorColumnType, 3)} ORDER BY ${cursorColumn} ASC LIMIT $4`,
               [tenantId, cutoff, resumeAfterBound, descriptor.batchLimit]
             )
           : await tx.unsafe(
-              `SELECT * FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2 ORDER BY ${cursorColumn} ASC LIMIT $3`,
+              `SELECT * FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)} ORDER BY ${cursorColumn} ASC LIMIT $3`,
               [tenantId, cutoff, descriptor.batchLimit]
             )
       ) as Record<string, unknown>[];
@@ -248,7 +261,7 @@ async function runGenericArchivePass(
  * TOCTOU fix: holds are re-fetched FRESH inside this pass's own transaction on
  * every call — see `runGenericArchivePass`'s matching comment above.
  */
-async function runGenericPurgePass(
+export async function runGenericPurgePass(
   sql: Bun.SQL,
   descriptor: HighVolumeTableDescriptor,
   tenantId: string,
@@ -258,6 +271,12 @@ async function runGenericPurgePass(
   if (descriptor.deletion.mode !== "hard_delete") {
     throw new Error(
       `data-lifecycle archive/purge: descriptor "${descriptor.key}" declares executionMode "generic" with deletion.mode "${descriptor.deletion.mode}" — only "hard_delete" is implemented by this engine today (see module README Limitations). Refusing to execute.`
+    );
+  }
+
+  if (descriptor.cursorColumnType === "date" && descriptor.archive.archivable) {
+    throw new Error(
+      `data-lifecycle archive/purge: descriptor "${descriptor.key}" has a date cursor and is archivable; rows sharing a day cannot be resumed safely (purge without archive). Refusing to execute.`
     );
   }
 
@@ -304,8 +323,8 @@ async function runGenericPurgePass(
         `DELETE FROM ${tableName}
          WHERE id IN (
            SELECT id FROM ${tableName}
-           WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2
-             AND ($3::timestamptz IS NULL OR ${cursorColumn} <= $3)
+           WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)}
+             AND ($3::timestamptz IS NULL OR ${cursorColumn} <= ${cursorBoundSql(descriptor.cursorColumnType, 3)})
            ORDER BY ${cursorColumn} ASC
            LIMIT $4
          )

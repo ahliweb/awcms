@@ -24,7 +24,10 @@ import {
   evaluateLegalHoldForDescriptor,
   type LegalHoldRecord
 } from "../domain/legal-hold";
-import { applyCursorBoundarySafetyMargin } from "../domain/cursor-boundary";
+import {
+  applyCursorBoundarySafetyMargin,
+  cursorBoundSql
+} from "../domain/cursor-boundary";
 import {
   COUNT_FUNCTION_PATTERN,
   DELEGATED_COUNT_FUNCTIONS
@@ -137,7 +140,7 @@ export async function planLifecycleDryRun(
     eligibleCount = rows[0]?.count ?? 0;
   } else {
     const eligibleRows = (await tx.unsafe(
-      `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2`,
+      `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)}`,
       [tenantId, cutoff]
     )) as { count: number }[];
     eligibleCount = eligibleRows[0]?.count ?? 0;
@@ -201,7 +204,7 @@ export async function planLifecycleDryRun(
   const archivedThroughBound = applyCursorBoundarySafetyMargin(archivedThrough);
 
   const archivedRows = (await tx.unsafe(
-    `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2 AND ${cursorColumn} <= $3`,
+    `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)} AND ${cursorColumn} <= ${cursorBoundSql(descriptor.cursorColumnType, 3)}`,
     [tenantId, cutoff, archivedThroughBound]
   )) as { count: number }[];
   const archivedCount = archivedRows[0]?.count ?? 0;

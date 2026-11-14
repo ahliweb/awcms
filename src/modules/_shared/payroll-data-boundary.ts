@@ -386,13 +386,181 @@ export function normalizeTableNameForBoundary(name: string): string {
   return lastDot === -1 ? unquoted : unquoted.slice(lastDot + 1);
 }
 
-/** True when `name` is a payroll table (or a member of the payroll family). */
-export function isPayrollTable(name: string): boolean {
-  const normalized = normalizeTableNameForBoundary(name);
+/**
+ * Tables whose NAME trips the pay-word patterns although they are NOT payroll
+ * data, each with the reason (Issue #1276). The motivating case is a store
+ * refund table such as `<module>_refund_compensations` (goods or credit given
+ * instead of a cash refund), which `compensations?` classifies as employee pay.
+ *
+ * Keys are EXACT, lower-cased, schema-less table names. A CATALOG object of the
+ * table (`<table>_pkey`, `<table>_<cols>_idx|key|fkey|check|seq|trg`) inherits
+ * the exception, but only when it carries no other table's stem, so an
+ * exception for `awcms_x_refund_compensations` can never launder
+ * `awcms_x_refund_compensations_payroll_runs`, and an entry that is a prefix of
+ * a known payroll table is refused at load. An exception is the maintainer
+ * saying "this is not pay"; it is made in a PR that says why. FAIL-CLOSED: empty
+ * today (the table that motivated it lives downstream, not here), and a name in
+ * {@link PAYROLL_REQUIRED_TABLES} or one that is not a pattern hit is refused at
+ * load.
+ */
+export const NON_PAYROLL_TABLE_NAME_EXCEPTIONS: Readonly<
+  Record<string, string>
+> = {};
 
+/** The pattern layer alone: what `isPayrollTable` decides without exceptions. */
+function matchesPayrollPattern(normalized: string): boolean {
   return FORBIDDEN_PAYROLL_TABLE_PATTERNS.some((pattern) =>
     pattern.test(normalized)
   );
+}
+
+/**
+ * Table-family names that an exception entry may never equal or be a
+ * `_`-bounded prefix of (Issue #1276 audit, M3): an entry `awcms_hr_payroll`
+ * must not free `awcms_hr_payroll_runs`. The required tables plus the payroll
+ * tables the phase plan names (ADR-0147 and the hr-payroll roadmap); extend it
+ * when a payroll table is named.
+ */
+const KNOWN_PAYROLL_FAMILY_TABLES: readonly string[] = [
+  ...PAYROLL_REQUIRED_TABLES,
+  "awcms_hr_payroll_runs",
+  "awcms_hr_payroll_run_lines",
+  "awcms_hr_payroll_employee_items",
+  "awcms_hr_compensation_employee_amounts"
+];
+
+/**
+ * Words that mark the part after `<table>_` as another TABLE's object rather
+ * than this table's own index/constraint (`awcms_x_payroll_runs_pkey` is the
+ * primary key of `awcms_x_payroll_runs`, not of `awcms_x_payroll`). Their
+ * presence refuses inheritance (fail-closed); such an object is excepted by its
+ * own exact entry or not at all.
+ */
+const FOREIGN_OBJECT_STEMS: ReadonlySet<string> = new Set([
+  "run",
+  "runs",
+  "line",
+  "lines",
+  "item",
+  "items",
+  "amount",
+  "amounts",
+  "employee",
+  "employees",
+  "history",
+  "accrual",
+  "accruals",
+  "transition",
+  "transitions",
+  "slip",
+  "slips",
+  "period",
+  "periods"
+]);
+
+/** Suffix of a catalog object PostgreSQL names `<table>_<columns>_<suffix>`. */
+const CATALOG_SUFFIX =
+  /^(?:pkey|(?:[a-z0-9]+_)*(?:key|idx|fkey|check|seq|trg))$/;
+
+/**
+ * Whether `normalized` is covered by an entry of `exceptions`: the exact name,
+ * or a CATALOG object of it (`<entry>_pkey`, `<entry>_<cols>_idx|key|fkey|
+ * check|seq|trg`) whose own name is not a payroll-pattern hit and does not
+ * carry another table's stem (Issue #1276 audit, M3: a bare prefix used to free
+ * the whole family).
+ */
+function isExceptedFromPayroll(
+  normalized: string,
+  exceptions: Readonly<Record<string, string>>
+): boolean {
+  for (const entry of Object.keys(exceptions)) {
+    if (normalized === entry) return true;
+
+    if (normalized.startsWith(`${entry}_`)) {
+      const rest = normalized.slice(entry.length + 1);
+
+      if (
+        CATALOG_SUFFIX.test(rest) &&
+        !rest.split("_").some((segment) => FOREIGN_OBJECT_STEMS.has(segment)) &&
+        !matchesPayrollPattern(`awcms_${rest}`)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validates an exception registry (Issue #1276): exact lower-cased names, a
+ * non-empty reason, not a required payroll table, and an actual pattern hit (an
+ * exception for a name no pattern flags is dead weight and hides a rename).
+ * Returns the problems; empty means valid.
+ */
+export function validateNonPayrollExceptions(
+  exceptions: Readonly<Record<string, string>>
+): string[] {
+  const problems: string[] = [];
+
+  for (const [name, reason] of Object.entries(exceptions)) {
+    if (name !== normalizeTableNameForBoundary(name) || name.includes(".")) {
+      problems.push(`${name}: must be an exact, lower-case, schema-less name`);
+    }
+    if (typeof reason !== "string" || reason.trim().length < 20) {
+      problems.push(`${name}: needs a reason (at least 20 characters)`);
+    }
+    if (PAYROLL_REQUIRED_TABLES.includes(name)) {
+      problems.push(`${name}: a required payroll table cannot be excepted`);
+    }
+    if (!matchesPayrollPattern(name)) {
+      problems.push(`${name}: no payroll pattern matches it; remove the entry`);
+    }
+    if (
+      KNOWN_PAYROLL_FAMILY_TABLES.some(
+        (known) => known === name || known.startsWith(`${name}_`)
+      )
+    ) {
+      problems.push(
+        `${name}: is, or is a prefix of, a known payroll table; an exception would free the family`
+      );
+    }
+  }
+
+  return problems;
+}
+
+/** Throws when `exceptions` is invalid. Called at load on the registered list. */
+export function assertNonPayrollExceptionsValid(
+  exceptions: Readonly<Record<string, string>>
+): void {
+  const problems = validateNonPayrollExceptions(exceptions);
+
+  if (problems.length > 0) {
+    throw new Error(
+      `NON_PAYROLL_TABLE_NAME_EXCEPTIONS is invalid: ${problems.join("; ")}`
+    );
+  }
+}
+
+assertNonPayrollExceptionsValid(NON_PAYROLL_TABLE_NAME_EXCEPTIONS);
+
+/**
+ * True when `name` is a payroll table (or a member of the payroll family).
+ * `exceptions` defaults to the registered {@link NON_PAYROLL_TABLE_NAME_EXCEPTIONS};
+ * it is a parameter so a test can prove the mechanism without registering a name.
+ */
+export function isPayrollTable(
+  name: string,
+  exceptions: Readonly<
+    Record<string, string>
+  > = NON_PAYROLL_TABLE_NAME_EXCEPTIONS
+): boolean {
+  const normalized = normalizeTableNameForBoundary(name);
+
+  if (isExceptedFromPayroll(normalized, exceptions)) return false;
+
+  return matchesPayrollPattern(normalized);
 }
 
 /** The payroll tables among `names`, deduplicated, in first-seen order. */

@@ -29,3 +29,26 @@ export const CURSOR_BOUNDARY_SAFETY_MARGIN_MS = 1;
 export function applyCursorBoundarySafetyMargin(value: Date): Date {
   return new Date(value.getTime() + CURSOR_BOUNDARY_SAFETY_MARGIN_MS);
 }
+
+/**
+ * SQL expression that binds JS `Date` parameter `$n` for comparison against the
+ * descriptor's cursor column (Issue #1276).
+ *
+ * - `timestamptz` (default): `$n::timestamptz`. The explicit cast keeps the
+ *   comparison independent of how the driver types the parameter.
+ * - `date`: the UTC calendar date of the instant,
+ *   `($n::timestamptz AT TIME ZONE 'UTC')::date`. A bare `$n::timestamptz`
+ *   compared to a `date` column converts the DATE using the SESSION TimeZone, so
+ *   the retention boundary would move with the database setting and the cutoff
+ *   day itself would become eligible. The explicit UTC date is session-
+ *   independent, and `day < cutoffDay` keeps a whole day until it is strictly
+ *   older than the cutoff day.
+ */
+export function cursorBoundSql(
+  cursorColumnType: "timestamptz" | "date" | undefined,
+  n: number
+): string {
+  return cursorColumnType === "date"
+    ? `(($${n}::timestamptz) AT TIME ZONE 'UTC')::date`
+    : `$${n}::timestamptz`;
+}

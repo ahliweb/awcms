@@ -90,7 +90,18 @@ export type CsvCellOptions = {
    * that already begins with `'` plus a leader, so the round trip is exact.
    */
   reversible?: boolean;
+  /**
+   * Opt-in (Issue #1276). A STRING that is only an optionally signed decimal
+   * (`-12.50`, `+5`, `.5`) is written as is, so negative money carried as
+   * `numeric(14,2)` text stays a number. Anything else (`-1+cmd`, `-1e5`,
+   * `-12.50\n=cmd`, whitespace, TAB, CR) is neutralised exactly as without the
+   * option. Callers that do not pass it see no change.
+   */
+  numericText?: boolean;
 };
+
+/** Optionally signed plain decimal, ASCII digits only, anchored both ends. */
+const SIGNED_DECIMAL_TEXT = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 /** Text for any cell value, before neutralisation. */
 function stringifyCsvValue(value: unknown): string {
@@ -117,6 +128,15 @@ export function csvCellForWrite(
   }
 
   const text = stringifyCsvValue(value);
+
+  if (
+    options.numericText &&
+    typeof value === "string" &&
+    SIGNED_DECIMAL_TEXT.test(text)
+  ) {
+    return text;
+  }
+
   const leader = options.reversible ? QUOTED_FORMULA_LEADER : FORMULA_LEADER;
 
   return quoteCsvCell(leader.test(text) ? `'${text}` : text);
