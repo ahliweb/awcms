@@ -88,13 +88,31 @@ function bucketTenant(token: { tenantId: string } | null): string {
   return token ? token.tenantId : "malformed";
 }
 
+/**
+ * #1298 L6: the per-(tenant, address) attempt bucket is charged BEFORE any
+ * verification (so it throttles an unverified flood), and handed back once the
+ * request turned out to be a verified, NEW delivery. Without the refund a
+ * tenant whose number genuinely receives more than 1200 signed events a minute
+ * from Meta's address was answered `429` and its deliveries delayed by its own
+ * volume. A refusal, a malformed body and a verified DUPLICATE (a replay or a
+ * provider retry, which still costs a transaction) keep their charge, so none
+ * of them can be turned into free work; and a request that never verified can
+ * never earn a refund.
+ */
+const ATTEMPT_BUCKET = {
+  maxAttempts: ATTEMPTS_PER_MINUTE,
+  windowMs: 60_000
+} as const;
+const attemptBucketKey = (tenant: string, client: string) =>
+  `whatsapp-meta-webhook:${tenant}:${client}`;
+
 async function attemptAllowed(
   tenant: string,
   client: string
 ): Promise<{ allowed: true } | { allowed: false; retryAfterSec: number }> {
   const limit = await checkSharedRateLimit(
-    `whatsapp-meta-webhook:${tenant}:${client}`,
-    { maxAttempts: ATTEMPTS_PER_MINUTE, windowMs: 60_000 }
+    attemptBucketKey(tenant, client),
+    ATTEMPT_BUCKET
   );
 
   return limit.allowed
@@ -220,6 +238,14 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
     // Verified: this request does not count against the address's
     // unverified allowance (M-2).
     await refundSharedRateLimit(ipBucketKey(client), IP_BUCKET);
+
+    // #1298 L6: nor, when it was new work, against the tenant's own volume.
+    if (!outcome.result.duplicate) {
+      await refundSharedRateLimit(
+        attemptBucketKey(token.tenantId, client),
+        ATTEMPT_BUCKET
+      );
+    }
 
     log("info", "whatsapp.meta_webhook.accepted", {
       moduleKey: WHATSAPP_MODULE_KEY,

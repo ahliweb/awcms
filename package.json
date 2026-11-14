@@ -63,6 +63,7 @@
     "push:queue:purge": "bun scripts/push-queue-purge.ts",
     "push:vapid:generate": "bun scripts/push-vapid-generate.ts",
     "whatsapp:dispatch": "bun scripts/whatsapp-dispatch.ts",
+    "whatsapp:meta:preflight": "bun scripts/whatsapp-meta-preflight.ts",
     "whatsapp:queue:purge": "bun scripts/whatsapp-queue-purge.ts",
     "social-publishing:dispatch": "bun scripts/social-publishing-dispatch.ts",
     "social-publishing:retention:purge": "bun scripts/social-publishing-retention-purge.ts",

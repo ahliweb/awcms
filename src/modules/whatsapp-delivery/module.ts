@@ -278,6 +278,21 @@ export const whatsappDeliveryModule = defineModule({
       environmentNotes:
         "Runs regardless of WHATSAPP_ENABLED: a deployment that turned WhatsApp OFF still has rows from when it was on, and nothing else will ever clean them up.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run whatsapp:meta:preflight",
+      schedule: {
+        mode: "manual",
+        because:
+          "A read-only operator check (Issue #1298 L5) run once, before the tenant-owned Meta path is enabled on a deployment that already holds Meta numbers, and again after fixing what it names. Scheduling it would only repeat a report nobody is waiting for; the dispatcher already fails a bad row terminally by itself."
+      },
+      purpose:
+        "List, per tenant, the connected Meta numbers with no live WABA parent and the queued rows that would fail terminally at their next dispatch (no sendable template approval of the right category on the number's WABA, or free text outside the 24-hour window), OTP rows counted apart. Applies the dispatcher's own rule. Writes nothing, calls no provider, prints ids and counts only.",
+      recommendedSchedule:
+        "Once by an operator before enabling the Meta path, and after each fix. See docs/awcms/whatsapp-meta-enable-runbook.md.",
+      environmentNotes:
+        "Needs WORKER_DATABASE_URL (three SELECTs per tenant as awcms_worker). Exit code 1 when anything would fail.",
+      safeInOfflineLan: true
     }
   ],
   /**

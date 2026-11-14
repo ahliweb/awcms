@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d8bf0a4228654f717da9c6df1cb941de9afa288b0bdbdb9bf208616590f17346 -->
+<!-- i18n-source-hash: sha256:6639042c98c5faf498dbbc45639ed2674a649011c1868e546e6cf19566ad3e9e -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-163 target menjalankan berkas di `scripts/`; 65 di antaranya
+164 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -194,6 +194,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `ui:single-flight:audit`                  | `ui-single-flight-audit.ts`                    | —    |
 | `version:check`                           | `version-check.ts`                             | ✅   |
 | `whatsapp:dispatch`                       | `whatsapp-dispatch.ts`                         | —    |
+| `whatsapp:meta:preflight`                 | `whatsapp-meta-preflight.ts`                   | —    |
 | `whatsapp:queue:purge`                    | `whatsapp-queue-purge.ts`                      | —    |
 | `workflow:escalations:dispatch`           | `workflow-escalations-dispatch.ts`             | —    |
 

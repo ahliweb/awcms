@@ -53,6 +53,10 @@ import {
 } from "./harness";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
+import {
+  checkSharedRateLimit,
+  resetRateLimitForTests
+} from "../../src/lib/security/rate-limit";
 import { defaultSecretStore } from "../../src/modules/channel-accounts/application/secret-store";
 import { createMetaWebhookSubscription } from "../../src/modules/channel-accounts/application/webhook-subscription-directory";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
@@ -383,6 +387,7 @@ suite(
     beforeEach(async () => {
       expect(handlerReady, "the handler database must be available").toBe(true);
       setEnv();
+      resetRateLimitForTests();
       await resetHandlerDatabase();
       await bootstrap();
       officeA = await seedOffice("office-a");
@@ -516,6 +521,103 @@ suite(
 
       expect(
         await post(tokenB, again, sign(secretB, again), OTHER_ADDRESS)
+      ).toBe(429);
+    });
+
+    // #1298 L6: the per-(tenant, address) attempt bucket (1200 a minute) is
+    // charged before verification and handed back for a verified NEW delivery,
+    // so a tenant's genuine volume from Meta's address is never answered 429 by
+    // its own success. A verified duplicate (a replay or a retry still costs a
+    // transaction) and any refusal keep their charge.
+    test("L6: a verified new delivery refunds the tenant's attempt bucket; a duplicate and a refusal do not", async () => {
+      const secret = "appsecretL6appsecretL6appsecret1";
+      const created = await withTenantOrThrow(
+        getHandlerDatabaseClient(),
+        tenantId,
+        (tx) =>
+          createMetaWebhookSubscription(
+            tx,
+            defaultSecretStore,
+            tenantId,
+            ownerTenantUserId,
+            tenantWide.number,
+            secret
+          )
+      );
+
+      if (created.outcome !== "created") throw new Error(created.outcome);
+
+      const token = created.callbackToken;
+      const sign = (key: string, body: string) =>
+        `sha256=${createHmac("sha256", key).update(body, "utf8").digest("hex")}`;
+      const post = async (body: string, signature: string, address: string) =>
+        (
+          await metaWebhook({
+            request: new Request(
+              `https://budget.example/api/v1/whatsapp/webhooks/meta/${token}`,
+              {
+                method: "POST",
+                headers: { "x-hub-signature-256": signature },
+                body
+              }
+            ),
+            params: { token },
+            clientAddress: address
+          } as never)
+        ).status;
+      const fresh = (n: number) =>
+        JSON.stringify({
+          object: "whatsapp_business_account",
+          entry: [],
+          n
+        });
+      const ATTEMPT = { maxAttempts: 1200, windowMs: 60_000 } as const;
+      // Spends the tenant's own bucket for an address down to ONE unit left.
+      const nearlyExhaust = async (address: string) => {
+        for (let i = 0; i < 1199; i += 1) {
+          await checkSharedRateLimit(
+            `whatsapp-meta-webhook:${tenantId}:${address}`,
+            ATTEMPT
+          );
+        }
+      };
+
+      // New, verified deliveries: each is charged and refunded, so the one
+      // remaining unit is enough for any number of them.
+      const NEW_ADDRESS = "198.51.100.61";
+
+      await nearlyExhaust(NEW_ADDRESS);
+
+      for (let n = 1; n <= 5; n += 1) {
+        const body = fresh(n);
+
+        expect(await post(body, sign(secret, body), NEW_ADDRESS)).toBe(200);
+      }
+
+      // A verified DUPLICATE keeps its charge: the first copy is new (refunded),
+      // the second spends the last unit, the third finds none.
+      const DUP_ADDRESS = "198.51.100.62";
+
+      await nearlyExhaust(DUP_ADDRESS);
+
+      const dup = fresh(100);
+
+      expect(await post(dup, sign(secret, dup), DUP_ADDRESS)).toBe(200);
+      expect(await post(dup, sign(secret, dup), DUP_ADDRESS)).toBe(200);
+      expect(await post(dup, sign(secret, dup), DUP_ADDRESS)).toBe(429);
+
+      // A refusal (a wrong signature) never earns a refund.
+      const REFUSED_ADDRESS = "198.51.100.63";
+
+      await nearlyExhaust(REFUSED_ADDRESS);
+
+      const bad = fresh(200);
+
+      expect(
+        await post(bad, sign("not-the-secret", bad), REFUSED_ADDRESS)
+      ).toBe(401);
+      expect(
+        await post(bad, sign("not-the-secret", bad), REFUSED_ADDRESS)
       ).toBe(429);
     });
 

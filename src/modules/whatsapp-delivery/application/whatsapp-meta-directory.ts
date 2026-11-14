@@ -393,6 +393,14 @@ export async function clearMetaRestriction(
   await tx`
     UPDATE awcms_whatsapp_meta_sender_signals
     SET restriction_reason = NULL, restricted_at = NULL,
+        -- #1298 L1: the clear moves the event clock STRICTLY past both the
+        -- event that set the restriction and the moment of the clear, so the
+        -- same (or any older) restrict event arriving later, through another
+        -- subscription or another body, no longer re-restricts the WABA. Only
+        -- an event Meta stamped after this clear can.
+        restriction_event_at = GREATEST(
+          restriction_event_at + interval '1 microsecond',
+          clock_timestamp()),
         cleared_by = ${actor}, cleared_at = now(), updated_at = now()
     WHERE tenant_id = ${tenantId} AND waba_external_id = ${wabaId}
   `;
@@ -421,10 +429,19 @@ export async function recordWebhookReceipt(
   subscriptionId: string,
   payloadSha256: string
 ): Promise<boolean> {
+  // #1298 L2: "seen" is per TENANT, not per subscription. Rotating a number's
+  // webhook token mints a new subscription, and the app secret that signs the
+  // body does not change, so a body captured before the rotation would apply
+  // again under the new token if the receipt were keyed to the old one. The
+  // lookup uses `awcms_whatsapp_webhook_receipts_tenant_payload_idx` (sql/393).
   const rows = (await tx`
     INSERT INTO awcms_whatsapp_webhook_receipts
       (tenant_id, subscription_id, payload_sha256)
-    VALUES (${tenantId}, ${subscriptionId}, ${payloadSha256})
+    SELECT ${tenantId}, ${subscriptionId}, ${payloadSha256}
+    WHERE NOT EXISTS (
+      SELECT 1 FROM awcms_whatsapp_webhook_receipts
+      WHERE tenant_id = ${tenantId} AND payload_sha256 = ${payloadSha256}
+    )
     ON CONFLICT ON CONSTRAINT awcms_whatsapp_webhook_receipts_payload_key
     DO NOTHING
     RETURNING id

@@ -1030,14 +1030,15 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
             "an UPDATE of the sender snapshot as the runtime role",
             { errno: "23514", message: "sender snapshot is immutable" }
           );
-          // The worker holds UPDATE on the queue (it finalises rows) and is
-          // bound by the same trigger.
+          // The worker holds UPDATE only on the columns the dispatcher writes
+          // (sql/392, Issue #1298 L3): none of the snapshot columns is among
+          // them, so it is refused by the privilege before the trigger runs.
           await assertPgRejected(
             withTenantOrThrow(getWorkerRoleSql(), TENANT_A, (tx) =>
               Promise.resolve(change(tx))
             ),
             "an UPDATE of the sender snapshot as the worker role",
-            { errno: "23514", message: "sender snapshot is immutable" }
+            { errno: "42501", message: "permission denied" }
           );
         }
 
