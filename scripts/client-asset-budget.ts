@@ -1188,8 +1188,19 @@ export const READER_BUDGET_BYTES = 24_000;
  * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
+ *
+ * **Raised for Issue #1153** (the website engagement screens): +1,500 B
+ * (365,600 -> 367,100), measured 366,974 locally with this change (`main` sat
+ * about 40 B under its budget), with 126 B of margin for the local/CI build
+ * difference. Two page scripts, each on its own screen only:
+ * `/admin/website-engagement/[id]` (the confirmed, idempotent withdrawal with
+ * its translated error sentences) and `/admin/website-engagement/sources` (the
+ * confirmed revoke). The list screen ships no script. The lifecycle is the
+ * shared `admin-form-client.ts`, the key source is the shared
+ * `admin-idempotency-key.ts` and the confirmation is the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 367_100;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

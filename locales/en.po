@@ -9547,3 +9547,287 @@ msgstr ""
 
 msgid "Refresh progress"
 msgstr ""
+
+# Website engagement screens (Issue #1153)
+
+msgid "{count} submission matches your search and filters"
+msgid_plural "{count} submissions match your search and filters"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} submission"
+msgid_plural "{count} submissions"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Source: {value}"
+msgstr ""
+
+msgid "Kind: {value}"
+msgstr ""
+
+msgid "Website engagement"
+msgstr ""
+
+msgid "Contact requests, leads and interactions posted by your websites. Contact details are shown masked."
+msgstr ""
+
+msgid "You do not have permission to view website submissions."
+msgstr ""
+
+msgid "The submissions could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Submissions"
+msgstr ""
+
+msgid "Newest first. Contact details are masked here: reading them in full is a separate, audited permission that this screen does not offer. A submission is evidence of what a visitor consented to, so it cannot be edited."
+msgstr ""
+
+msgid "Websites and their access tokens"
+msgstr ""
+
+msgid "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused. The ones listed below were received earlier."
+msgstr ""
+
+msgid "There are more submissions than this screen loads. Showing the newest {count}. The source, kind and status filters cover every submission; search covers only these. The API lists the rest."
+msgstr ""
+
+msgid "Search submissions"
+msgstr ""
+
+msgid "All sources"
+msgstr ""
+
+msgid "Received"
+msgstr ""
+
+msgid "Contact (masked)"
+msgstr ""
+
+msgid "No submissions yet"
+msgstr ""
+
+msgid "Submissions appear here when a registered website posts a contact request, a lead or an interaction."
+msgstr ""
+
+msgid "Website submission"
+msgstr ""
+
+msgid "One submission with its consent record and provenance. Contact details are masked."
+msgstr ""
+
+msgid "Back to submissions"
+msgstr ""
+
+msgid "The submission could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "That submission does not exist, or you cannot see it."
+msgstr ""
+
+msgid "Submission"
+msgstr ""
+
+msgid "Topic"
+msgstr ""
+
+msgid "Email (masked)"
+msgstr ""
+
+msgid "Phone (masked)"
+msgstr ""
+
+msgid "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
+msgstr ""
+
+msgid "Purposes"
+msgstr ""
+
+msgid "Consent copy version"
+msgstr ""
+
+msgid "Shown on page"
+msgstr ""
+
+msgid "Consented at"
+msgstr ""
+
+msgid "Provenance and attribution"
+msgstr ""
+
+msgid "Website host"
+msgstr ""
+
+msgid "Anti-abuse challenge"
+msgstr ""
+
+msgid "Landing page"
+msgstr ""
+
+msgid "Referrer host"
+msgstr ""
+
+msgid "Campaign source"
+msgstr ""
+
+msgid "Campaign medium"
+msgstr ""
+
+msgid "Campaign name"
+msgstr ""
+
+msgid "Campaign term"
+msgstr ""
+
+msgid "Campaign content"
+msgstr ""
+
+msgid "Withdraw this submission"
+msgstr ""
+
+msgid "Withdrawing is permanent. The contact details are erased and downstream consumers are told to stop using this submission. The consent record and attribution are kept."
+msgstr ""
+
+msgid "Withdraw this submission? The contact details are erased and this cannot be undone."
+msgstr ""
+
+msgid "Could not withdraw the submission. Please try again."
+msgstr ""
+
+msgid "That submission no longer exists, or you cannot act on it."
+msgstr ""
+
+msgid "This request was already used for something else. Reload the page and try again."
+msgstr ""
+
+msgid "Too many requests. Wait a moment and try again."
+msgstr ""
+
+msgid "Withdrawing needs a signed-in person; a machine credential cannot do it."
+msgstr ""
+
+msgid "Withdraw submission"
+msgstr ""
+
+msgid "{count} source"
+msgid_plural "{count} sources"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Website sources"
+msgstr ""
+
+msgid "The websites registered to post submissions, the hosts they may post from and how each is protected."
+msgstr ""
+
+msgid "You do not have permission to view website sources."
+msgstr ""
+
+msgid "The sources could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "A submission is accepted only with the source's access token and from one of its hosts. The token itself is never shown again after it was created or rotated: only its first characters are listed so you can tell which token a website uses."
+msgstr ""
+
+msgid "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused."
+msgstr ""
+
+msgid "Revoke the source {name}? Its website stops being able to post submissions, and this cannot be undone."
+msgstr ""
+
+msgid "Could not revoke the source. Please try again."
+msgstr ""
+
+msgid "That source no longer exists, or you cannot act on it."
+msgstr ""
+
+msgid "Revoking needs a signed-in person; a machine credential cannot do it."
+msgstr ""
+
+msgid "Accepted hosts"
+msgstr ""
+
+msgid "Accepts"
+msgstr ""
+
+msgid "Access token"
+msgstr ""
+
+msgid "No website is registered yet. Sources are created through the API."
+msgstr ""
+
+msgid "None: every request is refused"
+msgstr ""
+
+msgid "Not run on this deployment: the other controls apply alone."
+msgstr ""
+
+msgid "rotated {time}"
+msgstr ""
+
+msgid "Contact request"
+msgstr ""
+
+msgid "Lead"
+msgstr ""
+
+msgid "Interaction"
+msgstr ""
+
+msgid "Form viewed"
+msgstr ""
+
+msgid "Form started"
+msgstr ""
+
+msgid "Call-to-action clicked"
+msgstr ""
+
+msgid "Phone link clicked"
+msgstr ""
+
+msgid "WhatsApp link clicked"
+msgstr ""
+
+msgid "Map link clicked"
+msgstr ""
+
+msgid "Download clicked"
+msgstr ""
+
+msgid "Turnstile challenge"
+msgstr ""
+
+msgid "No challenge"
+msgstr ""
+
+msgid "Challenge passed"
+msgstr ""
+
+msgid "Challenge not run on this deployment"
+msgstr ""
+
+msgid "Source has no challenge"
+msgstr ""
+
+msgid "Respond to the inquiry"
+msgstr ""
+
+msgid "Marketing follow-up"
+msgstr ""
+
+msgid "Data subject request"
+msgstr ""
+
+msgid "Consent withdrawn"
+msgstr ""
+
+msgid "Controller decision"
+msgstr ""
+
+msgid "Origin header"
+msgstr ""
+
+msgid "Referer header"
+msgstr ""
