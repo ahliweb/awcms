@@ -20,6 +20,15 @@ export type MetaPreflightNumber = {
   accountId: string;
   /** The WABA id of a LIVE `waba` container parent, or `null` (no parent, a deleted one, or one of another kind). */
   wabaId: string | null;
+  /**
+   * The dispatcher's OWN verdict for this number (the sender port's
+   * `resolveWhatsappSender` classified by `classifySenderUnavailable`), so a
+   * parent that is revoked or disabled, or whose business scope does not
+   * contain the number's, is reported as what the dispatcher will do with it.
+   * Absent means usable (the pure tests that do not exercise the binding).
+   */
+  sender?:
+    { verdict: "usable" } | { verdict: "terminal" | "hold"; reason: string };
 };
 
 /** Queued, retry-waiting or in-flight rows of one Meta number, grouped. */
@@ -41,6 +50,15 @@ export type MetaPreflightApproval = {
 };
 
 export type MetaPreflightFinding =
+  | {
+      kind: "number_unusable";
+      accountId: string;
+      /** `terminal`: every queued row fails at its next dispatch. `hold`: rows wait (an OTP still expires on its own clock). */
+      verdict: "terminal" | "hold";
+      reason: string;
+      pendingRows: number;
+      pendingSecurityRows: number;
+    }
   | {
       kind: "number_without_waba";
       accountId: string;
@@ -96,6 +114,7 @@ export function evaluateMetaEnablement(input: {
   let blockedRows = 0;
   let blockedSecurityRows = 0;
   const unbound = new Map<string, { rows: number; security: number }>();
+  const unusable = new Map<string, { rows: number; security: number }>();
 
   for (const group of input.groups) {
     const number = byNumber.get(group.senderAccountId);
@@ -114,6 +133,22 @@ export function evaluateMetaEnablement(input: {
       unbound.set(number.accountId, entry);
       blockedRows += group.rows;
       if (group.purpose === "security") blockedSecurityRows += group.rows;
+      continue;
+    }
+
+    if (number.sender && number.sender.verdict !== "usable") {
+      const entry = unusable.get(number.accountId) ?? { rows: 0, security: 0 };
+
+      entry.rows += group.rows;
+      if (group.purpose === "security") entry.security += group.rows;
+      unusable.set(number.accountId, entry);
+
+      // A hold is not a failure: the rows wait, so they are not "blocked".
+      if (number.sender.verdict === "terminal") {
+        blockedRows += group.rows;
+        if (group.purpose === "security") blockedSecurityRows += group.rows;
+      }
+
       continue;
     }
 
@@ -171,6 +206,24 @@ export function evaluateMetaEnablement(input: {
     findings.unshift({
       kind: "number_without_waba",
       accountId: number.accountId,
+      pendingRows: entry?.rows ?? 0,
+      pendingSecurityRows: entry?.security ?? 0
+    });
+  }
+
+  // A bound number the dispatcher cannot use is reported even with an empty
+  // queue, for the same reason.
+  for (const number of input.numbers) {
+    if (number.wabaId === null) continue;
+    if (!number.sender || number.sender.verdict === "usable") continue;
+
+    const entry = unusable.get(number.accountId);
+
+    findings.unshift({
+      kind: "number_unusable",
+      accountId: number.accountId,
+      verdict: number.sender.verdict,
+      reason: number.sender.reason,
       pendingRows: entry?.rows ?? 0,
       pendingSecurityRows: entry?.security ?? 0
     });

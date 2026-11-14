@@ -40,7 +40,10 @@ import {
 import {
   WHATSAPP_META_AUDIT_TRIGGERS,
   WORKER_COLUMN_GRANTS,
-  pinTriggerFunction
+  WORKER_PURGE_POLICIES,
+  evaluateWorkerPurgePolicies,
+  pinTriggerFunction,
+  probeWorkerPurgeDeleteFloors
 } from "../../scripts/security-readiness";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { parseChannelCallbackToken } from "../../src/modules/_shared/channel-webhook-token";
@@ -55,7 +58,8 @@ import { PROVIDER_MATRIX_VERSION } from "../../src/modules/channel-accounts/doma
 import { enqueueWhatsappMessage } from "../../src/modules/whatsapp-delivery/application/whatsapp-enqueue";
 import {
   clearMetaRestriction,
-  readMetaRestriction
+  readMetaRestriction,
+  recordWebhookReceipt
 } from "../../src/modules/whatsapp-delivery/application/whatsapp-meta-directory";
 import { handleMetaWebhook } from "../../src/modules/whatsapp-delivery/application/whatsapp-meta-webhook";
 import { runMetaEnablementPreflight } from "../../src/modules/whatsapp-delivery/application/whatsapp-meta-preflight";
@@ -774,7 +778,7 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
       await queuedMessage();
 
       const ready = await asWorker((tx) =>
-        runMetaEnablementPreflight(tx, TENANT)
+        runMetaEnablementPreflight(tx, TENANT, { senders })
       );
 
       expect(ready.findings).toEqual([]);
@@ -786,7 +790,7 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
       `;
 
       const unapproved = await asWorker((tx) =>
-        runMetaEnablementPreflight(tx, TENANT)
+        runMetaEnablementPreflight(tx, TENANT, { senders })
       );
 
       expect(unapproved.blockedRows).toBe(2);
@@ -806,7 +810,7 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
       `;
 
       const unbound = await asWorker((tx) =>
-        runMetaEnablementPreflight(tx, TENANT)
+        runMetaEnablementPreflight(tx, TENANT, { senders })
       );
 
       expect(unbound.blockedRows).toBe(2);
@@ -818,6 +822,367 @@ suite("#1267 audit Lows against PostgreSQL (#1298)", () => {
           pendingSecurityRows: 0
         }
       ]);
+    });
+  });
+  describe("audit follow-up LOW-1: the worker's INSERT and DELETE on the queue", () => {
+    const insertAsWorker = (overrides: Record<string, unknown>, key: string) =>
+      asWorker(async (tx) => {
+        const row = {
+          status: "queued",
+          provider_name: null,
+          provider_message_id: null,
+          sent_at: null,
+          provider_status: null,
+          provider_status_rank: 0,
+          retry_count: 0,
+          failure_code: null,
+          last_error: null,
+          ...overrides
+        };
+
+        return tx`
+          INSERT INTO awcms_whatsapp_messages
+            (tenant_id, idempotency_key, template_key, template_version,
+             purpose, recipient, recipient_hash, recipient_masked, body,
+             status, provider_name, provider_message_id, sent_at,
+             provider_status, provider_status_rank, retry_count,
+             failure_code, last_error, sender_account_id)
+          VALUES (${TENANT}, ${key}, 'it1298.reminder', 1, 'transactional',
+                  ${PHONE}, ${`k1:${key}`}, '+62***90', 'x',
+                  ${row.status as string}, ${row.provider_name as string | null},
+                  ${row.provider_message_id as string | null},
+                  ${row.sent_at as Date | null},
+                  ${row.provider_status as string | null},
+                  ${row.provider_status_rank as number},
+                  ${row.retry_count as number},
+                  ${row.failure_code as string | null},
+                  ${row.last_error as string | null}, ${numberId})
+          RETURNING id`;
+      });
+
+    test("the worker still enqueues a fresh queued message (the booking reminder job does, through the port)", async () => {
+      await requireWorkerRole();
+
+      sequence += 1;
+
+      const result = await asWorker((tx) =>
+        enqueueWhatsappMessage(
+          tx,
+          {
+            tenantId: TENANT,
+            templateKey: "it1298.reminder",
+            variables: { name: "Sari" },
+            recipient: { kind: "address", phone: PHONE },
+            idempotencyKey: `k1298-worker-${sequence}`,
+            senderAccountId: numberId
+          },
+          { env: ENV, senders }
+        )
+      );
+
+      expect(result.status).toBe("queued");
+    });
+
+    test("it cannot insert a forged sent or read message, nor a non-fresh one", async () => {
+      await requireWorkerRole();
+
+      for (const [what, overrides] of [
+        [
+          "a sent row with a provider status read",
+          {
+            status: "sent",
+            provider_name: "meta_cloud",
+            provider_message_id: "wamid.FORGED",
+            sent_at: new Date(),
+            provider_status: "read",
+            provider_status_rank: 3
+          }
+        ],
+        ["a sent row", { status: "sent" }],
+        ["a queued row with a provider id", { provider_message_id: "w.X" }],
+        ["a queued row with a provider name", { provider_name: "meta_cloud" }],
+        ["a queued row with a sent_at", { sent_at: new Date() }],
+        [
+          "a queued row with a provider status",
+          { provider_status: "read", provider_status_rank: 3 }
+        ],
+        ["a queued row with retries", { retry_count: 2 }],
+        ["a queued row with a failure code", { failure_code: "x" }],
+        ["a queued row with an error text", { last_error: "x" }]
+      ] as const) {
+        sequence += 1;
+
+        const error = await assertRejected(
+          insertAsWorker(overrides, `forged-${sequence}`),
+          `a worker insert of ${what}`
+        );
+
+        expect(String(error.message)).toContain("fresh queued message");
+      }
+    });
+
+    test("it deletes only terminal rows past the floor: a fresh sent, an old queued and a fresh failed row survive", async () => {
+      await requireWorkerRole();
+
+      const admin = getAdminSql();
+      const rows: Record<string, string> = {};
+
+      for (const [name, status, age] of [
+        ["freshSent", "sent", "0 days"],
+        ["freshFailed", "failed", "1 day"],
+        ["oldQueued", "queued", "60 days"],
+        ["oldSending", "sending", "60 days"],
+        ["agedFailed", "failed", "60 days"],
+        ["agedSent", "sent", "60 days"]
+      ] as const) {
+        const id = await queuedMessage();
+
+        await admin.unsafe(
+          `UPDATE awcms_whatsapp_messages SET status = '${status}',
+             updated_at = now() - interval '${age}' WHERE id = '${id}'`
+        );
+        rows[name] = id;
+      }
+
+      const deleted = await asWorker(
+        (tx) => tx`
+        DELETE FROM awcms_whatsapp_messages
+        WHERE id = ANY(string_to_array(${Object.values(rows).join(",")}, ',')::uuid[])
+        RETURNING id`
+      );
+      const gone = new Set((deleted as { id: string }[]).map((r) => r.id));
+
+      expect([...gone].sort()).toEqual(
+        [rows.agedFailed!, rows.agedSent!].sort()
+      );
+    });
+
+    test("the worker cannot age a terminal row to pass the floor (it cannot write a terminal row at all)", async () => {
+      await requireWorkerRole();
+
+      const id = await queuedMessage();
+
+      await getAdminSql()`
+        UPDATE awcms_whatsapp_messages SET status = 'sent' WHERE id = ${id}
+      `;
+      await assertRejected(
+        asWorker(
+          (tx) => tx`
+          UPDATE awcms_whatsapp_messages
+          SET updated_at = now() - interval '90 days' WHERE id = ${id}`
+        ),
+        "ageing a terminal message"
+      );
+    });
+
+    test("security:readiness: the insert guard is pinned exactly, the delete floor by expression and by probe", async () => {
+      expect(
+        await pinTriggerFunction(
+          getAdminSql(),
+          WHATSAPP_META_AUDIT_TRIGGERS[3]!
+        )
+      ).toBeNull();
+      expect(
+        await pinTriggerFunction(
+          getAdminSql(),
+          WHATSAPP_META_AUDIT_TRIGGERS[3]!
+        )
+      ).toBeNull();
+
+      const rows = (await getAdminSql()`
+        SELECT p.polname AS name, NOT p.polpermissive AS restrictive,
+               p.polcmd AS command,
+               p.polroles = ARRAY[to_regrole('awcms_worker')::oid] AS worker_only,
+               pg_get_expr(p.polqual, p.polrelid) AS expression
+        FROM pg_policy p
+        WHERE p.polname = ANY(${Object.keys(WORKER_PURGE_POLICIES)})
+      `) as Parameters<typeof evaluateWorkerPurgePolicies>[0];
+
+      expect(rows).toHaveLength(Object.keys(WORKER_PURGE_POLICIES).length);
+      expect(evaluateWorkerPurgePolicies(rows)).toEqual([]);
+
+      // loosened floor: the behavioural probe finds it (restored in finally;
+      // the probe opens its own transaction, so the change is committed
+      // briefly, and nothing else runs in this file meanwhile)
+      let finding: string | undefined;
+
+      try {
+        await getAdminSql().unsafe(
+          "ALTER POLICY awcms_whatsapp_messages_worker_purge_only ON awcms_whatsapp_messages USING (true)"
+        );
+        finding = (await probeWorkerPurgeDeleteFloors(getAdminSql())).finding;
+      } finally {
+        await getAdminSql().unsafe(
+          "ALTER POLICY awcms_whatsapp_messages_worker_purge_only ON awcms_whatsapp_messages USING (status IN ('sent', 'failed', 'cancelled', 'expired') AND updated_at < now() - interval '7 days')"
+        );
+      }
+
+      expect(finding).toContain("message:");
+
+      expect(await probeWorkerPurgeDeleteFloors(getAdminSql())).toEqual({
+        ran: true
+      });
+
+      // a disabled insert guard is a finding
+      let pin: string | null = null;
+
+      try {
+        await getAdminSql().begin(async (tx) => {
+          await tx.unsafe(
+            "ALTER TABLE awcms_whatsapp_messages DISABLE TRIGGER awcms_whatsapp_messages_worker_insert_guard"
+          );
+          pin = await pinTriggerFunction(
+            tx as unknown as Bun.SQL,
+            WHATSAPP_META_AUDIT_TRIGGERS[3]!
+          );
+          throw new Error("rollback");
+        });
+      } catch {
+        // rolled back on purpose
+      }
+
+      expect(pin).not.toBeNull();
+    });
+  });
+
+  describe("audit follow-up LOW-3: the receipt dedupe is atomic across subscriptions", () => {
+    test("the same signed body arriving at two subscriptions of one tenant at once is applied once", async () => {
+      const admin = getAdminSql();
+      const second = (await admin`
+        INSERT INTO awcms_channel_webhook_subscriptions
+          (tenant_id, account_id, provider, callback_token_hash,
+           verification_mode, status)
+        VALUES (${TENANT}, ${numberId}, 'whatsapp_cloud',
+                ${`sha256:${crypto.randomUUID().replace(/-/g, "").padEnd(64, "0")}`},
+                'hmac_signature', 'revoked')
+        RETURNING id
+      `) as { id: string }[];
+      const first = (await admin`
+        INSERT INTO awcms_channel_webhook_subscriptions
+          (tenant_id, account_id, provider, callback_token_hash,
+           verification_mode, status)
+        VALUES (${TENANT}, ${numberId}, 'whatsapp_cloud',
+                ${`sha256:${crypto.randomUUID().replace(/-/g, "").padEnd(64, "0")}`},
+                'hmac_signature', 'revoked')
+        RETURNING id
+      `) as { id: string }[];
+      const hash = "c".repeat(64);
+
+      // The first holds its transaction open after recording; the second starts
+      // while it is open. Without the lock the second also inserts (it cannot
+      // see the uncommitted receipt); with it, the second waits and then sees it.
+      const one = inTenant(async (tx) => {
+        const recorded = await recordWebhookReceipt(
+          tx,
+          TENANT,
+          first[0]!.id,
+          hash
+        );
+
+        await Bun.sleep(1200);
+
+        return recorded;
+      });
+
+      await Bun.sleep(300);
+
+      const two = inTenant((tx) =>
+        recordWebhookReceipt(tx, TENANT, second[0]!.id, hash)
+      );
+      const results = await Promise.all([one, two]);
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+
+      const count = (await admin`
+        SELECT count(*)::int AS n FROM awcms_whatsapp_webhook_receipts
+        WHERE tenant_id = ${TENANT} AND payload_sha256 = ${hash}
+      `) as { n: number }[];
+
+      expect(count[0]!.n).toBe(1);
+    });
+  });
+
+  describe("audit follow-up LOW-2: the preflight applies the dispatcher's own binding rule", () => {
+    async function verdictFor(sql: string) {
+      await getAdminSql().unsafe(sql);
+
+      const report = await asWorker((tx) =>
+        runMetaEnablementPreflight(tx, TENANT, { senders })
+      );
+
+      return report;
+    }
+
+    test("a revoked or disabled WABA parent is a terminal finding; a degraded one is a hold; a scope the parent does not contain is terminal", async () => {
+      await requireWorkerRole();
+
+      await queuedMessage();
+      await queuedMessage();
+
+      const parent = `(SELECT parent_account_id FROM awcms_channel_accounts WHERE id = '${numberId}')`;
+
+      try {
+        for (const status of ["revoked", "disabled"]) {
+          const report = await verdictFor(
+            `UPDATE awcms_channel_accounts SET status = '${status}' WHERE id = ${parent}`
+          );
+
+          expect(report.findings).toEqual([
+            {
+              kind: "number_unusable",
+              accountId: numberId,
+              verdict: "terminal",
+              reason:
+                status === "revoked" ? "ACCOUNT_REVOKED" : "ACCOUNT_DISABLED",
+              pendingRows: 2,
+              pendingSecurityRows: 0
+            }
+          ]);
+          expect(report.blockedRows).toBe(2);
+        }
+
+        const held = await verdictFor(
+          `UPDATE awcms_channel_accounts SET status = 'degraded' WHERE id = ${parent}`
+        );
+
+        expect(held.findings).toEqual([
+          expect.objectContaining({
+            kind: "number_unusable",
+            verdict: "hold",
+            reason: "ACCOUNT_DEGRADED",
+            pendingRows: 2
+          })
+        ]);
+        expect(held.blockedRows).toBe(0);
+
+        const scoped = await verdictFor(
+          `UPDATE awcms_channel_accounts SET status = 'connected',
+             business_scope_type = 'brand',
+             business_scope_id = 'b1298000-0000-4000-8000-0000000000bb'
+           WHERE id = ${parent}`
+        );
+
+        expect(scoped.findings).toEqual([
+          expect.objectContaining({
+            kind: "number_unusable",
+            verdict: "terminal",
+            reason: "CONTAINER_BINDING_INVALID"
+          })
+        ]);
+        expect(scoped.blockedRows).toBe(2);
+      } finally {
+        await getAdminSql().unsafe(
+          `UPDATE awcms_channel_accounts SET status = 'connected',
+             business_scope_type = NULL, business_scope_id = NULL
+           WHERE id = ${parent}`
+        );
+      }
+
+      const ok = await asWorker((tx) =>
+        runMetaEnablementPreflight(tx, TENANT, { senders })
+      );
+
+      expect(ok.findings).toEqual([]);
     });
   });
 });

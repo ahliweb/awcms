@@ -76,6 +76,14 @@ async function main(): Promise<void> {
               `${finding.pendingRows} queued row(s) (${finding.pendingSecurityRows} security) will fail terminally. ` +
               "Register the number under its waba container."
           );
+        } else if (finding.kind === "number_unusable") {
+          console.log(
+            `[${tenant.tenant_code}] number ${finding.accountId} cannot send (${finding.reason}, ${finding.verdict}): ` +
+              `${finding.pendingRows} queued row(s) (${finding.pendingSecurityRows} security) will ` +
+              (finding.verdict === "terminal"
+                ? "fail terminally. Repair the WABA parent (status, scope) or the number."
+                : "wait until it is usable again.")
+          );
         } else {
           const need = finding.providerTemplate
             ? ` Meta must show ${finding.providerTemplate.name}/${finding.providerTemplate.language} as APPROVED on WABA ${finding.wabaId}; record it with evidence.`

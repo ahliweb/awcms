@@ -630,19 +630,33 @@ describe("security:readiness pins the worker's purge-only DELETE (review L-2)", 
   });
 
   test("every widening, weakening or loss is a finding (mutations go red)", () => {
+    // Mutates ONE policy (by index) and keeps the others, so each case yields
+    // exactly one finding.
+    const change =
+      (index: number, patch: Partial<(typeof exact)[number]>) =>
+      (rows: typeof exact) =>
+        rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    const drop = (index: number) => (rows: typeof exact) =>
+      rows.filter((_, i) => i !== index);
     const mutations: ((rows: typeof exact) => typeof exact)[] = [
-      (rows) => rows.slice(1),
-      (rows) => [{ ...rows[0]!, restrictive: false }, rows[1]!],
-      (rows) => [{ ...rows[0]!, command: "*" }, rows[1]!],
-      (rows) => [{ ...rows[0]!, worker_only: false }, rows[1]!],
-      (rows) => [
-        {
-          ...rows[0]!,
-          expression: "(last_inbound_at < (now() - '00:00:00'::interval))"
-        },
-        rows[1]!
-      ],
-      (rows) => [rows[0]!, { ...rows[1]!, expression: "true" }]
+      drop(0),
+      drop(2),
+      change(0, { restrictive: false }),
+      change(0, { command: "*" }),
+      change(0, { worker_only: false }),
+      change(0, {
+        expression: "(last_inbound_at < (now() - '00:00:00'::interval))"
+      }),
+      change(1, { expression: "true" }),
+      // sql/394 (audit LOW-1): the queue policy loses its status or its age half,
+      // is made permissive, or is widened.
+      change(2, { expression: "(updated_at < (now() - '7 days'::interval))" }),
+      change(2, {
+        expression:
+          "(status = ANY (ARRAY['sent'::text, 'failed'::text, 'cancelled'::text, 'expired'::text]))"
+      }),
+      change(2, { restrictive: false }),
+      change(2, { expression: "true" })
     ];
 
     for (const mutate of mutations) {

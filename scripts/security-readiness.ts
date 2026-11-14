@@ -2814,6 +2814,13 @@ export const WHATSAPP_META_AUDIT_TRIGGERS: readonly PinnedTrigger[] = [
     trigger: "awcms_whatsapp_service_windows_clock",
     fn: "awcms_whatsapp_service_windows_clock",
     body: "BEGIN NEW.last_inbound_at := LEAST(NEW.last_inbound_at, now()); RETURN NEW; END;"
+  },
+  {
+    table: "awcms_whatsapp_messages",
+    trigger: "awcms_whatsapp_messages_worker_insert_guard",
+    fn: "awcms_whatsapp_messages_worker_insert_guard",
+    events: "insert",
+    body: "BEGIN IF current_user <> 'awcms_worker' THEN RETURN NEW; END IF; IF NEW.status <> 'queued' OR NEW.provider_name IS NOT NULL OR NEW.provider_message_id IS NOT NULL OR NEW.sent_at IS NOT NULL OR NEW.provider_status IS NOT NULL OR NEW.provider_status_rank <> 0 OR NEW.failure_code IS NOT NULL OR NEW.last_error IS NOT NULL OR NEW.retry_count <> 0 THEN RAISE EXCEPTION 'the WhatsApp dispatcher role may only enqueue a fresh queued message' USING ERRCODE = '23514'; END IF; RETURN NEW; END;"
   }
 ];
 
@@ -3288,8 +3295,35 @@ export async function probeWorkerPurgeDeleteFloors(
         WHERE payload_sha256 = ${"b".repeat(64)}
       `;
 
+      // sql/394 (#1298 audit LOW-1): a fresh sent row, a fresh failed row, a
+      // queued row (never deletable, however old) and an aged terminal row.
+      // Deployment-sender rows (no sender account), seeded as the connecting role, so neither the sender guard nor the worker insert guard is in play.
+      for (const [key, status, ageDays] of [
+        ["fresh-sent", "sent", 0],
+        ["queued-old", "queued", 40],
+        ["aged-failed", "failed", 40]
+      ] as const) {
+        await tx`
+          INSERT INTO awcms_whatsapp_messages
+            (tenant_id, idempotency_key, template_key, template_version,
+             purpose, recipient, recipient_hash, recipient_masked, body,
+             status)
+          VALUES (${tenant}, ${`probe-${key}`}, 'probe.t', 1, 'transactional',
+                  '+6280000000001', ${`k1:${key}`}, '+62***01', 'probe',
+                  ${status})
+        `;
+        await tx`
+          UPDATE awcms_whatsapp_messages
+          SET updated_at = now() - make_interval(days => ${ageDays})
+          WHERE idempotency_key = ${`probe-${key}`}
+        `;
+      }
+
       await tx.unsafe("SET LOCAL ROLE awcms_worker");
 
+      const messages = (await tx`
+        DELETE FROM awcms_whatsapp_messages RETURNING idempotency_key
+      `) as { idempotency_key: string }[];
       const windows = (await tx`
         DELETE FROM awcms_whatsapp_service_windows RETURNING recipient_hash
       `) as { recipient_hash: string }[];
@@ -3298,6 +3332,7 @@ export async function probeWorkerPurgeDeleteFloors(
       `) as { payload_sha256: string }[];
 
       deleted = [
+        ...messages.map((row) => `message:${row.idempotency_key}`),
         ...windows.map((row) => `window:${row.recipient_hash}`),
         ...receipts.map((row) => `receipt:${row.payload_sha256.slice(0, 1)}`)
       ].sort();
@@ -3313,12 +3348,12 @@ export async function probeWorkerPurgeDeleteFloors(
     }
   }
 
-  const expected = ["receipt:b", "window:k1:aged"];
+  const expected = ["message:probe-aged-failed", "receipt:b", "window:k1:aged"];
 
   if (JSON.stringify(deleted) !== JSON.stringify(expected)) {
     return {
       ran: true,
-      finding: `awcms_worker deleted [${deleted.join(", ")}] where exactly the aged window and the aged webhook receipt were expected (the purge-only DELETE floors of sql/365 are missing or wrong)`
+      finding: `awcms_worker deleted [${deleted.join(", ")}] where exactly the aged window, the aged webhook receipt and the aged terminal message were expected (the purge-only DELETE floors of sql/365 and sql/394 are missing or wrong)`
     };
   }
 
@@ -4547,7 +4582,8 @@ export async function checkWorkerSetupRoleGrants(
         FROM pg_policy p
         WHERE p.polname IN (
           'awcms_whatsapp_service_windows_worker_purge_only',
-          'awcms_whatsapp_webhook_receipts_worker_purge_only'
+          'awcms_whatsapp_webhook_receipts_worker_purge_only',
+          'awcms_whatsapp_messages_worker_purge_only'
         )
       `) as WorkerPurgePolicyRow[];
 
@@ -5098,7 +5134,10 @@ export const WORKER_PURGE_POLICIES: Readonly<Record<string, string>> = {
   awcms_whatsapp_service_windows_worker_purge_only:
     "(last_inbound_at < (now() - '2 days'::interval))",
   awcms_whatsapp_webhook_receipts_worker_purge_only:
-    "(received_at < (now() - '8 days'::interval))"
+    "(received_at < (now() - '8 days'::interval))",
+  // sql/394 (#1298 audit LOW-1): terminal and older than seven days only.
+  awcms_whatsapp_messages_worker_purge_only:
+    "((status = ANY (ARRAY['sent'::text, 'failed'::text, 'cancelled'::text, 'expired'::text])) AND (updated_at < (now() - '7 days'::interval)))"
 };
 
 export function evaluateWorkerPurgePolicies(

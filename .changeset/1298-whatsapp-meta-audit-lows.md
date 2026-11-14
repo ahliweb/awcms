@@ -16,4 +16,6 @@ security(whatsapp_delivery): close the six Low findings of the independent audit
 
 **L6.** The per-(tenant, address) webhook attempt bucket is refunded for a verified, new delivery, so a legitimate high-volume tenant is no longer answered `429` by its own traffic. Refusals, malformed bodies and verified duplicates keep their charge.
 
+**Audit follow-up (independent audit of this change: PASS, three Lows, fixed).** `sql/394`: `awcms_worker`'s `INSERT` on `awcms_whatsapp_messages` must be a fresh `queued` row (trigger) and its `DELETE` only reaches terminal rows older than seven days (RESTRICTIVE policy); both pinned by `security:readiness` (trigger body, policy expression, behavioural probe). `whatsapp:meta:preflight` now decides each number's binding with the dispatcher's own sender-port verdict, so a revoked/disabled parent or a scope mismatch is a terminal finding and a degraded one a hold (new `number_unusable` finding). The webhook receipt dedupe takes a per-(tenant, body hash) advisory lock, so a body delivered to two subscriptions at once applies once.
+
 No OpenAPI or AsyncAPI change (no request or response shape changed). Human steps not performed here: running the preflight and the runbook against a real deployment.

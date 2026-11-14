@@ -192,3 +192,70 @@ describe("evaluateMetaEnablement", () => {
     expect(report.findings).toEqual([]);
   });
 });
+
+describe("the dispatcher's own binding verdict (audit LOW-2)", () => {
+  const sender = (
+    verdict: "usable" | "terminal" | "hold",
+    reason = "ACCOUNT_REVOKED"
+  ) =>
+    verdict === "usable"
+      ? ({ verdict } as const)
+      : ({ verdict, reason } as const);
+
+  test("a terminal verdict blocks the rows (OTP counted apart) and is a finding", () => {
+    const report = evaluateMetaEnablement({
+      numbers: [{ accountId: "n1", wabaId: "w1", sender: sender("terminal") }],
+      groups: [
+        {
+          senderAccountId: "n1",
+          templateKey: "t.otp",
+          purpose: "security",
+          windowOpen: false,
+          rows: 2
+        }
+      ],
+      approvals: [],
+      lookupTemplate: () => undefined
+    });
+
+    expect(report.blockedRows).toBe(2);
+    expect(report.blockedSecurityRows).toBe(2);
+    expect(report.findings).toEqual([
+      {
+        kind: "number_unusable",
+        accountId: "n1",
+        verdict: "terminal",
+        reason: "ACCOUNT_REVOKED",
+        pendingRows: 2,
+        pendingSecurityRows: 2
+      }
+    ]);
+  });
+
+  test("a hold is reported but its rows are not blocked; a usable number adds nothing", () => {
+    const held = evaluateMetaEnablement({
+      numbers: [
+        {
+          accountId: "n1",
+          wabaId: "w1",
+          sender: sender("hold", "ACCOUNT_DEGRADED")
+        }
+      ],
+      groups: [],
+      approvals: [],
+      lookupTemplate: () => undefined
+    });
+    const usable = evaluateMetaEnablement({
+      numbers: [{ accountId: "n1", wabaId: "w1", sender: sender("usable") }],
+      groups: [],
+      approvals: [],
+      lookupTemplate: () => undefined
+    });
+
+    expect(held.blockedRows).toBe(0);
+    expect(held.findings).toEqual([
+      expect.objectContaining({ kind: "number_unusable", verdict: "hold" })
+    ]);
+    expect(usable.findings).toEqual([]);
+  });
+});

@@ -7,6 +7,9 @@
  *
  * The pure verdict is `evaluateMetaEnablement`; this file only gathers rows.
  */
+import type { ChannelAccountPort } from "../../_shared/ports/channel-account-port";
+import { loadChannelAccountPort } from "../infrastructure/channel-account-port-loader";
+import { classifySenderUnavailable } from "../domain/whatsapp-sender";
 import {
   evaluateMetaEnablement,
   type MetaPreflightApproval,
@@ -34,7 +37,8 @@ export type TenantMetaPreflight = MetaPreflightReport & {
 
 export async function runMetaEnablementPreflight(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  options: { senders?: ChannelAccountPort } = {}
 ): Promise<TenantMetaPreflight> {
   const numberRows = (await tx`
     SELECT a.id, p.external_id AS waba_id
@@ -48,10 +52,34 @@ export async function runMetaEnablementPreflight(
       AND a.status = 'connected'
     ORDER BY a.id
   `) as { id: string; waba_id: string | null }[];
-  const numbers: MetaPreflightNumber[] = numberRows.map((row) => ({
-    accountId: row.id,
-    wabaId: row.waba_id
-  }));
+  // #1298 (audit LOW-2): the binding is decided by the dispatcher's OWN rule
+  // (the sender port, which applies `loadLendingParent`: the parent's status,
+  // its kind and its business scope), not by a look-alike JOIN. The same
+  // `dm` verdict the dispatcher takes per lane, classified by the same
+  // `classifySenderUnavailable`, so a revoked or disabled parent or a scope
+  // that does not contain the number's is a TERMINAL finding and a held one
+  // (degraded, pending) is reported separately.
+  const port = options.senders ?? (await loadChannelAccountPort());
+  const numbers: MetaPreflightNumber[] = [];
+
+  for (const row of numberRows) {
+    // No catch on purpose: an error inside this transaction poisons it, and a
+    // tenant that cannot be read is reported by the caller as "could not be
+    // read" (never as READY).
+    const verdict = await port.resolveWhatsappSender(tx, {
+      tenantId,
+      accountId: row.id,
+      capability: "dm"
+    });
+    const sender: NonNullable<MetaPreflightNumber["sender"]> = verdict.usable
+      ? { verdict: "usable" }
+      : {
+          verdict: classifySenderUnavailable(verdict.reason),
+          reason: verdict.reason
+        };
+
+    numbers.push({ accountId: row.id, wabaId: row.waba_id, sender });
+  }
 
   if (numbers.length === 0) {
     return {

@@ -434,6 +434,17 @@ export async function recordWebhookReceipt(
   // body does not change, so a body captured before the rotation would apply
   // again under the new token if the receipt were keyed to the old one. The
   // lookup uses `awcms_whatsapp_webhook_receipts_tenant_payload_idx` (sql/393).
+  // #1298 (audit LOW-3): the NOT EXISTS above is not atomic under READ
+  // COMMITTED, and the unique constraint is still per subscription, so the
+  // same signed body arriving at two subscriptions of one tenant at once would
+  // pass both checks and apply twice. A transaction-scoped advisory lock keyed
+  // by (tenant, body hash) serialises exactly those deliveries: the second one
+  // waits for the first to commit, then sees its receipt.
+  await tx`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`whatsapp-webhook-receipt:${tenantId}:${payloadSha256}`}, 0))
+  `;
+
   const rows = (await tx`
     INSERT INTO awcms_whatsapp_webhook_receipts
       (tenant_id, subscription_id, payload_sha256)
