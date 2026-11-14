@@ -522,6 +522,194 @@ suite("site_search module (integration, ADR-0040)", () => {
     expect(Array.isArray(result.items)).toBe(true);
   });
 
+  describe("prefix matching on the last token", () => {
+    async function indexTenantA(): Promise<void> {
+      await insertPost(TENANT_A, {
+        title: "Sungai Kapuas meluap",
+        body: "Kalimantan Barat banjir Kapuas",
+        slug: "kapuas"
+      });
+      await insertPost(TENANT_A, {
+        title: "Pasar Kapurindo",
+        body: "Kalimantan Tengah harga",
+        slug: "kapurindo"
+      });
+      await insertPost(TENANT_A, {
+        title: "Kafe baru buka",
+        body: "kopi enak",
+        slug: "kafe"
+      });
+      await insertPost(TENANT_A, {
+        title: "Rapat Café Müller",
+        body: "umlaut and accent",
+        slug: "unicode"
+      });
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+    }
+
+    async function titles(query: string): Promise<string[]> {
+      const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        searchSiteContent(tx, TENANT_A, { query, locale: "en", limit: 20 })
+      );
+      return result.items.map((item) => item.title).sort();
+    }
+
+    test("a 3+ character last token matches as a prefix, a 2-character one does not", async () => {
+      await indexTenantA();
+      expect(await titles("Kapu")).toEqual([
+        "Pasar Kapurindo",
+        "Sungai Kapuas meluap"
+      ]);
+      // Exact lexeme only below the floor: "ka" is not a word in any document.
+      expect(await titles("Ka")).toEqual([]);
+    });
+
+    test("only the LAST token is a prefix; earlier tokens stay exact lexemes", async () => {
+      await indexTenantA();
+      expect(await titles("Kalimantan Kapu")).toEqual([
+        "Pasar Kapurindo",
+        "Sungai Kapuas meluap"
+      ]);
+      expect(await titles("Barat Kapu")).toEqual(["Sungai Kapuas meluap"]);
+      expect(await titles("Tengah Kapu")).toEqual(["Pasar Kapurindo"]);
+      // "Kalim" is a prefix of a body word, but it is not the last token.
+      expect(await titles("Kalim Kapuas")).toEqual([]);
+      expect(await titles("Sungai Kapu")).toEqual(["Sungai Kapuas meluap"]);
+      // "Sung" is a prefix of a word but is NOT the last token here.
+      expect(await titles("Sung Kapuas")).toEqual([]);
+    });
+
+    test("Unicode letters tokenize and prefix-match (accents, composed or decomposed)", async () => {
+      await indexTenantA();
+      expect(await titles("Café")).toEqual(["Rapat Café Müller"]);
+      expect(await titles("Café")).toEqual(["Rapat Café Müller"]);
+      expect(await titles("Mül")).toEqual(["Rapat Café Müller"]);
+    });
+
+    test("tsquery operator characters in the input never change the semantics nor error", async () => {
+      await indexTenantA();
+      // `|` would be OR if it reached to_tsquery; the words are ANDed, so
+      // nothing carries both.
+      expect(await titles("kapuas | kafe")).toEqual([]);
+      // `!` would be NOT; it is dropped, so this is just "kapuas".
+      expect(await titles("!kapuas")).toEqual(["Sungai Kapuas meluap"]);
+      // `:*` prefix syntax is inert punctuation.
+      expect(await titles("kapuas:*")).toEqual(["Sungai Kapuas meluap"]);
+      // `:A` weight syntax is NOT a weight filter either: it is the two words
+      // "kapuas" AND "a", and no document carries the word "a".
+      expect(await titles("kapuas:A")).toEqual([]);
+      // `<->` followed-by operator is not interpreted.
+      expect(await titles("sungai<->kapuas")).toEqual(["Sungai Kapuas meluap"]);
+
+      const hostile = [
+        "|",
+        "&",
+        "!",
+        ":*",
+        "*",
+        "(",
+        ")",
+        "()",
+        "(((",
+        "'",
+        "''",
+        "\\",
+        "\\'",
+        "a & | ! ( ) : * ' \\ b",
+        "kapu') | (",
+        "'; DROP TABLE awcms_site_search_documents; --",
+        "<->",
+        "\u{1F600}"
+      ];
+      for (const query of hostile) {
+        const result = await withTenantOrThrow(
+          getRuntimeSql(),
+          TENANT_A,
+          async (tx) => ({
+            list: await searchSiteContent(tx, TENANT_A, {
+              query,
+              locale: "en",
+              limit: 20
+            }),
+            facets: await countSearchFacets(tx, TENANT_A, {
+              query,
+              locale: "en"
+            })
+          })
+        );
+        expect(Array.isArray(result.list.items)).toBe(true);
+        expect(Array.isArray(result.facets.resourceTypes)).toBe(true);
+      }
+      expect(await docCount(TENANT_A)).toBe(4);
+
+      // Pure punctuation has no word tokens: the neutral empty result, never
+      // "every document" (an empty tsquery must not be allowed to match all).
+      expect(await titles("|")).toEqual([]);
+      expect(await titles("()")).toEqual([]);
+    });
+
+    test("a token the PG parser discards never widens the match (DB path, not the early exit)", async () => {
+      await indexTenantA();
+      // U+00BD is a \p{N}, so the JS tokenizer keeps it and the early exit does
+      // NOT fire, yet to_tsquery reduces it to an EMPTY tsquery. That must match
+      // nothing, and inside an AND it must not drop the other operands' restriction.
+      expect(await titles("\u00BD\u00BD\u00BD")).toEqual([]);
+      // PG drops the empty operand from the AND, so the remaining word still
+      // bites: same rows as plain "kapuas", never "every document".
+      expect(await titles("kapuas \u00BD\u00BD\u00BD")).toEqual(
+        await titles("kapuas")
+      );
+      expect(await titles("kapuas")).toEqual(["Sungai Kapuas meluap"]);
+      expect(await titles("zzzzzz \u00BD\u00BD\u00BD")).toEqual([]);
+    });
+
+    test("a -word exclusion is dropped, not turned into a required word", async () => {
+      await indexTenantA();
+      // The excluded word is not required: "sungai -zzzzzz" == "sungai".
+      expect(await titles("sungai -zzzzzz")).toEqual(await titles("sungai"));
+      expect((await titles("sungai -zzzzzz")).length).toBeGreaterThan(0);
+    });
+
+    test("results, facets and snippet share one predicate", async () => {
+      await indexTenantA();
+      const { list, facets } = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        async (tx) => ({
+          list: await searchSiteContent(tx, TENANT_A, {
+            query: "Kapu",
+            locale: "en",
+            limit: 20
+          }),
+          facets: await countSearchFacets(tx, TENANT_A, {
+            query: "Kapu",
+            locale: "en"
+          })
+        })
+      );
+      expect(list.items).toHaveLength(2);
+      expect(facets.resourceTypes.reduce((n, f) => n + f.count, 0)).toBe(2);
+      // The snippet highlights the prefix-matched word.
+      const kapuas = list.items.find((i) => i.title.includes("Kapuas"))!;
+      expect(kapuas.snippet).toContain("<mark>Kapuas</mark>");
+    });
+
+    test("prefix matching does not cross tenants", async () => {
+      await indexTenantA();
+      await insertPost(TENANT_B, {
+        title: "Kapuas secret",
+        body: "b only",
+        slug: "kb"
+      });
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_B, SOURCES)
+      );
+      expect(await titles("Kapu")).not.toContain("Kapuas secret");
+    });
+  });
+
   test("suggest returns trigram title matches, tenant-scoped", async () => {
     await insertPost(TENANT_A, {
       title: "Chameleon guide",

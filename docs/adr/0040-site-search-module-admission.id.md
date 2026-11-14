@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0040-site-search-module-admission.md)
 
-<!-- i18n-source-hash: sha256:8b704f847282c2d3b2ba9746886bae0178b51a1acfde16e97f2a3c7a12feba56 -->
+<!-- i18n-source-hash: sha256:75fd832f3aa43ee378dc16d1688272addc1be1b4d9f44b8df08657ee9e32252c -->
 
 # ADR-0040 — Admission `site_search` (Official Optional Module): pencarian PostgreSQL FTS lintas-konten lewat search-source descriptor, DAG-safe inward
 
@@ -71,15 +71,15 @@ Maka seam-nya adalah **descriptor-list** — pola `dataLifecycle`/`sodRules`/`re
 
 ### 5. Kontrak query publik + suggestion
 
-| Aspek                   | Invariant                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tenant/locale scope** | Setiap query dibatasi `tenant_id` (RLS FORCE + predikat) DAN `locale`.                                                                |
-| **Publication-state**   | Difilter di boundary sumber→indeks; query indeks **bukan** sumber otorisasi. Tidak ada draft/preview/private/deleted di hasil.        |
-| **Normalisasi query**   | Trim, batas panjang min/max, kolaps whitespace, strip control char, lalu ke `websearch_to_tsquery('simple', $1)` sebagai bound param. |
-| **Snippet/highlight**   | `ts_headline` dengan sentinel non-HTML → escape HTML seluruhnya → sentinel diganti `<mark>` — markup dari konten tidak pernah lolos.  |
-| **Pagination**          | Keyset cursor `(rank, id)`, `LIMIT` dibatasi.                                                                                         |
-| **Anonim**              | Rate limit per-IP, batas panjang query, result caps.                                                                                  |
-| **Cache key**           | `buildSearchCacheKey` menolak menyusun key tanpa `tenant_id`+`locale`+`query`-hash.                                                   |
+| Aspek                   | Invariant                                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Tenant/locale scope** | Setiap query dibatasi `tenant_id` (RLS FORCE + predikat) DAN `locale`.                                                                                                               |
+| **Publication-state**   | Difilter di boundary sumber→indeks; query indeks **bukan** sumber otorisasi. Tidak ada draft/preview/private/deleted di hasil.                                                       |
+| **Normalisasi query**   | Trim, batas panjang min/max, kolaps whitespace, strip control char, lalu ditokenisasi dan masuk ke `to_tsquery('simple', $1)` sebagai SATU bound param (lihat Amandemen 2026-11-14). |
+| **Snippet/highlight**   | `ts_headline` dengan sentinel non-HTML → escape HTML seluruhnya → sentinel diganti `<mark>` — markup dari konten tidak pernah lolos.                                                 |
+| **Pagination**          | Keyset cursor `(rank, id)`, `LIMIT` dibatasi.                                                                                                                                        |
+| **Anonim**              | Rate limit per-IP, batas panjang query, result caps.                                                                                                                                 |
+| **Cache key**           | `buildSearchCacheKey` menolak menyusun key tanpa `tenant_id`+`locale`+`query`-hash.                                                                                                  |
 
 ### 6. Konfigurasi tenant, admin, retensi/audit
 
@@ -130,3 +130,14 @@ Layanan search SaaS/Elasticsearch/OpenSearch, vector/semantic AI ranking, cross-
 - **Menyatukan pencarian ke `blog_content` yang sudah ada.** Ditolak: pencarian lintas-konten bukan milik satu modul konten; agregator netral adalah tempat yang benar.
 - **Layanan search eksternal (Elastic/OpenSearch/vector).** Ditolak: tidak ada bukti PostgreSQL FTS tidak cukup untuk scope website.
 - **Menyimpan URL relatif tanpa `:tenantCode` dan menambahkan prefiks saat query.** Ditolak: URL akan benar hanya untuk pemanggil yang ingat menambahkannya, dan checksum dokumen tidak akan menangkap perubahan `tenant_code` — menyimpan URL final membuat rename tenant otomatis meng-update dokumen pada reconcile berikutnya.
+
+## Amandemen 2026-11-14: pencocokan prefiks pada token terakhir query
+
+Baris normalisasi query di §5 semula menyerahkan string ternormalisasi ke `websearch_to_tsquery('simple', $1)`. Fungsi itu hanya mencocokkan lexeme utuh, sehingga kata yang belum selesai diketik ("Kapu") tidak menemukan apa pun, padahal itu inti search-as-you-type. Kini query ditokenisasi menjadi run huruf/angka Unicode (`[\p{L}\p{N}]+` setelah normalisasi NFC) dan disusun oleh `buildPrefixTsQuery`: setiap token adalah lexeme utuh, semuanya di-AND, dan token TERAKHIR menjadi prefiks (`token:*`) bila panjangnya minimal 3 karakter. Hasilnya tetap diikat sebagai SATU parameter ke `to_tsquery('simple', $1)`, dan teks yang sama dipakai daftar hasil, hitungan facet, dan snippet, sehingga facet tidak pernah menghitung dokumen yang tidak terjangkau daftar.
+
+- **Injeksi.** Pengikatan parameter sudah menutup injeksi SQL. Tokenisasi menutup tambahan injeksi OPERATOR tsquery: tak satu pun dari `& | ! : * ( ) < - >`, tanda kutip, atau backslash adalah huruf atau angka, jadi tidak ada token yang bisa membawanya. Pemisah dan sufiks `:*` ditulis oleh pembangun saja.
+- **Konsekuensi yang diterima.** Sintaks `websearch_to_tsquery` hilang: frasa berkutip dan `or` tidak lagi ditafsirkan (tanda bacanya dibuang dan kata sisanya di-AND). Kata `-pengecualian` dibuang UTUH, jadi ia tidak mengecualikan dan tidak menjadi kata wajib: `politik -korupsi` kini berarti `politik`; konsumen atau URL tersimpan yang mengandalkan pengecualian kehilangan filter itu (TIDAK dibalik).
+- **Himpunan token kosong.** Query tanpa token kata (hanya tanda baca/simbol) mengembalikan hasil kosong netral tanpa menyentuh database.
+- **Di luar cakupan.** Pencarian per-modul `blog_content` tetap memakai `websearch_to_tsquery`. Endpoint suggest tidak berubah (`ILIKE` trigramnya sudah pencocokan substring). Bentuk respons tidak berubah (ADR-0065).
+- **Penjaga query kosong.** Keluar-dini untuk query tanpa token kata adalah optimasi, bukan kontrol: tsquery yang kosong di sisi database tidak cocok dengan apa pun, dan tes integrasi menguncinya lewat jalur database.
+- **Indeks.** Tanpa migrasi: indeks GIN `tsvector` mendukung operand prefiks `:*`, itulah yang tampak pada rencana superuser. Itu BUKAN yang diterima role runtime: di bawah `FORCE ROW LEVEL SECURITY` kebijakan tenant adalah security barrier dan `ts_match_vq` (fungsi `@@`) tidak LEAKPROOF, sehingga planner tidak dapat memakainya sebagai kondisi indeks dan rencananya adalah sequential scan terbatas tenant dengan `ts_rank` per kandidat. Ini sudah berlaku untuk `websearch_to_tsquery`; prefiks 3 karakter memperlebar himpunan kandidat. Dampak dibatasi rate limit publik dan `statement_timeout`. Menandai `ts_match_vq` LEAKPROOF TIDAK dilakukan di sini dan memerlukan ADR sendiri; jalur baca berfilter tenant eksplisit adalah alternatifnya. Dilacak di #1321; sebuah tes mengunci rencana runtime saat ini agar perbaikan sungguhan memerahkannya dengan sengaja.

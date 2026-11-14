@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:32d1a856b8e6526c7be6b919883a749c446e493a3e1b631dd2d9c3c3ddd407dc -->
+<!-- i18n-source-hash: sha256:52e414a343b0f83fd772ed3be7f1321cbde5ce030500e6a48a3d777c7ae1e68b -->
 
 # site_search
 
@@ -29,7 +29,7 @@ Modul konten mendeklarasikan `SearchSourceDescriptor` **data-murni** di `module.
 
 - **Status publikasi** ditegakkan di batas sumber→indeks — indeks hanya menyimpan konten publik dan TIDAK PERNAH menjadi sumber otorisasi.
 - **Isolasi tenant + locale** — RLS FORCE + predikat `tenant_id`/`locale` eksplisit; `buildSearchCacheKey` menolak kunci tanpa tenant/locale/query-hash (pertahanan cache-poisoning / lintas-tenant).
-- **Injeksi SQL** — query selalu menjadi parameter terikat ke dalam `websearch_to_tsquery('simple', $1)`; identifier deskriptor divalidasi sebelum diinterpolasi.
+- **Injeksi SQL** — query ditokenisasi menjadi huruf/angka Unicode dan selalu menjadi SATU parameter terikat ke dalam `to_tsquery('simple', $1)` (tak ada karakter operator yang lolos tokenisasi, jadi injeksi SQL maupun injeksi operator tsquery mustahil); identifier deskriptor divalidasi sebelum diinterpolasi.
 - **XSS** — snippet dibangun oleh `ts_headline` dengan sentinel non-HTML, di-escape di `renderSafeSnippet`, lalu sentinelnya menjadi `<mark>` — markup yang berasal dari konten tidak akan pernah bisa selamat.
 - **Penyalahgunaan anonim** — batas laju per-IP, batas panjang query, batas jumlah hasil.
 - **Keamanan URL publik** — `:tenantCode`/`:slug`/`:id` di-`encodeURIComponent` saat pengindeksan, sehingga tidak ada nilai sumber yang bisa menyuntikkan segmen path atau sebuah scheme.
