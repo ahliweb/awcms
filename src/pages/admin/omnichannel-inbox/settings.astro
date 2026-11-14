@@ -32,16 +32,9 @@ import { getTranslatorFor } from "../../../lib/i18n";
 import { weekdayLabel } from "../../../lib/i18n/labels/omnichannel-inbox";
 import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
 import { openDays } from "../../../lib/ui/omnichannel-inbox-screen";
-import { visibilityFor } from "../../../modules/omnichannel-inbox/application/route-support";
-import {
-  listSlaPolicies,
-  type SlaPolicyView
-} from "../../../modules/omnichannel-inbox/application/sla-policy-directory";
-import {
-  listTags,
-  type TagView
-} from "../../../modules/omnichannel-inbox/application/tag-directory";
-import { isOmnichannelInboxEnabled } from "../../../modules/omnichannel-inbox/domain/inbox-config";
+import { loadInboxSettings } from "../../../modules/omnichannel-inbox/application/screen-loaders";
+import type { SlaPolicyView } from "../../../modules/omnichannel-inbox/application/sla-policy-directory";
+import type { TagView } from "../../../modules/omnichannel-inbox/application/tag-directory";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -83,49 +76,27 @@ const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
   authorize: SLA_READ_GUARD,
-  load: async ({ tx, auth, can }) => {
-    if (!isOmnichannelInboxEnabled()) {
-      return {
-        enabled: false as const,
-        policies: [] as SlaPolicyView[],
-        tags: null as TagView[] | null,
-        canConfigurePolicies: false,
-        canConfigureTags: false,
-        canRebuild: false
-      };
-    }
-
-    const context = {
-      tx,
-      tenantId: ssr.tenantId,
-      tokenHash: ssr.tokenHash,
-      auth,
-      now: new Date(),
-      request: Astro.request,
-      clientAddress: Astro.clientAddress
-    };
-    // The route's own rule: the tenant default plus the scopes the caller
-    // covers (everything when acting tenant-wide).
-    const policies = await listSlaPolicies(
-      tx,
-      ssr.tenantId,
-      await visibilityFor(context, SLA_READ_GUARD)
-    );
-    // The tag list is `conversations.read` on its endpoint: a caller without it
-    // gets no catalogue section rather than an empty one.
-    const tags = (await can({ ...CONVERSATIONS_READ_GUARD }))
-      ? await listTags(tx, ssr.tenantId)
-      : null;
-
-    return {
-      enabled: true as const,
-      policies,
-      tags,
-      canConfigurePolicies: await can({ ...SLA_CONFIGURE_GUARD }),
-      canConfigureTags: await can({ ...TAGS_CONFIGURE_GUARD }),
-      canRebuild: await can({ ...PROJECTION_CONFIGURE_GUARD })
-    };
-  },
+  load: ({ tx, auth, can }) =>
+    // The visibility -> policy chain is the module's loader (see
+    // `screen-loaders.ts`): the behavioural integration test runs it as a
+    // confined viewer.
+    loadInboxSettings({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      slaReadGuard: SLA_READ_GUARD,
+      conversationsReadGuard: CONVERSATIONS_READ_GUARD,
+      slaConfigureGuard: SLA_CONFIGURE_GUARD,
+      tagsConfigureGuard: TAGS_CONFIGURE_GUARD,
+      projectionConfigureGuard: PROJECTION_CONFIGURE_GUARD,
+      can
+    }),
   onError: (error) => {
     logAdminPageError(
       "admin/omnichannel-inbox/settings.astro: failed to load the settings",
@@ -625,7 +596,10 @@ function weekText(policy: SlaPolicyView): string {
   } from "../../../lib/ui/admin-form-client";
   import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
   import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
-  import { buildPolicyBody } from "../../../lib/ui/omnichannel-inbox-screen";
+  import {
+    buildPolicyBody,
+    rebuildResumePoint
+  } from "../../../lib/ui/omnichannel-inbox-screen";
 
   const actionError = messageBox("omnichannel-settings-error-box");
   const BASE = "/api/v1/omnichannel-inbox";
@@ -761,12 +735,16 @@ function weekText(policy: SlaPolicyView): string {
   // The rebuild is batched: each call replays one bounded batch and reports
   // where it stopped. Bounded here too, so a runaway never loops forever.
   const MAX_REBUILD_BATCHES = 50;
+  // Kept across clicks: a paused rebuild continues from where it stopped (a
+  // click from "0" every time would never get past the first batches of a
+  // large tenant). A page reload starts over, which is only slower, not wrong.
+  let rebuildAfter = "0";
 
   onAction(".js-inbox-rebuild", async (button) => {
     actionError.clear();
     const result = document.getElementById("omnichannel-rebuild-result");
     const unlock = lockElement(button, "Rebuilding…");
-    let after = "0";
+    let after = rebuildAfter;
     let processed = 0;
     let created = 0;
     let complete = false;
@@ -793,8 +771,9 @@ function weekText(policy: SlaPolicyView): string {
 
       processed += response.data.processed;
       created += response.data.created;
-      after = response.data.nextAfterSequence;
       complete = response.data.complete;
+      after = rebuildResumePoint(complete, response.data.nextAfterSequence);
+      rebuildAfter = after;
     }
 
     if (result) {

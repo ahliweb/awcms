@@ -18,7 +18,8 @@ import {
   buildPolicyBody,
   clockToMinutes,
   minutesToClock,
-  openDays
+  openDays,
+  rebuildResumePoint
 } from "../src/lib/ui/omnichannel-inbox-screen";
 import {
   ACTIVITY_KINDS,
@@ -141,5 +142,15 @@ describe("labels cover every closed vocabulary of the module", () => {
     ).not.toBe("user_inactive");
     expect(activityDetailLabel(t, "assigned", "something_new")).toBe("");
     expect(activityDetailLabel(t, "tag_added", null)).toBe("");
+  });
+});
+
+describe("rebuild resume point", () => {
+  test("a paused rebuild continues; a finished or malformed one starts over", () => {
+    expect(rebuildResumePoint(false, "1500")).toBe("1500");
+    expect(rebuildResumePoint(true, "1500")).toBe("0");
+    expect(rebuildResumePoint(false, "abc")).toBe("0");
+    expect(rebuildResumePoint(false, undefined)).toBe("0");
+    expect(rebuildResumePoint(false, "-1")).toBe("0");
   });
 });

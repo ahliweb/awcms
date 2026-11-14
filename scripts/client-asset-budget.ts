@@ -1202,8 +1202,13 @@ export const READER_BUDGET_BYTES = 24_000;
  * `admin-form-client.ts`, the key source is the shared
  * `admin-idempotency-key.ts` and the confirmation is the shared
  * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * **Raised again for the #1164 audit follow-up**: +160 B (370,560 -> 370,720),
+ * measured 370,615 locally (+92 B). The rebuild button now continues from where
+ * the previous click stopped (state across clicks plus a pure resume-point
+ * helper) instead of replaying the first batches forever on a large tenant.
  */
-export const APP_BUDGET_BYTES = 370_560;
+export const APP_BUDGET_BYTES = 370_720;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

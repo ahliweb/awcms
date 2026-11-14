@@ -39,6 +39,10 @@ const read = (path: string) => stripComments(readFileSync(path, "utf8"));
 const list = read(LIST_PAGE);
 const detail = read(DETAIL_PAGE);
 const settings = read(SETTINGS_PAGE);
+/** The chain the pages delegate to; its BEHAVIOUR is the integration test's (`omnichannel-inbox-screens.integration.test.ts`). */
+const loaders = read(
+  "src/modules/omnichannel-inbox/application/screen-loaders.ts"
+);
 
 /** The literal guard object a page spells out, so the coverage gate (which reads source text) sees it. */
 function literalGuard(source: string, name: string) {
@@ -167,38 +171,67 @@ describe("the screens gate on keys that really exist", () => {
   });
 
   test("a control is shown only when the chokepoint allows its permission", () => {
-    expect(detail).toContain("await can({ ...UPDATE_GUARD })");
-    expect(detail).toContain("await can({ ...ASSIGN_GUARD })");
-    expect(settings).toContain("await can({ ...SLA_CONFIGURE_GUARD })");
-    expect(settings).toContain("await can({ ...TAGS_CONFIGURE_GUARD })");
-    expect(settings).toContain("await can({ ...PROJECTION_CONFIGURE_GUARD })");
+    // The pages hand their own literal guards to the loaders (so the coverage
+    // gate sees them); the loaders ask the chokepoint with exactly those.
+    expect(detail).toContain("updateGuard: UPDATE_GUARD");
+    expect(detail).toContain("assignGuard: ASSIGN_GUARD");
+    expect(settings).toContain("slaConfigureGuard: SLA_CONFIGURE_GUARD");
+    expect(settings).toContain("tagsConfigureGuard: TAGS_CONFIGURE_GUARD");
+    expect(settings).toContain(
+      "projectionConfigureGuard: PROJECTION_CONFIGURE_GUARD"
+    );
     // The tag catalogue is `conversations.read` on its endpoint.
-    expect(settings).toContain("await can({ ...CONVERSATIONS_READ_GUARD })");
+    expect(settings).toContain(
+      "conversationsReadGuard: CONVERSATIONS_READ_GUARD"
+    );
+    expect(loaders).toContain("await can(input.updateGuard)");
+    expect(loaders).toContain("await can(input.assignGuard)");
+    expect(loaders).toContain("await can(input.slaConfigureGuard)");
+    expect(loaders).toContain("await can(input.tagsConfigureGuard)");
+    expect(loaders).toContain("await can(input.projectionConfigureGuard)");
+    expect(loaders).toContain("await can(input.conversationsReadGuard)");
 
-    for (const source of [list, detail, settings]) {
+    for (const source of [list, detail, settings, loaders]) {
       // Never raw RBAC: that skips ABAC and module state.
       expect(source).not.toContain("ssr.permissions.has");
     }
   });
 
   test("the screens are off with the deployment switch, checked AFTER authorization", () => {
+    // The switch lives in the loaders, which run only inside `loadAdminScreen`'s
+    // `load` (after it allowed the page); the pages hold no read that could skip it.
     for (const source of [list, detail, settings]) {
-      expect(source).toContain("isOmnichannelInboxEnabled()");
-      expect(source.indexOf("isOmnichannelInboxEnabled()")).toBeGreaterThan(
+      expect(source).not.toContain("isOmnichannelInboxEnabled");
+      expect(source.search(/\bloadInbox\w+\(/)).toBeGreaterThan(
         source.indexOf("await loadAdminScreen(")
       );
     }
+
+    expect(
+      loaders.match(/if \(!isOmnichannelInboxEnabled\(\)\)/g)
+    ).toHaveLength(3);
   });
 });
 
 describe("the screens read through the routes' own rules", () => {
   test("visibility and listing are the API's functions, with no SQL in the page", () => {
-    expect(list).toContain("visibilityFor(context, READ_GUARD)");
-    expect(list).toContain("listConversations(");
-    expect(detail).toContain("visibilityFor(context, READ_GUARD)");
-    expect(detail).toContain("getConversation(");
-    expect(settings).toContain("visibilityFor(context, SLA_READ_GUARD)");
-    expect(settings).toContain("listSlaPolicies(");
+    // The pages name neither the visibility rule nor a directory function: the
+    // chain is the loaders', and a page that re-inlined it (and could widen the
+    // argument) would redden here and in the behavioural integration test.
+    for (const source of [list, detail, settings]) {
+      expect(source).not.toMatch(
+        /visibilityFor|listConversations|getConversation|listSlaPolicies|unconfined/
+      );
+    }
+
+    expect(list).toContain("readGuard: READ_GUARD");
+    expect(detail).toContain("readGuard: READ_GUARD");
+    expect(settings).toContain("slaReadGuard: SLA_READ_GUARD");
+    expect(loaders).toContain("visibilityFor(context, readGuard)");
+    expect(loaders).toContain("visibilityFor(context, input.slaReadGuard)");
+    expect(loaders).toContain("listConversations(");
+    expect(loaders).toContain("getConversation(");
+    expect(loaders).toContain("listSlaPolicies(");
 
     for (const source of [list, detail, settings]) {
       expect(source).not.toMatch(/\btx`/);
@@ -207,19 +240,28 @@ describe("the screens read through the routes' own rules", () => {
   });
 
   test("the list turns the URL into the API's own typed query and filters in SQL", () => {
-    expect(list).toContain("validateListConversationsQuery(sqlParams(cursor))");
-    expect(list).toContain('params.set("slaState", "breached")');
-    expect(list).toContain('params.set("tagId", tag)');
+    expect(loaders).toContain("validateListConversationsQuery(");
+    expect(loaders).toContain('params.set("slaState", "breached")');
+    expect(loaders).toContain('params.set("tagId", tag)');
     // The query is parsed BEFORE the load that needs it, and the load is bounded.
     expect(list.indexOf("parseDataPageQuery(")).toBeLessThan(
       list.indexOf("await loadAdminScreen(")
     );
-    expect(list).toContain("LOAD_PAGE_LIMIT = 2");
+    expect(loaders).toContain("LOAD_PAGE_LIMIT = 2");
   });
 
   test("an unknown or foreign id is one 'not found' answer", () => {
     expect(detail).toContain("omnichannel-conversation-not-found");
     expect(detail).toContain("asUuid(Astro.params.id)");
+  });
+});
+
+describe("the rebuild button", () => {
+  test("continues from where the last click stopped instead of replaying from zero", () => {
+    expect(settings).toContain("let rebuildAfter =");
+    expect(settings).toContain("let after = rebuildAfter;");
+    expect(settings).toContain("rebuildResumePoint(complete,");
+    expect(settings).not.toMatch(/let after = "0"/);
   });
 });
 

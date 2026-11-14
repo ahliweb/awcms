@@ -107,3 +107,23 @@ export function buildPolicyBody(fields: PolicyFormFields): {
     ]
   };
 }
+
+/**
+ * Where the next click on "rebuild" starts. The rebuild is batched and the
+ * screen bounds how many batches one click runs, so a tenant with more events
+ * than that must CONTINUE from where the last click stopped; starting from the
+ * beginning every time would replay the same first events forever. A finished
+ * rebuild resets to the beginning (a later rebuild is a fresh one), and so does
+ * a malformed cursor (never resume from something the server did not say).
+ */
+export function rebuildResumePoint(
+  complete: boolean,
+  nextAfterSequence: unknown
+): string {
+  if (complete) return "0";
+
+  return typeof nextAfterSequence === "string" &&
+    /^[0-9]{1,20}$/.test(nextAfterSequence)
+    ? nextAfterSequence
+    : "0";
+}

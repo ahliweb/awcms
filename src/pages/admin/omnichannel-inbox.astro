@@ -20,7 +20,7 @@
  *
  * ## It shows exactly what the API shows
  *
- * The list runs through the SAME `visibilityFor` and `listConversations` the
+ * The list runs, through `loadInboxList`, the SAME `visibilityFor` and `listConversations` the
  * API route uses (business-scope confinement: a confined caller sees only the
  * scopes they cover, never a tenant-wide conversation). The status, assignee,
  * overdue, tag and source filters are pushed to SQL; search and sort run on the
@@ -66,21 +66,13 @@ import {
   sliceKeyset,
   type DataPageSpec
 } from "../../lib/ui/admin-data-page";
-import {
-  listConversations,
-  type ConversationView
-} from "../../modules/omnichannel-inbox/application/conversation-directory";
-import { visibilityFor } from "../../modules/omnichannel-inbox/application/route-support";
-import {
-  listTags,
-  type TagView
-} from "../../modules/omnichannel-inbox/application/tag-directory";
-import { isOmnichannelInboxEnabled } from "../../modules/omnichannel-inbox/domain/inbox-config";
+import type { ConversationView } from "../../modules/omnichannel-inbox/application/conversation-directory";
+import { loadInboxList } from "../../modules/omnichannel-inbox/application/screen-loaders";
+import type { TagView } from "../../modules/omnichannel-inbox/application/tag-directory";
 import {
   CONVERSATION_STATUSES,
   SOURCE_KINDS
 } from "../../modules/omnichannel-inbox/domain/inbox-constants";
-import { validateListConversationsQuery } from "../../modules/omnichannel-inbox/domain/inbox-validation";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -113,105 +105,28 @@ const SPEC: DataPageSpec = {
 const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
 const filtered = hasActiveFilters(query);
 
-/** Two keyset pages of the API's own query: the bound of what this screen loads. */
-const LOAD_PAGE_SIZE = 100;
-const LOAD_PAGE_LIMIT = 2;
-
-/** The API's own query validator turns the URL filters into a typed query (an unknown value is dropped, never an error). */
-function sqlParams(cursor: string | null): URLSearchParams {
-  const params = new URLSearchParams();
-  const { status, assignee, sla, source, tag } = query.filters;
-
-  if (status && (CONVERSATION_STATUSES as readonly string[]).includes(status)) {
-    params.set("status", status);
-  }
-
-  if (assignee === "me" || assignee === "unassigned") {
-    params.set("assignee", assignee);
-  }
-
-  if (sla === "breached") params.set("slaState", "breached");
-
-  if (source && (SOURCE_KINDS as readonly string[]).includes(source)) {
-    params.set("sourceKind", source);
-  }
-
-  if (tag) params.set("tagId", tag);
-
-  params.set("limit", String(LOAD_PAGE_SIZE));
-
-  if (cursor) params.set("cursor", cursor);
-
-  return params;
-}
-
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
   authorize: READ_GUARD,
-  load: async ({ tx, auth, can }) => {
-    // The deployment switch is checked AFTER authorization, as the API does,
-    // so an unauthorised caller learns nothing about it.
-    if (!isOmnichannelInboxEnabled()) {
-      return {
-        enabled: false as const,
-        conversations: [] as ConversationView[],
-        more: false,
-        tags: [] as TagView[],
-        me: auth.context.tenantUserId,
-        canSeeSettings: false
-      };
-    }
-
-    // The same context the routes build, so the visibility rule is the routes'
-    // own function and not a copy that could drift.
-    const context = {
-      tx,
-      tenantId: ssr.tenantId,
-      tokenHash: ssr.tokenHash,
-      auth,
-      now: new Date(),
-      request: Astro.request,
-      clientAddress: Astro.clientAddress
-    };
-    const visibility = await visibilityFor(context, READ_GUARD);
-
-    // One awaited query at a time: `tx` is one connection.
-    const conversations: ConversationView[] = [];
-    let cursor: string | null = null;
-    let more = false;
-
-    for (let page = 0; page < LOAD_PAGE_LIMIT; page += 1) {
-      const validated = validateListConversationsQuery(sqlParams(cursor));
-
-      if (!validated.valid) break;
-
-      const result = await listConversations(
+  load: ({ tx, auth, can }) =>
+    // The visibility -> listing chain is the module's loader, not inline here:
+    // it is what the behavioural integration test runs as a confined viewer.
+    loadInboxList({
+      context: {
         tx,
-        ssr.tenantId,
-        visibility,
-        auth.context.tenantUserId,
-        validated.value,
-        context.now
-      );
-
-      conversations.push(...result.items);
-
-      if (result.nextCursor === null) break;
-
-      cursor = result.nextCursor;
-      more = page === LOAD_PAGE_LIMIT - 1;
-    }
-
-    return {
-      enabled: true as const,
-      conversations,
-      more,
-      tags: await listTags(tx, ssr.tenantId),
-      me: auth.context.tenantUserId,
-      canSeeSettings: await can({ ...SLA_READ_GUARD })
-    };
-  },
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      filters: query.filters,
+      readGuard: READ_GUARD,
+      settingsGuard: SLA_READ_GUARD,
+      can
+    }),
   onError: (error) => {
     logAdminPageError(
       "admin/omnichannel-inbox.astro: failed to load the inbox",

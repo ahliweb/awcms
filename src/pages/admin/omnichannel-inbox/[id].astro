@@ -50,20 +50,8 @@ import {
   sourceKindLabel
 } from "../../../lib/i18n/labels/omnichannel-inbox";
 import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
-import {
-  getConversation,
-  type ActivityView,
-  type ConversationView
-} from "../../../modules/omnichannel-inbox/application/conversation-directory";
-import {
-  asUuid,
-  visibilityFor
-} from "../../../modules/omnichannel-inbox/application/route-support";
-import {
-  listTags,
-  type TagView
-} from "../../../modules/omnichannel-inbox/application/tag-directory";
-import { isOmnichannelInboxEnabled } from "../../../modules/omnichannel-inbox/domain/inbox-config";
+import { asUuid } from "../../../modules/omnichannel-inbox/application/route-support";
+import { loadInboxDetail } from "../../../modules/omnichannel-inbox/application/screen-loaders";
 import { CONVERSATION_STATUSES } from "../../../modules/omnichannel-inbox/domain/inbox-constants";
 
 const ssr = Astro.locals.ssrContext!;
@@ -93,59 +81,30 @@ const ASSIGN_GUARD = {
   action: "assign"
 } as const;
 
-type DetailData =
-  | { enabled: false }
-  | { enabled: true; found: false }
-  | {
-      enabled: true;
-      found: true;
-      conversation: ConversationView & { activity: ActivityView[] };
-      tags: TagView[];
-      me: string;
-      canUpdate: boolean;
-      canAssign: boolean;
-    };
-
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
   authorize: READ_GUARD,
-  load: async ({ tx, auth, can }): Promise<DetailData> => {
-    if (!isOmnichannelInboxEnabled()) return { enabled: false };
-
-    if (conversationId === null) return { enabled: true, found: false };
-
-    const context = {
-      tx,
-      tenantId: ssr.tenantId,
-      tokenHash: ssr.tokenHash,
-      auth,
-      now: new Date(),
-      request: Astro.request,
-      clientAddress: Astro.clientAddress
-    };
-    // The route's own visibility rule: a conversation the caller may not see is
-    // the same answer as an unknown id or another tenant's id.
-    const conversation = await getConversation(
-      tx,
-      ssr.tenantId,
+  load: ({ tx, auth, can }) =>
+    // The visibility -> lookup chain is the module's loader (see
+    // `screen-loaders.ts`): the behavioural integration test runs it as a
+    // confined viewer.
+    loadInboxDetail({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
       conversationId,
-      await visibilityFor(context, READ_GUARD),
-      context.now
-    );
-
-    if (!conversation) return { enabled: true, found: false };
-
-    return {
-      enabled: true,
-      found: true,
-      conversation,
-      tags: await listTags(tx, ssr.tenantId),
-      me: auth.context.tenantUserId,
-      canUpdate: await can({ ...UPDATE_GUARD }),
-      canAssign: await can({ ...ASSIGN_GUARD })
-    };
-  },
+      readGuard: READ_GUARD,
+      updateGuard: UPDATE_GUARD,
+      assignGuard: ASSIGN_GUARD,
+      can
+    }),
   onError: (error) => {
     logAdminPageError(
       "admin/omnichannel-inbox/[id].astro: failed to load a conversation",
