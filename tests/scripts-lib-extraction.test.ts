@@ -29,6 +29,7 @@ import {
 import {
   MIGRATIONS_DIR,
   MIGRATIONS_DIR_NAME,
+  compareMigrationNames,
   listMigrationNames,
   loadMigrations
 } from "../scripts/lib/migrations";
@@ -108,7 +109,7 @@ describe("the shared migration loader", () => {
     // Sorting is not cosmetic: `deriveTableRlsStates` folds files in filename
     // order and only the LAST statement about a table is true, so an unsorted
     // loader would report an end-state that never existed.
-    expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
+    expect([...names].sort(compareMigrationNames)).toEqual(names);
   });
 });
 
