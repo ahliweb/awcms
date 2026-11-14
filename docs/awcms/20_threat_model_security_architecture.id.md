@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](20_threat_model_security_architecture.md)
 
-<!-- i18n-source-hash: sha256:82e7dd3705b491d3da9cc7366d27ac9693ba183d454a86ab45dda93cabc1d4dd -->
+<!-- i18n-source-hash: sha256:75560f16af282ecbcc825a339f935beaaead2a31f4408e2776116cd9f444b2ee -->
 
 # Bagian 20 — Threat Model dan Arsitektur Keamanan
 
@@ -153,7 +153,7 @@ Struktur matrix di bawah mengikuti pola audit kepatuhan base awcms-mini (memetak
 | A06 | Vulnerable/Outdated Components     | 🎯     | Bun-only, dependency minimal; Dependabot + CodeQL aktif sejak awal.                                                                                                                                                                                                                                                                                             |
 | A07 | Identification & Auth Failures     | 🎯     | Lockout **per-principal** — satu penghitung per manusia, lintas seluruh tenant ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md), menutup #430) — + rate limit sumber+tenant sejak awal (bukan ditambal setelah insiden seperti di base); anti-enumeration pada login/forgot-password; sesi TTL + revoke eksplisit saat logout.                         |
 | A08 | Software & Data Integrity Failures | 🎯     | Checksum objek sync/upload; audit append-only; migration checksum di runner; CodeQL.                                                                                                                                                                                                                                                                            |
-| A09 | Logging & Monitoring Failures      | 🎯     | Audit high-risk + decision log + correlation ID; redaction wajib (termasuk data payroll/finansial) sebelum log/audit.                                                                                                                                                                                                                                           |
+| A09 | Logging & Monitoring Failures      | 🎯     | Audit high-risk + decision log (append-only ditegakkan di tingkat privilege hanya untuk audit trail; tabel log/event lain dilacak terpisah) + correlation ID; redaction wajib (termasuk data payroll/finansial) sebelum log/audit.                                                                                                                              |
 | A10 | SSRF                               | 🎯     | URL provider eksternal (payment gateway/marketplace/Coretax/logistik) selalu dari konfigurasi tenant/env tervalidasi; circuit breaker per-provider; kasus tenant-configured URL (mis. OIDC issuer, endpoint webhook custom) diperlakukan sebagai accepted-risk terdokumentasi eksplisit, bukan diam-diam dianggap aman — mengikuti pola keputusan #603 di base. |
 
 ### OWASP ASVS (L1/L2 relevan)
@@ -171,18 +171,18 @@ Struktur matrix di bawah mengikuti pola audit kepatuhan base awcms-mini (memetak
 
 ### ISO/IEC 27001:2022 Annex A (relevan-kode)
 
-| Kontrol                           | Status | Rencana mitigasi                                                                                                                                                   |
-| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A.5.15 Access control             | 🎯     | ABAC default-deny + RLS FORCE + SoD finansial.                                                                                                                     |
-| A.5.17 Authentication information | 🎯     | Password hash argon2id; token sesi hash-only.                                                                                                                      |
-| A.8.2 Privileged access rights    | 🎯     | Role DB terpisah (app/worker/setup/migration), least-privilege, tak satupun superuser.                                                                             |
-| A.8.5 Secure authentication       | 🎯     | Lockout + rate limit + hashing modern + CSRF checkOrigin.                                                                                                          |
-| A.8.12 Data leakage prevention    | 🎯     | Masking/redaction identifier sensitif & data payroll.                                                                                                              |
-| A.8.15 Logging                    | 🎯     | Audit trail append-only + decision log + correlation ID; retensi eksplisit + purge terjadwal.                                                                      |
-| A.8.16 Monitoring                 | ⚠      | Log terstruktur direncanakan; agregasi/alerting terpusat (SIEM) tanggung jawab lapisan operasional/deployment turunan.                                             |
-| A.8.24 Cryptography               | 🎯     | Argon2id (password), SHA-256 (token, checksum, hash CSP), HMAC (sync & webhook).                                                                                   |
-| A.8.28 Secure coding              | 🎯     | Guardrail coding standard (belum ditulis, doc 10) akan menegakkan tagged-template query, response helper standar, ABAC/RLS/audit/idempotency per endpoint; CodeQL. |
-| A.8.31 Separation of environments | 🎯     | `APP_ENV` menggerbang perilaku sensitif; role DB app vs migrasi terpisah.                                                                                          |
+| Kontrol                           | Status | Rencana mitigasi                                                                                                                                                                           |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A.5.15 Access control             | 🎯     | ABAC default-deny + RLS FORCE + SoD finansial.                                                                                                                                             |
+| A.5.17 Authentication information | 🎯     | Password hash argon2id; token sesi hash-only.                                                                                                                                              |
+| A.8.2 Privileged access rights    | 🎯     | Role DB terpisah (app/worker/setup/migration), least-privilege, tak satupun superuser.                                                                                                     |
+| A.8.5 Secure authentication       | 🎯     | Lockout + rate limit + hashing modern + CSRF checkOrigin.                                                                                                                                  |
+| A.8.12 Data leakage prevention    | 🎯     | Masking/redaction identifier sensitif & data payroll.                                                                                                                                      |
+| A.8.15 Logging                    | 🎯     | Audit trail append-only (role runtime hanya SELECT + INSERT, `sql/408`; DELETE retensi hanya sebagai `awcms_worker`) + decision log + correlation ID; retensi eksplisit + purge terjadwal. |
+| A.8.16 Monitoring                 | ⚠      | Log terstruktur direncanakan; agregasi/alerting terpusat (SIEM) tanggung jawab lapisan operasional/deployment turunan.                                                                     |
+| A.8.24 Cryptography               | 🎯     | Argon2id (password), SHA-256 (token, checksum, hash CSP), HMAC (sync & webhook).                                                                                                           |
+| A.8.28 Secure coding              | 🎯     | Guardrail coding standard (belum ditulis, doc 10) akan menegakkan tagged-template query, response helper standar, ABAC/RLS/audit/idempotency per endpoint; CodeQL.                         |
+| A.8.31 Separation of environments | 🎯     | `APP_ENV` menggerbang perilaku sensitif; role DB app vs migrasi terpisah.                                                                                                                  |
 
 Matrix di atas **akan diaudit ulang secara faktual** (dengan bukti path file/fungsi konkret, sama seperti dokumen sumber) setiap kali sekelompok modul selesai dibangun — bukan diklaim terpenuhi di muka.
 

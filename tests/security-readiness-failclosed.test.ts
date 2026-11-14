@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
   checkRuntimeRoleGrants,
+  checkWorkerJobsReachableWithoutWorkerUrl,
   defaultRuntimeRoleGrantsPolicy
 } from "../scripts/security-readiness";
 
@@ -160,7 +161,7 @@ describeOrSkip(
       expect(overGranted.status).toBe("fail");
       expect(overGranted.evidence).toContain(PROBE_TABLE);
       expect(overGranted.evidence).toContain(
-        "retired read-only table still has"
+        "narrowed table holds privileges beyond its declaration"
       );
       expect(overGranted.evidence).toContain("INSERT, UPDATE, DELETE");
 
@@ -195,6 +196,135 @@ describeOrSkip(
       });
 
       expect(exact.status).toBe("pass");
+    });
+
+    test("state (d): the audit trail is pinned append-only, and re-granting UPDATE/DELETE/TRUNCATE/TRIGGER/REFERENCES or a column-level UPDATE turns the gate RED (Issue #1341)", async () => {
+      // `sql/408`. The declaration alone proves nothing: it must fail when the
+      // grant it describes is undone. Each verb is returned in turn on the REAL
+      // table and revoked again in `finally`, so a failing assertion cannot
+      // leave `awcms_audit_events` writable for the rest of the process.
+      if (!(await awcmsAppExists())) return;
+
+      // State (c) leaves its narrowed probe behind; as a tenant-scoped table
+      // missing UPDATE it would fail the baseline for a reason unrelated to the
+      // audit table, so remove it first.
+      await sql.unsafe(`DROP TABLE IF EXISTS ${PROBE_TABLE}`);
+
+      // The pin is the exact set, not "at least SELECT".
+      expect(
+        defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges
+          .awcms_audit_events
+      ).toEqual(["SELECT", "INSERT"]);
+
+      const baseline = await checkRuntimeRoleGrants();
+      expect(baseline.status).toBe("pass");
+      expect(baseline.evidence).toContain("awcms_audit_events");
+
+      try {
+        for (const verb of ["UPDATE", "DELETE"] as const) {
+          await sql.unsafe(`GRANT ${verb} ON awcms_audit_events TO awcms_app`);
+
+          const widened = await checkRuntimeRoleGrants();
+          expect(widened.status).toBe("fail");
+          expect(widened.evidence).toContain("awcms_audit_events");
+          expect(widened.evidence).toContain(verb);
+
+          await sql.unsafe(
+            `REVOKE ${verb} ON awcms_audit_events FROM awcms_app`
+          );
+        }
+
+        // Privileges the four verbs cannot see (audit M1). `has_table_privilege`
+        // answers false for a COLUMN grant, and TRUNCATE ignores RLS, so each is
+        // widened on the real table and must turn the gate red on its own.
+        for (const grant of [
+          ["TRUNCATE", "TRUNCATE"],
+          ["TRIGGER", "TRIGGER"],
+          ["REFERENCES", "REFERENCES"],
+          ["UPDATE (message)", "column-level UPDATE"],
+          ["REFERENCES (message)", "column-level REFERENCES"]
+        ] as const) {
+          await sql.unsafe(
+            `GRANT ${grant[0]} ON awcms_audit_events TO awcms_app`
+          );
+
+          const widened = await checkRuntimeRoleGrants();
+          expect(widened.status).toBe("fail");
+          expect(widened.evidence).toContain("awcms_audit_events");
+          expect(widened.evidence).toContain(grant[1]);
+
+          await sql.unsafe(
+            `REVOKE ${grant[0]} ON awcms_audit_events FROM awcms_app`
+          );
+          expect((await checkRuntimeRoleGrants()).status).toBe("pass");
+        }
+
+        // Over-narrowing is also a failure: INSERT is what every audit write needs.
+        await sql.unsafe(`REVOKE INSERT ON awcms_audit_events FROM awcms_app`);
+        const narrowed = await checkRuntimeRoleGrants();
+        expect(narrowed.status).toBe("fail");
+        expect(narrowed.evidence).toContain("awcms_audit_events");
+      } finally {
+        await sql.unsafe(`REVOKE ALL ON awcms_audit_events FROM awcms_app`);
+        await sql.unsafe(
+          `GRANT SELECT, INSERT ON awcms_audit_events TO awcms_app`
+        );
+      }
+
+      expect((await checkRuntimeRoleGrants()).status).toBe("pass");
+    });
+    test("state (e): web connection = awcms_app with no WORKER_DATABASE_URL is RED when a worker-only verb is missing (audit M2)", async () => {
+      // `getWorkerDatabaseClient` falls back to DATABASE_URL, so the retention
+      // purge would run as `awcms_app` and hit `permission denied` on the
+      // DELETE `sql/408` took away. This connects as the REAL login.
+      if (!(await awcmsAppExists())) return;
+
+      await sql.unsafe(`DROP TABLE IF EXISTS ${PROBE_TABLE}`);
+
+      const before = (await sql`
+        SELECT rolcanlogin FROM pg_roles WHERE rolname = 'awcms_app'
+      `) as { rolcanlogin: boolean }[];
+      const url = new URL(DATABASE_URL as string);
+      url.username = "awcms_app";
+      // Generated per run: a literal here reads as a committed credential to
+      // the secret scanner, and the role is reset to NOLOGIN afterwards.
+      const loginSecret = crypto.randomUUID().replaceAll("-", "");
+      url.password = loginSecret;
+      await sql.unsafe(`ALTER ROLE awcms_app LOGIN PASSWORD '${loginSecret}'`);
+      const app = new Bun.SQL(url.toString(), { max: 1 });
+
+      try {
+        const red = await checkWorkerJobsReachableWithoutWorkerUrl({
+          client: app,
+          workerDatabaseUrl: ""
+        });
+        expect(red.status).toBe("fail");
+        expect(red.evidence).toContain("awcms_audit_events (DELETE)");
+
+        // A configured worker URL is the remedy.
+        const configured = await checkWorkerJobsReachableWithoutWorkerUrl({
+          client: app,
+          workerDatabaseUrl: "postgres://worker@localhost/db"
+        });
+        expect(configured.status).toBe("pass");
+
+        // Control: with the verb back, the same configuration is green, so the
+        // failure above is the missing DELETE and nothing else.
+        await sql.unsafe(`GRANT DELETE ON awcms_audit_events TO awcms_app`);
+        const withVerb = await checkWorkerJobsReachableWithoutWorkerUrl({
+          client: app,
+          workerDatabaseUrl: ""
+        });
+        expect(withVerb.evidence).not.toContain("awcms_audit_events");
+      } finally {
+        await sql.unsafe(`REVOKE DELETE ON awcms_audit_events FROM awcms_app`);
+        await app.close();
+        await sql.unsafe(
+          before[0]?.rolcanlogin
+            ? `ALTER ROLE awcms_app LOGIN`
+            : `ALTER ROLE awcms_app NOLOGIN PASSWORD NULL`
+        );
+      }
     });
   }
 );

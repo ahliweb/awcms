@@ -28,10 +28,12 @@ import {
   getAdminSql,
   getAppRoleSql,
   getRuntimeSql,
+  getWorkerRoleSql,
   integrationEnabled,
   resetDatabase,
   setupIntegrationDatabase,
-  teardownIntegrationDatabase
+  teardownIntegrationDatabase,
+  workerRoleActivated
 } from "./harness";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
@@ -338,8 +340,12 @@ suite("data_lifecycle module (integration)", () => {
       createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
     );
 
+    // The audit purge is a DELETE of `awcms_audit_events`, which the runtime
+    // role no longer holds (`sql/408`, Issue #1341); production runs it as
+    // `awcms_worker`, so the test does too.
+    const purger = workerRoleActivated ? getWorkerRoleSql() : runtime;
     const held = await purgeExpiredAuditEvents(
-      runtime,
+      purger,
       TENANT_A,
       legalHoldGuardPortAdapter,
       { now: NOW }
@@ -370,7 +376,7 @@ suite("data_lifecycle module (integration)", () => {
     });
 
     const unblocked = await purgeExpiredAuditEvents(
-      runtime,
+      purger,
       TENANT_A,
       legalHoldGuardPortAdapter,
       { now: NOW }
