@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:a6723d2127f0577435455681817b30a9d1dc86153e5d71289b5bdef387c399a6 -->
+<!-- i18n-source-hash: sha256:3220f1b5d86d08f0eadc0f21b3180409e05ad526af282f95a782d99972759261 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -432,6 +432,40 @@ booking; peran pemilik fungsi (`awcms_booking_expiry`, NOLOGIN, tanpa anggota)
 hanya memegang privilege per-kolom yang dibutuhkan literal-literalnya, dan
 `EXECUTE` hanya milik worker. Reklamasi malas (§5.1) bukan job ini: ia berjalan
 di dalam transaksi klaim sebagai peran aplikasi.
+
+**Confirm dan cancel yang bisa dipanggil worker** (Issue #1278, `sql/388`).
+Konsumen hilir yang mengonfirmasi atau membatalkan dari `domain-events:dispatch`
+berjalan sebagai `awcms_worker`, yang tak punya privilege pada tabel ini, jadi
+`BookingPort.confirm` dan `.cancel` mengambil jalur kedua bila `current_user`
+koneksi adalah `awcms_worker`: `awcms_booking_worker_transition(tenant,
+reservation, action, actor, correlation, reason)`, pola sweep lagi. Owner khusus
+NOLOGIN tanpa anggota (`awcms_booking_transition`) hanya memegang `UPDATE` per
+kolom pada kolom rilis dan status serta `INSERT` pada tabel riwayat;
+`search_path` dipin; argumen tenant harus sama dengan `app.current_tenant_id`
+sesi (jika tidak 42501); `EXECUTE` hanya milik worker. `action` hanya `confirm`
+atau `cancel` (22023): check-in, completion, dan no-show tetap tanpa jalur
+worker. Aturannya ditulis dua kali (fungsi ini dan `transitionReservation`),
+maka `booking-worker-transition.integration.test.ts` menjalankan KEDUANYA untuk
+tiap status dan membandingkan baris yang ditinggalkan. Baris audit
+(`recordTransitionAudit`) dan domain event ditulis sekali, oleh fungsi yang
+sama, dari fakta yang dikembalikan fungsi. **Keputusan tercatat:** jalur worker
+tidak menyimpan rekaman Idempotency-Key (worker tak punya `INSERT` pada
+`awcms_idempotency_keys`, dan fungsi yang menulisnya akan menulis hash dan
+respons yang dipasok pemanggil). Ia tetap MENGHORMATI rekaman tersimpan (replay
+atau konflik), dan keamanan retry-nya adalah lapisan 2, cek status: meminta
+status yang sudah dicapai tidak menulis apa pun. Akibat yang harus diketahui
+konsumen worker (audit PR #1302, L-3): (a) kunci yang dipakai ulang untuk
+reservasi BERBEDA tidak terdeteksi di jalur ini (jalur aplikasi menjawab
+`IDEMPOTENCY_CONFLICT`; hanya rekaman buatan jalur aplikasi yang dihormati);
+(b) `confirm` yang dikirim ulang setelah reservasi dibatalkan dijawab
+`INVALID_STATE`, sedangkan jalur aplikasi memutar ulang `ok` tersimpan.
+Konsumen yang melakukan efek samping (refund, pesan) pada penolakan tidak boleh
+menggantungkannya pada jawaban saja: arahkan lewat
+`awcms_domain_event_consumer_effects` untuk exactly-once. Aktor bersifat
+self-asserted (user tenant yang SAMA lewat FK komposit, status apa pun), seperti
+jalur aplikasi lewat port; worker yang menyebut user keliru salah mengatribusikan
+baris audit, bukan memperoleh hak. Keduanya keputusan terbuka; fungsi definer
+yang menyimpan hash di sisi server adalah tindak lanjut opsional.
 
 **Constraint eksklusi** (pada `resource_allocations`; constraint staf identik
 pada `staff_ref`):
