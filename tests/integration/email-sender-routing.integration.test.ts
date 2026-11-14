@@ -66,7 +66,10 @@ import {
   resolveEnqueueEmailSender,
   setEmailSenderPolicy
 } from "../../src/modules/email/application/email-sender-directory";
-import { verifyEmailSendersForTenant } from "../../src/modules/email/application/email-sender-verify";
+import {
+  emailSendersVerifyRunFailed,
+  verifyEmailSendersForTenant
+} from "../../src/modules/email/application/email-sender-verify";
 import type {
   EmailMessage,
   EmailProvider
@@ -1007,6 +1010,37 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
         businessScope: SCOPE_X
       })
     ).toMatchObject({ ok: false, reason: "SENDER_UNAVAILABLE" });
+  });
+
+  test("audit L-1 of PR #1301: an unavailable secret store is counted and fails the run, not just skipped", async () => {
+    let probed = 0;
+    const summary = await verifyEmailSendersForTenant(
+      getRuntimeSql(),
+      TENANT_A,
+      {
+        directory: emailAccountDirectoryAdapter,
+        credentials: {
+          ...credentials,
+          resolveEmailAccountCredential: async () => ({
+            ok: false,
+            reason: "SECRET_STORE_UNAVAILABLE"
+          })
+        } as typeof credentials,
+        recordHealth: (tx, tenantId, accountId, input) =>
+          recordAccountHealth(tx, tenantId, accountId, input),
+        buildProbe: () => {
+          probed += 1;
+          throw new Error("no probe may run without a token");
+        },
+        env: { ...ENV, ...CA_ENV } as NodeJS.ProcessEnv
+      }
+    );
+
+    expect(probed).toBe(0);
+    expect(summary.accounts).toBeGreaterThan(0);
+    expect(summary.accountsProbed).toBe(0);
+    expect(summary.secretStoreFailures).toBe(summary.accounts);
+    expect(emailSendersVerifyRunFailed(summary, 0)).toBe(true);
   });
 
   describe("audit M2: a parent lends only to a child whose scope it contains", () => {

@@ -241,17 +241,13 @@ export const emailModule = defineModule({
     },
     {
       command: "bun run email:senders:verify",
-      schedule: {
-        mode: "manual",
-        because:
-          "It WRITES channel-account health and status, which only awcms_app may (a worker that could would be able to mark an unverified sender verified), and Issue #1132 keeps the app connection out of every crontab job. An operator schedules it from the deployment's full environment, like channel-accounts:secrets:rekey; until a decision admits an app-role scheduled exception (as ADR-0147 did for one job), it is not on the generated crontab."
-      },
+      schedule: { mode: "cron", expression: "0 * * * *", backlog: "bounded" },
       purpose:
         "Read each tenant Mailketing account's credit balance and verified senders (read-only GET /credits and GET /senders) and record them as account health; a sender becomes usable only when the provider reports it verified (Issue #1160).",
       recommendedSchedule:
-        "Hourly, by the operator's own scheduler. Must run more often than EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES (default 360), or every tenant sender is held as stale (fail closed).",
+        "Hourly via cron/systemd timer. Must run more often than EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES (default 360), or every tenant sender is held as stale (fail closed).",
       environmentNotes:
-        'No-op when EMAIL_SENDER_ROUTING_ENABLED is not "true". Requires network egress to the provider and the channel secrets key ring.',
+        'No-op when EMAIL_SENDER_ROUTING_ENABLED is not "true". Runs as awcms_app through DATABASE_URL, a recorded scheduled exception (ADR-0162, listed in APP_ROLE_SCHEDULED_EXCEPTIONS): it writes channel-account health, which only the request role may. Provider calls are read-only GETs; one tenant failing does not stop the others. Requires network egress to the provider and the channel secrets key ring.',
       safeInOfflineLan: false
     },
     {

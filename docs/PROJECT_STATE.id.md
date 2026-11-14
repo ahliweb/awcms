@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6a262050f12b008326dace6eaf6708d1123c616e9661cdb84b0e6127a080b509 -->
+<!-- i18n-source-hash: sha256:91505147dcfce1b16594915267f7315b3b0a2f0b62abcbe089edf2ebced698fd -->
 
 # AWCMS — Project State & Continuation
 
@@ -137,7 +137,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                                                                                          | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Modul base                         | **40** (lihat daftar di ARCHITECTURE.md)                                                                                                                                                                    | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **276** (`sql/001`–`386`)                                                                                                                                                                                   | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0162** (`0000` = template; status ADR tertinggi: **Proposed**)                                                                                                                                   | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0163** (`0000` = template; status ADR tertinggi: **Proposed**)                                                                                                                                   | `ls docs/adr/`                                                                          |
 | Layar admin                        | **82** berkas `.astro` di `src/pages/admin/`; **6 dari 40** modul tanpa `navigation:` (`crm-follow-up`, `crm-leads`, `omnichannel-inbox`, `social-publishing`, `telegram-engagement`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **104** (61.199 baris) — soal typecheck lihat §6                                                                                                                                                            | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **69** di rantai `bun run check`                                                                                                                                                                            | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -409,6 +409,19 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **`email:senders:verify` DIJADWALKAN — 14 November 2026 (#1160, ADR-0162).**
+  Melaksanakan keputusan pemilik 11 November 2026 (entri ADR-0159 di bawah).
+  Job kini ada di crontab ter-generate per jam (`0 * * * *`), sebagai job
+  `awcms_app` terjadwal ketiga setelah ADR-0147 dan ADR-0160; ia tetap no-op
+  kecuali `EMAIL_SENDER_ROUTING_ENABLED` bernilai `true`. Mekanisme pengecualian
+  bukan lagi set tulisan tangan di dalam dua tes: `APP_ROLE_SCHEDULED_EXCEPTIONS`
+  di `scripts/jobs-env-allowlist.ts` menamai tiap pengecualian beserta ADR dan
+  alasannya, dan `tests/jobs-app-role-exceptions.test.ts` menahannya pada
+  crontab dua arah (job berperan app yang tak terdaftar, atau entri basi,
+  memerah). Terbuka: ADR-0162 O1, memindahkan job ke role database khusus.
+  Tindakan operator: pasang ulang `ops/awcms-jobs.crontab` ter-generate; tanpa
+  migrasi.
 
 - **ADR-0160 DITERIMA — 11 November 2026 (#1164, PR #1275).** Pemilik
   (ahliweb) menerima ADR-0160: modul `omnichannel_inbox` (proyeksi tanpa isi

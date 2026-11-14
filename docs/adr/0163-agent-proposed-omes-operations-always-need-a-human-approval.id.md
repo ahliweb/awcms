@@ -1,8 +1,8 @@
-🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0162-agent-proposed-omes-operations-always-need-a-human-approval.md)
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0163-agent-proposed-omes-operations-always-need-a-human-approval.md)
 
-<!-- i18n-source-hash: sha256:1763ecc25a2939dd8bb431b1dd3852cbdced7dbe3447e3ccb4b2b113f164d60c -->
+<!-- i18n-source-hash: sha256:e698a85c3ee91e540f35ffc785c98aa91bb02a1edebd7bbfda66b6350b89b7ed -->
 
-# ADR-0162 — Operasi OMES yang diusulkan agen selalu memerlukan persetujuan manusia
+# ADR-0163 — Operasi OMES yang diusulkan agen selalu memerlukan persetujuan manusia
 
 - **Status:** Diusulkan
 - **Tinjauan:** memerlukan keputusan pemilik atas pertanyaan di §Pertanyaan terbuka. Hanya dokumen; tidak ada yang dibangun sebelum ADR ini Diterima dan dipecah menjadi issue.
