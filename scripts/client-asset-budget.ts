@@ -1177,7 +1177,9 @@ export const READER_BUDGET_BYTES = 24_000;
  * `showFlash`, in the SHARED `admin-form-client.ts` (so they are imported, not
  * copied, by every screen that adopts them), plus the three call sites and the
  * sentence attributes on `/admin/invitations` and the one link on
- * `/admin/users`. Nothing is duplicated per screen.
+ * `/admin/users`. Nothing is duplicated per screen. The audit follow-up scoped
+ * the stored flash to its page and a 10 s window (a JSON record plus a parse
+ * guard, +383 B), so the budget is 366,600 B (measured 366,405 B).
  *
  * **Raised for Issue #1238** (the over-cap refusal said "2 MiB over the 2 MiB
  * limit"): +320 B (362,560 -> 362,880), of which 316 B measured locally (362,533
@@ -1198,7 +1200,7 @@ export const READER_BUDGET_BYTES = 24_000;
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
  */
-export const APP_BUDGET_BYTES = 366_100;
+export const APP_BUDGET_BYTES = 366_600;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
