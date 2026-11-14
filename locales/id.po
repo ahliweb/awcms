@@ -10110,3 +10110,244 @@ msgstr "Anda tidak memegang cakupan bisnis pengirim ini."
 
 msgid "You may view senders but not change the default."
 msgstr "Anda dapat melihat pengirim tetapi tidak dapat mengubah default."
+
+#. Pre-session auth pages (/login, /forgot-password, /reset-password) — ADR-0095
+msgctxt "login"
+msgid "Sign in"
+msgstr "Masuk"
+
+msgctxt "login"
+msgid "Welcome back. Sign in to your workspace."
+msgstr "Selamat datang kembali. Masuk ke ruang kerja Anda."
+
+msgctxt "login"
+msgid "Signing in to"
+msgstr "Masuk ke"
+
+msgctxt "login"
+msgid "Password"
+msgstr "Kata sandi"
+
+msgctxt "login"
+msgid "Forgot your password?"
+msgstr "Lupa kata sandi?"
+
+msgctxt "login"
+msgid "Sign in failed. Check your details and try again."
+msgstr "Gagal masuk. Periksa data Anda lalu coba lagi."
+
+msgctxt "login"
+msgid "One admin surface for every tenant, module and audit trail."
+msgstr "Satu permukaan admin untuk setiap tenant, modul, dan jejak audit."
+
+msgctxt "login"
+msgid "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+msgstr "AWCMS menyatukan konten, identitas, dan operasional dalam satu ruang kerja yang terkelola, dengan setiap keputusan tercatat."
+
+msgctxt "login"
+msgid "Multi-tenant"
+msgstr "Multi-tenant"
+
+msgctxt "login"
+msgid "ABAC access control"
+msgstr "Kendali akses ABAC"
+
+msgctxt "login"
+msgid "Full audit trail"
+msgstr "Jejak audit lengkap"
+
+msgctxt "login"
+msgid "Organization"
+msgstr "Organisasi"
+
+msgctxt "login"
+msgid "Choose your organization"
+msgstr "Pilih organisasi Anda"
+
+msgctxt "login"
+msgid "Tenant ID"
+msgstr "ID tenant"
+
+msgctxt "login"
+msgid "Login identifier"
+msgstr "Nama pengguna atau email"
+
+msgctxt "login"
+msgid "Show"
+msgstr "Tampilkan"
+
+msgctxt "login"
+msgid "Hide"
+msgstr "Sembunyikan"
+
+msgctxt "login"
+msgid "Show password"
+msgstr "Tampilkan kata sandi"
+
+msgctxt "login"
+msgid "Hide password"
+msgstr "Sembunyikan kata sandi"
+
+msgctxt "login"
+msgid "Account recovery"
+msgstr "Pemulihan akun"
+
+msgctxt "login"
+msgid "Secured workspace access"
+msgstr "Akses ruang kerja yang aman"
+
+msgctxt "login"
+msgid "Please wait…"
+msgstr "Mohon tunggu…"
+
+msgctxt "login"
+msgid "Network error. Please try again."
+msgstr "Kesalahan jaringan. Silakan coba lagi."
+
+msgctxt "recovery"
+msgid "Reset your password"
+msgstr "Atur ulang kata sandi Anda"
+
+msgctxt "recovery"
+msgid "Locked out? A reset link is one step away."
+msgstr "Tidak bisa masuk? Tautan atur ulang tinggal satu langkah."
+
+msgctxt "recovery"
+msgid "We send a single-use link to the address on file. Nothing about your account changes until you use it."
+msgstr "Kami mengirim tautan sekali pakai ke alamat yang tercatat. Tidak ada yang berubah pada akun Anda sampai Anda memakainya."
+
+msgctxt "recovery"
+msgid "Enter the identifier you sign in with. If it belongs to an account, we'll email a link to set a new password."
+msgstr "Masukkan nama masuk Anda. Jika milik sebuah akun, kami akan mengirim email berisi tautan untuk mengatur kata sandi baru."
+
+msgctxt "recovery"
+msgid "Recovering for"
+msgstr "Memulihkan akun untuk"
+
+msgctxt "recovery"
+msgid "Send reset link"
+msgstr "Kirim tautan atur ulang"
+
+msgctxt "recovery"
+msgid "Back to sign in"
+msgstr "Kembali ke halaman masuk"
+
+msgctxt "recovery"
+msgid "Too many requests. Please wait a few minutes and try again."
+msgstr "Terlalu banyak permintaan. Tunggu beberapa menit lalu coba lagi."
+
+msgctxt "recovery"
+msgid "Could not send the reset link. Check your details and try again."
+msgstr "Tautan atur ulang tidak dapat dikirim. Periksa isian Anda lalu coba lagi."
+
+msgctxt "recovery"
+msgid "If an account exists for that identifier, password reset instructions have been sent."
+msgstr "Jika ada akun untuk nama masuk itu, petunjuk atur ulang kata sandi telah dikirim."
+
+msgctxt "recovery"
+msgid "Set a new password"
+msgstr "Atur kata sandi baru"
+
+msgctxt "recovery"
+msgid "Choose a new password."
+msgstr "Pilih kata sandi baru."
+
+msgctxt "recovery"
+msgid "The link that brought you here works once and expires; setting a password signs out every other session."
+msgstr "Tautan yang membawa Anda ke sini hanya berlaku sekali dan kedaluwarsa; mengatur kata sandi akan mengeluarkan semua sesi lain."
+
+msgctxt "recovery"
+msgid "Choose a new password for your account. Signing you out everywhere is part of the reset."
+msgstr "Pilih kata sandi baru untuk akun Anda. Keluar dari semua perangkat adalah bagian dari pengaturan ulang."
+
+msgctxt "recovery"
+msgid "This password reset link is invalid or has expired."
+msgstr "Tautan atur ulang kata sandi ini tidak valid atau sudah kedaluwarsa."
+
+msgctxt "recovery"
+msgid "Request a new link"
+msgstr "Minta tautan baru"
+
+msgctxt "recovery"
+msgid "New password"
+msgstr "Kata sandi baru"
+
+msgctxt "recovery"
+msgid "At least {count} characters."
+msgstr "Minimal {count} karakter."
+
+msgctxt "recovery"
+msgid "Confirm new password"
+msgstr "Ulangi kata sandi baru"
+
+msgctxt "recovery"
+msgid "Set new password"
+msgstr "Atur kata sandi baru"
+
+msgctxt "recovery"
+msgid "Sign in with your new password"
+msgstr "Masuk dengan kata sandi baru"
+
+msgctxt "recovery"
+msgid "Password must be at least {count} characters."
+msgstr "Kata sandi minimal {count} karakter."
+
+msgctxt "recovery"
+msgid "The two passwords do not match."
+msgstr "Kedua kata sandi tidak sama."
+
+msgctxt "recovery"
+msgid "Too many attempts. Please wait a few minutes and try again."
+msgstr "Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi."
+
+msgctxt "recovery"
+msgid "Your password has been changed and every session was signed out."
+msgstr "Kata sandi Anda telah diganti dan semua sesi telah dikeluarkan."
+
+msgctxt "recovery"
+msgid "Organization"
+msgstr "Organisasi"
+
+msgctxt "recovery"
+msgid "Choose your organization"
+msgstr "Pilih organisasi Anda"
+
+msgctxt "recovery"
+msgid "Tenant ID"
+msgstr "ID tenant"
+
+msgctxt "recovery"
+msgid "Login identifier"
+msgstr "Nama pengguna atau email"
+
+msgctxt "recovery"
+msgid "Show"
+msgstr "Tampilkan"
+
+msgctxt "recovery"
+msgid "Hide"
+msgstr "Sembunyikan"
+
+msgctxt "recovery"
+msgid "Show password"
+msgstr "Tampilkan kata sandi"
+
+msgctxt "recovery"
+msgid "Hide password"
+msgstr "Sembunyikan kata sandi"
+
+msgctxt "recovery"
+msgid "Account recovery"
+msgstr "Pemulihan akun"
+
+msgctxt "recovery"
+msgid "Secured workspace access"
+msgstr "Akses ruang kerja yang aman"
+
+msgctxt "recovery"
+msgid "Please wait…"
+msgstr "Mohon tunggu…"
+
+msgctxt "recovery"
+msgid "Network error. Please try again."
+msgstr "Kesalahan jaringan. Silakan coba lagi."

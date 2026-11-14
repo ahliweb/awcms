@@ -85,6 +85,14 @@ exhaustiveness.
 - Resolution happens in `src/middleware.ts` via `resolveRequestLocale` (`src/lib/i18n/request-locale.ts`), is stored on `Astro.locals`, and every page/layout reads it from there. **Do not re-resolve the locale in a layout or page.**
 - Precedence: cookie `awcms_locale` (`LOCALE_COOKIE_NAME`) → the tenant's `default_locale` carried on `SsrContext` (no new DB round-trip) → `DEFAULT_LOCALE` (`en`).
 
+### The one sanctioned exception: the pre-session auth pages
+
+`/login`, `/forgot-password` and `/reset-password` call `resolveAuthPageLocale` (`src/lib/i18n/auth-page-locale.ts`) instead of reading `Astro.locals.locale`, because the middleware cannot know a tenant before a session exists. Chain: cookie → tenant default → `Accept-Language` → `en`. They use the `login` / `recovery` `msgctxt`, render `<html lang={locale}>`, and hand client-script messages over as server-translated `data-msg-*` attributes.
+
+- **The tenant step must not be an oracle.** Pass `tenantId` ONLY for the single-tenant deployment (whose name the page already prints) or a tenant taken from an AES-GCM-**sealed** reset link. Never a selected/typed tenant id and never a plain `?tenantId=`: the page language would then answer "does this tenant exist, and what does it speak". `tests/auth-page-locale.test.ts` pins both call sites.
+- Every failure the client can show is ONE fixed sentence per locale (no text from a response body), so the language never reveals whether an account exists.
+- These pages are not public cache surfaces (private, `no-store`), which is why cookie-varied language is safe here; the test also pins that they never join `PUBLIC_CACHE_SURFACES`. `/register` and `/accept-invitation` are still literal English.
+
 ## Language switcher
 
 `src/components/LanguageSwitcher.astro` sets the cookie and does a **full reload**, not an instant swap like the theme toggle — the locale changes SSR-rendered text, and only a cookie reaches the server before render. Show `LOCALE_FLAG` + `LOCALE_ENDONYM` (the language's own name), not the raw code.

@@ -5,7 +5,7 @@ description: Tambah/ubah string UI atau konten multi-bahasa AWCMS yang benar. Gu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:b5ec46db31e4aa1f713686f8158b0c5143ee20bf992c81bb04257514011baecd -->
+<!-- i18n-source-hash: sha256:4be535102835cf2777553467174c35c8f1ba7fec2228b4e5f657381825195ce2 -->
 
 # AWCMS — i18n (String UI & Konten Multi-bahasa)
 
@@ -86,6 +86,14 @@ literal pada `<td`/`<th` admin mana pun, dan ekshaustivitas helper bersama.
 
 - Resolusi terjadi di `src/middleware.ts` lewat `resolveRequestLocale` (`src/lib/i18n/request-locale.ts`), disimpan di `Astro.locals`, dan setiap halaman/layout membacanya dari sana. **Jangan meresolusi ulang locale di layout atau halaman.**
 - Presedensi: cookie `awcms_locale` (`LOCALE_COOKIE_NAME`) → `default_locale` tenant yang dibawa `SsrContext` (tanpa round-trip DB baru) → `DEFAULT_LOCALE` (`en`).
+
+### Satu pengecualian yang diizinkan: halaman auth pra-sesi
+
+`/login`, `/forgot-password`, dan `/reset-password` memanggil `resolveAuthPageLocale` (`src/lib/i18n/auth-page-locale.ts`) alih-alih membaca `Astro.locals.locale`, karena middleware tidak dapat mengetahui tenant sebelum ada sesi. Rantai: cookie → default tenant → `Accept-Language` → `en`. Halaman memakai `msgctxt` `login` / `recovery`, merender `<html lang={locale}>`, dan menyerahkan pesan skrip klien sebagai atribut `data-msg-*` yang diterjemahkan server.
+
+- **Langkah tenant tidak boleh menjadi oracle.** Berikan `tenantId` HANYA untuk deployment satu tenant (yang namanya sudah tercetak di halaman) atau tenant dari tautan reset yang **tersegel** AES-GCM. Jangan pernah tenant yang dipilih/diketik dan jangan `?tenantId=` polos: bahasa halaman akan menjawab "apakah tenant ini ada, dan berbahasa apa". `tests/auth-page-locale.test.ts` mengunci kedua titik pemanggilan.
+- Setiap galat yang dapat ditampilkan klien adalah SATU kalimat tetap per locale (tanpa teks dari body respons), sehingga bahasa tidak pernah membocorkan apakah akun ada.
+- Halaman ini bukan permukaan cache publik (private, `no-store`), sebab itu bahasa yang bervariasi menurut cookie aman di sini; tes juga mengunci bahwa halaman ini tidak pernah masuk `PUBLIC_CACHE_SURFACES`. `/register` dan `/accept-invitation` masih berbahasa Inggris literal.
 
 ## Language switcher
 
