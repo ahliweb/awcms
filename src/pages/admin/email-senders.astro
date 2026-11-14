@@ -640,9 +640,13 @@ function laneText(lane: EmailSenderLane | null): string {
                 ? t(
                     "Mail with no sender named goes out from the deployment sender."
                   )
-                : t(
-                    "A tenant sender is the default; the deployment sender is used only where a message asks for it."
-                  )}
+                : data.deploymentIsDefault === false
+                  ? t(
+                      "A tenant sender is the default; the deployment sender is used only where a message asks for it."
+                    )
+                  : t(
+                      "The default sender is not shown to you; the deployment sender is used where a message asks for it."
+                    )}
             </p>
             <p class="page-description">{laneText(data.deploymentLane)}</p>
           </section>

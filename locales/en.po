@@ -9904,6 +9904,9 @@ msgstr ""
 msgid "A tenant sender is the default; the deployment sender is used only where a message asks for it."
 msgstr ""
 
+msgid "The default sender is not shown to you; the deployment sender is used where a message asks for it."
+msgstr ""
+
 msgid "A test send needs an allow-listed address and a confirmation step that do not exist yet."
 msgstr ""
 

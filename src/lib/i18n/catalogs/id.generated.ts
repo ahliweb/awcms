@@ -2640,6 +2640,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "The dataset console could not be loaded right now. Please try again later.": ["Konsol dataset tidak dapat dimuat saat ini. Silakan coba lagi nanti."],
   "The date range is not valid. Use real dates, with From not after To.": ["Rentang tanggal tidak valid. Gunakan tanggal nyata, dengan Dari tidak setelah Sampai."],
   "The dates are not valid: check-out must be after check-in.": ["Tanggal tidak valid: check-out harus setelah check-in."],
+  "The default sender is not shown to you; the deployment sender is used where a message asks for it.": ["Pengirim default tidak ditampilkan kepada Anda; pengirim deployment dipakai bila sebuah pesan memintanya."],
   "The default sender was changed. It applies to messages queued from now on.": ["Pengirim default diubah. Berlaku untuk pesan yang diantrekan mulai sekarang."],
   "The definition is not valid JSON.": ["Definisi bukan JSON yang valid."],
   "The deployment sender is not Mailketing, so there is no API version to migrate.": ["Pengirim deployment bukan Mailketing, sehingga tidak ada versi API yang perlu dimigrasikan."],

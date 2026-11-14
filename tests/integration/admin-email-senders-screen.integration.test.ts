@@ -51,6 +51,7 @@ import { resolveChannelSecretsRing } from "../../src/modules/channel-accounts/do
 import { PROVIDER_MATRIX_VERSION } from "../../src/modules/channel-accounts/domain/provider-matrix";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
 import {
+  loadMailketingHealth,
   resolveEmailSendersScreen,
   type EmailSendersScreen
 } from "../../src/modules/email/application/email-senders-screen";
@@ -942,6 +943,97 @@ suite("email senders screen decisions (Issue #1162)", () => {
     const nobody = await seedUser(env.tenantId, "nobody", []);
 
     expect(await screenFor(nobody.sessionHash, env.tenantId)).toBe("denied");
+  });
+
+  test("a parent login the caller cannot see does not show its state through the sender's reason (audit L-1)", async () => {
+    if (!handlerReady) return;
+
+    const esp = await seedEsp(env.tenantId);
+    const sender = await seedSender(env.tenantId, esp, { name: "Open sender" });
+    const colleague = await seedUser(env.tenantId, "colleague", [READ]);
+    const assignee = await seedUser(env.tenantId, "assignee", [READ]);
+
+    await assign(
+      env.tenantId,
+      esp,
+      assignee.tenantUserId,
+      env.ownerTenantUserId
+    );
+
+    const reasons: Array<string | null> = [];
+
+    for (const status of [
+      "connected",
+      "revoked",
+      "disabled",
+      "degraded",
+      "pending"
+    ]) {
+      await admin()`
+        UPDATE awcms_channel_accounts SET status = ${status}
+        WHERE tenant_id = ${env.tenantId} AND id = ${esp}
+      `;
+
+      const seen = ready(await screenFor(colleague.sessionHash, env.tenantId));
+      const row = seen.senders.find((s) => s.id === sender)!;
+
+      expect(seen.accounts).toEqual([]);
+      reasons.push(row.unusableReason);
+    }
+
+    expect(reasons[0]).toBeNull();
+    // Every parent state other than connected reads as the SAME code.
+    expect(new Set(reasons.slice(1))).toEqual(new Set(["PARENT_UNAVAILABLE"]));
+  });
+
+  test("a tenant-wide default the caller cannot see is unknown, not 'the deployment sender' (audit L-2)", async () => {
+    if (!handlerReady) return;
+
+    const esp = await seedEsp(env.tenantId);
+    const hidden = await seedSender(env.tenantId, esp, { name: "Hidden" });
+    const colleague = await seedUser(env.tenantId, "colleague", [READ]);
+    const assignee = await seedUser(env.tenantId, "assignee", [READ]);
+
+    await assign(
+      env.tenantId,
+      hidden,
+      assignee.tenantUserId,
+      env.ownerTenantUserId
+    );
+    await admin()`
+      INSERT INTO awcms_email_sender_policies
+        (tenant_id, business_scope_type, business_scope_id,
+         default_sender_account_id, changed_by)
+      VALUES (${env.tenantId}, NULL, NULL, ${hidden}, ${env.ownerTenantUserId})
+    `;
+
+    const peer = ready(await screenFor(colleague.sessionHash, env.tenantId));
+    const holder = ready(await screenFor(assignee.sessionHash, env.tenantId));
+
+    expect(peer.confined).toBe(false);
+    expect(peer.senders).toEqual([]);
+    expect(peer.deploymentIsDefault).toBeNull();
+    expect(holder.deploymentIsDefault).toBe(false);
+  });
+
+  test("health is loaded only for the accounts asked about, however many rows the tenant holds (audit L-3)", async () => {
+    if (!handlerReady) return;
+
+    const visible = await seedEsp(env.tenantId);
+    const other = await seedEsp(env.tenantId);
+    const facts = await withTenantOrThrow(
+      getHandlerDatabaseClient(),
+      env.tenantId,
+      async (tx) => ({
+        one: await loadMailketingHealth(tx, env.tenantId, [visible]),
+        none: await loadMailketingHealth(tx, env.tenantId, []),
+        both: await loadMailketingHealth(tx, env.tenantId, [visible, other])
+      })
+    );
+
+    expect([...facts.one.keys()]).toEqual([visible]);
+    expect(facts.none.size).toBe(0);
+    expect(new Set(facts.both.keys())).toEqual(new Set([visible, other]));
   });
 
   test("more accounts than the screen loads are flagged as truncated, not silently dropped", async () => {

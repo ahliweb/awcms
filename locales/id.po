@@ -9861,6 +9861,9 @@ msgstr "Pengirim hanya dapat dipakai bila penyedia melaporkannya terverifikasi b
 msgid "A tenant sender is the default; the deployment sender is used only where a message asks for it."
 msgstr "Pengirim tenant adalah default; pengirim deployment hanya dipakai bila sebuah pesan memintanya."
 
+msgid "The default sender is not shown to you; the deployment sender is used where a message asks for it."
+msgstr "Pengirim default tidak ditampilkan kepada Anda; pengirim deployment dipakai bila sebuah pesan memintanya."
+
 msgid "A test send needs an allow-listed address and a confirmation step that do not exist yet."
 msgstr "Kirim uji memerlukan alamat dalam daftar izin dan langkah konfirmasi yang belum tersedia."
 

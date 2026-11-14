@@ -576,6 +576,14 @@ mengembalikannya); apakah operator perlu melihatnya utuh adalah keputusan
 produk. Layar memuat paling banyak 100 akun Mailketing dan menyatakan bila ada
 lebih banyak.
 
+Tindak lanjut visibilitas (audit #1303): pengirim yang login Mailketing-nya tidak
+terlihat oleh pemanggil membaca satu alasan generik (`PARENT_UNAVAILABLE`) apa
+pun status login itu; bila ada default tenant-wide yang menunjuk pengirim yang
+tidak terlihat pemanggil, "adalah default" pada lajur deployment menjadi tidak
+diketahui (`null`) dan halaman menyatakan default tidak ditampilkan, bukan
+mengklaim pengirim deployment; fakta kesehatan hanya dimuat untuk akun yang
+boleh dilihat pemanggil.
+
 ## Perilaku saat nonaktif / offline-LAN
 
 `EMAIL_ENABLED=false` tidak boleh menghentikan aplikasi atau jalur bisnis apa

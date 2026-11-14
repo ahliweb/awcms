@@ -189,14 +189,22 @@ type HealthDbRow = {
 
 /**
  * Every recorded health fact of the tenant's live Mailketing accounts in ONE
- * statement (no per-row query). Filtering to what the caller may see happens in
- * memory against the already-narrowed account list, so a fact of an account the
- * caller cannot see is fetched here but never used or returned.
+ * statement (no per-row query). The caller passes only the ids of accounts it may
+ * already see (the lister's narrowed list), so no fact of an account the caller
+ * cannot see is loaded.
  */
-async function loadMailketingHealth(
+export async function loadMailketingHealth(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  accountIds: string[]
 ): Promise<Map<string, EmailAccountHealthFacts>> {
+  const facts = new Map<string, EmailAccountHealthFacts>();
+
+  // Only the accounts the caller may see are asked about: a fact of an account
+  // the caller cannot see is never read, and the statement is bounded by the
+  // (already capped) visible list instead of an arbitrary LIMIT cut.
+  if (accountIds.length === 0) return facts;
+
   const rows = (await tx`
     SELECT h.account_id, h.state, h.reason_code, h.checked_at,
            h.quota_remaining::float8 AS quota_remaining
@@ -206,9 +214,9 @@ async function loadMailketingHealth(
     WHERE h.tenant_id = ${tenantId}
       AND a.provider = 'mailketing'
       AND a.deleted_at IS NULL
+      AND h.account_id = ANY(${tx.array(accountIds, "uuid")}::uuid[])
     LIMIT 1000
   `) as HealthDbRow[];
-  const facts = new Map<string, EmailAccountHealthFacts>();
 
   for (const row of rows) {
     facts.set(row.account_id, {
@@ -291,7 +299,11 @@ export async function resolveEmailSendersScreen(
     diagnostics,
     policies
   );
-  const health = await loadMailketingHealth(context.tx, context.tenantId);
+  const health = await loadMailketingHealth(
+    context.tx,
+    context.tenantId,
+    listed.accounts.map((account) => account.id)
+  );
   const lanes = new Map<string | null, EmailSenderDiagnostics>(
     visible.senders.map((entry) => [entry.senderAccountId, entry])
   );
@@ -393,6 +405,19 @@ export async function resolveEmailSendersScreen(
       unusableReason = verdict.usable ? null : verdict.reason;
     }
 
+    // A parent login the caller cannot see must not have its lifecycle (revoked,
+    // disabled, degraded, pending) readable through this sender's reason: one
+    // generic code, the same for every parent state.
+    if (
+      unusableReason !== null &&
+      account.parentAccountId !== null &&
+      parent === null &&
+      (unusableReason.startsWith("ACCOUNT_") ||
+        unusableReason === "CREDENTIAL_UNAVAILABLE")
+    ) {
+      unusableReason = "PARENT_UNAVAILABLE";
+    }
+
     const readyToSend = hold === null && unusableReason === null;
     let defaultWithheld: DefaultSenderWithheld | null = null;
 
@@ -452,6 +477,12 @@ export async function resolveEmailSendersScreen(
   const tenantWidePolicy = visible.policies.find(
     (policy) => policy.businessScope === null
   );
+  // A tenant-wide policy that exists but was filtered out (its default sender is
+  // one the caller cannot see) makes the answer UNKNOWN, not "the deployment
+  // sender is the default".
+  const tenantWideHidden =
+    tenantWidePolicy === undefined &&
+    policies.some((policy) => policy.businessScope === null);
 
   return {
     ...base,
@@ -463,11 +494,12 @@ export async function resolveEmailSendersScreen(
     canConfigurePolicy,
     confined: visible.confined,
     deploymentLane: visible.confined ? null : laneOf(lanes.get(null)),
-    deploymentIsDefault: visible.confined
-      ? null
-      : tenantWidePolicy === undefined
-        ? true
-        : tenantWidePolicy.defaultSenderAccountId === null
+    deploymentIsDefault:
+      visible.confined || tenantWideHidden
+        ? null
+        : tenantWidePolicy === undefined
+          ? true
+          : tenantWidePolicy.defaultSenderAccountId === null
   };
 }
 

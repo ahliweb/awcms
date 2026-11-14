@@ -542,6 +542,13 @@ Open decisions: the sender address is masked on this screen (the API never
 returns it); whether operators should see it whole is a product decision. The
 screen loads at most 100 Mailketing accounts and says when there are more.
 
+Visibility follow-up (audit of #1303): a sender whose Mailketing login the caller
+cannot see reads one generic reason (`PARENT_UNAVAILABLE`) whatever state the
+login is in; when a tenant-wide default exists but names a sender the caller
+cannot see, the deployment lane's "is default" is unknown (`null`) and the page
+says the default is not shown, instead of claiming the deployment sender; health
+facts are loaded only for the accounts the caller may see.
+
 ## Disabled / offline-LAN behavior
 
 `EMAIL_ENABLED=false` must never stop the app or any business path.
