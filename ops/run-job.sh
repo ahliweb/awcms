@@ -339,14 +339,31 @@ case "$JOB" in
 esac
 # END GENERATED: dedicated-role jobs
 
+# An app-role job whose code never opens the worker connection (audit L-5 of
+# PR #1301) holds the app login and, for the senders job, the secret key ring;
+# a third credential it never uses would only widen what a compromised job holds.
+# BEGIN GENERATED: app-role jobs that never open the worker connection (bun run jobs:env-allowlist:generate)
+# Source: appRoleTargetsWithoutWorkerClient() in scripts/jobs-env-allowlist.ts, derived
+# from each app-role exception's import closure. Do not edit between the markers; regenerate.
+case "$JOB" in
+  email:senders:verify | omnichannel-inbox:sla)
+    WITHHOLD_WORKER_DATABASE_URL=1
+    ;;
+  *)
+    WITHHOLD_WORKER_DATABASE_URL=0
+    ;;
+esac
+# END GENERATED: app-role jobs that never open the worker connection
+
 # `WORKER_DATABASE_URL` counts as configured only when it is not blank after
 # trimming, exactly as `readConfiguredUrl` in `src/lib/database/client.ts` reads
 # it: a blank value falls back to DATABASE_URL, so the credential stays.
 docker exec "$APP" printenv \
-  | WITHHOLD="$WITHHOLD_DATABASE_URL" DEDICATED="$WITHHOLD_ALL_DATABASE_URLS" awk -F= '
+  | WITHHOLD="$WITHHOLD_DATABASE_URL" DEDICATED="$WITHHOLD_ALL_DATABASE_URLS" NOWORKER="$WITHHOLD_WORKER_DATABASE_URL" awk -F= '
       NR==FNR { want[$0]=1; next }
       ($1 in want) {
         if (ENVIRON["DEDICATED"] == "1" && ($1 == "DATABASE_URL" || $1 == "WORKER_DATABASE_URL" || $1 == "SETUP_DATABASE_URL")) next
+        if (ENVIRON["NOWORKER"] == "1" && $1 == "WORKER_DATABASE_URL") next
         kept[++n] = $0
         if ($1 == "DATABASE_URL") db = n
         if ($1 == "WORKER_DATABASE_URL") {
@@ -366,6 +383,8 @@ docker exec "$APP" printenv \
 
 if [ "$WITHHOLD_ALL_DATABASE_URLS" = "1" ]; then
   log "DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL withheld from $JOB (it runs as its own database role)"
+elif [ "$WITHHOLD_WORKER_DATABASE_URL" = "1" ]; then
+  log "WORKER_DATABASE_URL withheld from $JOB (it runs as awcms_app and never opens the worker connection)"
 elif [ "$WITHHOLD_DATABASE_URL" = "1" ] && ! grep -q '^DATABASE_URL=' "$ENVFILE"; then
   log "DATABASE_URL withheld from $JOB (WORKER_DATABASE_URL is configured; this job never opens the app connection)"
 fi

@@ -124,6 +124,21 @@ function vendorNow(minutesAgo = 60, daysAgo = 0): string {
     .replace("T", " ");
 }
 
+/**
+ * Where a flood of `count` reports, one minute apart, starts: `vendorNow(start
+ * + i)` for every `i < count` falls on ONE UTC calendar day (Issue #1322).
+ * Recipient-keyed events are deduplicated per UTC day, so a fixed 60–84
+ * minute window straddled midnight for runs between 01:00 and 01:24 UTC and
+ * legitimately split into two rows. Decided once per test, with a five-minute
+ * margin on both ends so the clock cannot cross midnight while it posts.
+ */
+function sameUtcDayStart(count: number): number {
+  const day = (minutesAgo: number) =>
+    new Date(Date.now() - minutesAgo * 60_000).toISOString().slice(0, 10);
+
+  return day(60 - 5) === day(60 + count + 5) ? 60 : 60 + count + 120;
+}
+
 async function bootstrap(code: string): Promise<World> {
   const loginIdentifier = `${code}-owner@example.com`;
   const setup = await invoke<{ data: { tenantId: string } }>(setupInitialize, {
@@ -1248,13 +1263,16 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
 
     await sentMessage(world, "mk-flood");
 
+    // One window for all three floods below, never straddling UTC midnight.
+    const start = sameUtcDayStart(25);
+
     // 25 unsubscribes, each with a different time, same person, same day.
     await post(
       token,
       Array.from({ length: 25 }, (_, i) => ({
         type: "unsubscribe",
         email: RECIPIENT,
-        date: vendorNow(60 + i)
+        date: vendorNow(start + i)
       }))
     );
     // The same person on other days: still ONE pending unsubscribe.
@@ -1269,7 +1287,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
         type: "bounce",
         email: RECIPIENT,
         reason: "452 4.2.2 mailbox full",
-        date: vendorNow(60 + i),
+        date: vendorNow(start + i),
         message_id: "mk-flood"
       }))
     );
@@ -1281,7 +1299,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
         type: "emailclick",
         email: RECIPIENT,
         link_clicked: `https://shop.example/p/${i}`,
-        date: vendorNow(60 + i)
+        date: vendorNow(start + i)
       }))
     );
     // Unreadable dates are stale, not "now".

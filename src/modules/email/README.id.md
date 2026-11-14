@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:5d1b702174900f4b8d52706026d9235d6eca775d5bb899500ab552e516766358 -->
+<!-- i18n-source-hash: sha256:55c41554c9868f860d2146eed5d4dd22d9835f784def9b3bc84b6cadc62fa433 -->
 
 # Email
 
@@ -283,11 +283,13 @@ token di JSON pengaturan atau di browser.
   dikenali, atau entri yang saling bertentangan untuk satu alamat, `unknown`;
   401 mengeluarkan akun dari layanan; probe yang tak mempelajari apa pun tidak
   menulis apa pun (faktanya menjadi basi); hasil dibuang bila token akun diganti
-  selama probe berjalan. **Job ini manual: TIDAK ada di crontab yang
-  di-generate** (ia menulis health channel-account, yang hanya boleh dilakukan
-  `awcms_app`, dan Issue #1132 menjauhkan koneksi app dari job crontab).
-  Operator wajib menjadwalkannya lebih sering dari
-  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360). Tanpa jadwal itu setiap pengirim
+  selama probe berjalan. **Job ini dijadwalkan per jam di crontab yang
+  di-generate** (`0 * * * *`, ADR-0162), sebagai pengecualian `awcms_app`
+  bernama (ia menulis health channel-account, yang hanya boleh `awcms_app`;
+  pengecualiannya terdaftar di `APP_ROLE_SCHEDULED_EXCEPTIONS` dan diuji dua
+  arah). Ia tetap no-op kecuali `EMAIL_SENDER_ROUTING_ENABLED` bernilai `true`.
+  Ia harus terus berjalan lebih sering dari
+  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360): tanpa jalannya, setiap pengirim
   tenant menjadi basi setelah 360 menit, emailnya ditahan lalu GAGAL
   (`SENDER_HOLD_BUDGET_EXCEEDED`) satu jam setelah enqueue; tidak ada yang
   dialihkan ke pengirim deployment. Repo ini **tidak
@@ -343,8 +345,7 @@ token di JSON pengaturan atau di browser.
 Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 bentuk respons live `/senders` dan `/credits` belum diverifikasi (parser hanya
 menerima `verified: true` / `status: "verified"` eksplisit dan saldo numerik);
-`email:senders:verify` manual (lihat di atas) sampai pengecualian job terjadwal
-ber-role app diputuskan; 401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
+`email:senders:verify` berjalan sebagai `awcms_app` di crontab, pilihan yang dibuat di PR implementasi dan sementara sampai pemilik mengonfirmasi (ADR-0162 O1: konfirmasi, atau pindahkan ke role database khusus; sementara itu runner menahan `WORKER_DATABASE_URL` darinya dan job keluar non-nol bila secret store tak tersedia atau tak ada yang bisa diperiksa); 401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
 health; breaker per akun menghentikan jalur dan putaran verify berikutnya
 mencatatnya); notifikasi workflow tidak memakai kebijakan default (hanya
 pengumuman).

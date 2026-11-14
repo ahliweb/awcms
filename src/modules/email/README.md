@@ -267,12 +267,14 @@ JSON or in the browser.
   an unrecognised response, or contradictory entries for one address, is
   `unknown`; a 401 takes the account out of service; a probe that learnt
   nothing writes nothing (the fact goes stale); results are discarded when the
-  account's token was replaced while the probe ran. **The job is manual: it is
-  NOT on the generated crontab** (it writes channel-account health, which only
-  `awcms_app` may, and Issue #1132 keeps the app connection out of crontab
-  jobs). An operator must schedule it, more often than
-  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360). Without that schedule every
-  tenant sender goes stale after 360 minutes, its mail is held and then FAILS
+  account's token was replaced while the probe ran. **The job is scheduled hourly on
+  the generated crontab** (`0 * * * *`, ADR-0162), as a named `awcms_app`
+  exception (it writes channel-account health, which only `awcms_app` may; the
+  exception is listed in `APP_ROLE_SCHEDULED_EXCEPTIONS` and tested in both
+  directions). It stays a no-op unless `EMAIL_SENDER_ROUTING_ENABLED` is
+  `true`. It must keep running more often than
+  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360): without a run every tenant
+  sender goes stale after 360 minutes, its mail is held and then FAILS
   (`SENDER_HOLD_BUDGET_EXCEEDED`) one hour after enqueue; nothing falls back to
   the deployment sender.
   This repo **does not create or verify domains at Mailketing**: the
@@ -325,8 +327,7 @@ JSON or in the browser.
 Open decisions (fail-closed choices taken, need maintainer confirmation):
 the live `/senders` and `/credits` response shapes are unverified (the parsers
 only accept explicit `verified: true` / `status: "verified"` and a numeric
-balance); `email:senders:verify` is manual (see above) until an app-role
-scheduled exception is decided; a 401/403 at send time does not degrade the
+balance); `email:senders:verify` runs as `awcms_app` on the crontab, a choice made in the implementing PR and provisional until the owner confirms it (ADR-0162 O1: confirm, or move it to a dedicated database role; meanwhile the runner withholds `WORKER_DATABASE_URL` from it and the job exits non-zero when the secret store is unavailable or nothing could be probed); a 401/403 at send time does not degrade the
 account immediately (the worker cannot write health; the per-account breaker
 stops the lane and the next verify pass records it); workflow notifications do
 not consult the default policy (only announcements do).
