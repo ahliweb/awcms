@@ -7,6 +7,7 @@ import { resolveSsrContext } from "./lib/auth/ssr-session";
 import { getDatabaseClient } from "./lib/database/client";
 import { annotateEdgeCache } from "./lib/edge-cache/runtime";
 import type { Locale } from "./lib/i18n/locales";
+import { applyAuthPageCacheHeaders } from "./lib/i18n/auth-page-locale";
 import { coerceLocale } from "./lib/i18n/negotiate";
 import {
   carryLocaleThroughRedirect,
@@ -51,9 +52,11 @@ function resolveCorrelationId(request: Request): string {
 
 function applyResponseHeaders(
   response: Response,
-  correlationId: string
+  correlationId: string,
+  pathname: string
 ): Response {
   response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  applyAuthPageCacheHeaders(pathname, response);
 
   for (const [name, value] of buildSecurityHeaders({
     isProduction: process.env.APP_ENV === "production",
@@ -249,7 +252,8 @@ const handleRequest: MiddlewareHandler = async (context, next) => {
         originLatencyMs: performance.now() - startedAtMs,
         nowMs: Date.now()
       }),
-      context.locals.correlationId
+      context.locals.correlationId,
+      context.url.pathname
     );
 
   if (

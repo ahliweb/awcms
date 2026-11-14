@@ -17,7 +17,11 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveAuthPageLocale } from "../src/lib/i18n/auth-page-locale";
+import {
+  applyAuthPageCacheHeaders,
+  resolveAuthPageLocale,
+  tenantForResetLocale
+} from "../src/lib/i18n/auth-page-locale";
 import { getTranslatorFor } from "../src/lib/i18n";
 import { matchPublicCacheSurface } from "../src/lib/edge-cache/surface-registry";
 
@@ -153,21 +157,85 @@ describe("the auth pages — no tenant or account oracle through the language", 
     }
   });
 
-  test("reset-password names a tenant to the resolver ONLY when it came out of a sealed link", () => {
-    const source = read(PAGES.reset);
+  test("reset-password names a tenant to the resolver ONLY when it came out of a sealed link (behaviour)", () => {
+    // The sealed, opened link: the one case that may name a tenant.
+    expect(
+      tenantForResetLocale({
+        sealed: "blob",
+        hasToken: true,
+        openedTenantId: TENANT
+      })
+    ).toBe(TENANT);
 
-    // A plain ?tenantId= is attacker-chosen: it must never reach the resolver.
-    expect(source).toContain("tenantId: sealed && hasToken && tenantId");
-    expect(source).not.toMatch(/tenantId:\s*tenantId\s*[,}\n]/);
+    // A plain ?tenantId= (no seal) is attacker-chosen: never.
+    expect(
+      tenantForResetLocale({
+        sealed: "",
+        hasToken: true,
+        openedTenantId: TENANT
+      })
+    ).toBeNull();
+    // A broken seal (opens to nothing) next to a plain parameter: never.
+    expect(
+      tenantForResetLocale({
+        sealed: "broken",
+        hasToken: false,
+        openedTenantId: TENANT
+      })
+    ).toBeNull();
+    expect(
+      tenantForResetLocale({
+        sealed: "blob",
+        hasToken: true,
+        openedTenantId: ""
+      })
+    ).toBeNull();
   });
 
-  test("no page displays text taken from a response body", () => {
+  test("the reset page feeds the resolver only through tenantForResetLocale, with the tenant gated on the seal", () => {
+    const source = read(PAGES.reset);
+
+    expect(source).toContain("tenantId: tenantForResetLocale({");
+    expect(source).toContain('openedTenantId: sealed ? tenantId : ""');
+    // Exactly one `tenantId:` key is handed to the resolver.
+    const start = source.indexOf("resolveAuthPageLocale({");
+    const call = source.slice(start, source.indexOf("});", start));
+
+    expect(call.match(/\btenantId:/g)?.length).toBe(1);
+  });
+
+  test("a client script reads nothing from a response body but `success`, and names no error text from it", () => {
     for (const path of Object.values(PAGES)) {
       const source = read(path);
+      const scriptStart = source.indexOf("<script");
 
-      expect(source).not.toMatch(/payload\??\.(data\??\.)?(message|error)/);
-      expect(source).not.toMatch(/response\.(text|statusText)/);
+      // Any access of `payload`, bracket or dot, other than `.success`.
+      const script = source.slice(scriptStart);
+      const accesses = [
+        ...script.matchAll(/payload\??\.?\??\[?\s*([A-Za-z"'_]*)/g)
+      ]
+        .map((m) => m[1])
+        .filter((name) => name && name !== "success");
+
+      expect(accesses).toEqual([]);
+      expect(script).not.toMatch(/payload\??\.?\[/);
     }
+  });
+
+  test("the login failure message does not depend on the response status", () => {
+    const source = read(PAGES.login);
+    const script = source.slice(source.indexOf("<script"));
+
+    // Every showError() argument is a server-rendered, fixed data-msg sentence.
+    const calls = [
+      ...script.matchAll(/(?<!function )showError\(([^)]*)\)/g)
+    ].map((m) => m[1]);
+
+    expect(calls.length).toBeGreaterThan(0);
+    for (const arg of calls) {
+      expect(arg).toMatch(/^messages\.msg[A-Za-z]+ \?\? ""$/);
+    }
+    expect(script).not.toMatch(/response\.status/);
   });
 
   test("the pages localise through server-rendered data-msg attributes, not client strings keyed by status", () => {
@@ -212,7 +280,7 @@ describe("the auth pages — no tenant or account oracle through the language", 
 });
 
 describe("the auth pages stay out of every shared cache", () => {
-  test("none is a public cache surface, so a cookie-varied language can never be cached", () => {
+  test("none is a public cache surface", () => {
     for (const pathname of [
       "/login",
       "/forgot-password",
@@ -222,5 +290,42 @@ describe("the auth pages stay out of every shared cache", () => {
     ]) {
       expect(matchPublicCacheSurface(pathname)).toBeNull();
     }
+  });
+
+  test("the response carries private, no-store and Vary regardless of EDGE_CACHE_MODE", () => {
+    for (const pathname of [
+      "/login",
+      "/forgot-password",
+      "/reset-password",
+      "/id/login",
+      "/en/reset-password"
+    ]) {
+      const response = applyAuthPageCacheHeaders(
+        pathname,
+        new Response("ok", { headers: { Vary: "Origin" } })
+      );
+      const vary = (response.headers.get("Vary") ?? "").toLowerCase();
+
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(vary).toContain("origin");
+      expect(vary).toContain("cookie");
+      expect(vary).toContain("accept-language");
+    }
+  });
+
+  test("any other path is left untouched", () => {
+    for (const pathname of ["/", "/blog/x", "/admin/login", "/login/x"]) {
+      const response = applyAuthPageCacheHeaders(pathname, new Response("ok"));
+
+      expect(response.headers.get("Cache-Control")).toBeNull();
+      expect(response.headers.get("Vary")).toBeNull();
+    }
+  });
+
+  test("the middleware applies it on its single exit point", () => {
+    const source = read("src/middleware.ts");
+
+    expect(source).toContain("applyAuthPageCacheHeaders(pathname, response)");
+    expect(source).toContain("context.url.pathname\n    )");
   });
 });

@@ -91,7 +91,7 @@ exhaustiveness.
 
 - **The tenant step must not be an oracle.** Pass `tenantId` ONLY for the single-tenant deployment (whose name the page already prints) or a tenant taken from an AES-GCM-**sealed** reset link. Never a selected/typed tenant id and never a plain `?tenantId=`: the page language would then answer "does this tenant exist, and what does it speak". `tests/auth-page-locale.test.ts` pins both call sites.
 - Every failure the client can show is ONE fixed sentence per locale (no text from a response body), so the language never reveals whether an account exists.
-- These pages are not public cache surfaces (private, `no-store`), which is why cookie-varied language is safe here; the test also pins that they never join `PUBLIC_CACHE_SURFACES`. `/register` and `/accept-invitation` are still literal English.
+- These pages are not public cache surfaces, and the middleware stamps `Cache-Control: private, no-store` plus `Vary: Cookie, Accept-Language` on them UNCONDITIONALLY (`applyAuthPageCacheHeaders`, independent of `EDGE_CACHE_MODE`, which is off by default and then adds no cache header at all); that is why cookie-varied language is safe here. The tests pin the headers and that these paths never join `PUBLIC_CACHE_SURFACES`. `/register` and `/accept-invitation` are still literal English.
 
 ## Language switcher
 

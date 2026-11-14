@@ -5,7 +5,7 @@ description: Tambah/ubah string UI atau konten multi-bahasa AWCMS yang benar. Gu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:4be535102835cf2777553467174c35c8f1ba7fec2228b4e5f657381825195ce2 -->
+<!-- i18n-source-hash: sha256:d0bc1a0e49a91177bae59285b8dcb05cae93539b3842d3261858f84a1004d37b -->
 
 # AWCMS — i18n (String UI & Konten Multi-bahasa)
 
@@ -93,7 +93,7 @@ literal pada `<td`/`<th` admin mana pun, dan ekshaustivitas helper bersama.
 
 - **Langkah tenant tidak boleh menjadi oracle.** Berikan `tenantId` HANYA untuk deployment satu tenant (yang namanya sudah tercetak di halaman) atau tenant dari tautan reset yang **tersegel** AES-GCM. Jangan pernah tenant yang dipilih/diketik dan jangan `?tenantId=` polos: bahasa halaman akan menjawab "apakah tenant ini ada, dan berbahasa apa". `tests/auth-page-locale.test.ts` mengunci kedua titik pemanggilan.
 - Setiap galat yang dapat ditampilkan klien adalah SATU kalimat tetap per locale (tanpa teks dari body respons), sehingga bahasa tidak pernah membocorkan apakah akun ada.
-- Halaman ini bukan permukaan cache publik (private, `no-store`), sebab itu bahasa yang bervariasi menurut cookie aman di sini; tes juga mengunci bahwa halaman ini tidak pernah masuk `PUBLIC_CACHE_SURFACES`. `/register` dan `/accept-invitation` masih berbahasa Inggris literal.
+- Halaman ini bukan permukaan cache publik, dan middleware memberi `Cache-Control: private, no-store` serta `Vary: Cookie, Accept-Language` TANPA SYARAT (`applyAuthPageCacheHeaders`, tidak bergantung `EDGE_CACHE_MODE`, yang mati secara bawaan dan saat itu tidak menambah header cache sama sekali); sebab itu bahasa yang bervariasi menurut cookie aman di sini. Tes mengunci header itu dan bahwa jalur ini tidak pernah masuk `PUBLIC_CACHE_SURFACES`. `/register` dan `/accept-invitation` masih berbahasa Inggris literal.
 
 ## Language switcher
 
