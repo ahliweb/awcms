@@ -1,11 +1,11 @@
 /**
- * Pure query normalization + bounds for `site_search` (ADR-0040 §5, ported from
- * awcms-micro Issue #270). The normalized string is passed to PostgreSQL's
- * `websearch_to_tsquery('simple', $1)` as a BOUND PARAMETER (never interpolated),
- * so `websearch_to_tsquery`'s own parser — not string concatenation — turns it
- * into a `tsquery`. Normalization here is about ABUSE BOUNDS and determinism
- * (length caps, whitespace collapse, control-char stripping, cache-key
- * stability), not about SQL safety (parameter binding already provides that).
+ * Pure query normalization + bounds for `site_search` (ADR-0040 §5, as amended
+ * for prefix matching). The text built by `buildPrefixTsQuery` is passed to
+ * PostgreSQL's `to_tsquery('simple', $1)` as a BOUND PARAMETER (never
+ * interpolated), so it is never concatenated into SQL text. Normalization here
+ * is about ABUSE BOUNDS and determinism (length caps, whitespace collapse,
+ * control-char stripping, cache-key stability); tokenization is what keeps
+ * tsquery OPERATORS out of the bound text (see `tokenizeSearchQuery`).
  */
 
 /** Absolute floor / ceiling a tenant's `min_query_length` config is clamped to. */
@@ -71,6 +71,67 @@ export function clampMinQueryLength(minLength: number): number {
     Math.max(Math.trunc(minLength), MIN_QUERY_LENGTH_FLOOR),
     MIN_QUERY_LENGTH_CEILING
   );
+}
+
+/**
+ * Shortest LAST-token length that is prefix-matched. Below this a one- or
+ * two-character prefix is closer to noise than to a stem (and matches a large
+ * slice of the vocabulary). It is deliberately independent of the tenant's
+ * `minQueryLength`, which may be configured down to 1 for unrelated reasons.
+ */
+export const PREFIX_MIN_TOKEN_LENGTH = 3;
+
+/**
+ * `[\p{L}\p{N}]+`: a run of Unicode letters/digits. This is BOTH the tokenizer
+ * AND the whole of the sanitization. Every character `to_tsquery`'s text-form
+ * parser reads as an operator (`& | ! : * ( ) < - >`), plus quotes, backslashes
+ * and whitespace, is punctuation or a symbol, never a letter or digit, so a
+ * token cannot carry one structurally; there is no "strip the operators" step to
+ * forget.
+ */
+const WORD_TOKEN_PATTERN = /[\p{L}\p{N}]+/gu;
+
+/**
+ * Splits a query into word tokens. The input is NFC-normalized first so a
+ * decomposed letter (base + combining mark, which `\p{L}` alone would split in
+ * two) stays one token and matches the indexed form.
+ */
+export function tokenizeSearchQuery(query: string): string[] {
+  return query.normalize("NFC").match(WORD_TOKEN_PATTERN) ?? [];
+}
+
+/**
+ * Builds the `to_tsquery('simple', ...)` TEXT: every token is an exact lexeme,
+ * ANDed; the LAST token becomes a prefix match (`lexeme:*`) once it has at
+ * least `PREFIX_MIN_TOKEN_LENGTH` characters, so "Kapu" finds "Kapuas" and
+ * "Kalimantan Kapu" requires the exact word AND a word starting "Kapu".
+ *
+ * Returns `null` when the query has no word tokens (pure punctuation, symbols,
+ * emoji survive length-only normalization). Callers MUST treat that as "no
+ * possible match" and skip the database, rather than binding an empty string:
+ * an empty tsquery is a valid value and a match predicate must not depend on
+ * how it evaluates.
+ *
+ * Syntax that `websearch_to_tsquery` used to interpret (quoted phrases, `or`,
+ * `-exclusion`) is NOT supported: such characters are dropped as punctuation
+ * and the remaining words are ANDed. The ` & ` separators and the `:*` suffix
+ * are written by this function alone, never copied from input; the result is
+ * bound as one parameter, so SQL injection is excluded by binding regardless.
+ */
+export function buildPrefixTsQuery(query: string): string | null {
+  const tokens = tokenizeSearchQuery(query);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  const lastIndex = tokens.length - 1;
+  return tokens
+    .map((token, index) =>
+      index === lastIndex && token.length >= PREFIX_MIN_TOKEN_LENGTH
+        ? `${token}:*`
+        : token
+    )
+    .join(" & ");
 }
 
 /**

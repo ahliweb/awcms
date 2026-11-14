@@ -84,7 +84,7 @@ describe("the facet query is the result query minus its own filter", () => {
     expect(body).toContain("d.tenant_id = ${tenantId}");
     expect(body).toContain("d.locale = ${options.locale}");
     expect(body).toContain(
-      "d.search_vector @@ websearch_to_tsquery('simple', ${options.query})"
+      "d.search_vector @@ to_tsquery('simple', ${tsQueryText})"
     );
     expect(body).toContain("d.resource_type = ANY(");
   });
@@ -124,7 +124,7 @@ describe("the facet query is the result query minus its own filter", () => {
     expect(body).toContain("d.tenant_id = ${tenantId}");
     expect(body).toContain("d.locale = ${options.locale}");
     expect(body).toContain(
-      "d.search_vector @@ websearch_to_tsquery('simple', ${options.query})"
+      "d.search_vector @@ to_tsquery('simple', ${tsQueryText})"
     );
   });
 

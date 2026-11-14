@@ -27,7 +27,7 @@ Content modules declare **pure-data** `SearchSourceDescriptor`s in their own `mo
 
 - **Publication-state** enforced at the source→index boundary — the index holds public content only and is NEVER an authorization source.
 - **Tenant + locale isolation** — RLS FORCE + explicit `tenant_id`/`locale` predicates; `buildSearchCacheKey` refuses a key without tenant/locale/query-hash (cache-poisoning / cross-tenant defense).
-- **SQL injection** — the query is always a bound parameter into `websearch_to_tsquery('simple', $1)`; descriptor identifiers are validated before interpolation.
+- **SQL injection** — the query is tokenized to Unicode letters/digits and always bound as ONE parameter into `to_tsquery('simple', $1)` (no operator character can survive tokenization, so neither SQL nor tsquery-operator injection is possible); descriptor identifiers are validated before interpolation.
 - **XSS** — snippets are built by `ts_headline` with non-HTML sentinels, escaped in `renderSafeSnippet`, then the sentinels become `<mark>` — content-originated markup can never survive.
 - **Anonymous abuse** — per-IP rate limits, query-length bounds, result caps.
 - **Public URL safety** — `:tenantCode`/`:slug`/`:id` are `encodeURIComponent`'d at index time, so no source value can inject a path segment or a scheme.

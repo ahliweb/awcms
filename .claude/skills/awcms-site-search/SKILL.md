@@ -105,8 +105,9 @@ fail the whole run, and it is recorded in the diagnostics table.
   escapes the WHOLE string FIRST and only then replaces the sentinel with `<mark>`.
   Reversing that order = XSS. Never pass `<b>`/`<mark>` as
   `StartSel` to `ts_headline`.
-- **SQL injection**: the query text is always a bound param to
-  `websearch_to_tsquery('simple', $1)`.
+- **SQL injection**: the query is tokenized (`[\p{L}\p{N}]+`) by `buildPrefixTsQuery` and always
+  bound as ONE param to `to_tsquery('simple', $1)`; the last token of 3+ chars
+  is a prefix (`tok:*`).
 - **Cache**: `buildSearchCacheKey` REJECTS a key without tenant+locale+query-hash.
 - **RLS**: all five tables `ENABLE` **and** `FORCE`. `ENABLE` alone is inert for
   the table owner.

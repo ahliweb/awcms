@@ -31,8 +31,10 @@ paths:
         PUBLIC, unauthenticated cross-content search. The tenant is resolved from
         the request host (never a session or a tenant header); results come from
         the tenant's search index, which contains PUBLISHED PUBLIC content only
-        and is never an authorization source. The query text is always a bound
-        parameter into `websearch_to_tsquery`, snippets are HTML-escaped before
+        and is never an authorization source. The query is tokenized into Unicode
+        letters/digits (operator characters are dropped, all words are ANDed, and
+        the last word of 3 or more characters also matches as a prefix) and bound
+        as one parameter into `to_tsquery`, snippets are HTML-escaped before
         the `<mark>` highlights are inserted, and the endpoint is per-IP
         rate-limited, query-length-bounded (max 128 characters) and result-capped.
         An unresolved host, a disabled module, a search-disabled tenant, and a

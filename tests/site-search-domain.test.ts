@@ -24,7 +24,10 @@ import {
   hashSearchQuery,
   MAX_QUERY_LENGTH,
   normalizeSearchLocale,
+  buildPrefixTsQuery,
   normalizeSearchQuery,
+  PREFIX_MIN_TOKEN_LENGTH,
+  tokenizeSearchQuery,
   stripControlCharacters
 } from "../src/modules/site-search/domain/search-query";
 import {
@@ -306,5 +309,62 @@ describe("renderSearchPageBody — accessible, escaped, no-JS", () => {
     expect(html).toContain('<meta name="robots" content="noindex, follow" />');
     expect(html).toContain('<html lang="en">');
     expect(html).toContain("Acme");
+  });
+});
+
+describe("tokenizeSearchQuery / buildPrefixTsQuery — prefix matching without operator injection", () => {
+  test("the last token of 3+ characters becomes a prefix; earlier ones stay exact", () => {
+    expect(PREFIX_MIN_TOKEN_LENGTH).toBe(3);
+    expect(buildPrefixTsQuery("Kapu")).toBe("Kapu:*");
+    expect(buildPrefixTsQuery("Kalimantan Kapu")).toBe("Kalimantan & Kapu:*");
+  });
+
+  test("a last token under the floor is NOT prefixed", () => {
+    expect(buildPrefixTsQuery("Ka")).toBe("Ka");
+    expect(buildPrefixTsQuery("kapuas ka")).toBe("kapuas & ka");
+    // "99,68" tokenizes to two short numbers, both exact.
+    expect(buildPrefixTsQuery("99,68")).toBe("99 & 68");
+  });
+
+  test("Unicode letters and digits are tokens; composed and decomposed forms agree", () => {
+    expect(tokenizeSearchQuery("Café Müller 2026")).toEqual([
+      "Café",
+      "Müller",
+      "2026"
+    ]);
+    expect(tokenizeSearchQuery("Café")).toEqual(["Café"]);
+    expect(buildPrefixTsQuery("東京都")).toBe("東京都:*");
+  });
+
+  test("no tsquery operator character can survive into the built text", () => {
+    const operators = "&|!:*()<->'\"\\";
+    const hostile = [
+      "a & b",
+      "a | b",
+      "!a",
+      "a:*",
+      "a:A",
+      "(a)",
+      "a <-> b",
+      "a' | 'b",
+      "\\a",
+      `${operators}word${operators}`
+    ];
+    for (const query of hostile) {
+      const built = buildPrefixTsQuery(query);
+      expect(built).not.toBeNull();
+      // Only the builder's own " & " separators and the final ":*" may appear.
+      const stripped = built!.replace(/ & /g, " ").replace(/:\*$/, "");
+      for (const ch of "&|!:*()<>-'\"\\") {
+        expect(stripped.includes(ch)).toBe(false);
+      }
+    }
+  });
+
+  test("a query with no word tokens yields null (caller skips the database)", () => {
+    for (const query of ["|", "()", "!!!", ":*", "<->", "\u{1F600}", "'; --"]) {
+      expect(buildPrefixTsQuery(query)).toBeNull();
+    }
+    expect(buildPrefixTsQuery("")).toBeNull();
   });
 });
