@@ -10,6 +10,7 @@ import {
   type DeleteReasonInput
 } from "./content-validation";
 import { validateSeoFields } from "./seo-validation";
+import { validateRegionCodeField } from "./institution-validation";
 import { validatePortableTextDocument } from "./portable-text-validation";
 import type { PortableTextDocument } from "./portable-text";
 import {
@@ -40,6 +41,18 @@ export type CreateBlogPostInput = {
   termIds: string[] | undefined;
   /** Issue #595 — the fourth classification dimension of `sql/131`. Same shape as `termIds`; existence is checked by `countExistingInstitutions` at the application layer. */
   institutionIds: string[] | undefined;
+  /**
+   * Issue #1312 — the region dimension of `sql/131`
+   * (`awcms_blog_posts.region_code`), the same dotted `idn_admin_regions`
+   * code and the same validator (`validateRegionCodeField`) as
+   * `institution-validation.ts` uses for `awcms_blog_institutions`. Unlike
+   * `institutionIds`/`termIds` this is a plain column, not a relation — no
+   * existence check against another table, because the column is
+   * deliberately not a foreign key (sql/131's own comment: the region
+   * dataset is versioned, so the code is the only identifier stable across
+   * generations). `null` is the normal state ("no region set").
+   */
+  regionCode: string | null;
   translationGroupId: string | null;
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. Defaults `false` (linking behaves exactly as before this issue unless an editor explicitly opts a post out). */
   autoInternalTagLinksDisabled: boolean;
@@ -179,6 +192,12 @@ export function validateCreateBlogPostInput(
     });
   }
 
+  // Issue #1312 — pushes directly into the shared `errors` array on an
+  // invalid shape; `undefined` here means either "absent" or "invalid" and
+  // the two are told apart by `errors.length` below, the same convention
+  // `institution-validation.ts`'s own create/update functions use.
+  const regionCode = validateRegionCodeField(record, errors);
+
   const translationGroupIdResult = validateTranslationGroupId(
     record.translationGroupId
   );
@@ -228,6 +247,7 @@ export function validateCreateBlogPostInput(
       canonicalUrl: seoResult.value.canonicalUrl ?? null,
       termIds: termIdsResult.value,
       institutionIds: institutionIdsResult.value,
+      regionCode: regionCode ?? null,
       translationGroupId: translationGroupIdResult.value,
       autoInternalTagLinksDisabled
     }
@@ -250,6 +270,8 @@ export type UpdateBlogPostInput = {
   termIds?: string[];
   /** Issue #595 — see `CreateBlogPostInput.institutionIds`. */
   institutionIds?: string[];
+  /** Issue #1312 — see `CreateBlogPostInput.regionCode`. Absent leaves the stored value unchanged; `null` clears it. */
+  regionCode?: string | null;
   translationGroupId?: string | null;
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. */
   autoInternalTagLinksDisabled?: boolean;
@@ -411,6 +433,17 @@ export function validateUpdateBlogPostInput(
       });
     } else {
       value.termIds = termIdsResult.value;
+    }
+  }
+
+  // Issue #1312 — same shared validator as create, same absent/invalid
+  // convention as `validateUpdateInstitutionInput`'s own `regionCode` block:
+  // only touch `value.regionCode` when the field was actually present and
+  // well-formed, so an absent field leaves the stored value untouched.
+  if (record.regionCode !== undefined) {
+    const regionCode = validateRegionCodeField(record, errors);
+    if (regionCode !== undefined) {
+      value.regionCode = regionCode;
     }
   }
 

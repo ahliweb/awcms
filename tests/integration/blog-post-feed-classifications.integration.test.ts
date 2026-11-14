@@ -255,6 +255,24 @@ suite("build feed carries classifications", () => {
     ]);
   });
 
+  test("regionCode (Issue #1312) — a plain column, projected without a join", async () => {
+    const admin = getAdminSql();
+    const withRegion = await postIdBySlug("post-1");
+
+    await admin`
+      UPDATE awcms_blog_posts SET region_code = '62.71.01'
+      WHERE tenant_id = ${TENANT} AND id = ${withRegion}
+    `;
+
+    const page = await readFeed();
+    const bySlug = new Map(page.items.map((item) => [item.slug, item]));
+
+    expect(bySlug.get("post-1")!.regionCode).toBe("62.71.01");
+    // `null` is the normal state — never `undefined` (which would serialise
+    // to a missing key and vanish from the public build feed's JSON).
+    expect(bySlug.get("post-2")!.regionCode).toBeNull();
+  });
+
   test("an empty page asks nothing and returns nothing", async () => {
     await getAdminSql()`
       UPDATE awcms_blog_posts SET deleted_at = now() WHERE tenant_id = ${TENANT}
