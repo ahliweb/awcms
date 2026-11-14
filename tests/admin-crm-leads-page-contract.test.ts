@@ -298,3 +298,32 @@ describe("the screens are ADR-0149 data pages", () => {
     expect(list).toContain("total={data.more ? undefined : page.total}");
   });
 });
+
+describe("the affordances are gated by the chokepoint and the lead's state (audit L-4)", () => {
+  test("the move and assign sections render only behind their own probe", () => {
+    expect(detail).toContain("{detail.canMove && (");
+    expect(detail).toContain("{detail.canAssign && (");
+    expect(detail).toContain("{(detail.canMove || detail.canAssign) && (");
+  });
+
+  test("every control of a move form is disabled unless the lead is writable", () => {
+    const move = detail.slice(
+      detail.indexOf("{detail.canMove && ("),
+      detail.indexOf("{detail.canAssign && (")
+    );
+
+    expect(move.match(/disabled=\{!writable\}/g)?.length).toBe(3);
+    expect(move).not.toContain("disabled={false}");
+  });
+
+  test("an assign control is disabled unless writable", () => {
+    const assign = detail.slice(detail.indexOf("{detail.canAssign && ("));
+
+    expect(assign.match(/disabled=\{!writable \|\|/g)?.length).toBe(2);
+  });
+
+  test("the settings form sends only the changed fields", () => {
+    expect(settings).toContain("settingsPatchFromForm(");
+    expect(settings).not.toMatch(/const body = \{\s*enabled:/);
+  });
+});

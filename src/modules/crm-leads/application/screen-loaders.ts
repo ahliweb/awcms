@@ -17,9 +17,13 @@
  *   - Every read is for `tenantId` of the access context; no id from the URL
  *     reaches a query without it, and an unknown id and another tenant's id
  *     give the same answer (`found: false`).
- *   - Soft-deleted, merged and anonymised leads are not listed (the screens
- *     ask for live leads, exactly as `GET /leads` does without
- *     `includeDeleted`).
+ *   - Soft-deleted, merged and anonymised leads are not LISTED (the list asks
+ *     for live, open leads; the API, unlike the screen, also returns merged
+ *     and anonymised ones). The DETAIL of a live merged or anonymised lead is
+ *     still reachable by its id, read-only: the endpoints refuse every write on
+ *     it (`LEAD_NOT_OPEN`).
+ *   - The detail never carries `externalCustomerRef`: no screen shows it, so
+ *     the page does not receive it.
  *   - Contact points are the MASKED view the API returns, never the value.
  *   - The settings screen loads ONE pipeline's catalogue (the selected one),
  *     so the number of queries does not grow with the number of pipelines.
@@ -163,6 +167,7 @@ export async function loadLeadList(input: {
       stageCategory,
       ownerTenantUserId,
       includeDeleted: false,
+      openOnly: true,
       cursor,
       limit: LOAD_PAGE_SIZE
     });
@@ -202,7 +207,7 @@ export type LeadDetailData =
       enabled: true;
       found: true;
       tenantEnabled: boolean;
-      lead: LeadView;
+      lead: Omit<LeadView, "externalCustomerRef">;
       history: LeadHistory;
       pipeline: PipelineView;
       revision: RevisionView;
@@ -236,12 +241,14 @@ export async function loadLeadDetail(input: {
   if (!pipeline) return { enabled: true, found: false };
 
   const { currentRevision, ...pipelineView } = pipeline;
+  // No screen shows the downstream customer reference; do not hand it over.
+  const { externalCustomerRef: _omitted, ...leadView } = lead;
 
   return {
     enabled: true,
     found: true,
     tenantEnabled: (await fetchSettings(tx, tenantId)).enabled,
-    lead,
+    lead: leadView,
     history: await fetchLeadHistory(tx, tenantId, leadId),
     pipeline: pipelineView,
     revision: currentRevision,

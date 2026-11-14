@@ -650,6 +650,52 @@ suite("crm_leads admin screens (#1166, ADR-0153)", () => {
     });
   });
 
+  test("merged and anonymised leads are not listed, and the detail never carries the customer reference (audit L-1, L-2)", async () => {
+    await enableTenant(tenantId, ownerToken);
+    const pipeline = await newPipeline(tenantId, ownerToken);
+    const survivor = await newLead(pipeline.id, tenantId, ownerToken, {
+      displayName: "Survivor"
+    });
+    const absorbed = await newLead(pipeline.id, tenantId, ownerToken, {
+      displayName: "Absorbed",
+      contactPoints: [{ kind: "email", value: "absorbed@example.test" }]
+    });
+    const anon = await newLead(pipeline.id, tenantId, ownerToken, {
+      displayName: "Erased",
+      contactPoints: [{ kind: "email", value: "erased@example.test" }]
+    });
+
+    await admin()`
+      UPDATE awcms_crm_leads
+      SET status = 'merged', merged_into_lead_id = ${survivor.id}
+      WHERE tenant_id = ${tenantId} AND id = ${absorbed.id}
+    `;
+    await admin()`
+      UPDATE awcms_crm_leads
+      SET status = 'anonymized', anonymized_at = now(), display_name = NULL
+      WHERE tenant_id = ${tenantId} AND id = ${anon.id}
+    `;
+    // A customer reference is only legal beside a live conversion; the guard is
+    // bypassed for this fixture so the detail has a value it must not return.
+    await admin().begin(async (tx) => {
+      await tx`SET LOCAL session_replication_role = replica`;
+      await tx`
+        UPDATE awcms_crm_leads SET external_customer_ref = 'cust-ref-1'
+        WHERE tenant_id = ${tenantId} AND id = ${survivor.id}
+      `;
+    });
+
+    const shown = (await list(ownerToken)) as any;
+
+    expect(shown.leads.map((lead: any) => lead.id)).toEqual([survivor.id]);
+
+    const one = (await detail(ownerToken, survivor.id)) as any;
+
+    expect(one.found).toBe(true);
+    expect("externalCustomerRef" in one.lead).toBe(false);
+    expect(JSON.stringify(one)).not.toContain("cust-ref-1");
+  });
+
   test("a lead of another tenant is 'not found', not an error and not data", async () => {
     await admin()`
       INSERT INTO awcms_tenants (id, tenant_code, tenant_name)

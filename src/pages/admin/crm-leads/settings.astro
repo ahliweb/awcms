@@ -161,7 +161,14 @@ const messages = {
           hidden
         ></p>
 
-        <form id="crm-settings-form" class="admin-form">
+        <form
+          id="crm-settings-form"
+          class="admin-form"
+          data-initial={JSON.stringify({
+            enabled: settings.enabled,
+            mergeUndoHours: settings.mergeUndoHours
+          })}
+        >
           <label class="checkbox-label" for="crm-settings-enabled">
             <input
               type="checkbox"
@@ -420,6 +427,7 @@ const messages = {
     sendJson
   } from "../../../lib/ui/admin-form-client";
   import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import { settingsPatchFromForm } from "../../../lib/ui/crm-leads-settings-patch";
 
   const formError = messageBox("crm-settings-error-box");
   const root = document.getElementById("crm-settings");
@@ -443,10 +451,20 @@ const messages = {
   }
 
   onSubmit("crm-settings-form", async ({ submit }) => {
-    const body = {
-      enabled: checkboxChecked("crm-settings-enabled"),
-      mergeUndoHours: integerValue("crm-settings-undo", 0)
-    };
+    const body = settingsPatchFromForm(
+      JSON.parse(
+        (document.getElementById("crm-settings-form") as HTMLElement).dataset
+          .initial as string
+      ),
+      {
+        enabled: checkboxChecked("crm-settings-enabled"),
+        mergeUndoHours: integerValue("crm-settings-undo", 0)
+      }
+    );
+
+    // Only what the viewer changed is sent (audit M-1): a stale tab must not
+    // re-assert a value another admin has since changed.
+    if (body === null) return;
 
     await mutateAndReload(
       submit,

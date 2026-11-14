@@ -1198,8 +1198,14 @@ export const READER_BUDGET_BYTES = 24_000;
  * ships no script. The lifecycle is the shared `admin-form-client.ts` and the
  * key source the shared `admin-idempotency-key.ts`, so there is no per-screen
  * duplication to recover.
+ *
+ * **Raised again for the #1166 audit follow-up (M-1)**: +300 B (367,200 ->
+ * 367,500), measured 367,316 locally. The settings form now sends only the
+ * fields the viewer changed (a stale tab must not re-assert a tenant switch
+ * another admin turned off), which is a small diff helper plus the page's
+ * initial values: ~200 B on that one screen, with the same margin as above.
  */
-export const APP_BUDGET_BYTES = 367_200;
+export const APP_BUDGET_BYTES = 367_500;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
