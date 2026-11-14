@@ -291,6 +291,65 @@ describe("entities decode exactly once", () => {
   });
 });
 
+describe("typographic entities and hexadecimal references", () => {
+  function textOfFirstBlock(html: string): string {
+    const result = convertLegacyHtmlToPortableText(html);
+
+    return (result.document[0] as { children: { text: string }[] }).children
+      .map((span) => span.text)
+      .join("");
+  }
+
+  test("the typographic named entities decode", () => {
+    expect(
+      textOfFirstBlock(
+        "<p>&ldquo;a&rdquo; &lsquo;b&rsquo; &sbquo;c&bdquo; 1&ndash;2 x&mdash;y&hellip; 30&deg; &trade;&copy;&reg;</p>"
+      )
+    ).toBe(
+      "\u201Ca\u201D \u2018b\u2019 \u201Ac\u201E 1\u20132 x\u2014y\u2026 30\u00B0 \u2122\u00A9\u00AE"
+    );
+  });
+
+  test("a hexadecimal reference decodes, in either case of x and digits", () => {
+    expect(textOfFirstBlock("<p>a&#x2014;b &#X2019;c &#x1F600;</p>")).toBe(
+      "a\u2014b \u2019c \u{1F600}"
+    );
+  });
+
+  test("a hexadecimal reference to a non-code-point is left literal", () => {
+    expect(textOfFirstBlock("<p>a&#x110000;b &#x0;c</p>")).toBe(
+      "a&#x110000;b &#x0;c"
+    );
+  });
+
+  test("a newly recognised entity still decodes ONCE: &amp;ldquo; becomes &ldquo;, not a curly quote", () => {
+    expect(textOfFirstBlock("<p>&amp;ldquo; &amp;#x2014;</p>")).toBe(
+      "&ldquo; &#x2014;"
+    );
+  });
+
+  test("&amp;lt; becomes &lt;, never <", () => {
+    const text = textOfFirstBlock("<p>&amp;lt;b&amp;gt;</p>");
+
+    expect(text).toBe("&lt;b&gt;");
+    expect(text).not.toContain("<");
+  });
+
+  test("an unknown named entity is still left visible", () => {
+    expect(textOfFirstBlock("<p>a &weird; b</p>")).toBe("a &weird; b");
+  });
+
+  test("a hex-encoded javascript: scheme in an href is still refused as unsafe_href", () => {
+    const result = convertLegacyHtmlToPortableText(
+      '<p><a href="&#x6A;avascript:steal()">click</a></p>'
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.rejections[0]?.reason).toBe("unsafe_href");
+    expect(textOf(result.document)).not.toContain("avascript:");
+  });
+});
+
 describe("a resolved image becomes a real image (Issue #599)", () => {
   const MEDIA_ID = "11111111-1111-4111-8111-111111111111";
   const OTHER_ID = "22222222-2222-4222-8222-222222222222";
