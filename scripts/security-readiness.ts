@@ -1617,6 +1617,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_blog_posts: ["SELECT", "UPDATE"],
   awcms_blog_post_terms: ["SELECT"],
   awcms_blog_settings: ["SELECT"],
+  // blog_content — the same sweep records a revision per post it publishes
+  // (sql/397): INSERT the append-only snapshot, SELECT the post's latest
+  // revision number. No UPDATE/DELETE: history is never rewritten.
+  awcms_blog_revisions: ["INSERT", "SELECT"],
   // blog_content — site-search:reconcile (sql/136, Issue #625). SELECT-only:
   // the index engine reads each registered search source and writes exclusively
   // to its own awcms_site_search_* tables, so an UPDATE here would be a

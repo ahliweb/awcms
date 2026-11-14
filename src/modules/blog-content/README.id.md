@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:65be42c7df08ee0146b4b732d861487659ddb7ec4dcd8871c690674d6f5d56e6 -->
+<!-- i18n-source-hash: sha256:b354e06a187a38b6e03f29616fd61229789daf6c70f7571452f3db0498e8ef50 -->
 
 # Blog Content
 
@@ -426,7 +426,7 @@ Hanya rute untuk **post** — doc issue #541 §Routes cuma mendaftarkan tiga rut
 `createBlogRevision` dulu hanya berjalan dari kedua handler `PATCH` dan restore revisi, sehingga urutan create -> publish -> edit menghasilkan riwayat yang baris pertamanya sudah berisi teks pasca-edit: versi yang benar-benar dibaca pembaca tidak bisa dipulihkan. Kini setiap jalur yang menerbitkan menulis revisi dalam transaksi yang sama dengan transisinya:
 
 - `POST /api/v1/blog/posts/{id}/publish` dan `POST /api/v1/blog/pages/{id}/publish` — diatribusikan ke pemanggil, `changeNote: "Published."`. Publish ulang `published -> published` atas konten yang tak berubah juga menulis satu (replay dengan `Idempotency-Key` yang sama tidak).
-- Sapuan scheduled-publish (`publishDueScheduledPosts`) — diatribusikan ke penulis post itu sendiri (job latar tidak punya aktor manusia dan `created_by_tenant_user_id` NOT NULL), `changeNote: "Published by scheduled publish."`. Satu `INSERT` batch (`createBlogRevisions`) untuk seluruh run, sehingga anggaran query sapuan tetap datar (6 -> 7 untuk dua belas post maupun satu).
+- Sapuan scheduled-publish (`publishDueScheduledPosts`) — diatribusikan ke penulis post itu sendiri (job latar tidak punya aktor manusia dan `created_by_tenant_user_id` NOT NULL), `changeNote: "Published by scheduled publish."`. Satu `INSERT` batch (`createBlogRevisions`) untuk seluruh run, sehingga anggaran query sapuan tetap datar (6 -> 7 untuk dua belas post maupun satu). Job berjalan sebagai `awcms_worker`, yang sejak sql/397 memegang `SELECT, INSERT` (tidak pernah UPDATE/DELETE) pada `awcms_blog_revisions`; `tests/integration/scheduled-publish-budget.integration.test.ts` menjalankan sapuan sebagai role itu. Atribusi ke penulis post adalah keputusan sengaja, bukan celah: identitas penjadwal tidak tercatat pada post, jadi aktor yang lebih tepat tidak tersedia. Kegagalan pada satu tenant (paruh publish atau penarikan) dicatat dan dihitung (`failedTenants`, status job `partial`) dan tidak menghentikan paruh lainnya maupun tenant berikutnya.
 
 Semantik `PATCH` sendiri (snapshot keadaan pasca-edit) tidak berubah. **Keputusan terbuka:** ini membalik catatan lama "revisi pertama baru setelah edit signifikan pertama"; tidak ada ADR yang mencatat aturan aslinya sehingga tidak perlu ADR untuk mengubahnya, tetapi maintainer mungkin ingin mencatatnya.
 

@@ -78,10 +78,12 @@ import {
 import {
   getAdminSql,
   getRuntimeSql,
+  getWorkerRoleSql,
   integrationEnabled,
   resetDatabase,
   setupIntegrationDatabase,
-  teardownIntegrationDatabase
+  teardownIntegrationDatabase,
+  workerRoleActivated
 } from "./harness";
 import { countPoolQueries } from "./query-budget";
 import {
@@ -466,5 +468,71 @@ suite("the scheduled sweeps cost the same for twelve posts as for one", () => {
     // RECORD of why the post is archived. Batching the UPDATE must not quietly
     // start clearing it.
     expect(rows[0]!.count).toBe(DUE_COUNT);
+  });
+
+  test("the sweep runs as the least-privilege worker role and snapshots the body readers see", async () => {
+    // The job runs as `awcms_worker` (doc 18), not as the app role the budget
+    // cases above use. The role had no grant on `awcms_blog_revisions`, so the
+    // revision INSERT threw `permission denied`, the tenant transaction rolled
+    // back and the post stayed `scheduled`. Removing sql/397 turns this red.
+    if (!workerRoleActivated) {
+      return;
+    }
+
+    const body = [
+      {
+        _type: "block",
+        _key: "k1",
+        style: "normal",
+        children: [
+          { _type: "span", _key: "s1", text: "Isi berita", marks: [] }
+        ],
+        markDefs: []
+      }
+    ];
+    await seedDuePosts(2);
+    await getAdminSql()`
+      UPDATE awcms_blog_posts
+      SET body_portable_text = ${body}::jsonb
+      WHERE tenant_id = ${TENANT} AND slug = 'due-1'
+    `;
+
+    const result = await publishDueScheduledPosts(
+      getWorkerRoleSql(),
+      TENANT,
+      mediaLibraryPortAdapter
+    );
+
+    expect(result.publishedCount).toBe(2);
+    expect(await statusCounts()).toEqual({ published: 2 });
+
+    const rows = (await getAdminSql()`
+      SELECT p.slug, r.body_portable_text, r.created_by_tenant_user_id
+      FROM awcms_blog_revisions r
+      JOIN awcms_blog_posts p ON p.id = r.resource_id
+      WHERE r.tenant_id = ${TENANT}
+      ORDER BY p.slug
+    `) as {
+      slug: string;
+      body_portable_text: unknown;
+      created_by_tenant_user_id: string;
+    }[];
+
+    expect(rows).toHaveLength(2);
+    // The snapshot IS the body of the post, stored as a JSON array (not a
+    // string), not an empty or dropped one.
+    expect(rows[0]!.slug).toBe("due-1");
+    expect(rows[0]!.body_portable_text).toEqual(body);
+    expect(rows[1]!.body_portable_text).toEqual([]);
+    // Attribution: a background job has no human actor, so the revision is
+    // credited to the post's author (documented in the module README).
+    expect(rows.every((row) => row.created_by_tenant_user_id === AUTHOR)).toBe(
+      true
+    );
+
+    // The worker still cannot rewrite or remove history.
+    await expect(
+      getWorkerRoleSql()`DELETE FROM awcms_blog_revisions WHERE tenant_id = ${TENANT}`
+    ).rejects.toThrow();
   });
 });
