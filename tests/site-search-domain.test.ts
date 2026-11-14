@@ -361,6 +361,14 @@ describe("tokenizeSearchQuery / buildPrefixTsQuery — prefix matching without o
     }
   });
 
+  test("a -word exclusion is dropped whole, never inverted into a required word", () => {
+    expect(buildPrefixTsQuery("politik -korupsi")).toBe("politik:*");
+    expect(buildPrefixTsQuery("-korupsi politik")).toBe("politik:*");
+    expect(buildPrefixTsQuery("-korupsi")).toBeNull();
+    // A hyphen glued to a preceding letter/digit is part of a compound, not an exclusion.
+    expect(buildPrefixTsQuery("e-commerce")).toBe("e & commerce:*");
+  });
+
   test("a query with no word tokens yields null (caller skips the database)", () => {
     for (const query of ["|", "()", "!!!", ":*", "<->", "\u{1F600}", "'; --"]) {
       expect(buildPrefixTsQuery(query)).toBeNull();

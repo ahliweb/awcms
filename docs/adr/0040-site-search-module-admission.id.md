@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0040-site-search-module-admission.md)
 
-<!-- i18n-source-hash: sha256:ebebc0d2ab2a052e6f3bc9799b2a9d1f75bc996ed89cfef2c9e43bdc1eabd2af -->
+<!-- i18n-source-hash: sha256:75fd832f3aa43ee378dc16d1688272addc1be1b4d9f44b8df08657ee9e32252c -->
 
 # ADR-0040 — Admission `site_search` (Official Optional Module): pencarian PostgreSQL FTS lintas-konten lewat search-source descriptor, DAG-safe inward
 
@@ -136,7 +136,8 @@ Layanan search SaaS/Elasticsearch/OpenSearch, vector/semantic AI ranking, cross-
 Baris normalisasi query di §5 semula menyerahkan string ternormalisasi ke `websearch_to_tsquery('simple', $1)`. Fungsi itu hanya mencocokkan lexeme utuh, sehingga kata yang belum selesai diketik ("Kapu") tidak menemukan apa pun, padahal itu inti search-as-you-type. Kini query ditokenisasi menjadi run huruf/angka Unicode (`[\p{L}\p{N}]+` setelah normalisasi NFC) dan disusun oleh `buildPrefixTsQuery`: setiap token adalah lexeme utuh, semuanya di-AND, dan token TERAKHIR menjadi prefiks (`token:*`) bila panjangnya minimal 3 karakter. Hasilnya tetap diikat sebagai SATU parameter ke `to_tsquery('simple', $1)`, dan teks yang sama dipakai daftar hasil, hitungan facet, dan snippet, sehingga facet tidak pernah menghitung dokumen yang tidak terjangkau daftar.
 
 - **Injeksi.** Pengikatan parameter sudah menutup injeksi SQL. Tokenisasi menutup tambahan injeksi OPERATOR tsquery: tak satu pun dari `& | ! : * ( ) < - >`, tanda kutip, atau backslash adalah huruf atau angka, jadi tidak ada token yang bisa membawanya. Pemisah dan sufiks `:*` ditulis oleh pembangun saja.
-- **Konsekuensi yang diterima.** Sintaks `websearch_to_tsquery` hilang: frasa berkutip, `or`, dan `-pengecualian` tidak lagi ditafsirkan; tanda baca dibuang dan kata sisanya di-AND.
+- **Konsekuensi yang diterima.** Sintaks `websearch_to_tsquery` hilang: frasa berkutip dan `or` tidak lagi ditafsirkan (tanda bacanya dibuang dan kata sisanya di-AND). Kata `-pengecualian` dibuang UTUH, jadi ia tidak mengecualikan dan tidak menjadi kata wajib: `politik -korupsi` kini berarti `politik`; konsumen atau URL tersimpan yang mengandalkan pengecualian kehilangan filter itu (TIDAK dibalik).
 - **Himpunan token kosong.** Query tanpa token kata (hanya tanda baca/simbol) mengembalikan hasil kosong netral tanpa menyentuh database.
 - **Di luar cakupan.** Pencarian per-modul `blog_content` tetap memakai `websearch_to_tsquery`. Endpoint suggest tidak berubah (`ILIKE` trigramnya sudah pencocokan substring). Bentuk respons tidak berubah (ADR-0065).
-- **Indeks.** Tanpa migrasi: indeks GIN `tsvector` mendukung operand prefiks `:*`.
+- **Penjaga query kosong.** Keluar-dini untuk query tanpa token kata adalah optimasi, bukan kontrol: tsquery yang kosong di sisi database tidak cocok dengan apa pun, dan tes integrasi menguncinya lewat jalur database.
+- **Indeks.** Tanpa migrasi: indeks GIN `tsvector` mendukung operand prefiks `:*`, itulah yang tampak pada rencana superuser. Itu BUKAN yang diterima role runtime: di bawah `FORCE ROW LEVEL SECURITY` kebijakan tenant adalah security barrier dan `ts_match_vq` (fungsi `@@`) tidak LEAKPROOF, sehingga planner tidak dapat memakainya sebagai kondisi indeks dan rencananya adalah sequential scan terbatas tenant dengan `ts_rank` per kandidat. Ini sudah berlaku untuk `websearch_to_tsquery`; prefiks 3 karakter memperlebar himpunan kandidat. Dampak dibatasi rate limit publik dan `statement_timeout`. Menandai `ts_match_vq` LEAKPROOF TIDAK dilakukan di sini dan memerlukan ADR sendiri; jalur baca berfilter tenant eksplisit adalah alternatifnya. Dilacak di #1321; sebuah tes mengunci rencana runtime saat ini agar perbaikan sungguhan memerahkannya dengan sengaja.

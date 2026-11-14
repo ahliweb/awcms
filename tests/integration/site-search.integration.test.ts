@@ -650,6 +650,28 @@ suite("site_search module (integration, ADR-0040)", () => {
       expect(await titles("()")).toEqual([]);
     });
 
+    test("a token the PG parser discards never widens the match (DB path, not the early exit)", async () => {
+      await indexTenantA();
+      // U+00BD is a \p{N}, so the JS tokenizer keeps it and the early exit does
+      // NOT fire, yet to_tsquery reduces it to an EMPTY tsquery. That must match
+      // nothing, and inside an AND it must not drop the other operands' restriction.
+      expect(await titles("\u00BD\u00BD\u00BD")).toEqual([]);
+      // PG drops the empty operand from the AND, so the remaining word still
+      // bites: same rows as plain "kapuas", never "every document".
+      expect(await titles("kapuas \u00BD\u00BD\u00BD")).toEqual(
+        await titles("kapuas")
+      );
+      expect(await titles("kapuas")).toEqual(["Sungai Kapuas meluap"]);
+      expect(await titles("zzzzzz \u00BD\u00BD\u00BD")).toEqual([]);
+    });
+
+    test("a -word exclusion is dropped, not turned into a required word", async () => {
+      await indexTenantA();
+      // The excluded word is not required: "sungai -zzzzzz" == "sungai".
+      expect(await titles("sungai -zzzzzz")).toEqual(await titles("sungai"));
+      expect((await titles("sungai -zzzzzz")).length).toBeGreaterThan(0);
+    });
+
     test("results, facets and snippet share one predicate", async () => {
       await indexTenantA();
       const { list, facets } = await withTenantOrThrow(

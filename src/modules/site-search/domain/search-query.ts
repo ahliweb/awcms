@@ -92,12 +92,26 @@ export const PREFIX_MIN_TOKEN_LENGTH = 3;
 const WORD_TOKEN_PATTERN = /[\p{L}\p{N}]+/gu;
 
 /**
+ * A word written as `-word` (leading hyphen NOT glued to a preceding letter or
+ * digit, so `e-commerce` is untouched) was an exclusion under the old
+ * `websearch_to_tsquery` syntax. Exclusion is unsupported now, and turning it
+ * into a REQUIRED word would invert the caller's intent, so the whole word is
+ * dropped instead (it neither requires nor excludes anything).
+ */
+const EXCLUSION_WORD_PATTERN = /(?<![\p{L}\p{N}])-[\p{L}\p{N}]+/gu;
+
+/**
  * Splits a query into word tokens. The input is NFC-normalized first so a
  * decomposed letter (base + combining mark, which `\p{L}` alone would split in
  * two) stays one token and matches the indexed form.
  */
 export function tokenizeSearchQuery(query: string): string[] {
-  return query.normalize("NFC").match(WORD_TOKEN_PATTERN) ?? [];
+  return (
+    query
+      .normalize("NFC")
+      .replace(EXCLUSION_WORD_PATTERN, " ")
+      .match(WORD_TOKEN_PATTERN) ?? []
+  );
 }
 
 /**
@@ -107,15 +121,17 @@ export function tokenizeSearchQuery(query: string): string[] {
  * "Kalimantan Kapu" requires the exact word AND a word starting "Kapu".
  *
  * Returns `null` when the query has no word tokens (pure punctuation, symbols,
- * emoji survive length-only normalization). Callers MUST treat that as "no
- * possible match" and skip the database, rather than binding an empty string:
- * an empty tsquery is a valid value and a match predicate must not depend on
- * how it evaluates.
+ * emoji survive length-only normalization). Callers skip the database for it,
+ * which is an OPTIMIZATION and not a control: a tsquery that is empty on the
+ * database side (to_tsquery('simple', NULL), or a token the PG parser discards
+ * such as a fraction sign) matches nothing, and the integration tests pin that
+ * through the database path as well.
  *
- * Syntax that `websearch_to_tsquery` used to interpret (quoted phrases, `or`,
- * `-exclusion`) is NOT supported: such characters are dropped as punctuation
- * and the remaining words are ANDed. The ` & ` separators and the `:*` suffix
- * are written by this function alone, never copied from input; the result is
+ * Syntax that `websearch_to_tsquery` used to interpret is NOT supported:
+ * quoted phrases and `or` lose their punctuation and the remaining words are
+ * ANDed; a `-word` exclusion is dropped WHOLE (never inverted into a required
+ * word). The ` & ` separators and the `:*` suffix are written by this function
+ * alone, never copied from input; the result is
  * bound as one parameter, so SQL injection is excluded by binding regardless.
  */
 export function buildPrefixTsQuery(query: string): string | null {

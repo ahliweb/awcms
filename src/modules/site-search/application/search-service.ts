@@ -151,7 +151,9 @@ export async function searchSiteContent(
   const termFilter = buildTermFilterOperand(options.termFilters);
   const tsQueryText = buildPrefixTsQuery(options.query);
   // No word tokens (pure punctuation/symbols survived length-only
-  // normalization): no possible match, so skip the database.
+  // normalization): skip the database. This is an OPTIMIZATION, not a security
+  // control: a tsquery that is empty on the database side matches nothing
+  // anyway (pinned through the DB path in the integration tests).
   if (tsQueryText === null) {
     return { items: [], nextCursor: null };
   }
@@ -343,8 +345,8 @@ export async function countSearchFacets(
     allowedTypes === null ? null : tx.array(allowedTypes, "text");
   const typeFacetTermFilter = buildTermFilterOperand(options.termFilters);
   const tsQueryText = buildPrefixTsQuery(options.query);
-  // Same early exit as `searchSiteContent`: the facets must describe EXACTLY
-  // the result set the query returns.
+  // Same early exit as `searchSiteContent` (an optimization, not a control):
+  // the facets must describe EXACTLY the result set the query returns.
   if (tsQueryText === null) {
     return { resourceTypes: [], terms: {} };
   }

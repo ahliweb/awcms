@@ -1,23 +1,33 @@
 /**
- * The prefix `to_tsquery` predicate is still served by the GIN index on
- * `awcms_site_search_documents.search_vector` (ADR-0040 amendment, prefix
- * matching on the last token).
+ * Query-plan facts for the prefix `to_tsquery` predicate (ADR-0040 amendment,
+ * prefix matching on the last token), measured from BOTH postures that matter.
  *
- * ## What this binds and why
+ * ## Two postures, two different answers
+ *
+ * 1. INDEX SUITABILITY (superuser, RLS bypassed): `search_vector @@ tsquery`
+ *    with a `:*` operand is a shape the GIN index
+ *    `awcms_site_search_documents_search_vector_idx` can serve. This proves the
+ *    index and the predicate are compatible; it says NOTHING about production.
+ * 2. WHAT RUNTIME ACTUALLY GETS (`awcms_app`, `FORCE ROW LEVEL SECURITY`, via
+ *    `withTenantOrThrow(getRuntimeSql())`): the tenant policy is a security
+ *    barrier, and the `@@` operator's function (`ts_match_vq`) is not
+ *    LEAKPROOF, so the planner may not use it as an index condition below the
+ *    barrier. The honest result is a tenant-bounded sequential scan, with
+ *    `ts_rank` computed per candidate. This is true for the previous
+ *    `websearch_to_tsquery` predicate too, so the prefix change widens the
+ *    candidate set but does not introduce the scan. The test pins the fact so
+ *    nobody claims the index serves production traffic, and so a follow-up that
+ *    really fixes it (an explicit tenant-filtered read path, or a recorded
+ *    LEAKPROOF decision by ADR) turns the test RED on purpose: flip the
+ *    assertion then. Do NOT mark `ts_match_vq` LEAKPROOF without an ADR.
  *
  * The query text is bound as ONE parameter, exactly like `searchSiteContent`
- * does. Substituting a literal would let the planner see the value at plan time
- * and prove nothing about the bound path, so the statement is run through the
- * extended protocol with `$n` placeholders.
+ * does, and `enable_seqscan` is NOT turned off (with it off, "no Seq Scan" is
+ * hollow). The fixture is VACUUM ANALYZEd: a GIN index's size statistics live
+ * in its metapage and only VACUUM refreshes them.
  *
- * The plan is measured AS THE PLANNER CHOOSES IT. `enable_seqscan` is NOT turned
- * off: with it off, "no Seq Scan" is hollow, because the planner is forbidden
- * from picking one. The fixture is big enough, and the term selective enough,
- * that an index is the honest winner; the test asserts that the named GIN index
- * is the access path and that the table is not scanned sequentially.
- *
- * MUTATION PROOF: drop `awcms_site_search_documents_search_vector_idx` -> the
- * cases go RED with a `Seq Scan` in the plan.
+ * MUTATION PROOF: drop the GIN index -> the suitability cases go RED. Measure
+ * the runtime case as the superuser again -> it goes RED (Bitmap Index Scan).
  */
 import {
   afterAll,
@@ -29,8 +39,10 @@ import {
 } from "bun:test";
 
 import { buildPrefixTsQuery } from "../../src/modules/site-search/domain/search-query";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   getAdminSql,
+  getRuntimeSql,
   integrationEnabled,
   resetDatabase,
   setupIntegrationDatabase,
@@ -53,14 +65,21 @@ function flatten(node: PlanNode, out: PlanNode[] = []): PlanNode[] {
   return out;
 }
 
+type Posture = "superuser" | "runtime";
+
 async function plan(
   sqlText: string,
-  params: unknown[]
+  params: unknown[],
+  posture: Posture
 ): Promise<{ nodes: PlanNode[]; text: string }> {
-  const rows = (await getAdminSql().unsafe(
-    `EXPLAIN (FORMAT JSON) ${sqlText}`,
-    params as never[]
-  )) as { "QUERY PLAN": unknown }[];
+  const statement = `EXPLAIN (FORMAT JSON) ${sqlText}`;
+  const rows = (
+    posture === "superuser"
+      ? await getAdminSql().unsafe(statement, params as never[])
+      : await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+          tx.unsafe(statement, params as never[])
+        )
+  ) as { "QUERY PLAN": unknown }[];
   const raw = rows[0]!["QUERY PLAN"];
   const document = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
     Plan: PlanNode;
@@ -121,30 +140,46 @@ suite("site_search prefix query plan (integration)", () => {
     WHERE d.tenant_id = $1 AND d.locale = $2
       AND d.search_vector @@ to_tsquery('simple', $3)`;
 
-  test("a prefix operand is answered by the GIN index, with no sequential scan", async () => {
+  test("index suitability (superuser): a prefix operand is answered by the GIN index", async () => {
     await seed();
     const text = buildPrefixTsQuery("sungai kapu");
     expect(text).toBe("sungai & kapu:*");
 
-    const { nodes, text: rendered } = await plan(PREDICATE, [
-      TENANT,
-      "id",
-      text
-    ]);
+    const { nodes, text: rendered } = await plan(
+      PREDICATE,
+      [TENANT, "id", text],
+      "superuser"
+    );
 
     expect(rendered).toContain("awcms_site_search_documents_search_vector_idx");
     expect(nodes.some((n) => n["Node Type"] === "Seq Scan")).toBe(false);
   });
 
-  test("an exact-only operand (no prefix) uses the same index", async () => {
+  test("index suitability (superuser): an exact-only operand uses the same index", async () => {
     await seed();
-    const { nodes, text: rendered } = await plan(PREDICATE, [
-      TENANT,
-      "id",
-      buildPrefixTsQuery("sungai kapuas500")
-    ]);
+    const { nodes, text: rendered } = await plan(
+      PREDICATE,
+      [TENANT, "id", buildPrefixTsQuery("sungai kapuas500")],
+      "superuser"
+    );
 
     expect(rendered).toContain("awcms_site_search_documents_search_vector_idx");
     expect(nodes.some((n) => n["Node Type"] === "Seq Scan")).toBe(false);
+  });
+
+  test("runtime posture (awcms_app, FORCE RLS): the GIN index is NOT used; the scan is tenant-bounded", async () => {
+    await seed();
+    for (const q of ["sungai kapu", "sungai kapuas500"]) {
+      const { nodes, text: rendered } = await plan(
+        PREDICATE,
+        [TENANT, "id", buildPrefixTsQuery(q)],
+        "runtime"
+      );
+      // Known limitation, see the header: `ts_match_vq` is not LEAKPROOF.
+      expect(rendered).not.toContain(
+        "awcms_site_search_documents_search_vector_idx"
+      );
+      expect(nodes.some((n) => n["Node Type"] === "Seq Scan")).toBe(true);
+    }
   });
 });
