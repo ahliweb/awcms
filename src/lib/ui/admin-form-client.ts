@@ -588,7 +588,13 @@ export function holdForNavigation(): void {
   navTimer = setTimeout(() => restoreOnPageShow({ persisted: true }), 1e4);
 }
 
-let pageShowArmed = false;
+/**
+ * The window the `pageshow` listener was added to. Keyed by the object rather
+ * than a boolean: a browser has one window so this arms once, while a test
+ * process that swaps `globalThis.window` between files gets the listener on the
+ * window it is actually using, instead of whichever file happened to run first.
+ */
+let pageShowWindow: unknown = null;
 
 /**
  * The bfcache back button restores the DOM exactly as it was when the user left
@@ -604,9 +610,9 @@ export function restoreOnPageShow(event: { persisted?: boolean }): void {
 }
 
 function armPageShow(): void {
-  if (pageShowArmed || typeof window === "undefined") return;
+  if (typeof window === "undefined" || pageShowWindow === window) return;
 
-  pageShowArmed = true;
+  pageShowWindow = window;
   window.addEventListener("pageshow", restoreOnPageShow);
 }
 
