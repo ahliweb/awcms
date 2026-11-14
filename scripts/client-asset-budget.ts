@@ -1258,8 +1258,23 @@ export const READER_BUDGET_BYTES = 24_000;
  * Rebase note: `main` had moved to 379,350 B, so this branch's own raise
  * (+500 B, written against 372,100 B) is stacked on it, giving
  * 379,850 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1153** (the website engagement screens): +1,500 B
+ * (365,600 -> 367,100), measured 366,974 locally with this change (`main` sat
+ * about 40 B under its budget), with 126 B of margin for the local/CI build
+ * difference. Two page scripts, each on its own screen only:
+ * `/admin/website-engagement/[id]` (the confirmed, idempotent withdrawal with
+ * its translated error sentences) and `/admin/website-engagement/sources` (the
+ * confirmed revoke). The list screen ships no script. The lifecycle is the
+ * shared `admin-form-client.ts`, the key source is the shared
+ * `admin-idempotency-key.ts` and the confirmation is the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * Rebase note: `main` had moved to 379,850 B, so this branch's own raise
+ * (+1,500 B, written against 365,600 B) is stacked on it, giving
+ * 381,350 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 379_850;
+export const APP_BUDGET_BYTES = 381_350;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

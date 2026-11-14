@@ -1,0 +1,410 @@
+---
+/**
+ * Website engagement — the inbound submission list (Issue #1153, ADR-0155
+ * section 8, ADR-0149 data page).
+ *
+ * ## What this screen is, and is not
+ *
+ * The READ side of `website_engagement`'s submissions: every contact request,
+ * lead and interaction a tenant's websites posted, newest first, filterable by
+ * source, kind and status. One submission's provenance, consent record and
+ * withdrawal are on `/admin/website-engagement/{id}`; the sources (websites)
+ * and their token prefix and accepted hosts are on
+ * `/admin/website-engagement/sources`.
+ *
+ * It shows MASKED contact details only (`j***@example.com`), exactly what
+ * `GET /api/v1/website-engagement/submissions` returns. It never decrypts: the
+ * reveal is a separate, audited permission and is not offered here. It shows no
+ * message text, no IP address, no fingerprint (none is stored).
+ *
+ * ## It shows exactly what the API shows
+ *
+ * The list runs, through `loadSubmissionList`, the SAME `listSubmissions` the
+ * API route uses, inside the caller's own tenant-scoped transaction. The
+ * source, kind and status filters are pushed to SQL; search and sort run on the
+ * loaded rows and match only what the page shows.
+ *
+ * ## Paging
+ *
+ * The loader reads at most 200 submissions (two keyset pages of the API's own
+ * query) and the screen slices them in memory through the ADR-0149 contract.
+ * When more exist the page says so instead of showing a total it cannot stand
+ * behind; the API lists the rest.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  consentPurposeLabel,
+  interactionTypeLabel,
+  submissionKindLabel,
+  submissionStatusLabel,
+  submissionStatusTone
+} from "../../lib/i18n/labels/website-engagement";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
+import type { SubmissionView } from "../../modules/website-engagement/application/submission-directory";
+import { loadSubmissionList } from "../../modules/website-engagement/application/screen-loaders";
+import { SUBMISSION_KINDS } from "../../modules/website-engagement/domain/website-engagement-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims, and held
+ * equal to the module's own guard by the page-contract test.
+ */
+const READ_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "submissions",
+  action: "read"
+} as const;
+/** Only to fill the source filter with the tenant's sources and to decide whether to LINK to the sources screen; that screen gates itself. */
+const SOURCES_READ_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "sources",
+  action: "read"
+} as const;
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/website-engagement";
+const SPEC: DataPageSpec = {
+  filterKeys: ["source", "kind", "status"],
+  sortKeys: ["received", "kind", "status"],
+  defaultSort: "received",
+  defaultDir: "desc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, can }) =>
+    // The listing chain is the module's loader, not inline here: it is what the
+    // behavioural integration test runs as a restricted viewer.
+    loadSubmissionList({
+      tx,
+      tenantId: ssr.tenantId,
+      filters: query.filters,
+      readSourcesGuard: SOURCES_READ_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/website-engagement.astro: failed to load the submissions",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "no submissions" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const submissions: SubmissionView[] = data?.submissions ?? [];
+const sourceOptions = data?.sourceOptions ?? [];
+const kindLabel = (kind: string) => submissionKindLabel(t, kind);
+const statusLabel = (status: string) => submissionStatusLabel(t, status);
+const sourceName = (id: string) =>
+  sourceOptions.find((source) => source.id === id)?.code ?? id;
+
+function contactText(submission: SubmissionView): string {
+  const parts = [submission.emailMasked, submission.phoneMasked].filter(
+    (part): part is string => part !== null
+  );
+
+  return parts.length === 0 ? "—" : parts.join(" · ");
+}
+
+function whatText(submission: SubmissionView): string {
+  return submission.kind === "interaction" && submission.interactionType
+    ? interactionTypeLabel(t, submission.interactionType)
+    : kindLabel(submission.kind);
+}
+
+// The search matches what the page SHOWS: source code, kind, masked contact.
+const needle = query.q.toLowerCase();
+const matching = submissions.filter(
+  (submission) =>
+    needle === "" ||
+    submission.sourceCode.toLowerCase().includes(needle) ||
+    whatText(submission).toLowerCase().includes(needle) ||
+    contactText(submission).toLowerCase().includes(needle)
+);
+const page = sliceKeyset(matching, {
+  sortValue: (submission) =>
+    query.sort === "kind"
+      ? submission.kind
+      : query.sort === "status"
+        ? submission.status
+        : submission.receivedAt,
+  id: (submission) => submission.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(PATH, SPEC, query, change);
+const sortState = (key: string) => buildSortHeaderState(PATH, SPEC, query, key);
+const clearHref = buildClearFiltersHref(PATH, SPEC, query);
+const chips = buildActiveFilterChips(PATH, SPEC, query, (key, value) =>
+  key === "q"
+    ? t("Search: {value}", { value })
+    : key === "source"
+      ? t("Source: {value}", { value: sourceName(value) })
+      : key === "kind"
+        ? t("Kind: {value}", { value: kindLabel(value) })
+        : t("Status: {value}", { value: statusLabel(value) })
+);
+const summary = filtered
+  ? tn(
+      "{count} submission matches your search and filters",
+      "{count} submissions match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
+---
+
+<AdminLayout
+  title={t("Website engagement")}
+  description={t(
+    "Contact requests, leads and interactions posted by your websites. Contact details are shown masked."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="website-engagement-denied">
+      {t("You do not have permission to view website submissions.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="website-engagement-error">
+      {t(
+        "The submissions could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="website-engagement-title"
+    >
+      <h2 class="admin-section-title" id="website-engagement-title">
+        {t("Submissions")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "Newest first. Contact details are masked here: reading them in full is a separate, audited permission that this screen does not offer. A submission is evidence of what a visitor consented to, so it cannot be edited."
+        )}
+        {data.canSeeSources && (
+          <>
+            {" "}
+            <a href={`${PATH}/sources`} id="website-engagement-sources-link">
+              {t("Websites and their access tokens")}
+            </a>
+          </>
+        )}
+      </p>
+
+      {!data.intakeAvailable && (
+        <p class="state-notice" id="website-engagement-intake-unavailable">
+          {t(
+            "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused. The ones listed below were received earlier."
+          )}
+        </p>
+      )}
+
+      {data.more && (
+        <p class="state-notice" id="website-engagement-truncated">
+          {t(
+            "There are more submissions than this screen loads. Showing the newest {count}. The source, kind and status filters cover every submission; search covers only these. The API lists the rest.",
+            { count: submissions.length }
+          )}
+        </p>
+      )}
+
+      <DataListToolbar
+        action={PATH}
+        idPrefix="website-engagement"
+        landmarkLabel={t("Search submissions")}
+        searchLabel={t("Search")}
+        q={query.q}
+        filters={[
+          {
+            name: "source",
+            label: t("Source"),
+            value: query.filters.source ?? "",
+            allLabel: t("All sources"),
+            options: sourceOptions.map((source) => ({
+              value: source.id,
+              label: source.code
+            }))
+          },
+          {
+            name: "kind",
+            label: t("Kind"),
+            value: query.filters.kind ?? "",
+            allLabel: t("All kinds"),
+            options: SUBMISSION_KINDS.map((kind) => ({
+              value: kind,
+              label: kindLabel(kind)
+            }))
+          },
+          {
+            name: "status",
+            label: t("Status"),
+            value: query.filters.status ?? "",
+            allLabel: t("All statuses"),
+            options: (["received", "withdrawn"] as const).map((status) => ({
+              value: status,
+              label: statusLabel(status)
+            }))
+          }
+        ]}
+        sort={{
+          label: t("Sort by"),
+          value: query.sort,
+          options: [
+            { value: "received", label: t("Received") },
+            { value: "kind", label: t("Kind") },
+            { value: "status", label: t("Status") }
+          ],
+          dirLabel: t("Sort order"),
+          dir: query.dir,
+          ascLabel: t("Ascending"),
+          descLabel: t("Descending")
+        }}
+        preserve={
+          query.limit === DEFAULT_DATA_PAGE_SIZE
+            ? {}
+            : { limit: String(query.limit) }
+        }
+        chips={chips}
+        clearHref={clearHref}
+        summary={summary}
+        submitLabel={t("Search")}
+        clearLabel={t("Clear filters")}
+        chipsLabel={t("Active filters")}
+        removeLabel={(label) => t("Remove filter: {label}", { label })}
+      />
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="website-engagement-table-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="website-engagement-table"
+        >
+          <caption id="website-engagement-table-caption">
+            {tn("{count} submission", "{count} submissions", page.total, {
+              count: page.total
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <SortableHeader
+                label={t("Received")}
+                {...sortState("received")}
+              />
+              <th scope="col">{t("Source")}</th>
+              <SortableHeader label={t("Kind")} {...sortState("kind")} />
+              <th scope="col">{t("Contact (masked)")}</th>
+              <th scope="col">{t("Consent")}</th>
+              <SortableHeader label={t("Status")} {...sortState("status")} />
+            </tr>
+          </thead>
+          <tbody>
+            {page.items.length === 0 ? (
+              <DataEmptyState
+                colspan={6}
+                filtered={filtered}
+                query={query.q}
+                clearHref={clearHref}
+                title={t("No submissions yet")}
+                text={t(
+                  "Submissions appear here when a registered website posts a contact request, a lead or an interaction."
+                )}
+              />
+            ) : (
+              page.items.map((submission) => (
+                <tr data-submission-id={submission.id}>
+                  <td data-label={t("Received")}>
+                    <a href={`${PATH}/${submission.id}`}>
+                      {formatUtcMinute(submission.receivedAt)}
+                    </a>
+                  </td>
+                  <td data-label={t("Source")}>{submission.sourceCode}</td>
+                  <td data-label={t("Kind")} data-kind={submission.kind}>
+                    {whatText(submission)}
+                  </td>
+                  <td data-label={t("Contact (masked)")}>
+                    {contactText(submission)}
+                  </td>
+                  <td data-label={t("Consent")}>
+                    {submission.consent.purposes.length === 0
+                      ? "—"
+                      : submission.consent.purposes
+                          .map((purpose) => consentPurposeLabel(t, purpose))
+                          .join(", ")}
+                  </td>
+                  <td data-label={t("Status")} data-status={submission.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={submissionStatusTone(submission.status)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {statusLabel(submission.status)}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <KeysetPager
+        prevHref={
+          page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+        }
+        nextHref={
+          page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+        }
+        from={page.from}
+        to={page.to}
+        total={data.more ? undefined : page.total}
+        limit={query.limit}
+        sizes={DATA_PAGE_SIZES.map((value) => ({
+          value,
+          href: href({ limit: value })
+        }))}
+      />
+    </section>
+  )}
+</AdminLayout>
