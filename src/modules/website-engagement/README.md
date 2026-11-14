@@ -10,7 +10,8 @@ A tenant's website posts a contact request, a lead or an interaction to ONE publ
 
 - **Tables** (`sql/325`): `awcms_engagement_sources`, `awcms_engagement_source_domains`, `awcms_engagement_submissions`; RLS `FORCE`, `WITH CHECK`; integrity guards in `sql/327`; permissions in `sql/326`.
 - **Events**: `awcms.website_engagement.submission.received` and `...submission.withdrawn` (AsyncAPI), carrying an opaque reference, never the visitor's details.
-- **Admin API**: sources (create, change, rotate, revoke, delete), masked submission reads, an audited **reveal**, and the controller's **withdrawal**; every route is default-deny and `experimental` with no navigation entry until the screen lands.
+- **Admin API**: sources (create, change, rotate, revoke, delete), masked submission reads, an audited **reveal**, and the controller's **withdrawal**; every route is default-deny.
+- **Admin screens** (Issue #1153, `active`): `/admin/website-engagement` (submission list: keyset-paged, filtered by source, kind and status, masked contact only), `/admin/website-engagement/{id}` (consent record, attribution, provenance and the confirmed, idempotent **withdrawal**) and `/admin/website-engagement/sources` (registered websites, accepted hosts, effective challenge, token **prefix** only, confirmed **revoke**). They read through the API's own directory functions (`application/screen-loaders.ts`), never decrypt and never select a token or its hash. Create, edit, pause, rotate and the audited **reveal** stay API-only: the token is shown once and the reveal renders personal data, so each needs its own screen contract (`submissions.reveal` is still on the `NOT_YET_SCREENED` ledger).
 - **Retention**: declared in `module.ts` through `data_lifecycle` (default 180 days).
 - **Configuration**: TWO key rings, `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS` (contact details) and `WEBSITE_ENGAGEMENT_HASH_KEYS` (source-token and identifier hashes), both required to store anything (fail closed) and sharing no key (ADR-0137 section 3, Issue #1262): with each other, enforced at runtime and by `config:validate`; with another module's ring or single-key secret, enforced by `config:validate`; the optional, transitional `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`; and the rate-limit variables in `.env.example`.
 
@@ -58,4 +59,4 @@ Identifier hashes (`email_hash`, `phone_hash`) written before the transition sta
 - Attribution fields are a closed charset but cannot prove a value is not personal.
 - A double-click on a challenged form can fail the second (single-use) challenge.
 - Audit items L3, L5 and the informational findings are accepted as recorded in the audit report and are not addressed in this slice.
-- No public withdrawal channel, no server-to-server mode, no rotation grace window, no admin screen.
+- No public withdrawal channel, no server-to-server mode, no rotation grace window, no screen for creating, editing or rotating a source or for the reveal (API-only), and no date-range filter (the list API has none; the screen filters by source, kind and status). The sources list is the API's bounded list of 200.

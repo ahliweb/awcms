@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](website-engagement.md)
 
-<!-- i18n-source-hash: sha256:85feadca81c53949dddac29414b0009c4836ecaa5cf310f84c3f09ae1cf92ea2 -->
+<!-- i18n-source-hash: sha256:80f7e5c5fa858e8261d018b7ef45641b3c907fd424154da1d2fe1d25e38a9a23 -->
 
 # Website engagement — intake lead dan kontak (Issue #1153, ADR-0155)
 
@@ -91,13 +91,15 @@ Token yang tak bisa di-parse, tenant atau source tak dikenal, secret salah, sour
 
 **Tidak dibangun.** Widget tertanam akan menjadi skrip pihak ketiga yang berjalan di halaman milik tenant sendiri, yang membutuhkan tinjauan CSP per domain tenant (pembukaan `script-src` di setiap situs pelanggan), cerita aset-ter-hosting dan versi, keputusan apakah widget boleh memuat Turnstile di halaman yang tidak dikuasai tenant, dan tinjauan multi-domain atas batas `postMessage`/iframe-nya. Tidak ada yang terbukti di sini, kontrak di atas lengkap tanpanya, dan situs web merender formulirnya sendiri (ADR-0155 bagian 1 menolak mesin formulir kedua). Tinjau ulang sebagai ADR tersendiri bila tenant membutuhkannya. **Live chat di luar cakupan** dan butuh persetujuan sendiri.
 
-## Layar admin (ditunda) dan kontrak UX-nya
+## Layar admin dan kontrak UX-nya
 
-Modul **tidak mendeklarasikan entri navigasi** (entri navigasi tanpa halaman adalah 404 permanen). Kelima izin berada di `NOT_YET_SCREENED`. Saat layar operator hadir, dalam perubahan yang sama dengan entri navigasinya: tampilkan token **sekali** di area salin dengan konfirmasi eksplisit "sudah saya simpan" dan jangan render ulang; tampilkan `challengeEffective` sebagai teks yang terlihat, bukan hanya warna, dan tandai `none`; tampilkan nilai tersamar saja dan taruh reveal di balik aksi eksplisit dengan alasan; dan penuhi aturan WCAG 2.2 AA di `docs/awcms/14_ui_ux_design_system.md` (label, urutan fokus, pengumuman status, tanpa makna hanya-warna). Tidak ada UI pada perubahan ini, jadi tidak ada permukaan a11y yang diuji di sini.
+**Telah hadir (Issue #1153, tindak lanjut): separuh baca dan penarikan/pencabutan.** `/admin/website-engagement` (kiriman), `/admin/website-engagement/{id}` dan `/admin/website-engagement/sources` hadir bersama entri navigasinya; modul berstatus `active`. Layar menampilkan nilai tersamar saja, menampilkan tantangan efektif sebagai teks (dan menyebut bila `turnstile` sebuah sumber tidak dijalankan pada deployment ini), hanya mencantumkan **awalan** token, dan menawarkan dua aksi di balik izin masing-masing: penarikan yang dikonfirmasi dan membawa `Idempotency-Key`, serta pencabutan yang dikonfirmasi. `sources.read`, `sources.manage`, `submissions.read`, dan `submissions.withdraw` keluar dari `NOT_YET_SCREENED`.
+
+**Masih ditunda:** membuat, mengubah, menjeda, dan memutar sumber (token harus ditampilkan sekali) serta reveal yang diaudit (`submissions.reveal`, tetap di `NOT_YET_SCREENED`). Kontrak yang harus dipenuhi layar itu, dalam perubahan yang sama dengan kontrolnya: tampilkan token **sekali** di area salin dengan konfirmasi eksplisit "sudah saya simpan" dan jangan render ulang; tampilkan `challengeEffective` sebagai teks yang terlihat, bukan hanya warna, dan tandai `none`; tampilkan nilai tersamar saja dan taruh reveal di balik aksi eksplisit dengan alasan; dan penuhi aturan WCAG 2.2 AA di `docs/awcms/14_ui_ux_design_system.md` (label, urutan fokus, pengumuman status, tanpa makna hanya-warna). Layar yang dikirim memakai primitif halaman-data ADR-0149 bersama, pil status berteks (tidak pernah hanya warna), kontrol berlabel, dan tabel bertumpuk 360 px.
 
 ## Keterbatasan (tercatat)
 
-Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tangan; tidak ada widget; tidak ada live chat; tidak ada deduplikasi atau pencocokan orang; tidak ada layar admin; tidak ada masa tenggang token saat rotasi (token lama berhenti seketika); limiter per-IP berjalan di dalam proses kecuali Redis dikonfigurasi; pencocokan host berdasarkan hostname (port diabaikan).
+Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tangan; tidak ada widget; tidak ada live chat; tidak ada deduplikasi atau pencocokan orang; tidak ada layar untuk membuat/mengubah/memutar sumber atau reveal (hanya API); tidak ada filter rentang tanggal pada daftar; tidak ada masa tenggang token saat rotasi (token lama berhenti seketika); limiter per-IP berjalan di dalam proses kecuali Redis dikonfigurasi; pencocokan host berdasarkan hostname (port diabaikan).
 
 ## Pengoperasian
 

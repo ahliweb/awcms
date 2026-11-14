@@ -1,0 +1,367 @@
+---
+/**
+ * Website engagement — one submission (Issue #1153, ADR-0155 sections 5 and 8).
+ *
+ * Shows what the API's masked read shows: the kind, the source, the masked
+ * contact details, the CONSENT record (the purposes ticked, the exact consent
+ * copy version the website showed, the page and the moment), the source
+ * attribution and the provenance of the request (which host it came from and
+ * how the anti-abuse challenge went). It never decrypts: the reveal is a
+ * separate, audited permission (`submissions.reveal`) and has no control here.
+ *
+ * The one action is the controller's WITHDRAWAL: one-way, it erases the contact
+ * details and tells downstream consumers to stop using the submission. It shows
+ * only to a caller holding `submissions.withdraw`, for a submission that is
+ * still `received`, and posts to the withdraw endpoint with an
+ * `Idempotency-Key` after an explicit confirmation.
+ *
+ * An unknown id, another tenant's id and a malformed id are the same answer.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  challengeOutcomeLabel,
+  consentPurposeLabel,
+  interactionTypeLabel,
+  originViaLabel,
+  submissionKindLabel,
+  submissionStatusLabel,
+  submissionStatusTone,
+  withdrawalReasonLabel
+} from "../../../lib/i18n/labels/website-engagement";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { loadSubmissionDetail } from "../../../modules/website-engagement/application/screen-loaders";
+import { WITHDRAWAL_REASONS } from "../../../modules/website-engagement/domain/website-engagement-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+/** Literal guards for `admin:screen-coverage:check`; held equal to the module's own by the page-contract test. */
+const READ_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "submissions",
+  action: "read"
+} as const;
+const WITHDRAW_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "submissions",
+  action: "withdraw"
+} as const;
+
+const PATH = "/admin/website-engagement";
+const rawId = Astro.params.id ?? null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, can }) =>
+    loadSubmissionDetail({
+      tx,
+      tenantId: ssr.tenantId,
+      submissionId: rawId,
+      withdrawGuard: WITHDRAW_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/website-engagement/[id].astro: failed to load the submission",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const found = data !== null && data.found ? data : null;
+const submission = found?.submission ?? null;
+const dash = "—";
+const text = (value: string | null) => (value === null ? dash : value);
+---
+
+<AdminLayout
+  title={t("Website submission")}
+  description={t(
+    "One submission with its consent record and provenance. Contact details are masked."
+  )}
+>
+  <p class="page-description">
+    <a href={PATH} id="website-engagement-back">
+      {t("Back to submissions")}
+    </a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="website-engagement-denied">
+      {t("You do not have permission to view website submissions.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="website-engagement-error">
+      {t(
+        "The submission could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && data !== null && !data.found && (
+    <p class="state-notice fade-in-up" id="website-engagement-not-found">
+      {t("That submission does not exist, or you cannot see it.")}
+    </p>
+  )}
+
+  {canRead && !loadError && submission !== null && found !== null && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="website-engagement-summary-title"
+      >
+        <h2 class="admin-section-title" id="website-engagement-summary-title">
+          {t("Submission")}
+        </h2>
+        <dl class="admin-detail-list" id="website-engagement-summary">
+          <dt>{t("Status")}</dt>
+          <dd data-status={submission.status}>
+            <span
+              class="admin-status-pill"
+              data-tone={submissionStatusTone(submission.status)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true"></span>
+              {submissionStatusLabel(t, submission.status)}
+            </span>
+            {submission.withdrawnAt !== null && (
+              <span class="cell-muted">
+                {" "}
+                {formatUtcMinute(submission.withdrawnAt)}
+                {submission.withdrawalReason !== null &&
+                  ` · ${withdrawalReasonLabel(t, submission.withdrawalReason)}`}
+              </span>
+            )}
+          </dd>
+          <dt>{t("Kind")}</dt>
+          <dd>
+            {submissionKindLabel(t, submission.kind)}
+            {submission.interactionType !== null &&
+              ` · ${interactionTypeLabel(t, submission.interactionType)}`}
+          </dd>
+          <dt>{t("Source")}</dt>
+          <dd>{submission.sourceCode}</dd>
+          <dt>{t("Received")}</dt>
+          <dd>{formatUtcMinute(submission.receivedAt)}</dd>
+          <dt>{t("Occurred")}</dt>
+          <dd>{formatUtcMinute(submission.occurredAt)}</dd>
+          <dt>{t("Topic")}</dt>
+          <dd>{text(submission.topic)}</dd>
+          <dt>{t("Language")}</dt>
+          <dd>{text(submission.locale)}</dd>
+          <dt>{t("Email (masked)")}</dt>
+          <dd id="website-engagement-email">{text(submission.emailMasked)}</dd>
+          <dt>{t("Phone (masked)")}</dt>
+          <dd id="website-engagement-phone">{text(submission.phoneMasked)}</dd>
+        </dl>
+        <p class="page-description" id="website-engagement-reveal-note">
+          {t(
+            "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
+          )}
+        </p>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="website-engagement-consent-title"
+      >
+        <h2 class="admin-section-title" id="website-engagement-consent-title">
+          {t("Consent")}
+        </h2>
+        <dl class="admin-detail-list" id="website-engagement-consent">
+          <dt>{t("Purposes")}</dt>
+          <dd>
+            {submission.consent.purposes.length === 0
+              ? dash
+              : submission.consent.purposes
+                  .map((purpose) => consentPurposeLabel(t, purpose))
+                  .join(", ")}
+          </dd>
+          <dt>{t("Consent copy version")}</dt>
+          <dd>{text(submission.consent.copyVersion)}</dd>
+          <dt>{t("Shown on page")}</dt>
+          <dd>{text(submission.consent.pagePath)}</dd>
+          <dt>{t("Consented at")}</dt>
+          <dd>{formatUtcMinute(submission.consent.consentAt)}</dd>
+        </dl>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="website-engagement-provenance-title"
+      >
+        <h2
+          class="admin-section-title"
+          id="website-engagement-provenance-title"
+        >
+          {t("Provenance and attribution")}
+        </h2>
+        <dl class="admin-detail-list" id="website-engagement-provenance">
+          <dt>{t("Website host")}</dt>
+          <dd>
+            {submission.provenance.originHost}
+            <span class="cell-muted">
+              {" "}
+              {originViaLabel(t, submission.provenance.originVia)}
+            </span>
+          </dd>
+          <dt>{t("Anti-abuse challenge")}</dt>
+          <dd>{challengeOutcomeLabel(t, submission.provenance.challenge)}</dd>
+          <dt>{t("Landing page")}</dt>
+          <dd>{text(submission.attribution.landingPath)}</dd>
+          <dt>{t("Referrer host")}</dt>
+          <dd>{text(submission.attribution.referrerHost)}</dd>
+          <dt>{t("Campaign source")}</dt>
+          <dd>{text(submission.attribution.utmSource)}</dd>
+          <dt>{t("Campaign medium")}</dt>
+          <dd>{text(submission.attribution.utmMedium)}</dd>
+          <dt>{t("Campaign name")}</dt>
+          <dd>{text(submission.attribution.utmCampaign)}</dd>
+          <dt>{t("Campaign term")}</dt>
+          <dd>{text(submission.attribution.utmTerm)}</dd>
+          <dt>{t("Campaign content")}</dt>
+          <dd>{text(submission.attribution.utmContent)}</dd>
+        </dl>
+      </section>
+
+      {found.canWithdraw && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="website-engagement-withdraw-title"
+        >
+          <h2
+            class="admin-section-title"
+            id="website-engagement-withdraw-title"
+          >
+            {t("Withdraw this submission")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "Withdrawing is permanent. The contact details are erased and downstream consumers are told to stop using this submission. The consent record and attribution are kept."
+            )}
+          </p>
+          <p
+            id="website-engagement-withdraw-error"
+            class="admin-create-error"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+          <form
+            id="website-engagement-withdraw-form"
+            class="admin-form"
+            novalidate
+            data-submission-id={submission.id}
+            data-busy={t("Please wait…")}
+            data-confirm={t(
+              "Withdraw this submission? The contact details are erased and this cannot be undone."
+            )}
+            data-failed={t(
+              "Could not withdraw the submission. Please try again."
+            )}
+            data-forbidden={t("You do not have permission to do that.")}
+            data-not-found={t(
+              "That submission no longer exists, or you cannot act on it."
+            )}
+            data-conflict={t(
+              "This request was already used for something else. Reload the page and try again."
+            )}
+            data-rate-limited={t(
+              "Too many requests. Wait a moment and try again."
+            )}
+            data-person-only={t(
+              "Withdrawing needs a signed-in person; a machine credential cannot do it."
+            )}
+          >
+            <div class="admin-field">
+              <label for="website-engagement-withdraw-reason">
+                {t("Reason")}
+              </label>
+              <select id="website-engagement-withdraw-reason" name="reason">
+                {WITHDRAWAL_REASONS.map((reason) => (
+                  <option value={reason}>
+                    {withdrawalReasonLabel(t, reason)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <button type="submit" class="btn btn-danger btn-danger--solid">
+                {t("Withdraw submission")}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+
+  const error = messageBox("website-engagement-withdraw-error");
+  /** One key per distinct request: a retry of the same withdrawal replays, a different reason is a new request. */
+  const keyFor = createIdempotencyKeySource();
+
+  onSubmit("website-engagement-withdraw-form", async ({ form, submit }) => {
+    const say = (name: string): string => form.dataset[name] ?? "";
+    const id = form.dataset.submissionId;
+    const reason = (
+      form.querySelector<HTMLSelectElement>("select[name=reason]")?.value ?? ""
+    ).trim();
+
+    if (!id || !reason) return;
+
+    if (!(await confirmAction(say("confirm")))) return;
+
+    const body = { reason };
+
+    await mutateAndReload(
+      submit,
+      error,
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/website-engagement/submissions/${id}/withdraw`,
+          body,
+          { "Idempotency-Key": keyFor({ id, ...body }) }
+        ),
+      (code) =>
+        code === "ACCESS_DENIED"
+          ? say("forbidden")
+          : code === "RESOURCE_NOT_FOUND"
+            ? say("notFound")
+            : code === "IDEMPOTENCY_CONFLICT"
+              ? say("conflict")
+              : code === "RATE_LIMITED"
+                ? say("rateLimited")
+                : code === "INTERACTIVE_SESSION_REQUIRED"
+                  ? say("personOnly")
+                  : say("failed"),
+      say("busy")
+    );
+  });
+</script>

@@ -9509,3 +9509,284 @@ msgstr "{sent} terkirim, {failed} gagal, {waiting} menunggu"
 
 msgid "Refresh progress"
 msgstr "Muat ulang progres"
+
+# Website engagement screens (Issue #1153)
+
+msgid "{count} submission matches your search and filters"
+msgid_plural "{count} submissions match your search and filters"
+msgstr[0] "{count} kiriman cocok dengan pencarian dan filter Anda"
+
+msgid "{count} submission"
+msgid_plural "{count} submissions"
+msgstr[0] "{count} kiriman"
+
+msgid "Source: {value}"
+msgstr "Sumber: {value}"
+
+msgid "Kind: {value}"
+msgstr "Jenis: {value}"
+
+msgid "Website engagement"
+msgstr "Interaksi situs web"
+
+msgid "Contact requests, leads and interactions posted by your websites. Contact details are shown masked."
+msgstr "Permintaan kontak, prospek, dan interaksi yang dikirim situs web Anda. Detail kontak ditampilkan tersamar."
+
+msgid "You do not have permission to view website submissions."
+msgstr "Anda tidak memiliki izin untuk melihat kiriman situs web."
+
+msgid "The submissions could not be loaded right now. Please try again later."
+msgstr "Kiriman tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Submissions"
+msgstr "Kiriman"
+
+msgid "Newest first. Contact details are masked here: reading them in full is a separate, audited permission that this screen does not offer. A submission is evidence of what a visitor consented to, so it cannot be edited."
+msgstr "Terbaru lebih dulu. Detail kontak disamarkan di sini: membacanya utuh adalah izin terpisah yang diaudit dan tidak ditawarkan layar ini. Kiriman adalah bukti atas apa yang disetujui pengunjung, sehingga tidak dapat diubah."
+
+msgid "Websites and their access tokens"
+msgstr "Situs web dan token aksesnya"
+
+msgid "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused. The ones listed below were received earlier."
+msgstr "Konfigurasi kunci untuk interaksi situs web tidak valid pada deployment ini, sehingga kiriman baru ditolak. Yang tercantum di bawah diterima sebelumnya."
+
+msgid "There are more submissions than this screen loads. Showing the newest {count}. The source, kind and status filters cover every submission; search covers only these. The API lists the rest."
+msgstr "Kiriman lebih banyak daripada yang dimuat layar ini. Menampilkan {count} terbaru. Filter sumber, jenis, dan status mencakup semua kiriman; pencarian hanya mencakup yang ini. API menampilkan sisanya."
+
+msgid "Search submissions"
+msgstr "Cari kiriman"
+
+msgid "All sources"
+msgstr "Semua sumber"
+
+msgid "Received"
+msgstr "Diterima"
+
+msgid "Contact (masked)"
+msgstr "Kontak (tersamar)"
+
+msgid "No submissions yet"
+msgstr "Belum ada kiriman"
+
+msgid "Submissions appear here when a registered website posts a contact request, a lead or an interaction."
+msgstr "Kiriman muncul di sini ketika situs web terdaftar mengirim permintaan kontak, prospek, atau interaksi."
+
+msgid "Website submission"
+msgstr "Kiriman situs web"
+
+msgid "One submission with its consent record and provenance. Contact details are masked."
+msgstr "Satu kiriman beserta catatan persetujuan dan asal-usulnya. Detail kontak disamarkan."
+
+msgid "Back to submissions"
+msgstr "Kembali ke kiriman"
+
+msgid "The submission could not be loaded right now. Please try again later."
+msgstr "Kiriman tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "That submission does not exist, or you cannot see it."
+msgstr "Kiriman itu tidak ada, atau Anda tidak dapat melihatnya."
+
+msgid "Submission"
+msgstr "Kiriman"
+
+msgid "Topic"
+msgstr "Topik"
+
+msgid "Email (masked)"
+msgstr "Email (tersamar)"
+
+msgid "Phone (masked)"
+msgstr "Telepon (tersamar)"
+
+msgid "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
+msgstr "Detail kontak lengkap dan pesan tidak ditampilkan di layar ini. Membacanya adalah izin terpisah yang diaudit dan tersedia melalui API."
+
+msgid "Purposes"
+msgstr "Tujuan"
+
+msgid "Consent copy version"
+msgstr "Versi teks persetujuan"
+
+msgid "Shown on page"
+msgstr "Ditampilkan di halaman"
+
+msgid "Consented at"
+msgstr "Disetujui pada"
+
+msgid "Provenance and attribution"
+msgstr "Asal-usul dan atribusi"
+
+msgid "Website host"
+msgstr "Host situs web"
+
+msgid "Anti-abuse challenge"
+msgstr "Tantangan anti-penyalahgunaan"
+
+msgid "Landing page"
+msgstr "Halaman tujuan"
+
+msgid "Referrer host"
+msgstr "Host perujuk"
+
+msgid "Campaign source"
+msgstr "Sumber kampanye"
+
+msgid "Campaign medium"
+msgstr "Medium kampanye"
+
+msgid "Campaign name"
+msgstr "Nama kampanye"
+
+msgid "Campaign term"
+msgstr "Istilah kampanye"
+
+msgid "Campaign content"
+msgstr "Konten kampanye"
+
+msgid "Withdraw this submission"
+msgstr "Tarik kiriman ini"
+
+msgid "Withdrawing is permanent. The contact details are erased and downstream consumers are told to stop using this submission. The consent record and attribution are kept."
+msgstr "Penarikan bersifat permanen. Detail kontak dihapus dan konsumen hilir diberi tahu untuk berhenti menggunakan kiriman ini. Catatan persetujuan dan atribusi tetap disimpan."
+
+msgid "Withdraw this submission? The contact details are erased and this cannot be undone."
+msgstr "Tarik kiriman ini? Detail kontak dihapus dan ini tidak dapat dibatalkan."
+
+msgid "Could not withdraw the submission. Please try again."
+msgstr "Kiriman tidak dapat ditarik. Silakan coba lagi."
+
+msgid "That submission no longer exists, or you cannot act on it."
+msgstr "Kiriman itu sudah tidak ada, atau Anda tidak dapat menindaklanjutinya."
+
+msgid "This request was already used for something else. Reload the page and try again."
+msgstr "Permintaan ini sudah dipakai untuk hal lain. Muat ulang halaman lalu coba lagi."
+
+msgid "Too many requests. Wait a moment and try again."
+msgstr "Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi."
+
+msgid "Withdrawing needs a signed-in person; a machine credential cannot do it."
+msgstr "Penarikan memerlukan orang yang sedang masuk; kredensial mesin tidak dapat melakukannya."
+
+msgid "Withdraw submission"
+msgstr "Tarik kiriman"
+
+msgid "{count} source"
+msgid_plural "{count} sources"
+msgstr[0] "{count} sumber"
+
+msgid "Website sources"
+msgstr "Sumber situs web"
+
+msgid "The websites registered to post submissions, the hosts they may post from and how each is protected."
+msgstr "Situs web yang terdaftar untuk mengirim kiriman, host tempat mereka boleh mengirim, dan cara masing-masing dilindungi."
+
+msgid "You do not have permission to view website sources."
+msgstr "Anda tidak memiliki izin untuk melihat sumber situs web."
+
+msgid "The sources could not be loaded right now. Please try again later."
+msgstr "Sumber tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "A submission is accepted only with the source's access token and from one of its hosts. The token itself is never shown again after it was created or rotated: only its first characters are listed so you can tell which token a website uses."
+msgstr "Kiriman diterima hanya dengan token akses sumber dan dari salah satu hostnya. Token itu sendiri tidak pernah ditampilkan lagi setelah dibuat atau diputar: hanya karakter awalnya yang dicantumkan agar Anda tahu token mana yang dipakai sebuah situs web."
+
+msgid "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused."
+msgstr "Konfigurasi kunci untuk interaksi situs web tidak valid pada deployment ini, sehingga kiriman baru ditolak."
+
+msgid "Revoke the source {name}? Its website stops being able to post submissions, and this cannot be undone."
+msgstr "Cabut sumber {name}? Situs webnya tidak dapat lagi mengirim kiriman, dan ini tidak dapat dibatalkan."
+
+msgid "Could not revoke the source. Please try again."
+msgstr "Sumber tidak dapat dicabut. Silakan coba lagi."
+
+msgid "That source no longer exists, or you cannot act on it."
+msgstr "Sumber itu sudah tidak ada, atau Anda tidak dapat menindaklanjutinya."
+
+msgid "Revoking needs a signed-in person; a machine credential cannot do it."
+msgstr "Pencabutan memerlukan orang yang sedang masuk; kredensial mesin tidak dapat melakukannya."
+
+msgid "Accepted hosts"
+msgstr "Host yang diterima"
+
+msgid "Accepts"
+msgstr "Menerima"
+
+msgid "Access token"
+msgstr "Token akses"
+
+msgid "No website is registered yet. Sources are created through the API."
+msgstr "Belum ada situs web terdaftar. Sumber dibuat melalui API."
+
+msgid "None: every request is refused"
+msgstr "Tidak ada: setiap permintaan ditolak"
+
+msgid "Not run on this deployment: the other controls apply alone."
+msgstr "Tidak dijalankan pada deployment ini: hanya kontrol lain yang berlaku."
+
+msgid "rotated {time}"
+msgstr "diputar {time}"
+
+msgid "Contact request"
+msgstr "Permintaan kontak"
+
+msgid "Lead"
+msgstr "Prospek"
+
+msgid "Interaction"
+msgstr "Interaksi"
+
+msgid "Form viewed"
+msgstr "Formulir dilihat"
+
+msgid "Form started"
+msgstr "Formulir mulai diisi"
+
+msgid "Call-to-action clicked"
+msgstr "Ajakan bertindak diklik"
+
+msgid "Phone link clicked"
+msgstr "Tautan telepon diklik"
+
+msgid "WhatsApp link clicked"
+msgstr "Tautan WhatsApp diklik"
+
+msgid "Map link clicked"
+msgstr "Tautan peta diklik"
+
+msgid "Download clicked"
+msgstr "Unduhan diklik"
+
+msgid "Turnstile challenge"
+msgstr "Tantangan Turnstile"
+
+msgid "No challenge"
+msgstr "Tanpa tantangan"
+
+msgid "Challenge passed"
+msgstr "Tantangan lolos"
+
+msgid "Challenge not run on this deployment"
+msgstr "Tantangan tidak dijalankan pada deployment ini"
+
+msgid "Source has no challenge"
+msgstr "Sumber tanpa tantangan"
+
+msgid "Respond to the inquiry"
+msgstr "Menanggapi pertanyaan"
+
+msgid "Marketing follow-up"
+msgstr "Tindak lanjut pemasaran"
+
+msgid "Data subject request"
+msgstr "Permintaan subjek data"
+
+msgid "Consent withdrawn"
+msgstr "Persetujuan ditarik"
+
+msgid "Controller decision"
+msgstr "Keputusan pengendali"
+
+msgid "Origin header"
+msgstr "Header Origin"
+
+msgid "Referer header"
+msgstr "Header Referer"

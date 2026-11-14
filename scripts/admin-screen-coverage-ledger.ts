@@ -276,19 +276,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // which claims BOTH keys (`sender_policy.configure` for the action,
   // `senders.read` for the "is this the default" readout and queue impact) and
   // so they leave this ledger. `/admin/whatsapp` stays gated on `messages.read`.
-  // website_engagement (5) — ADR-0155 / Issue #1153. API-first and
-  // `experimental`: the operator screen (sources and their hosts, a one-time
-  // token display, the masked submission list with its consent provenance, the
-  // audited reveal and the withdrawal) is the recorded follow-up that flips the
-  // module to `active` and adds its navigation entry in the same change (a nav
-  // entry without a page is a permanent 404). The WCAG contract of that screen
-  // (the source token is shown ONCE; the `none` challenge must be visible) is in
-  // docs/awcms/website-engagement.md.
-  "website_engagement.sources.manage",
-  "website_engagement.sources.read",
-  "website_engagement.submissions.read",
+  // website_engagement (1) — ADR-0155 / Issue #1153. `/admin/website-engagement`
+  // (and its `/{id}` and `/sources`) claim `sources.read`, `sources.manage`
+  // (revoke), `submissions.read` and `submissions.withdraw`, so those four left
+  // this ledger. What remains is the audited REVEAL of a submission's decrypted
+  // contact details: it needs its own screen contract (a deliberate, per-row,
+  // audited POST that renders personal data once), and is API-only until then.
   "website_engagement.submissions.reveal",
-  "website_engagement.submissions.withdraw",
   // social_publishing (9) — ADR-0157 / Issue #1145. API-first and
   // `experimental`: the operator screen (the publication list with its derived
   // status, the per-account job table where a partial failure is read, the
