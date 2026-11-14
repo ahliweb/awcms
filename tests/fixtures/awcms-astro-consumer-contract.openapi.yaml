@@ -1434,6 +1434,10 @@ components:
           items:
             type: string
             format: uuid
+        regionCode:
+          type: string
+          nullable: true
+          description: 'Issue #1312 — the region dimension of sql/131 (`awcms_blog_posts.region_code`), returned by `GET`/`PATCH`/`POST` on this path and — since this same issue — by the `?view=full` traversal a static site is built from. `null` is the normal state ("no region set"), never a missing key.'
         authorByline:
           description: |-
             ADR-0109 — the author's OPT-IN public byline, returned by the `?view=full` traversal a static site is built from.
@@ -1584,6 +1588,11 @@ components:
         autoInternalTagLinksDisabled:
           type: boolean
           description: Per-post opt-out of automatic internal tag linking.
+        regionCode:
+          type: string
+          nullable: true
+          pattern: ^[0-9]{2}(\.[0-9]{2}){0,2}(\.[0-9]{4})?$
+          description: "Issue #1312 — the region dimension of sql/131 (awcms_blog_posts.region_code). A dotted idn_admin_regions code (62, 62.71, 62.71.01, 62.71.01.2001), the same shape as BlogInstitution.regionCode. A plain column, not a relation like termIds/institutionIds — no existence check against another table, because the column is deliberately not a foreign key (the region dataset is versioned; the code is the only identifier stable across generations). null clears it on update; absent on update leaves the stored value unchanged."
     BlogTerm:
       type: object
       required:

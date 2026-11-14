@@ -82,6 +82,7 @@ function createInput(slug: string, body: PortableTextDocument) {
     canonicalUrl: null,
     termIds: undefined,
     institutionIds: undefined,
+    regionCode: null,
     translationGroupId: null,
     autoInternalTagLinksDisabled: false
   };

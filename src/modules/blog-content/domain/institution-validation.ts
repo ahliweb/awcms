@@ -153,7 +153,14 @@ function validateOptionalText(
   return trimmed.length === 0 ? null : trimmed;
 }
 
-function validateRegionCodeField(
+/**
+ * Exported since Issue #1312 so `blog-post-validation.ts` can validate
+ * `awcms_blog_posts.region_code` (sql/131) with the exact same rule rather
+ * than copying the regex/error-message pair a second time — a post and an
+ * institution both carry the same dotted `idn_admin_regions` code, under the
+ * same field name, with the same shape-only contract described above.
+ */
+export function validateRegionCodeField(
   record: Record<string, unknown>,
   errors: ValidationError[]
 ): string | null | undefined {
