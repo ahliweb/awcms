@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](20_threat_model_security_architecture.md)
 
-<!-- i18n-source-hash: sha256:75560f16af282ecbcc825a339f935beaaead2a31f4408e2776116cd9f444b2ee -->
+<!-- i18n-source-hash: sha256:eb4cb3569624076d3357633b5b622401fdbb869a4fdbe51469078c264761c1ee -->
 
 # Bagian 20 — Threat Model dan Arsitektur Keamanan
 
