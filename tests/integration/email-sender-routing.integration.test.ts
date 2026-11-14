@@ -36,6 +36,7 @@ import {
   getWorkerRoleSql,
   integrationEnabled,
   reassertRuntimeRoleLogins,
+  rescopeChannelAccount,
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase,
@@ -1049,30 +1050,6 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
       id: "d1160000-0000-4000-8000-0000000000b2"
     };
 
-    /**
-     * Re-scopes an account the way a defect or a compromised owner role could:
-     * with the identity guard switched off for this one statement. Since #1215
-     * the guard refuses a scope rewrite for EVERY role (sql/398), so a scenario
-     * that needs "the parent's scope changed after a child was registered" has
-     * to switch the guard off inside the same transaction, as the sender-guard
-     * tests below do for the message trigger.
-     */
-    async function rescopeAccount(
-      id: string,
-      scope: { type: string; id: string }
-    ): Promise<void> {
-      await getAdminSql().begin(async (tx) => {
-        await tx`ALTER TABLE awcms_channel_accounts DISABLE TRIGGER awcms_channel_accounts_identity_guard`;
-        await tx`
-          UPDATE awcms_channel_accounts
-          SET business_scope_type = ${scope.type},
-              business_scope_id = ${scope.id}
-          WHERE id = ${id}
-        `;
-        await tx`ALTER TABLE awcms_channel_accounts ENABLE TRIGGER awcms_channel_accounts_identity_guard`;
-      });
-    }
-
     /** A brand-Y sender registered (bypassing the route) under brand X's scoped account. */
     async function seedCrossScopeSender(): Promise<{
       id: string;
@@ -1091,7 +1068,7 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
       `) as { id: string }[];
       const id = rows[0]!.id;
 
-      await rescopeAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
+      await rescopeChannelAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
       await getAdminSql()`
         INSERT INTO awcms_channel_account_capabilities
           (tenant_id, account_id, capability, state, evidence_kind,
@@ -1177,7 +1154,7 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
     });
 
     test("createAccount refuses a child outside its parent's scope", async () => {
-      await rescopeAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
+      await rescopeChannelAccount(fx(TENANT_A).accounts[1]!.id, SCOPE_X);
 
       const { createAccount } =
         await import("../../src/modules/channel-accounts/application/account-directory");
