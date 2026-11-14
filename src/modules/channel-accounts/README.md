@@ -44,6 +44,7 @@ Nine rows are **phase-gated** (Issue #1152, pack §3.1): X, LINE Official Accoun
 | `POST accounts/{id}/disconnect`                                   | `accounts.revoke`                                  | `revoked`, own credential hard-deleted, webhooks revoked. `warning`                                                |
 | `GET accounts/{id}/health`                                        | `accounts.read`                                    | Reported by connectors, never asserted by a person                                                                 |
 | `GET accounts/{id}/capabilities`, `PUT .../{capability}`          | `accounts.read` / `capabilities.configure`         | Nine capabilities with matrix cell and effective verdict. Refused at write time when the matrix can never allow it |
+| `PUT accounts/{id}/access-mode`                                   | `assignments.assign`                               | `assigned` (default) or `tenant_wide`; to `assigned` needs an owner; `warning` audit on a real change              |
 | `GET/POST accounts/{id}/assignments`, `DELETE .../{assignmentId}` | `accounts.read` / `assignments.assign`             | Owner / operator / viewer; additive to the permission checks                                                       |
 | `GET connections`, `POST connections/{id}/revoke`                 | `accounts.read` / `accounts.revoke`                | Revoke clears and deletes every credential and revokes the bound accounts. Terminal (trigger)                      |
 | `POST connections/oauth/start`, `GET .../callback`                | `accounts.create`                                  | See below                                                                                                          |
@@ -56,7 +57,7 @@ Every mutation except the OAuth start and callback requires `Idempotency-Key` (a
 
 ## Per-account access
 
-Three layers, all default-deny: the tenant-wide permission; the **assignment** gate (an account with assignees is visible and operable only to them at the required kind, plus holders of `assignments.assign`); and **business-scope ABAC** (an account bound to a scope requires the caller to hold it, re-evaluated through the same chokepoint, so a deny policy and the decision log both apply). Connection break-glass belongs to the holder of the connection's scope and to the tenant administrator (`assignments.assign` as decided by the chokepoint, not derived from holding a scope; ADR-0148 amendment, #1215).
+Three layers, all default-deny: the tenant-wide permission; the **assignment** gate (by the account's explicit `access_mode`, below: an `assigned` account is visible and operable only to its assignees at the required kind, plus holders of `assignments.assign`); and **business-scope ABAC** (an account bound to a scope requires the caller to hold it, re-evaluated through the same chokepoint, so a deny policy and the decision log both apply). Connection break-glass belongs to the holder of the connection's scope and to the tenant administrator (`assignments.assign` as decided by the chokepoint, not derived from holding a scope; ADR-0148 amendment, #1215).
 
 ## OAuth
 
@@ -124,13 +125,27 @@ Connection break-glass asks the tenant-level question first (one memoised decisi
 
 `APP_URL` is required when the module is enabled and is the only source of the OAuth callback origin: `resolveChannelOAuthRedirectUri` returns `null` (start answers `PROVIDER_ADAPTER_UNAVAILABLE`, callback `STATE_INVALID`) instead of falling back to a built-in host, and `config:validate` refuses to boot the deployment (#1215 L7).
 
+## Access mode and the last owner (#1215 M-c, owner decision of 11 November 2026)
+
+Visibility used to be inferred from the **absence** of rows (no assignee meant open to the whole tenant), so removing the last assignee, or erasing the person who was it, silently opened a sender identity. It is now a column, `awcms_channel_accounts.access_mode` (`sql/398`), and the default is the closed one:
+
+| `access_mode`        | Who sees and operates the account                                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `assigned` (default) | its assignees (at the kind the action needs) and the holders of `assignments.assign`; with no assignee at all: administrators only |
+| `tenant_wide`        | the permission alone decides (the old "no assignee" behaviour), chosen on purpose and audited                                      |
+
+- A new account is `assigned` and its **creator becomes its first owner** (`createAccount`), so registering an account does not hand it to administrators only. Every row that existed when `sql/398` ran became `assigned` (fail-closed; the module ships off).
+- `PUT /accounts/{id}/access-mode` (`assignments.assign`, `Idempotency-Key`) switches the mode; the audit row (`channel_accounts.account.access_mode_set`, `warning`) is written only when it changes. Switching to `assigned` needs an owner to exist (`422 OWNER_REQUIRED`).
+- **The last owner of an `assigned` account cannot be removed or demoted** through the API (`409 LAST_OWNER`). The writers take the account row lock first, so two concurrent removals of two owners cannot each see the other remain. The database is the second wall (`sql/398` refuses an unowned switch to `assigned`; `sql/399` refuses demoting the last owner and an assignment's re-pointing).
+- **Erasure must always complete**, so deleting the last owner is NOT refused in the database: `sql/399` instead leaves one `warning` audit row, `channel_accounts.account.owner_orphaned`, carrying the account id only (never the person). The account stays fail-closed: it is reachable only by its remaining assignees (the viewers and operators that are left) and the tenant administrators, who can name a new owner. (The two owner-counting guards SHARE-lock the owner rows, so an erasure racing a demotion or a mode switch waits for it and always leaves this trace when it orphans an `assigned` account.)
+- `awcms_channel_accounts.business_scope_*` is now immutable for every role (`sql/398`, the same identity guard as the account's identity).
+- Every other module that asks "may this caller use this account?" (`whatsapp_delivery`, `email`, `social_publishing`, `telegram_engagement`) goes through `isAccountVisibleTo`, so they inherit the rule; none re-implements it. `omnichannel_inbox` does **not**: it sends nothing, so it only applies the business-scope rule, and a holder of the inbox permission within the same scope still sees the conversations of an `assigned` account. Making conversations follow assignment would be a separate owner decision.
+
 ## Residual items and open questions (#1215, owner decisions)
 
 Not done here; each needs an owner design decision and, for most, a migration:
 
-- **M-c**, the assignment model is fail-open: removing the last assignee opens an account to the whole tenant (proposed: an explicit `access_mode` column and refusing to remove the last owner). Erasure also has no module audit row.
-- **External-id squatting** (M4 of the first review): a `pending` row already holds the global `(provider, external_id)` claim. Needs verified claims or claim expiry, i.e. a platform-scoped job.
+- **External-id squatting** (M4 of the first review): a `pending` row already holds the global `(provider, external_id)` claim. Needs verified claims or claim expiry, i.e. a platform-scoped job. Deliberately NOT built: the options are written up on #1215 for the owner to choose.
 - **N2** (OAuth state sweep runs only on the next start), **N3** (`LIMIT 200` lists without a cursor), and L5/L6 as described in the issue (small inconsistencies, the documented cross-tenant oracle).
-- **`awcms_channel_accounts.business_scope_*` has no immutability trigger** (connections and consumed OAuth states do, `sql/320`). No API path updates it, but the containment rule above is only as durable as that column; guarding it needs a migration.
 - **Hierarchy containment**: should a child scope (an office under a region) be allowed to bind a parent scope's connection? Exact equality was chosen; relaxing it is an owner decision.
 - `sql/318` carries a stale comment (N10) that cannot be edited in an applied migration; the accurate statement is this README and ADR-0148.

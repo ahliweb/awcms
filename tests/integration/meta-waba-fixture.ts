@@ -17,9 +17,9 @@ export async function seedMetaWabaContainer(
   const rows = (await admin`
     INSERT INTO awcms_channel_accounts
       (id, tenant_id, provider, account_kind, external_id, display_name,
-       auth_mode, status)
+       auth_mode, status, access_mode)
     VALUES (${options.id ?? crypto.randomUUID()}, ${tenantId}, 'whatsapp_cloud',
-            'waba', ${wabaExternalId}, 'waba', 'api_token', 'connected')
+            'waba', ${wabaExternalId}, 'waba', 'api_token', 'connected', 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 

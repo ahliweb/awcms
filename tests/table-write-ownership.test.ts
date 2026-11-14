@@ -139,7 +139,13 @@ describe("findSharedTableWrites", () => {
       "awcms_domain_event_deliveries",
       // #1145 L8 (sql/386): the social source re-check probe.
       "awcms_blog_posts",
-      "awcms_news_media_objects"
+      "awcms_news_media_objects",
+      // #1215 M-c: the channel-account access-guard probe seeds two people (a
+      // profile, an identity and a tenant user each) and their assignments.
+      "awcms_channel_account_assignments",
+      "awcms_profiles",
+      "awcms_identities",
+      "awcms_tenant_users"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
@@ -320,13 +326,44 @@ describe("the real repository", () => {
     // creating an identity structurally needs a profile — which is exactly why
     // the shortcut kept being taken, and why it is worth pinning.
     const writes = await collectTableWrites();
+    // The one rolled-back readiness probe that seeds people is tooling, not a
+    // module writing the table (excused in DOCUMENTED_EXCEPTIONS). The filter
+    // names that FILE, not the whole "(scripts tooling)" owner: the gate
+    // excuses per owner, so any OTHER script that began writing this table
+    // would otherwise slip past both the gate and this pin (#1215 audit L4).
     const owners = writes
-      .filter((write) => write.table === "awcms_profiles")
+      .filter(
+        (write) =>
+          write.table === "awcms_profiles" &&
+          write.file !== "scripts/lib/channel-accounts-access-guards.ts"
+      )
       .map((write) => write.owner);
 
     expect([...new Set(owners)].sort()).toEqual([
       "profile_identity",
       "tenant_admin"
+    ]);
+  }, 60000);
+
+  test("#1215 audit L4: the tooling excused on the four identity tables is that one probe file and no other", async () => {
+    // The gate excuses by OWNER ("(scripts tooling)"), which is every script, so
+    // a reason that says "confined to that one function" is a claim only this
+    // test enforces: a second script writing these tables fails here.
+    const writes = await collectTableWrites();
+    const files = writes
+      .filter(
+        (write) =>
+          [
+            "awcms_channel_account_assignments",
+            "awcms_profiles",
+            "awcms_identities",
+            "awcms_tenant_users"
+          ].includes(write.table) && write.owner === "(scripts tooling)"
+      )
+      .map((write) => write.file);
+
+    expect([...new Set(files)]).toEqual([
+      "scripts/lib/channel-accounts-access-guards.ts"
     ]);
   }, 60000);
 
