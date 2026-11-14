@@ -147,7 +147,11 @@ const seeded = Boolean(tenantId && loginIdentifier && password);
  * `color-contrast [serious] target=".admin-status-pill" — Elements must have
  * sufficient colour contrast — help: https://…`
  */
-function describeViolations(violations: import("axe-core").Result[]): string[] {
+type AxeViolation = Awaited<
+  ReturnType<AxeBuilder["analyze"]>
+>["violations"][number];
+
+function describeViolations(violations: AxeViolation[]): string[] {
   const lines: string[] = [];
 
   for (const violation of violations) {
