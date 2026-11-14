@@ -262,19 +262,19 @@ async function seedWaba(
   const container = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
-       account_kind, external_id, display_name, auth_mode, status)
+       account_kind, external_id, display_name, auth_mode, status, access_mode)
     VALUES (${tenantId}, ${scopeType}, ${officeId}, 'whatsapp_cloud', 'waba',
-            ${wabaId}, 'waba', 'api_token', 'connected')
+            ${wabaId}, 'waba', 'api_token', 'connected', 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
   const number = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
        account_kind, external_id, display_name, auth_mode, status,
-       parent_account_id)
+       parent_account_id, access_mode)
     VALUES (${tenantId}, ${scopeType}, ${officeId}, 'whatsapp_cloud',
             'waba_phone_number', ${String(serial)}, ${`n-${serial}`},
-            'api_token', 'connected', ${container[0]!.id})
+            'api_token', 'connected', ${container[0]!.id}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 

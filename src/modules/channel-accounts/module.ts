@@ -215,7 +215,7 @@ export const channelAccountsModule = defineModule({
       exportable: true,
       erasure: "hard_delete",
       rationale:
-        "Which channel accounts this person may operate, and as what (owner, operator, viewer). It is the person's own access to a business asset, so it is part of a subject-access export; on erasure the row is removed (the account itself belongs to the tenant and is untouched, and removing the last assignment returns an account to tenant-wide visibility, which the tenant's administrators can see in the audit log)."
+        "Which channel accounts this person may operate, and as what (owner, operator, viewer). It is the person's own access to a business asset, so it is part of a subject-access export; on erasure the row is removed (the account itself belongs to the tenant and is untouched). Erasure always completes, even for the last owner of an `assigned` account: the account stays fail-closed (administrators only) and the database writes one `warning` audit row, `channel_accounts.account.owner_orphaned`, carrying the account id and never the person (sql/399)."
     }
   ]
 });

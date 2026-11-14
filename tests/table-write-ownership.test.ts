@@ -139,7 +139,13 @@ describe("findSharedTableWrites", () => {
       "awcms_domain_event_deliveries",
       // #1145 L8 (sql/386): the social source re-check probe.
       "awcms_blog_posts",
-      "awcms_news_media_objects"
+      "awcms_news_media_objects",
+      // #1215 M-c: the channel-account access-guard probe seeds two people (a
+      // profile, an identity and a tenant user each) and their assignments.
+      "awcms_channel_account_assignments",
+      "awcms_profiles",
+      "awcms_identities",
+      "awcms_tenant_users"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
@@ -320,8 +326,14 @@ describe("the real repository", () => {
     // creating an identity structurally needs a profile — which is exactly why
     // the shortcut kept being taken, and why it is worth pinning.
     const writes = await collectTableWrites();
+    // The rolled-back readiness probes are tooling, not a module writing the
+    // table (they are excused, one writer each, in DOCUMENTED_EXCEPTIONS).
     const owners = writes
-      .filter((write) => write.table === "awcms_profiles")
+      .filter(
+        (write) =>
+          write.table === "awcms_profiles" &&
+          write.owner !== "(scripts tooling)"
+      )
       .map((write) => write.owner);
 
     expect([...new Set(owners)].sort()).toEqual([
