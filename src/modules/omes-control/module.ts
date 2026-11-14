@@ -69,8 +69,48 @@ export const omesControlModule = defineModule({
   // `APPROVAL_WORKFLOW_NOT_CONFIGURED` refusal a tenant with no published
   // definition already gets — see tests/module-boundary.test.ts's
   // DOCUMENTED_EXCEPTIONS entry for "omes_control -> workflow".
-  dependencies: ["tenant_admin", "identity_access"],
+  // `domain_event_runtime` is required by the consumer contract for any module
+  // that declares `domainEventConsumers` (Issue ahliweb/awcms#1335); it is a
+  // foundation module, unlike `workflow`.
+  dependencies: ["tenant_admin", "identity_access", "domain_event_runtime"],
   type: "domain",
+  /**
+   * Issue ahliweb/awcms#1335: applies a finished approval's verdict to the
+   * operation request / AI egress approval that started it (a human's LATER
+   * decision used to leave them `requested` / `pending` for ever). `workflow`
+   * stays a SOFT integration (see the note above `dependencies`): the consumer
+   * reads only this module's own tables by workflow instance id plus the
+   * instance and decision rows, and an event of any other module's instance
+   * matches nothing. See `application/omes-workflow-settlement.ts`.
+   */
+  domainEventConsumers: [
+    {
+      name: "omes_control.workflow_verdict_settler",
+      description:
+        "omes_control consumer — applies the verdict of a finished approval workflow instance to the operation request (approved / rejected) or AI egress approval (approved / denied) it belongs to. It never creates a job (promotion stays in the worker queue). An approval no human backs, or one the requester took part in, leaves the row pending and is audited.",
+      eventTypes: [
+        "awcms.workflow.instance.approved",
+        "awcms.workflow.instance.rejected",
+        "awcms.workflow.instance.cancelled"
+      ],
+      eventVersions: ["1.0"],
+      handle: async (tx, event, ctx) => {
+        if (event.aggregateType !== "workflow_instance") {
+          return;
+        }
+
+        const { settleOmesRequestForInstance } =
+          await import("./application/omes-workflow-settlement");
+        await settleOmesRequestForInstance(
+          tx as Bun.TransactionSQL,
+          ctx.tenantId,
+          event.aggregateId,
+          ctx.correlationId,
+          new Date()
+        );
+      }
+    }
+  ],
   api: {
     openApiPath: "openapi/modules/omes-control.openapi.yaml",
     basePath: "/api/v1/omes",

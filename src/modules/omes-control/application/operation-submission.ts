@@ -179,7 +179,10 @@ export async function submitOmesOperation(
     // A workflow that resolves synchronously (e.g. zero required approvers)
     // is reflected immediately; otherwise the row stays 'requested' —
     // NEVER auto-approved — until a human decides via the pre-existing
-    // /workflows/tasks/{id}/decisions endpoint.
+    // /workflows/tasks/{id}/decisions endpoint, after which the
+    // `omes_control.workflow_verdict_settler` domain-event consumer
+    // (application/omes-workflow-settlement.ts, Issue #1335) applies the
+    // verdict to this row.
     const nextStatus = workflow.finished
       ? workflow.status === "approved"
         ? "approved"

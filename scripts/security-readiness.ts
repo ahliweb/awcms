@@ -2038,6 +2038,15 @@ export const WORKER_COLUMN_GRANTS: Record<
     UPDATE: ["status", "decided_by", "decided_at", "updated_at"]
   },
   awcms_hr_employments: { UPDATE: ["updated_at"] },
+  // sql/387 (Issue ahliweb/awcms#1335): the omes_control workflow-verdict settler
+  // moves a pending request / egress approval to the workflow's verdict. The
+  // request itself (operation, parameters, requester, link) is not writable.
+  awcms_omes_operation_requests: {
+    UPDATE: ["status", "approved_by", "updated_at"]
+  },
+  awcms_omes_ai_egress_approvals: {
+    UPDATE: ["decision", "decided_at", "updated_at"]
+  },
   // sql/392 (Issue #1298 L3): the dispatcher and the expiry sweep write exactly
   // these columns. The provider-reported status (`provider_status*`, written by
   // a signed webhook as awcms_app), the recipient, template, purpose and sender
