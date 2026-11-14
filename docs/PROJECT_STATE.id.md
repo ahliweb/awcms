@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b0b69bd976af21ccb88c58d96b3cbda9390df1f45e945bb55e15dfe7fabbda29 -->
+<!-- i18n-source-hash: sha256:d4a012c0bda92a1977dbac7978b5f6d3d1cbaed41d22506f8bf5a7d117cfe21b -->
 
 # AWCMS — Project State & Continuation
 
@@ -136,7 +136,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                                                                                               | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                                                                                               | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Modul base                         | **40** (lihat daftar di ARCHITECTURE.md)                                                                                                                                                                         | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **282** (`sql/001`–`408`)                                                                                                                                                                                        | `ls sql/`                                                                               |
+| Migrasi                            | **283** (`sql/001`–`409`)                                                                                                                                                                                        | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0162** (`0000` = template; status ADR tertinggi: **Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **86** berkas `.astro` di `src/pages/admin/`; **5 dari 40** modul tanpa `navigation:` (`crm-follow-up`, `crm-leads`, `social-publishing`, `telegram-engagement`, `website-engagement`)                           | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **108** (63.865 baris) — soal typecheck lihat §6                                                                                                                                                                 | `find src -name '*.astro'`                                                              |
@@ -409,6 +409,26 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **Ledger append-only dipersempit; dua keputusan pemilik dicatat — 14
+  November 2026 (#1346, `sql/409`).** Keputusan pemilik "1A, 2A". **1A:** sisa
+  tabel yang didokumentasikan append-only dikerjakan dalam SATU PR mengikuti
+  #1341/#1344: `sql/409` mencabut UPDATE, DELETE, dan TRUNCATE dari `awcms_app`
+  pada decision log ABAC, riwayat event access-policy, riwayat event
+  business-scope, dan outbox domain-event, dan `security:readiness` mem-pin
+  masing-masing persis SELECT + INSERT dua arah. Tiap tabel diaudit per call
+  site lebih dulu: tidak ada jalur UPDATE atau DELETE runtime untuk `awcms_app`;
+  satu-satunya DELETE yang sah (retensi decision log) milik `awcms_worker` dan
+  tetap dimilikinya; status pemrosesan outbox ada di
+  `awcms_domain_event_deliveries`, bukan di tabel event, sehingga dispatcher
+  tidak butuh apa pun di sini. Tidak ada tabel yang dikecualikan. **2A:** hak
+  `TEMP` tingkat database sengaja TETAP tidak diperiksa readiness (alasan di
+  #1345: setiap fungsi SECURITY DEFINER memasang `search_path = public,
+pg_temp`, pin persis memerahkan gerbang bila urutan itu berubah, dan cek
+  `TEMP` akan merah di setiap instalasi standar karena `TEMP` diberikan ke
+  `PUBLIC`); jangan menambahkannya. Aksi operator: bila `DATABASE_URL` adalah
+  login `awcms_app`, setel `WORKER_DATABASE_URL` ke `awcms_worker` sebelum atau
+  bersama migrasi.
 
 - **`email:senders:verify` DIJADWALKAN — 14 November 2026 (#1160, ADR-0162).**
   Melaksanakan keputusan pemilik 11 November 2026 (entri ADR-0159 di bawah).
