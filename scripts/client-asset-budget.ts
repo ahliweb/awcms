@@ -1273,8 +1273,30 @@ export const READER_BUDGET_BYTES = 24_000;
  * Rebase note: `main` had moved to 379,850 B, so this branch's own raise
  * (+1,500 B, written against 365,600 B) is stacked on it, giving
  * 381,350 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1166** (the lead pipeline screens): +1,600 B of its
+ * own. Two page scripts, each on its own screen only:
+ * the lead detail (`/admin/crm-leads/[id]`: move and assign, each sentence
+ * translated on the server and carried in a `data-messages` attribute) and the
+ * settings (`/admin/crm-leads/settings`: the tenant switch). The list screen
+ * ships no script. The lifecycle is the shared `admin-form-client.ts` and the
+ * key source the shared `admin-idempotency-key.ts`, so there is no per-screen
+ * duplication to recover.
+ *
+ * **Raised again for the #1166 audit follow-up (M-1)**: +300 B of its own. The settings form now
+ * sends only the fields the viewer changed (a stale tab must not re-assert a tenant switch
+ * another admin turned off), which is a small diff helper plus the page's
+ * initial values: ~200 B on that one screen.
+ *
+ * Rebase note (#1166): `main` had moved to 379,850 B; with both #1166 changes
+ * on top, the rebased build measures 380,829 B locally, so the budget is set to
+ * 380,970 B (measured + 141 B margin for the local/CI build difference).
+ *
+ * Rebase note: `main` had moved to 381,350 B, so this branch's own raise
+ * (+1,120 B, written against 379,850 B) is stacked on it, giving
+ * 382,470 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 381_350;
+export const APP_BUDGET_BYTES = 382_470;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

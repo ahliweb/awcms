@@ -1,0 +1,444 @@
+---
+/**
+ * Lead pipeline — the leads list (Issue #1166, ADR-0153, ADR-0149 data page).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the READ side of `crm_leads`: the tenant's live leads with their stage
+ * category, owner and first source, filterable by pipeline, stage category,
+ * owner and source. One lead's history and actions are on
+ * `/admin/crm-leads/{id}`; the tenant switch and the stage catalogue are on
+ * `/admin/crm-leads/settings`.
+ *
+ * It shows what `GET /api/v1/crm-leads/leads` shows and nothing more: the
+ * display name and the MASKED contact points. A contact value is never
+ * decrypted for a screen, a soft-deleted, merged-away or anonymised lead is not
+ * listed, and a staff member is "you" or "another staff member", never a name.
+ * There is no create form: lead intake stays on the API (and on the sources
+ * that feed it) in this slice.
+ *
+ * ## It shows exactly what the API shows
+ *
+ * The list runs, through `loadLeadList`, the SAME `listLeads` the route uses,
+ * for the session's tenant only (RLS and an explicit tenant predicate). The
+ * pipeline, stage category and owner filters are pushed to SQL; the source
+ * filter and the search run on the loaded rows and match only what the page
+ * shows.
+ *
+ * ## Paging
+ *
+ * The loader reads at most 200 leads (two keyset pages of the API's own query,
+ * newest first) and the screen sorts and slices them in memory through the
+ * ADR-0149 contract. The totals are exact for the loaded rows; when more exist
+ * the page says so instead of showing a total it cannot stand behind.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  leadSourceKindLabel,
+  leadStatusLabel,
+  stageCategoryLabel,
+  stageCategoryTone
+} from "../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
+import { loadLeadList } from "../../modules/crm-leads/application/screen-loaders";
+import {
+  SOURCE_KINDS,
+  STAGE_CATEGORIES
+} from "../../modules/crm-leads/domain/crm-leads-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims, and held
+ * equal to the module's own guard by the page-contract test.
+ */
+const READ_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "read"
+} as const;
+/** Only to decide whether to LINK to the settings screen; that screen gates itself. */
+const CONFIGURE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "pipelines",
+  action: "configure"
+} as const;
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/crm-leads";
+const SPEC: DataPageSpec = {
+  filterKeys: ["pipeline", "category", "owner", "source"],
+  sortKeys: ["created", "entered", "name"],
+  defaultSort: "created",
+  defaultDir: "desc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    // The listing chain is the module's loader, not inline here: it is what the
+    // behavioural integration test runs as a real viewer.
+    loadLeadList({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        me: auth.context.tenantUserId
+      },
+      filters: query.filters,
+      configureGuard: CONFIGURE_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads.astro: failed to load the leads",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "no leads" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const leads = data?.leads ?? [];
+const pipelineName = (id: string) =>
+  data?.pipelines.find((pipeline) => pipeline.id === id)?.name ??
+  t("Unknown pipeline");
+const categoryLabel = (category: string) => stageCategoryLabel(t, category);
+const sourceLabel = (kind: string | null) => leadSourceKindLabel(t, kind);
+
+function ownerText(owner: string | null): string {
+  if (owner === null) return t("Unassigned");
+
+  return owner === data?.me ? t("You") : t("Another staff member");
+}
+
+// The source filter and the search run on the loaded rows and match what the
+// page SHOWS: name, stage, category, source and pipeline labels.
+const needle = query.q.toLowerCase();
+const matching = leads.filter(
+  (lead) =>
+    (query.filters.source === undefined ||
+      query.filters.source === null ||
+      query.filters.source === "" ||
+      lead.sourceKind === query.filters.source) &&
+    (needle === "" ||
+      (lead.displayName ?? "").toLowerCase().includes(needle) ||
+      lead.stageKey.toLowerCase().includes(needle) ||
+      categoryLabel(lead.stageCategory).toLowerCase().includes(needle) ||
+      sourceLabel(lead.sourceKind).toLowerCase().includes(needle) ||
+      pipelineName(lead.pipelineId).toLowerCase().includes(needle))
+);
+const page = sliceKeyset(matching, {
+  sortValue: (lead) =>
+    query.sort === "entered"
+      ? lead.stageEnteredAt
+      : query.sort === "name"
+        ? (lead.displayName ?? "").toLowerCase()
+        : lead.createdAt,
+  id: (lead) => lead.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(PATH, SPEC, query, change);
+const sortState = (key: string) => buildSortHeaderState(PATH, SPEC, query, key);
+const clearHref = buildClearFiltersHref(PATH, SPEC, query);
+const chips = buildActiveFilterChips(PATH, SPEC, query, (key, value) =>
+  key === "q"
+    ? t("Search: {value}", { value })
+    : key === "pipeline"
+      ? t("Pipeline: {value}", { value: pipelineName(value) })
+      : key === "category"
+        ? t("Stage: {value}", { value: categoryLabel(value) })
+        : key === "owner"
+          ? t("Owner: {value}", { value: t("Assigned to me") })
+          : t("Source: {value}", { value: sourceLabel(value) })
+);
+const summary = filtered
+  ? tn(
+      "{count} lead matches your search and filters",
+      "{count} leads match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
+---
+
+<AdminLayout
+  title={t("Lead pipeline")}
+  description={t(
+    "The tenant's prospects by pipeline stage: owner, first source and how long they have been in their stage. Contact points are always masked."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-leads-denied">
+      {t("You do not have permission to view leads.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-leads-error">
+      {t("The leads could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-leads-disabled">
+      {t(
+        "The lead pipeline is switched off on this deployment, so no lead is collected or listed."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <section class="admin-section fade-in-up" aria-labelledby="crm-leads-title">
+      <h2 class="admin-section-title" id="crm-leads-title">
+        {t("Leads")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "Newest first. A lead is a prospect, not a customer: the customer record stays with the system that owns it."
+        )}
+        {data.canConfigure && (
+          <>
+            {" "}
+            <a href={`${PATH}/settings`} id="crm-leads-settings-link">
+              {t("Pipelines and settings")}
+            </a>
+          </>
+        )}
+      </p>
+
+      {!data.tenantEnabled && (
+        <p class="state-notice" id="crm-leads-tenant-off">
+          {t(
+            "The lead pipeline is switched off for this tenant, so leads cannot be changed. Existing leads can still be read."
+          )}
+        </p>
+      )}
+
+      {data.more && (
+        <p class="state-notice" id="crm-leads-truncated">
+          {t(
+            "There are more leads than this screen loads. Showing the newest {count}. The pipeline, stage and owner filters cover every lead; the source filter and search cover only these. The API lists the rest.",
+            { count: leads.length }
+          )}
+        </p>
+      )}
+
+      <DataListToolbar
+        action={PATH}
+        idPrefix="crm-leads"
+        landmarkLabel={t("Search leads")}
+        searchLabel={t("Search")}
+        q={query.q}
+        filters={[
+          {
+            name: "pipeline",
+            label: t("Pipeline"),
+            value: query.filters.pipeline ?? "",
+            allLabel: t("All pipelines"),
+            options: data.pipelines.map((pipeline) => ({
+              value: pipeline.id,
+              label: pipeline.name
+            }))
+          },
+          {
+            name: "category",
+            label: t("Stage"),
+            value: query.filters.category ?? "",
+            allLabel: t("All stages"),
+            options: STAGE_CATEGORIES.map((category) => ({
+              value: category,
+              label: categoryLabel(category)
+            }))
+          },
+          {
+            name: "owner",
+            label: t("Owner"),
+            value: query.filters.owner ?? "",
+            allLabel: t("Anyone"),
+            options: [{ value: "me", label: t("Assigned to me") }]
+          },
+          {
+            name: "source",
+            label: t("Source"),
+            value: query.filters.source ?? "",
+            allLabel: t("All sources"),
+            options: SOURCE_KINDS.map((kind) => ({
+              value: kind,
+              label: sourceLabel(kind)
+            }))
+          }
+        ]}
+        sort={{
+          label: t("Sort by"),
+          value: query.sort,
+          options: [
+            { value: "created", label: t("Created") },
+            { value: "entered", label: t("In stage since") },
+            { value: "name", label: t("Name") }
+          ],
+          dirLabel: t("Sort order"),
+          dir: query.dir,
+          ascLabel: t("Ascending"),
+          descLabel: t("Descending")
+        }}
+        preserve={
+          query.limit === DEFAULT_DATA_PAGE_SIZE
+            ? {}
+            : { limit: String(query.limit) }
+        }
+        chips={chips}
+        clearHref={clearHref}
+        summary={summary}
+        submitLabel={t("Search")}
+        clearLabel={t("Clear filters")}
+        chipsLabel={t("Active filters")}
+        removeLabel={(label) => t("Remove filter: {label}", { label })}
+      />
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="crm-leads-table-caption"
+      >
+        <table class="data-table data-table--stack" id="crm-leads-table">
+          <caption id="crm-leads-table-caption">
+            {tn("{count} lead", "{count} leads", page.total, {
+              count: page.total
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <SortableHeader label={t("Lead")} {...sortState("name")} />
+              <th scope="col">{t("Pipeline")}</th>
+              <th scope="col">{t("Stage")}</th>
+              <th scope="col">{t("Owner")}</th>
+              <th scope="col">{t("Source")}</th>
+              <SortableHeader
+                label={t("In stage since")}
+                {...sortState("entered")}
+              />
+              <SortableHeader label={t("Created")} {...sortState("created")} />
+            </tr>
+          </thead>
+          <tbody>
+            {page.items.length === 0 ? (
+              <DataEmptyState
+                colspan={7}
+                filtered={filtered}
+                query={query.q}
+                clearHref={clearHref}
+                title={t("No leads yet")}
+                text={t(
+                  "Leads appear here when they are entered by hand, imported, or sent by an integration through the API."
+                )}
+              />
+            ) : (
+              page.items.map((lead) => (
+                <tr data-lead-id={lead.id}>
+                  <td data-label={t("Lead")}>
+                    <a href={`${PATH}/${lead.id}`}>
+                      {lead.displayName ?? t("Unnamed lead")}
+                    </a>
+                    {lead.contactPoints
+                      .filter((point) => point.revokedAt === null)
+                      .map((point) => (
+                        <span class="cell-muted"> {point.masked ?? "—"}</span>
+                      ))}
+                    {lead.status !== "open" && (
+                      <span class="admin-status-pill" data-tone="neutral">
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {leadStatusLabel(t, lead.status)}
+                      </span>
+                    )}
+                  </td>
+                  <td data-label={t("Pipeline")}>
+                    {pipelineName(lead.pipelineId)}
+                  </td>
+                  <td
+                    data-label={t("Stage")}
+                    data-stage-category={lead.stageCategory}
+                  >
+                    <span
+                      class="admin-status-pill"
+                      data-tone={stageCategoryTone(lead.stageCategory)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {categoryLabel(lead.stageCategory)}
+                    </span>
+                    <span class="cell-muted"> {lead.stageKey}</span>
+                  </td>
+                  <td data-label={t("Owner")}>
+                    {ownerText(lead.ownerTenantUserId)}
+                  </td>
+                  <td data-label={t("Source")} data-source={lead.sourceKind}>
+                    {sourceLabel(lead.sourceKind)}
+                  </td>
+                  <td data-label={t("In stage since")}>
+                    {formatUtcMinute(lead.stageEnteredAt)}
+                  </td>
+                  <td data-label={t("Created")}>
+                    {formatUtcMinute(lead.createdAt)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <KeysetPager
+        prevHref={
+          page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+        }
+        nextHref={
+          page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+        }
+        from={page.from}
+        to={page.to}
+        total={data.more ? undefined : page.total}
+        limit={query.limit}
+        sizes={DATA_PAGE_SIZES.map((value) => ({
+          value,
+          href: href({ limit: value })
+        }))}
+      />
+    </section>
+  )}
+</AdminLayout>
