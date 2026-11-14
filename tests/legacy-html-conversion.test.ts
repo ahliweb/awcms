@@ -339,6 +339,33 @@ describe("typographic entities and hexadecimal references", () => {
     expect(textOfFirstBlock("<p>a &weird; b</p>")).toBe("a &weird; b");
   });
 
+  test("a prototype member name is not an entity: &constructor; stays literal", () => {
+    expect(
+      textOfFirstBlock(
+        "<p>a &constructor; b &toString; c &valueOf; d &__proto__; e &hasOwnProperty;</p>"
+      )
+    ).toBe(
+      "a &constructor; b &toString; c &valueOf; d &__proto__; e &hasOwnProperty;"
+    );
+  });
+
+  test("a reference to a surrogate or a control character stays literal; tab and line feed decode", () => {
+    expect(
+      textOfFirstBlock("<p>a&#xD800;b &#55357;c &#xDFFF;d &#1;e &#x1F;f</p>")
+    ).toBe("a&#xD800;b &#55357;c &#xDFFF;d &#1;e &#x1F;f");
+    expect(textOfFirstBlock("<p>a&#9;b&#x0A;c</p>")).toBe("a\tb\nc");
+  });
+
+  test("an attribute value decodes exactly once", () => {
+    const result = convertLegacyHtmlToPortableText(
+      '<p><a href="/a?x=1&amp;amp;y=2&amp;#x6A;">t</a></p>'
+    );
+    const block = result.document[0] as { markDefs: { href: string }[] };
+
+    expect(result.ok).toBe(true);
+    expect(block.markDefs[0]?.href).toBe("/a?x=1&amp;y=2&#x6A;");
+  });
+
   test("a hex-encoded javascript: scheme in an href is still refused as unsafe_href", () => {
     const result = convertLegacyHtmlToPortableText(
       '<p><a href="&#x6A;avascript:steal()">click</a></p>'

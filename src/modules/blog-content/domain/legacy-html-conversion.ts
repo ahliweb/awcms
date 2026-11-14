@@ -254,6 +254,22 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
  * `&#x6A;avascript:` is decoded BEFORE `isAllowedPortableTextHref` runs and is
  * refused as `unsafe_href`, exactly like the decimal form.
  */
+/**
+ * A numeric reference decodes only to a code point that can live in stored
+ * text: not NUL, not a UTF-16 surrogate (U+D800-U+DFFF, which would become a
+ * lone surrogate that is not valid Unicode text), and not a C0 control other
+ * than tab and line feed. Anything else stays literal, like an unknown name.
+ */
+function isDecodableCodePoint(point: number): boolean {
+  if (!Number.isInteger(point) || point <= 0 || point >= 0x110000) {
+    return false;
+  }
+  if (point >= 0xd800 && point <= 0xdfff) return false;
+  if (point < 0x20 && point !== 0x09 && point !== 0x0a) return false;
+
+  return true;
+}
+
 function decodeEntities(value: string): string {
   return value.replace(
     /&(#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g,
@@ -263,12 +279,17 @@ function decodeEntities(value: string): string {
         const point = isHex
           ? Number.parseInt(entity.slice(2), 16)
           : Number(entity.slice(1));
-        return Number.isInteger(point) && point > 0 && point < 0x110000
+        return isDecodableCodePoint(point)
           ? String.fromCodePoint(point)
           : match;
       }
 
-      return NAMED_ENTITIES[entity] ?? match;
+      // `Object.hasOwn`, not `NAMED_ENTITIES[entity] ?? match`: the entity name
+      // is archive-controlled, and a plain-object lookup would answer
+      // `&constructor;` with the text of `Object`'s constructor function.
+      return Object.hasOwn(NAMED_ENTITIES, entity)
+        ? NAMED_ENTITIES[entity]!
+        : match;
     }
   );
 }
