@@ -193,7 +193,16 @@ const ATTR_PATTERN =
   /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
 
 /**
- * The named entities CKEditor actually emits.
+ * The named entities this converter recognises.
+ *
+ * The base set (`nbsp`/`amp`/`lt`/`gt`/`quot`/`apos`) is what CKEditor emits for
+ * markup-significant characters. The typographic set (curly quotes, dashes,
+ * ellipsis) and a few symbols are what "smart punctuation" typing autocorrect
+ * and Word paste produce as literal named references. They were missing, so
+ * `decodeEntities` left them as seven literal characters and a consumer that
+ * HTML-escapes the stored text showed `&amp;ldquo;` on the page: the escaping
+ * was correct, the decode never ran for entities that were merely absent from
+ * this table, not unrecognisable.
  *
  * `nbsp` maps to a REGULAR space, deliberately, not U+00A0. CKEditor emits it as
  * filler by the thousand, and a non-breaking space survives into `content_text`
@@ -207,11 +216,27 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   gt: ">",
   quot: '"',
   apos: "'",
-  "#39": "'"
+  "#39": "'",
+  // Typographic punctuation, written as escapes so the source stays ASCII.
+  ldquo: "\u201C",
+  rdquo: "\u201D",
+  lsquo: "\u2018",
+  rsquo: "\u2019",
+  sbquo: "\u201A",
+  bdquo: "\u201E",
+  ndash: "\u2013",
+  mdash: "\u2014",
+  hellip: "\u2026",
+  // Symbols that bylines and captions carry.
+  deg: "\u00B0",
+  trade: "\u2122",
+  copy: "\u00A9",
+  reg: "\u00AE"
 };
 
 /**
- * Decodes the entity set CKEditor actually emits, in ONE pass.
+ * Decodes named, decimal (`&#8212;`) and hexadecimal (`&#x2014;`) character
+ * references, in ONE pass.
  *
  * The pass count is the security property, not a performance note. A chain of
  * `.replace()` calls decodes `&amp;lt;` to `&lt;` and then to `<`, because the
@@ -220,22 +245,51 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
  * turns text an author wrote as the literal characters `&lt;` into markup. A
  * single regex never re-scans its own output.
  *
- * Deliberately not exhaustive: an unrecognised entity is left as written rather
- * than guessed at, which shows up as literal text a proofreader can see instead
- * of a wrong character nobody notices.
+ * Deliberately not exhaustive for NAMED entities: an unrecognised one is left as
+ * written rather than guessed at, which shows up as literal text a proofreader
+ * can see instead of a wrong character nobody notices. A numeric reference names
+ * a code point unambiguously, so every valid one decodes.
+ *
+ * Attribute values go through this too, so a hex-encoded scheme such as
+ * `&#x6A;avascript:` is decoded BEFORE `isAllowedPortableTextHref` runs and is
+ * refused as `unsafe_href`, exactly like the decimal form.
  */
+/**
+ * A numeric reference decodes only to a code point that can live in stored
+ * text: not NUL, not a UTF-16 surrogate (U+D800-U+DFFF, which would become a
+ * lone surrogate that is not valid Unicode text), and not a C0 control other
+ * than tab and line feed. Anything else stays literal, like an unknown name.
+ */
+function isDecodableCodePoint(point: number): boolean {
+  if (!Number.isInteger(point) || point <= 0 || point >= 0x110000) {
+    return false;
+  }
+  if (point >= 0xd800 && point <= 0xdfff) return false;
+  if (point < 0x20 && point !== 0x09 && point !== 0x0a) return false;
+
+  return true;
+}
+
 function decodeEntities(value: string): string {
   return value.replace(
-    /&(nbsp|amp|lt|gt|quot|apos|#39|#\d+);/g,
+    /&(#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g,
     (match, entity: string) => {
       if (entity.startsWith("#")) {
-        const point = Number(entity.slice(1));
-        return Number.isInteger(point) && point > 0 && point < 0x110000
+        const isHex = entity[1] === "x" || entity[1] === "X";
+        const point = isHex
+          ? Number.parseInt(entity.slice(2), 16)
+          : Number(entity.slice(1));
+        return isDecodableCodePoint(point)
           ? String.fromCodePoint(point)
           : match;
       }
 
-      return NAMED_ENTITIES[entity] ?? match;
+      // `Object.hasOwn`, not `NAMED_ENTITIES[entity] ?? match`: the entity name
+      // is archive-controlled, and a plain-object lookup would answer
+      // `&constructor;` with the text of `Object`'s constructor function.
+      return Object.hasOwn(NAMED_ENTITIES, entity)
+        ? NAMED_ENTITIES[entity]!
+        : match;
     }
   );
 }
