@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:af38936580794d7ac8fdedaf5f595825162630b972f03dce9b491aea9dbdf64f -->
+<!-- i18n-source-hash: sha256:4758456ec017a18a54b2f4df7a7cf72520577bef3390cf5b179e905a4f3ba291 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -34,7 +34,12 @@ SECURITY DEFINER sempit `awcms_booking_worker_transition` (owner
 `awcms_booking_transition`, argumen tenant harus sama dengan milik sesi, EXECUTE
 hanya untuk worker) dan bukan `transitionReservation`; baris audit dan domain
 event-nya sama. Keputusan terbuka: jalur itu tak menyimpan rekaman
-Idempotency-Key (worker tak bisa menyisipkannya); retry aman lewat cek status.
+Idempotency-Key (worker tak bisa menyisipkannya); retry aman lewat cek status. Akibat (audit PR #1302, L-3/L-4): kunci yang dipakai
+ulang untuk reservasi lain tak terdeteksi di sana, confirm yang dikirim ulang
+setelah cancel dijawab `INVALID_STATE` (jalur aplikasi memutar ulang `ok`),
+maka arahkan efek samping konsumen lewat `awcms_domain_event_consumer_effects`;
+aktor self-asserted (user tenant sama berstatus apa pun). Rincian di
+`docs/awcms/booking.id.md`.
 
 Stay dan blok (Issue #940, `sql/204`): stay diklaim lewat allocator dan
 `placeHold` yang sama (`stay: { checkInDate, checkOutDate }`, exclusion

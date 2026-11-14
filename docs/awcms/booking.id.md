@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:a9bf8b25f78d16080d061722d465aaddb91f7a924570980eff929347c7123183 -->
+<!-- i18n-source-hash: sha256:b285930f08769daf91437cff49acacd1b6358f6058477b2d5f318420d9d67407 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -453,7 +453,19 @@ tidak menyimpan rekaman Idempotency-Key (worker tak punya `INSERT` pada
 `awcms_idempotency_keys`, dan fungsi yang menulisnya akan menulis hash dan
 respons yang dipasok pemanggil). Ia tetap MENGHORMATI rekaman tersimpan (replay
 atau konflik), dan keamanan retry-nya adalah lapisan 2, cek status: meminta
-status yang sudah dicapai tidak menulis apa pun.
+status yang sudah dicapai tidak menulis apa pun. Akibat yang harus diketahui
+konsumen worker (audit PR #1302, L-3): (a) kunci yang dipakai ulang untuk
+reservasi BERBEDA tidak terdeteksi di jalur ini (jalur aplikasi menjawab
+`IDEMPOTENCY_CONFLICT`; hanya rekaman buatan jalur aplikasi yang dihormati);
+(b) `confirm` yang dikirim ulang setelah reservasi dibatalkan dijawab
+`INVALID_STATE`, sedangkan jalur aplikasi memutar ulang `ok` tersimpan.
+Konsumen yang melakukan efek samping (refund, pesan) pada penolakan tidak boleh
+menggantungkannya pada jawaban saja: arahkan lewat
+`awcms_domain_event_consumer_effects` untuk exactly-once. Aktor bersifat
+self-asserted (user tenant yang SAMA lewat FK komposit, status apa pun), seperti
+jalur aplikasi lewat port; worker yang menyebut user keliru salah mengatribusikan
+baris audit, bukan memperoleh hak. Keduanya keputusan terbuka; fungsi definer
+yang menyimpan hash di sisi server adalah tindak lanjut opsional.
 
 **Constraint eksklusi** (pada `resource_allocations`; constraint staf identik
 pada `staff_ref`):

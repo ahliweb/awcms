@@ -543,59 +543,183 @@ suite("booking worker confirm and cancel (Issue #1278, sql/387)", () => {
       }
     ];
 
+    // The cancellation cutoff, as seconds before the start: a confirm has none;
+    // a cancel runs against a cutoff far past (always late), one not yet reached
+    // (never late) and one a couple of minutes either side of the boundary, so
+    // BOTH values of `late_cancellation` are compared, not only the late one.
+    type CutoffCase = {
+      name: string;
+      seconds: (startsAtMs: number) => number | null;
+      late: boolean | null;
+    };
+    const untilStart = (startsAtMs: number) =>
+      Math.round((startsAtMs - Date.now()) / 1000);
+    const cutoffCases: Record<"confirm" | "cancel", CutoffCase[]> = {
+      confirm: [{ name: "no cutoff", seconds: () => null, late: null }],
+      cancel: [
+        {
+          name: "a cutoff long past",
+          seconds: () => 30 * 24 * 3600,
+          late: true
+        },
+        { name: "a cutoff not reached", seconds: () => 3600, late: false },
+        {
+          name: "a cutoff 2 minutes short of the boundary",
+          seconds: (startsAtMs) => untilStart(startsAtMs) - 120,
+          late: false
+        },
+        {
+          name: "a cutoff 2 minutes past the boundary",
+          seconds: (startsAtMs) => untilStart(startsAtMs) + 120,
+          late: true
+        }
+      ]
+    };
+
     for (const verb of ["confirm", "cancel"] as const) {
-      for (const setup of setups) {
-        test(`${verb} on a ${setup.name} reservation leaves the same rows either way`, async () => {
-          // A late cutoff on half of the runs exercises both values of the flag.
-          const fixture = await newFixture(TENANT_A, {
-            capacity: 2,
-            cutoffSeconds: verb === "cancel" ? 30 * 24 * 3600 : null
+      for (const cutoff of cutoffCases[verb]) {
+        for (const setup of setups) {
+          test(`${verb} (${cutoff.name}) on a ${setup.name} reservation leaves the same rows either way`, async () => {
+            // Two units, one slot: the same claim twice, to compare like with like.
+            slotOffset += 1;
+            const startsAtMs = START + slotOffset * 2 * HOUR;
+            const fixture = await newFixture(TENANT_A, {
+              capacity: 2,
+              cutoffSeconds: cutoff.seconds(startsAtMs)
+            });
+            const viaApp = await newHold(TENANT_A, fixture, { startsAtMs });
+            const viaWorker = await newHold(TENANT_A, fixture, { startsAtMs });
+
+            await setup.prepare(viaApp);
+            await setup.prepare(viaWorker);
+
+            const action: TransitionAction = verb;
+            const app = await appTx(TENANT_A, (tx) =>
+              transitionReservation(tx, ctxOf(TENANT_A), viaApp, action, {
+                reasonCode: verb === "cancel" ? "same_reason" : null
+              })
+            );
+            const worker = await viaPort(
+              TENANT_A,
+              verb,
+              viaWorker,
+              "same_reason"
+            );
+
+            // Same answer: success (and replay or not), or the same refusal.
+            if (app.outcome === "ok") {
+              expect(worker).toMatchObject({
+                ok: true,
+                status: app.reservation.status,
+                replayed: app.replayed,
+                holdExpiresAt:
+                  app.reservation.holdExpiresAt === null
+                    ? null
+                    : expect.any(String)
+              });
+            } else {
+              expect(app.outcome).toBe("refused");
+              expect(worker).toEqual({
+                ok: false,
+                reason: (app as { code: string }).code as never
+              });
+            }
+
+            const workerFootprint = await footprint(viaWorker);
+
+            expect(workerFootprint).toEqual(await footprint(viaApp));
+
+            // The flag itself, not only its agreement: a cancel that actually
+            // happened carries the value the cutoff dictates.
+            if (verb === "cancel" && cutoff.late !== null && worker.ok) {
+              if (!worker.replayed) {
+                expect(workerFootprint.reservation!.late_cancellation).toBe(
+                  cutoff.late
+                );
+              }
+            }
           });
-          // Two units, one slot: the same claim twice, to compare like with like.
-          slotOffset += 1;
-          const startsAtMs = START + slotOffset * 2 * HOUR;
-          const viaApp = await newHold(TENANT_A, fixture, { startsAtMs });
-          const viaWorker = await newHold(TENANT_A, fixture, { startsAtMs });
-
-          await setup.prepare(viaApp);
-          await setup.prepare(viaWorker);
-
-          const action: TransitionAction = verb;
-          const app = await appTx(TENANT_A, (tx) =>
-            transitionReservation(tx, ctxOf(TENANT_A), viaApp, action, {
-              reasonCode: verb === "cancel" ? "same_reason" : null
-            })
-          );
-          const worker = await viaPort(
-            TENANT_A,
-            verb,
-            viaWorker,
-            "same_reason"
-          );
-
-          // Same answer: success (and replay or not), or the same refusal.
-          if (app.outcome === "ok") {
-            expect(worker).toMatchObject({
-              ok: true,
-              status: app.reservation.status,
-              replayed: app.replayed,
-              holdExpiresAt:
-                app.reservation.holdExpiresAt === null
-                  ? null
-                  : expect.any(String)
-            });
-          } else {
-            expect(app.outcome).toBe("refused");
-            expect(worker).toEqual({
-              ok: false,
-              reason: (app as { code: string }).code as never
-            });
-          }
-
-          expect(await footprint(viaWorker)).toEqual(await footprint(viaApp));
-        });
+        }
       }
     }
+  });
+
+  describe("serialisation on the reservation row", () => {
+    // Without `FOR UPDATE` the loser of a race read a stale status and met the
+    // "changed under its own lock" guard (55000): a failed job instead of the
+    // clean answer. These runs fire the contenders at once.
+    test("ten worker cancels of one reservation: one effect, nine replays, no error", async () => {
+      const fixture = await newFixture(TENANT_A);
+      const id = await newHold(TENANT_A, fixture);
+      const before = await footprint(id);
+      const results = await Promise.allSettled(
+        Array.from({ length: 10 }, () => viaPort(TENANT_A, "cancel", id))
+      );
+
+      expect(results.filter((result) => result.status === "rejected")).toEqual(
+        []
+      );
+
+      const answers = results.map(
+        (result) =>
+          (
+            result as PromiseFulfilledResult<{
+              ok: boolean;
+              replayed?: boolean;
+            }>
+          ).value
+      );
+
+      expect(answers.every((answer) => answer.ok)).toBe(true);
+      expect(
+        answers.filter((answer) => answer.replayed === false)
+      ).toHaveLength(1);
+      expect(answers.filter((answer) => answer.replayed === true)).toHaveLength(
+        9
+      );
+
+      const trace = await footprint(id);
+
+      expect(
+        trace.history.filter((row) => row.kind === "cancelled")
+      ).toHaveLength(1);
+      expect(trace.audit).toHaveLength(before.audit.length + 1);
+      expect(trace.events).toHaveLength(before.events.length + 1);
+    });
+
+    test("a worker confirm racing an application cancel: each gets a clean answer", async () => {
+      const fixture = await newFixture(TENANT_A);
+
+      for (let round = 0; round < 6; round += 1) {
+        const id = await newHold(TENANT_A, fixture);
+        const [worker, app] = await Promise.allSettled([
+          viaPort(TENANT_A, "confirm", id),
+          appTx(TENANT_A, (tx) =>
+            transitionReservation(tx, ctxOf(TENANT_A), id, "cancel")
+          )
+        ]);
+
+        // Never an exception, whichever won.
+        expect(worker.status).toBe("fulfilled");
+        expect(app.status).toBe("fulfilled");
+
+        const status = await statusOf(id);
+
+        expect(["confirmed", "cancelled"]).toContain(status);
+
+        const trace = await footprint(id);
+
+        // Exactly one terminal transition beyond the hold, never both.
+        expect(
+          trace.history.filter((row) =>
+            ["confirmed", "cancelled"].includes(row.kind as string)
+          ).length
+        ).toBeGreaterThanOrEqual(1);
+        expect(trace.history.map((row) => row.seq)).toEqual(
+          trace.history.map((_, index) => index + 1)
+        );
+      }
+    });
   });
 
   describe("abuse as awcms_worker", () => {
@@ -772,19 +896,52 @@ suite("booking worker confirm and cancel (Issue #1278, sql/387)", () => {
         members: 0
       });
 
-      const writes = (await admin`
-        SELECT table_name, privilege_type
-        FROM information_schema.table_privileges
-        WHERE grantee = 'awcms_booking_transition'
-          AND privilege_type IN ('INSERT', 'DELETE', 'TRUNCATE')
-        ORDER BY 1, 2
-      `) as { table_name: string; privilege_type: string }[];
+      // The COMPLETE privilege set of the owner, table-wide and per column, in
+      // every schema: a later migration that widens a grant (UPDATE of the whole
+      // table, SELECT of a credential table) must change this pin on purpose.
+      const tableWide = (await admin`
+        SELECT n.nspname || '.' || c.relname || ' ' || x.privilege_type AS grant
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL aclexplode(c.relacl) x
+        WHERE x.grantee = 'awcms_booking_transition'::regrole
+        ORDER BY 1
+      `) as { grant: string }[];
 
-      expect(writes).toEqual([
-        {
-          table_name: "awcms_booking_reservation_events",
-          privilege_type: "INSERT"
-        }
+      expect(tableWide.map((row) => row.grant)).toEqual([
+        "public.awcms_booking_reservation_events INSERT",
+        "public.awcms_booking_reservation_events SELECT",
+        "public.awcms_booking_reservation_items SELECT",
+        "public.awcms_booking_reservations SELECT",
+        "public.awcms_booking_resource_allocations SELECT",
+        "public.awcms_booking_staff_assignments SELECT"
+      ]);
+
+      const perColumn = (await admin`
+        SELECT c.relname || '.' || a.attname || ' ' || x.privilege_type AS grant
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        CROSS JOIN LATERAL aclexplode(a.attacl) x
+        WHERE a.attacl IS NOT NULL
+          AND x.grantee = 'awcms_booking_transition'::regrole
+        ORDER BY 1
+      `) as { grant: string }[];
+
+      expect(perColumn.map((row) => row.grant)).toEqual([
+        "awcms_booking_reservations.cancel_reason_code UPDATE",
+        "awcms_booking_reservations.hold_expires_at UPDATE",
+        "awcms_booking_reservations.late_cancellation UPDATE",
+        "awcms_booking_reservations.status UPDATE",
+        "awcms_booking_reservations.status_changed_at UPDATE",
+        "awcms_booking_reservations.status_changed_by UPDATE",
+        "awcms_booking_reservations.updated_at UPDATE",
+        "awcms_booking_resource_allocations.released_at UPDATE",
+        "awcms_booking_resource_allocations.released_reason UPDATE",
+        "awcms_booking_service_offerings.cancellation_cutoff_seconds SELECT",
+        "awcms_booking_service_offerings.id SELECT",
+        "awcms_booking_service_offerings.tenant_id SELECT",
+        "awcms_booking_staff_assignments.released_at UPDATE",
+        "awcms_booking_staff_assignments.released_reason UPDATE"
       ]);
 
       const execute = (await admin`

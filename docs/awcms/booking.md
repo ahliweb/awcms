@@ -441,7 +441,18 @@ path stores no Idempotency-Key record (the worker has no `INSERT` on
 `awcms_idempotency_keys`, and a function that wrote one would write a hash and a
 response the caller supplies). It still HONOURS a stored record (a replay or a
 conflict), and its retry safety is layer 2, the state check: asking for the state
-already reached writes nothing.
+already reached writes nothing. Consequences a worker consumer must know
+(audit of PR #1302, L-3): (a) a key reused for a DIFFERENT reservation is not
+detected on this path (the application path answers `IDEMPOTENCY_CONFLICT`; only
+a record the application path created is honoured); (b) a redelivered `confirm`
+after the reservation was cancelled answers `INVALID_STATE`, where the
+application path replays the stored `ok`. A consumer that performs a side effect
+(a refund, a message) on a refusal must therefore not key it on the answer alone:
+route it through `awcms_domain_event_consumer_effects` for exactly-once. The
+actor is self-asserted (a tenant user of the SAME tenant by composite FK, any
+status), as on the application path through the port; a worker that names the
+wrong user mis-attributes the audit row, it gains nothing. Both are open
+decisions; a server-side hash-storing definer function is the optional follow-up.
 
 **The exclusion constraint** (on `resource_allocations`; the staff constraint is
 identical on `staff_ref`):
