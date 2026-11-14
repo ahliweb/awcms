@@ -112,8 +112,25 @@ describe("the three properties this screen has to get right", () => {
     expect(createBlock).toContain('delivery === "unavailable"');
     expect(createBlock).toContain("NOT sent");
     expect(createBlock.indexOf('delivery === "unavailable"')).toBeLessThan(
-      createBlock.indexOf("window.location.reload()")
+      createBlock.indexOf('flashAndReload("created")')
     );
+  });
+
+  test("every success that reloads says so, through catalog keys the page itself ships", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // No bare reload left: each success is a `flashAndReload(<key>)`.
+    expect(page).not.toContain("window.location.reload()");
+    expect(page).toContain('flashAndReload("created")');
+    expect(page).toContain('flashAndReload(resending ? "resent" : "revoked")');
+    expect(page).toContain('showFlash("invitations-notice")');
+
+    // Each key has its translated sentence on the notice element, so storage
+    // only ever carries the key.
+    for (const key of ["created", "resent", "revoked"]) {
+      expect(page).toContain(`data-flash-${key}={t(`);
+    }
+    expect(page).not.toContain("sessionStorage");
   });
 
   test("system roles never reach the role picker", async () => {
