@@ -109,8 +109,24 @@ const FORBIDDEN_WORDS = [
 ];
 const WORD_RES = FORBIDDEN_WORDS.map(
   (w) =>
-    [w, new RegExp(`(?<![\\w$])${w.replace("$", "\\$")}(?![\\w$])`)] as const
+    [
+      w,
+      new RegExp(
+        `(?<![\\w$])${w.replace(/[$.*+?^{}()|[\]\\]/g, "\\$&")}(?![\\w$])`
+      )
+    ] as const
 );
+
+/** The template expression the egress mutation test swaps out; the `$` is
+ * kept apart from `{` so no string literal reads as template syntax. */
+const TEMPLATE_URL_EXPR = [
+  "`",
+  "$",
+  "{GITHUB_API_BASE}",
+  "$",
+  "{path}",
+  "`"
+].join("");
 
 /**
  * The only egress this surface may have. `ssrfSafeFetch` may appear in exactly
@@ -153,7 +169,7 @@ function splitParts(
     rest = rest.slice(fm[0].length);
   }
   rest = rest.replace(
-    /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi,
+    /<script\b[^>]*>([\s\S]*?)<\/script(?:[\s/][^>]*)?>/gi,
     (_all, body: string) => {
       code.push({ text: body, loader: "ts" });
       return " ";
@@ -444,7 +460,7 @@ describe("omes_control carries no execution capability (#1185)", () => {
     ).not.toEqual([]);
     expect(
       scanSource(
-        real.replace("`${GITHUB_API_BASE}${path}`", "path"),
+        real.replace(TEMPLATE_URL_EXPR, "path"),
         "ts",
         EGRESS_ALLOWLIST.file
       )
