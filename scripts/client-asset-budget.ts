@@ -1251,8 +1251,15 @@ export const READER_BUDGET_BYTES = 24_000;
  * Rebase note: `main` had moved to 372,850 B, so this branch's own raise
  * (+6,500 B, written against 365,600 B) is stacked on it, giving
  * 379,350 B; the gate re-measures the combined bundle.
+ *
+ * screen consumes it. The audit follow-up (page-cache restore + the DOM half in
+ * `enrolment-qr.ts`) raised it again to 372,600 B, measured 372,327 locally.
+ *
+ * Rebase note: `main` had moved to 379,350 B, so this branch's own raise
+ * (+500 B, written against 372,100 B) is stacked on it, giving
+ * 379,850 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 379_350;
+export const APP_BUDGET_BYTES = 379_850;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
