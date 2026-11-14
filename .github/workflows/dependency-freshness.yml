@@ -4,8 +4,13 @@
 # npm + the pinned base images vs Docker Hub + the held-back register. It writes
 # the report to the job summary and uploads the JSON manifest as an artifact.
 #
-# What it deliberately does NOT do: open PRs, push commits, edit `bun.lock` or
-# `package.json`, or create issues. Upgrades are atomic, human-reviewed PRs
+# It also runs the license/SBOM gate (`deps:license:check`) and the provider
+# changelog gate (`deps:provider-changelog:check`), and a SEPARATE job files one
+# GitHub issue per finding (`deps:issues:sync`, idempotent: an open issue for a
+# finding is never filed twice). Filing issues is the only write it has.
+#
+# What it deliberately does NOT do: open PRs, push commits, or edit `bun.lock` /
+# `package.json`. The freshness job itself stays `contents: read`. Upgrades are atomic, human-reviewed PRs
 # (docs/awcms/dependency-governance.md); a scheduled job that changed the lock
 # would be the silent mass update the issue forbids. The only alarm is the run
 # going red: `--strict` fails when a check could not run (UNKNOWN is never a
@@ -22,6 +27,11 @@ on:
     # Monday 02:00 UTC = 09:00 Asia/Jakarta, the same slot as Dependabot.
     - cron: "0 2 * * 1"
   workflow_dispatch:
+    inputs:
+      create_issues:
+        description: "File issues for the findings (a scheduled run always does)"
+        type: boolean
+        default: false
 
 concurrency:
   group: dependency-freshness
@@ -53,14 +63,25 @@ jobs:
         # `--strict` is what turns an UNKNOWN section into a red run.
         run: bun run deps:freshness --strict --out-json dependency-freshness.json --out-md dependency-freshness.md
 
+      - name: License gate and SBOM
+        # `if: always()`: a red freshness step must not hide a license finding.
+        if: always()
+        run: bun run deps:license:check --out-sbom sbom.cdx.json --out-json dependency-license.json --out-md dependency-license.md
+
+      - name: Provider changelog gate
+        if: always()
+        run: bun run deps:provider-changelog:check --out-json dependency-provider.json --out-md dependency-provider.md
+
       - name: Publish report to the job summary
         if: always()
         run: |
-          if [ -f dependency-freshness.md ]; then
-            cat dependency-freshness.md >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "deps:freshness produced no report (see the step log)." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          for report in dependency-freshness.md dependency-license.md dependency-provider.md; do
+            if [ -f "$report" ]; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "$report was not produced (see the step log)." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
       - name: Upload manifest
         if: always()
@@ -70,5 +91,51 @@ jobs:
           path: |
             dependency-freshness.json
             dependency-freshness.md
+            dependency-license.json
+            dependency-license.md
+            dependency-provider.json
+            dependency-provider.md
+            sbom.cdx.json
           if-no-files-found: ignore
           retention-days: 90
+
+  file-issues:
+    name: File one issue per finding (idempotent)
+    needs: freshness
+    # Runs when the report job went red: that is exactly when there is something to file.
+    if: always() && (github.event_name == 'schedule' || inputs.create_issues)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Download manifests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dependency-freshness
+          path: manifests
+
+      - name: File issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          args=()
+          for file in manifests/dependency-license.json manifests/dependency-provider.json; do
+            [ -f "$file" ] && args+=(--findings "$file")
+          done
+          [ -f manifests/dependency-freshness.json ] && args+=(--freshness manifests/dependency-freshness.json)
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "No manifests were produced; nothing to file." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          bun run deps:issues:sync "${args[@]}" --create | tee -a "$GITHUB_STEP_SUMMARY"

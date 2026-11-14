@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](dependency-governance.md)
 
-<!-- i18n-source-hash: sha256:76488d316d7b875c1df7ab3bc3883ccebdcf8a00a9770eb08361bc427387c242 -->
+<!-- i18n-source-hash: sha256:04e47cd62de130cf2c025fbcf49e54aa67c85730726a24d99ee065c443f1245f -->
 
 # Tata kelola dependensi — audit kesegaran dan upgrade atomik
 
@@ -48,14 +48,15 @@ install --frozen-lockfile` di mana-mana. Tidak ada `latest` mengambang di
 | GitHub Actions (dipin dengan SHA)                                                                  | Dependabot `github-actions`                                                                                                          | mingguan (Sen 09:30 Asia/Jakarta) |
 | Dependensi npm, usulan PR                                                                          | Dependabot `bun` (maksimum 5 PR terbuka)                                                                                             | mingguan (Sen 09:00 Asia/Jakarta) |
 | Analisis statis                                                                                    | CodeQL (required check)                                                                                                              | setiap PR                         |
+| Lisensi dan SBOM pohon dependensi                                                                  | `bun run deps:license:check` (di setiap `bun run check`; menulis SBOM CycloneDX dengan `--out-sbom`)                                 | setiap PR; mingguan               |
+| Changelog API provider                                                                             | `bun run deps:provider-changelog:check` (di setiap `bun run check`) terhadap `scripts/provider-api-register.ts`                      | setiap PR; mingguan               |
 | SBOM image rilis                                                                                   | `release.yml` (`anchore/sbom-action`)                                                                                                | per rilis                         |
 | Versi yang ditahan                                                                                 | `scripts/dependency-held-back.ts` + `tests/dependency-held-back.test.ts`                                                             | berkelanjutan (test)              |
 
-Belum dicakup, dan dikatakan terus terang alih-alih disiratkan: laporan lisensi
-untuk seluruh pohon dependensi, changelog API provider pihak ketiga (WhatsApp,
-Telegram, push, provider email, tipe API OMES Control Center), dan pembuatan issue
-otomatis untuk celah yang tervalidasi. Sampai semuanya ada, PR upgrade memeriksa
-lisensi dan changelog provider secara manual (lihat daftar periksa di bawah).
+Belum dicakup, dan dikatakan terus terang alih-alih disiratkan: tipe API OMES
+Control Center (dilacak bersama pekerjaannya). Changelog API provider WhatsApp,
+Telegram, Meta Graph, Mailketing, dan Google FCM dicakup register provider di
+bawah; PR upgrade tetap membaca changelog SDK berhadapan-provider secara manual.
 
 **Bukan milik kita.** Runtime Python OMES / Hermes dan sistem operasi di host
 tidak dimiliki AWCMS. Itu diaudit di repositori host, terpisah. `awcms-astro`
@@ -165,6 +166,81 @@ artefak (90 hari) — itulah manifes mingguan yang dapat diaudit. Run merah bera
   paket dengan pembaruan dalam-rentang (`astro 7.4.0 -> 7.4.2`) bisa diambil tanpa
   menyentuh `package.json`; yang terbarunya di luar rentang adalah perubahan
   rentang, dan untuk major, sebuah ADR.
+
+## Lisensi dan SBOM
+
+`bun run deps:license:check` membaca `bun.lock` (diurai skrip, hanya Bun),
+membaca lisensi tiap paket dari `node_modules/<pkg>/package.json` yang terpasang,
+dan gagal bila sebuah lisensi di luar `ALLOWED_LICENSES` di
+`scripts/dependency-license-policy.ts`. `--out-sbom <berkas>` menulis SBOM
+CycloneDX 1.6 untuk pohon yang sama (purl, SHA-512 dari integrity lock, lisensi,
+dan sisi dependensi yang diselesaikan mengikuti penyarangan lock).
+
+- **Ekspresi dievaluasi, bukan dicocokkan sebagai teks.** `A OR B` lolos bila salah
+  satu sisi diizinkan, `A AND B` butuh keduanya, `X WITH Y` adalah satu lisensi yang
+  harus terdaftar persis, dan ekspresi yang tak bisa diurai ditolak.
+- **Pengecualian adalah entri beralasan yang kedaluwarsa** di `LICENSE_EXCEPTIONS`:
+  paket (atau `keluarga-*`), lisensi yang dideklarasikannya, alasan dapat diterima,
+  pemilik, tanggal tinjau. Ia hanya meloloskan paket itu pada lisensi itu: paket yang
+  berganti lisensi menjadi pelanggaran lagi. Pengecualian yang tak cocok dengan apa
+  pun itu basi dan gagal; yang lewat tanggal tinjau juga gagal.
+- **Tak terbaca bukan bersih.** Paket yang lisensinya tak bisa dibaca (tak ada di
+  disk, tak ada field) dilaporkan `UNKNOWN` dan gagal; jalankan `bun install` dulu.
+  Paket opsional yang tak dipasang instalasi biasa (biner platform, fallback wasm)
+  dihitung dan didaftar sebagai tidak terpasang di sini: lisensinya ditandai belum
+  terverifikasi di SBOM, tidak dikarang.
+- **Pemakaian ulang di workspace turunan.** Gerbang tak mengandaikan tata letak repo
+  ini: `--root <dir>` menunjuk akar workspace yang memuat `bun.lock`, `package.json`
+  dan `node_modules`, dan `--policy <berkas>` mengganti `ALLOWED_LICENSES` /
+  `LICENSE_EXCEPTIONS` dengan milik workspace itu. Workspace yang membenamkan repo
+  ini memegang berkas kebijakannya sendiri; ia tidak mengubah yang ini
+  (ahliweb/awcms-one#471 adalah konsumen yang jadi acuan rancangan ini).
+
+## Changelog API provider
+
+`scripts/provider-api-register.ts` mencatat, per permukaan provider yang diajak
+bicara kode (Meta Graph untuk Facebook Pages, Meta WhatsApp Cloud, Telegram Bot
+API, Mailketing, Google FCM HTTP v1, dan TikTok sebagai `planned`), versi atau
+permukaan yang dipakai, URL changelog, pemilik, dan tanggal terakhir seorang
+maintainer membaca changelog itu. `bun run deps:provider-changelog:check`
+menegakkan:
+
+1. **Register -> kode.** Tiap literal `pins` harus masih ada di berkasnya. Mengubah
+   versi di kode tanpa register membuat gerbang gagal.
+2. **Kode -> register.** Setiap berkas sumber non-tes yang menyebut host provider
+   harus didaftarkan entri aktif. Konektor baru yang tak didaftarkan gagal. Entri
+   `planned` tidak memiliki berkas; host-nya muncul di sumber gagal sampai entri
+   dijadikan `active` dengan tinjauan pertama.
+3. **Jam.** `lastReview` (atau `recordedOn` selama `null`) ditambah `maxAgeDays`
+   adalah tenggatnya; lewat itu gerbang merah. Dalam 14 hari ia peringatan dan
+   workflow mingguan membuat issue. `--skip-age` hanya menjalankan aturan 1 dan 2.
+
+`lastReview` diisi orang yang membaca changelog, tidak pernah oleh skrip dan tidak
+pernah dimajukan demi menghijaukan gerbang; `null` berarti "dicatat dari kode,
+belum ditinjau" dan laporan menyebutnya. Gerbang tidak mengambil URL changelog:
+pemeriksaan PR tak boleh bergantung pada pihak ketiga yang hidup. Untuk workspace
+turunan: `--register <berkas>` (mengekspor `PROVIDER_REGISTER` dan
+`PROVIDER_HOSTS`), `--src <dir>` dan `--root <dir>`.
+
+## Issue dari putaran mingguan
+
+Job `file-issues` pada workflow terjadwal menjalankan `bun run deps:issues:sync`
+atas manifes freshness dan temuan kedua gerbang di atas. Itu satu-satunya
+penulisan yang dimiliki workflow (`issues: write`, hanya pada job itu).
+
+- **Satu issue terbuka per temuan.** Tiap temuan punya kunci stabil (tak pernah
+  hitungan hari atau digest); sidik jarinya adalah penanda tersembunyi di badan
+  issue. Satu putaran mendaftar issue terbuka berlabel `dependency-finding` dan
+  hanya membuat temuan yang belum punya penanda terbuka.
+- **Menutup bukan menyembunyikan.** Issue yang ditutup padahal temuannya masih
+  benar dibuat lagi pada putaran berikutnya.
+- **Tanpa spam.** Paling banyak 10 per putaran (`--max-create`); sisanya ditunda
+  dan dibuat pada putaran berikutnya. Ia tak pernah mengedit, berkomentar, atau
+  menutup issue. Bila daftar issue terbuka gagal diambil atau mungkin terpotong,
+  tidak ada yang dibuat.
+- Dry run secara bawaan (`bun run deps:issues:sync --findings f.json --freshness m.json`);
+  `--create` menulis. `workflow_dispatch` manual membuat issue hanya dengan input
+  `create_issues`.
 
 ## Register versi yang ditahan
 

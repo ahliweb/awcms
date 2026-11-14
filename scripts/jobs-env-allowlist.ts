@@ -1224,7 +1224,16 @@ export const UNTRACEABLE_IMPORT_SITES: readonly {
     expression: "`${process.cwd()}/${file}`",
     reason:
       "CI gate that imports module files by computed path inside the repository checkout; it is not a job and no job imports it"
-  }
+  },
+  ...[
+    "scripts/dependency-license-check.ts",
+    "scripts/provider-changelog-check.ts"
+  ].map((file) => ({
+    file,
+    expression: "pathToFileURL(path.resolve(file)).href",
+    reason:
+      "CI gate that loads an OPTIONAL policy/register file named by --policy/--register (a downstream workspace's own); it is not a job and no job imports it"
+  }))
 ];
 
 /**
@@ -1241,6 +1250,7 @@ export const UNTRACEABLE_EXECUTION_SITES: readonly {
     "scripts/graph-artifacts-check.ts",
     "scripts/dependency-audit-check.ts",
     "scripts/dependency-freshness.ts",
+    "scripts/dependency-issue-sync.ts",
     "scripts/astro-script-typecheck.ts",
     "scripts/astro-frontmatter-typecheck.ts",
     "scripts/changeset-policy-check.ts",
