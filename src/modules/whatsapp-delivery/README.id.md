@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9a1225f2013d87e5aabad058a5b924793c6830821092b2f57e15e595c3968c14 -->
+<!-- i18n-source-hash: sha256:82566586ea91abf27dc38871a74d91a9680ebee3840088cffa140a784beaaf8b -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -321,4 +321,4 @@ Progres pengiriman satu pengirim, secara langsung, sebagai Server-Sent Events da
 - **Teredaksi.** Jumlah per status, dan per pesan yang berubah hanya id, status, dan waktunya. Tidak pernah nomor (mentah, masked, atau hash), isi, variabel, template, respons provider, atau teks error.
 - **Cursor.** `wsp1.<akun>.<updated_at µs>.<id pesan>`, dihitung PostgreSQL; `Last-Event-ID` melanjutkan; cursor asing, salah bentuk, atau sudah dipurge, atau lebih dari 50 perubahan sekaligus, menghasilkan `snapshot-required`.
 - **Layar.** Panel progres di `/admin/channel-accounts/{id}` merender jumlah di server, punya tombol muat ulang manual, melakukan polling saat stream tak tersedia, menyatakan koneksi sebagai teks, dan mengumumkan secara sopan dengan laju terbatas.
-- **Keputusan terbuka (fail-closed untuk sekarang):** pengirim deployment (`sender_account_id` NULL) tidak punya stream: ia tidak punya id akun untuk diputuskan visibilitasnya. **Catatan deploy:** `sql/360` membangun dua indeks tanpa `CONCURRENTLY` (runner membungkus tiap migrasi dalam transaksi), yang menahan tulisan ke `awcms_whatsapp_messages` sampai selesai; jalankan di jendela sepi untuk antrean besar. **Sudah ada sebelumnya, di luar cakupan:** `POST /whatsapp/messages/{id}/cancel` tidak menerapkan pengurungan business scope; dilacak terpisah. Operasional: [stream progres real-time](../../../docs/awcms/realtime-progress-streams.id.md).
+- **Keputusan terbuka (fail-closed untuk sekarang):** pengirim deployment (`sender_account_id` NULL) tidak punya stream: ia tidak punya id akun untuk diputuskan visibilitasnya. **Catatan deploy:** `sql/360` membangun dua indeks tanpa `CONCURRENTLY` (runner membungkus tiap migrasi dalam transaksi), yang menahan tulisan ke `awcms_whatsapp_messages` sampai selesai; jalankan di jendela sepi untuk antrean besar. **Ditutup oleh #1265:** `POST /whatsapp/messages/{id}/cancel` dan `GET /whatsapp/diagnostics` (serta `/admin/whatsapp`) mengurung BARIS pesan menurut business scope-nya sendiri; pesan brand lain atau yang tanpa scope menghasilkan `409` yang sama dengan id tak dikenal, dan diagnostics menyembunyikan baris tanpa scope serta mengosongkan (`null`) total suppression/consent tenant-wide bagi pemanggil yang terkurung. Operasional: [stream progres real-time](../../../docs/awcms/realtime-progress-streams.id.md).

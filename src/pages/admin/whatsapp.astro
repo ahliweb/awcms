@@ -55,6 +55,7 @@ import {
   type WhatsappMessageView,
   type WhatsappQueueSummary
 } from "../../modules/whatsapp-delivery/application/whatsapp-diagnostics";
+import { resolveMessageScopeKeys } from "../../modules/whatsapp-delivery/application/whatsapp-message-scope";
 import {
   isKnownWhatsappProvider,
   isWhatsappEnabled
@@ -113,7 +114,24 @@ const screen = await loadAdminScreen({
     activityCode: "messages",
     action: "read"
   },
-  load: async ({ tx, can }) => {
+  load: async ({ tx, auth, can }) => {
+    // Same row confinement as `GET /api/v1/whatsapp/diagnostics` (Issue #1265).
+    const scopeKeys = await resolveMessageScopeKeys(
+      {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      {
+        moduleKey: "whatsapp_delivery",
+        activityCode: "messages",
+        action: "read"
+      }
+    );
     const canCancel = await can({
       moduleKey: "whatsapp_delivery",
       activityCode: "messages",
@@ -161,13 +179,15 @@ const screen = await loadAdminScreen({
     });
 
     // One transaction, one awaited query at a time (`tx` is one connection).
-    const summary = await summarizeWhatsappQueue(tx, ssr.tenantId);
+    const summary = await summarizeWhatsappQueue(tx, ssr.tenantId, scopeKeys);
     const list = await listRecentWhatsappMessages(tx, ssr.tenantId, {
       ...(statusFilter ? { status: statusFilter } : {}),
-      limit: 50
+      limit: 50,
+      scopeKeys
     });
     const attempts = await listRecentWhatsappAttempts(tx, ssr.tenantId, {
-      limit: 25
+      limit: 25,
+      scopeKeys
     });
     const consents = canReadConsents
       ? await listConsents(tx, ssr.tenantId, { limit: 50 })
