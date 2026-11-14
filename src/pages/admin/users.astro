@@ -117,6 +117,19 @@ const screen = await loadAdminScreen({
       moduleKey: "identity_access",
       activityCode: "user_sessions",
       action: "revoke"
+    }),
+    // The "Invite user" link needs `create` (what the invitation form's submit
+    // checks) AND `read` (what `/admin/invitations` checks before it renders
+    // anything) — see `canInvite` below.
+    canInviteCreate: await can({
+      moduleKey: "identity_access",
+      activityCode: "invitations",
+      action: "create"
+    }),
+    canReadInvitations: await can({
+      moduleKey: "identity_access",
+      activityCode: "invitations",
+      action: "read"
     })
   }),
   onError: (error) => {
@@ -141,6 +154,13 @@ const canReadSessions =
   screen.state === "allowed" && screen.data.canReadSessions;
 const canRevokeSessions =
   screen.state === "allowed" && screen.data.canRevokeSessions;
+// Both keys: `create` without `read` would land the caller on the invitations
+// page's own permission notice, and a link there is worse than no link. UX
+// only — the invitations endpoints still decide every request.
+const canInvite =
+  screen.state === "allowed" &&
+  screen.data.canInviteCreate &&
+  screen.data.canReadInvitations;
 
 // role code -> role id, so a user's assigned role codes can be turned into
 // removable controls carrying the id the unassign endpoint expects.
@@ -214,6 +234,17 @@ const summary = filtered
     "Tenant users, their status, and their assigned roles. Login identifiers are masked here \u2014 they are personal data and are never shown in full in a list view."
   )}
 >
+  {canInvite && (
+    <a
+      slot="page-actions"
+      class="btn btn-primary"
+      id="users-invite-link"
+      href="/admin/invitations#invitations-new-heading"
+    >
+      {t("Invite user")}
+    </a>
+  )}
+
   {!canRead && (
     <p class="state-notice fade-in-up" id="users-denied">
       {t("You do not have permission to view users.")}
