@@ -34,11 +34,11 @@ import {
   sendJsonForData
 } from "./admin-form-client";
 import {
-  QrCapacityError,
-  encodeQr,
-  qrPathData,
-  qrViewBoxSize
-} from "../qr/qr-code";
+  clearEnrolmentSecret,
+  finishEnrolment,
+  renderEnrolmentQr as renderEnrolmentQrInto,
+  restoreAfterPageCache
+} from "./enrolment-qr";
 
 /** Translated strings the page rendered for us, with English fallbacks. */
 function message(key: string, fallback: string): string {
@@ -205,67 +205,21 @@ function show(id: string): void {
   if (element) element.hidden = false;
 }
 
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-
-/**
- * Drop the enrolment secret AND its QR from the DOM. The otpauth URI carries
- * the same shared secret as the text, so it is cleared with it (Issue #1316):
- * on completion, and when the page is left or restored from the back/forward
- * cache. Nothing else holds the URI: it is never stored, logged or put in an
- * attribute.
- */
-function clearEnrolmentSecret(): void {
-  document.getElementById("account-mfa-qr")?.replaceChildren();
-  const secret = document.getElementById("account-mfa-secret");
-  if (secret) secret.textContent = "";
-}
-
-/**
- * Render the otpauth URI as a locally encoded SVG QR code. No network, no
- * third-party service, no inline script or style (presentation attributes
- * only), and no markup parsing: elements are created with the DOM API and the
- * `d` attribute holds numbers and path commands only. A URI that does not fit
- * the encoder leaves the QR out and the manual-entry secret stays.
- */
 function renderEnrolmentQr(otpauthUri: string): void {
-  const host = document.getElementById("account-mfa-qr");
-  if (!host) return;
-
-  let matrix;
-  try {
-    matrix = encodeQr(otpauthUri);
-  } catch (error) {
-    host.replaceChildren();
-    if (error instanceof QrCapacityError) return;
-    throw error;
-  }
-
-  const size = qrViewBoxSize(matrix);
-  const label = message(
-    "mfaQrLabel",
-    "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+  renderEnrolmentQrInto(
+    document,
+    otpauthUri,
+    message(
+      "mfaQrLabel",
+      "QR code for your authenticator app. If you cannot scan it, type the secret shown below into the app instead."
+    )
   );
-  const svg = document.createElementNS(SVG_NAMESPACE, "svg");
-  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", label);
-  svg.setAttribute("shape-rendering", "crispEdges");
-
-  const title = document.createElementNS(SVG_NAMESPACE, "title");
-  title.textContent = label;
-  const background = document.createElementNS(SVG_NAMESPACE, "rect");
-  background.setAttribute("width", String(size));
-  background.setAttribute("height", String(size));
-  background.setAttribute("fill", "#ffffff");
-  const modules = document.createElementNS(SVG_NAMESPACE, "path");
-  modules.setAttribute("d", qrPathData(matrix));
-  modules.setAttribute("fill", "#000000");
-
-  svg.append(title, background, modules);
-  host.replaceChildren(svg);
 }
 
-window.addEventListener("pagehide", clearEnrolmentSecret);
+window.addEventListener("pagehide", () => clearEnrolmentSecret(document));
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) restoreAfterPageCache(document);
+});
 
 function renderRecoveryCodes(codes: readonly string[]): void {
   const list = document.getElementById("account-mfa-recovery-list");
@@ -382,7 +336,7 @@ onSubmit("account-mfa-verify-form", async ({ data, submit }) => {
   if (form) form.hidden = true;
 
   // Enrolment is complete: the secret and its QR are no longer needed.
-  clearEnrolmentSecret();
+  finishEnrolment(document);
   const enrolment = document.getElementById("account-mfa-enrolment");
   const enrolmentHint = enrolment?.querySelector(".admin-card-hint");
   if (enrolmentHint instanceof HTMLElement) enrolmentHint.hidden = true;
