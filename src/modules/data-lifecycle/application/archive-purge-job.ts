@@ -113,6 +113,20 @@ function assertSafeIdentifier(name: string, kind: "table" | "column"): string {
 }
 
 /**
+ * A generic-engine table with no primary key. A named class so that
+ * `lifecycleFailureCode` records a stable, data-free code (the class name)
+ * instead of the generic `Error`.
+ */
+export class MissingPrimaryKeyError extends Error {
+  constructor(table: string) {
+    super(
+      `data-lifecycle archive/purge: table "${table}" has no primary key; the generic engine cannot purge it in bounded batches. Refusing to execute.`
+    );
+    this.name = "MissingPrimaryKeyError";
+  }
+}
+
+/**
  * Primary-key columns per table, resolved once per process from the catalog.
  * Keyed by the (already pattern-validated) table name; a table without a key
  * is NEVER cached so a later migration that adds one is picked up.
@@ -148,14 +162,13 @@ export async function resolvePrimaryKeyColumns(
        JOIN pg_attribute a
          ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
       WHERE i.indrelid = to_regclass($1) AND i.indisprimary
+        AND array_position(i.indkey::int2[], a.attnum) < i.indnkeyatts
       ORDER BY array_position(i.indkey::int2[], a.attnum)`,
     [table]
   )) as { column_name: string }[];
 
   if (rows.length === 0) {
-    throw new Error(
-      `data-lifecycle archive/purge: table "${table}" has no primary key; the generic engine cannot purge it in bounded batches. Refusing to execute.`
-    );
+    throw new MissingPrimaryKeyError(table);
   }
 
   const columns = rows.map((row) =>

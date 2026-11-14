@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import {
   clearPrimaryKeyColumnsCache,
+  lifecycleFailureCode,
+  MissingPrimaryKeyError,
   resolvePrimaryKeyColumns
 } from "../src/modules/data-lifecycle/application/archive-purge-job";
 
@@ -72,5 +74,40 @@ describe("resolvePrimaryKeyColumns", () => {
     await expect(resolvePrimaryKeyColumns(tx, "awcms_x")).rejects.toThrow(
       /unsafe column identifier/
     );
+  });
+
+  test("restricts the catalog query to key columns, not INCLUDE columns", async () => {
+    const { tx, calls } = fakeTx([{ column_name: "id" }]);
+
+    await resolvePrimaryKeyColumns(tx, "awcms_x");
+    expect(calls[0]!.text).toContain("i.indisprimary");
+    expect(calls[0]!.text).toContain(
+      "array_position(i.indkey::int2[], a.attnum) < i.indnkeyatts"
+    );
+  });
+
+  test("keys the cache per table (no cross-table reuse, no clear between)", async () => {
+    const a = fakeTx([{ column_name: "k1" }]);
+    const b = fakeTx([{ column_name: "k2" }]);
+
+    expect(await resolvePrimaryKeyColumns(a.tx, "awcms_a")).toEqual(["k1"]);
+    expect(await resolvePrimaryKeyColumns(b.tx, "awcms_b")).toEqual(["k2"]);
+    expect(b.calls).toHaveLength(1);
+
+    const none = fakeTx([]);
+
+    await expect(resolvePrimaryKeyColumns(none.tx, "awcms_c")).rejects.toThrow(
+      MissingPrimaryKeyError
+    );
+  });
+
+  test("a missing primary key surfaces a stable, data-free failure code", async () => {
+    const none = fakeTx([]);
+    const error = await resolvePrimaryKeyColumns(none.tx, "awcms_x").catch(
+      (e: unknown) => e
+    );
+
+    expect(error).toBeInstanceOf(MissingPrimaryKeyError);
+    expect(lifecycleFailureCode(error)).toBe("MissingPrimaryKeyError");
   });
 });

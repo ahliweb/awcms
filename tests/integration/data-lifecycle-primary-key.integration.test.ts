@@ -34,7 +34,13 @@ import { listModules } from "../../src/modules";
 const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const NOW = new Date("2026-07-01T10:00:00.000Z");
 const CUTOFF = new Date(NOW.getTime() - 30 * 86_400_000);
-const TABLES = ["awcms_t_pk_nonid", "awcms_t_pk_composite", "awcms_t_pk_none"];
+const TABLES = [
+  "awcms_t_pk_nonid",
+  "awcms_t_pk_composite",
+  "awcms_t_pk_none",
+  "awcms_t_pk_include",
+  "awcms_t_pk_secondary"
+];
 
 function descriptor(
   table: string,
@@ -95,7 +101,25 @@ suite("data_lifecycle purge by primary key", () => {
       `CREATE TABLE awcms_t_pk_composite (tenant_id uuid NOT NULL, seq int NOT NULL, created_at timestamptz NOT NULL, PRIMARY KEY (tenant_id, seq))`
     );
     await admin.unsafe(
-      `CREATE TABLE awcms_t_pk_none (tenant_id uuid NOT NULL, created_at timestamptz NOT NULL)`
+      `CREATE TABLE awcms_t_pk_none (tenant_id uuid NOT NULL, created_at timestamptz NOT NULL, tag text)`
+    );
+    await admin.unsafe(
+      `CREATE INDEX awcms_t_pk_none_tag ON awcms_t_pk_none (tag)`
+    );
+    await admin.unsafe(
+      `CREATE UNIQUE INDEX awcms_t_pk_none_uq ON awcms_t_pk_none (created_at)`
+    );
+    await admin.unsafe(
+      `CREATE TABLE awcms_t_pk_include (id uuid NOT NULL DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, created_at timestamptz NOT NULL, note text, PRIMARY KEY (id) INCLUDE (note))`
+    );
+    await admin.unsafe(
+      `CREATE TABLE awcms_t_pk_secondary (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, created_at timestamptz NOT NULL, tag text)`
+    );
+    await admin.unsafe(
+      `CREATE INDEX awcms_t_pk_secondary_tag ON awcms_t_pk_secondary (tag, created_at)`
+    );
+    await admin.unsafe(
+      `CREATE UNIQUE INDEX awcms_t_pk_secondary_uq ON awcms_t_pk_secondary (created_at)`
     );
     if (appRoleActivated) {
       for (const t of TABLES) {
@@ -116,8 +140,21 @@ suite("data_lifecycle purge by primary key", () => {
     await admin.unsafe(
       `INSERT INTO awcms_t_pk_composite VALUES ('${TENANT}', 99, '2026-06-30')`
     );
+    // Old + fresh rows sharing one tag: a delete addressed by anything but a
+    // real primary key would take the fresh row with it.
     await admin.unsafe(
-      `INSERT INTO awcms_t_pk_none VALUES ('${TENANT}', '2026-01-01')`
+      `INSERT INTO awcms_t_pk_none VALUES ('${TENANT}', '2026-01-01', 'x'), ('${TENANT}', '2026-01-02', 'x'), ('${TENANT}', '2026-06-30', 'x')`
+    );
+    await admin.unsafe(
+      `INSERT INTO awcms_t_pk_include (tenant_id, created_at, note)
+       SELECT '${TENANT}', '2026-01-01'::timestamptz + (g || ' hours')::interval, NULL FROM generate_series(1, 3) g`
+    );
+    await admin.unsafe(
+      `INSERT INTO awcms_t_pk_include (tenant_id, created_at, note)
+       SELECT '${TENANT}', '2026-02-01'::timestamptz + (g || ' hours')::interval, 'n' FROM generate_series(1, 3) g`
+    );
+    await admin.unsafe(
+      `INSERT INTO awcms_t_pk_include (tenant_id, created_at, note) VALUES ('${TENANT}', '2026-06-30', NULL)`
     );
   });
 
@@ -179,7 +216,72 @@ suite("data_lifecycle purge by primary key", () => {
           "c"
         )
       ).rejects.toThrow(/no primary key/);
-      expect(await count("awcms_t_pk_none")).toBe(1);
+      expect(await count("awcms_t_pk_none")).toBe(3);
+    } finally {
+      await pool.close();
+    }
+  });
+
+  test("a table without a key is still refused after another table's key was resolved (cache is per table)", async () => {
+    const pool = createRuntimePool(1);
+    try {
+      expect(
+        (
+          await runGenericPurgePass(
+            pool,
+            descriptor("awcms_t_pk_nonid", 100),
+            TENANT,
+            CUTOFF,
+            "c"
+          )
+        ).count
+      ).toBe(5);
+      await expect(
+        runGenericPurgePass(
+          pool,
+          descriptor("awcms_t_pk_none"),
+          TENANT,
+          CUTOFF,
+          "c2"
+        )
+      ).rejects.toThrow(/no primary key/);
+      expect(await count("awcms_t_pk_none")).toBe(3);
+    } finally {
+      await pool.close();
+    }
+  });
+
+  test("resolves only KEY columns: a PK with INCLUDE columns still purges rows whose INCLUDE column is NULL", async () => {
+    const pool = createRuntimePool(1);
+    try {
+      expect(
+        await resolvePrimaryKeyColumns(pool, "awcms_t_pk_include")
+      ).toEqual(["id"]);
+      let total = 0;
+      for (let i = 0; i < 6; i += 1) {
+        const r = await runGenericPurgePass(
+          pool,
+          descriptor("awcms_t_pk_include", 2),
+          TENANT,
+          CUTOFF,
+          `c${i}`
+        );
+        total += r.count;
+        if (r.count === 0) break;
+      }
+      expect(total).toBe(6);
+      expect(await count("awcms_t_pk_include")).toBe(1);
+    } finally {
+      await pool.close();
+    }
+  });
+
+  test("secondary and non-primary unique indexes never become the key", async () => {
+    const pool = createRuntimePool(1);
+    try {
+      expect(
+        await resolvePrimaryKeyColumns(pool, "awcms_t_pk_secondary")
+      ).toEqual(["id"]);
     } finally {
       await pool.close();
     }
@@ -199,6 +301,14 @@ suite("data_lifecycle purge by primary key", () => {
         clearPrimaryKeyColumnsCache();
         const cols = await resolvePrimaryKeyColumns(pool, d.tableName);
         expect(cols.length, d.key).toBeGreaterThan(0);
+        const [keyRow] = (await pool.unsafe(
+          `SELECT i.indnkeyatts::int AS n FROM pg_index i WHERE i.indrelid = to_regclass($1) AND i.indisprimary`,
+          [d.tableName]
+        )) as { n: number }[];
+
+        expect(cols.length, `${d.key} resolves key columns only`).toBe(
+          keyRow!.n
+        );
       }
     } finally {
       await pool.close();
