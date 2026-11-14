@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:89a0706d2518c7a849fcd268d1ee0af313e15283425ad34eca7ba8fd9af4d09b -->
+<!-- i18n-source-hash: sha256:994c7ff5a0269ce29b995b4dcb260c8770fbe5a3c4efc030336e3d6b0acaacef -->
 
 # `omes_control`
 
@@ -376,12 +376,23 @@ Pemeriksaan identitas/replay/versi yang gagal pada poll/heartbeat menjawab denga
 
 Aturan fail-closed (`evaluateWorkerCompatibility`): `contract_version` yang hilang, bukan string, tak dikenal, atau major masa depan; digest yang tidak persis sama dengan yang dideklarasikan; `omes_version` pre-release, bertag build, tak terurai, atau di luar rentang; dan descriptor non-objek semuanya `incompatible`. Kapabilitas di luar allowlist operasi aman adalah `unsupported_capability`, bukan sukses tebakan. Rentang hanyalah syarat perlu - kompatibilitas SemVer biner tidak pernah diasumsikan.
 
-| Butir              | Nilai (rilis ini)                                               |
-| ------------------ | --------------------------------------------------------------- |
-| Kontrak            | `ahliweb/omes` `control-center/v1`                              |
-| Commit sumber      | `a4026e6338ce917dbd6771c7e1bf02c14e31c38f`                      |
-| Digest agregat     | lihat `DECLARED_CONTRACT.aggregateDigest` di `compatibility.ts` |
-| Rentang worker     | `>=0.6.0 <0.7.0` (**dideklarasikan, belum diverifikasi**)       |
-| Bukti rilis bertag | belum ada (`DECLARED_WORKER_RANGE.evidence` bernilai `null`)    |
+| Butir                          | Nilai (rilis ini)                                                                                                                                                    |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kontrak                        | `ahliweb/omes` `control-center/v1`                                                                                                                                   |
+| Commit sumber                  | `a4026e6338ce917dbd6771c7e1bf02c14e31c38f`                                                                                                                           |
+| Digest agregat                 | lihat `DECLARED_CONTRACT.aggregateDigest` di `compatibility.ts`                                                                                                      |
+| Rentang worker                 | `>=0.6.0 <0.7.0` (**dideklarasikan**; hanya batas bawah yang punya bukti rilis, dan itu setingkat skema)                                                             |
+| Bukti rilis bertag             | `ahliweb/omes` `v0.6.0` (commit `c7c3cf9d89090071a1690d209b7b86ad8ce03d49`), lihat `DECLARED_WORKER_EVIDENCE`                                                        |
+| Digest kontrak worker          | `sha256:8188160e69074d87eb658dc64a69004b0e23a8a80e97033996e5c1668ce3d3f9` (rumus produsen, sembilan berkas; sama di `v0.6.0`, di commit ter-vendor, dan di repo ini) |
+| Status verifikasi              | **skema identik, runtime belum diverifikasi**: worker v0.6.0 tidak menandatangani request, belum ada rilis yang menerbitkan manifest, `verifiedBuilds` kosong        |
+| Berkas kompatibilitas produsen | di-vendor dari commit `ahliweb/omes` `c9940822523996ee184a25e063f36143389669e2` di `contracts/compatibility/v1/`, `PIN.json` sendiri                                 |
 
-Dicakup `tests/omes-control-contract-consumer-compat.test.ts` (murni, tanpa DB): pin/digest, fixture rentang dan versi tak dikenal, worker Ed25519 sintetis untuk keempat rute (tanda tangan terikat path/body/nonce/tenant/worker/server, timestamp basi dan masa depan), serta preflight terhadap salinan yang diutak-atik atau di-sync ulang. **Belum tercakup, masih terbuka:** rilis stabil worker OMES v0.6.0 dan matriks yang diverifikasi terhadap tag itu (sisi produsen, `ahliweb/omes#352`; rencana integrasi `ahliweb/omes#350`; gerbang consumer `ahliweb/omes-web#20`), produsen yang menerbitkan `contract_digest`, bukti canary/rollback, sinkronisasi subtree OMES-Web lewat **merge commit**, dan asersi FORCE RLS / ABAC berbasis DB untuk tabel worker (tes worker yang ada mencakup persistensi nonce dan urutan guard; suite DB khusus kompatibilitas bukan bagian perubahan ini).
+Dicakup `tests/omes-control-contract-consumer-compat.test.ts` (murni, tanpa DB): pin/digest, fixture rentang dan versi tak dikenal, worker Ed25519 sintetis untuk keempat rute (tanda tangan terikat path/body/nonce/tenant/worker/server, timestamp basi dan masa depan), preflight terhadap salinan yang diutak-atik atau di-sync ulang, digest rumus produsen yang dihitung ulang dari PIN lalu disilangperiksa dengan fixture produsen ter-vendor, dan tes mutasi untuk PIN produsen (berkas diedit, liar, hilang, di-sync ulang). Batas eksekusi (tanpa spawn proses, shell/SSH, socket mentah, `eval`, atau `fetch` ke host sembarang di modul ini, rute `/api/v1/omes/**`, layar `/admin/omes/**`, dan dua skrip preflight/sync) adalah `tests/omes-control-execution-boundary.test.ts`: pemindai yang sadar komentar dengan satu mutan untuk setiap bentuk terlarang.
+
+**Cara bukti diperoleh (dapat diulang, tanpa jaringan saat pengecekan):** di checkout `ahliweb/omes` yang publik, kesembilan berkas kontrak worker di-hash pada tag `v0.6.0`, pada commit `a4026e63...`, dan di repo ini; rumus digest produsen (baris `path:sha256` terurut, awalan `sha256:`) memberi nilai yang sama tiga kali. Berkas yang sama pada commit produsen yang lebih baru berbeda (perubahan aditif), jadi bukti ini tidak berkata apa pun tentang worker yang lebih baru dari `v0.6.0`. `bun run omes:contract:preflight` menghitung ulangnya dari `PIN.json` setiap kali, sehingga re-sync kontrak yang mengubah salah satu dari sembilan berkas itu ditolak sampai `DECLARED_WORKER_EVIDENCE` diturunkan ulang.
+
+**Belum tercakup, masih terbuka (#1185 tetap terbuka):** rilis OMES terbit yang membawa manifest kompatibilitas (produsen `ahliweb/omes#352`: manifest belum bertanda tangan, tidak dilampirkan ke rilis mana pun, dan `installer.status` bernilai `not_published`) beserta tag setelah `v0.6.0`; memutar ulang `consumer-scenarios.json` ter-vendor terhadap consumer ini (butuh pemetaan kode alasan produsen ke `CompatibilityReason` yang ditinjau, dan skenarionya memakai rumus digest produsen, bukan `aggregateContractDigest`); gerbang consumer OMES-Web (`ahliweb/omes-web#20`) yang memakai satu definisi digest, bukan tiga; bukti canary/rollback; sinkronisasi subtree OMES-Web lewat **merge commit**; dan asersi FORCE RLS / ABAC berbasis DB untuk tabel worker.
+
+### Keputusan terbuka (butuh maintainer / ADR, sengaja tidak diputuskan di sini)
+
+- **Skema tanda tangan request worker.** Worker OMES pada main-nya saat ini menandatangani request dengan string kanonik berversinya sendiri (`OMES-WORKER-SIG-V1`: method, path, hash body, nonce, timestamp) beserta nama header dan encoding kunci publiknya sendiri, sedangkan modul ini memverifikasi envelope kanonik yang juga mengikat tenant, server, dan id worker (`buildCanonicalEnvelope`). Kedua format wire itu tidak kompatibel, sehingga worker dari main itu akan ditolak saat enrollment. **Perubahan ini tidak mengadopsi skema produsen**: skema itu tidak mengikat tenant/server/worker, sehingga mengadopsinya melemahkan jaminan yang kini diberikan modul ini. Pilihan yang harus diputuskan lewat ADR dengan tinjauan keamanan: (a) modul ini mengadopsi skema produsen dan menerima ikatan yang lebih lemah atau menggantinya di tempat lain; (b) produsen mengadopsi envelope modul ini; (c) skema berversi yang dinegosiasikan. Sampai diputuskan, `DECLARED_WORKER_RANGE.maxExclusive` tidak boleh dinaikkan dan bukti worker `v0.6.0` tidak boleh dibaca sebagai kemampuan enroll.
