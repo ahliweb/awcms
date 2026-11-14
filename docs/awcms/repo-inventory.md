@@ -12,8 +12,8 @@
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 867   |
-| Route files                         | 689   |
+| Test files                          | 871   |
+| Route files                         | 692   |
 | ADR                                 | 326   |
 
 ### Modules
@@ -56,7 +56,7 @@
 | `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
-| `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
+| `crm_leads`            | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 | `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 | `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
 | `omnichannel_inbox`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
@@ -637,17 +637,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 642        |
+| `(root)`      | 643        |
 | `e2e`         | 30         |
-| `integration` | 194        |
-| `unit`        | 1          |
+| `integration` | 196        |
+| `unit`        | 2          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 568   |
-| `/admin/**`     | 90    |
+| `/admin/**`     | 93    |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->
