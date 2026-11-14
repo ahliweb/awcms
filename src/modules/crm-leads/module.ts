@@ -46,17 +46,19 @@ const LEAD_PERSON_NOTE =
  *
  * ## Status
  *
- * `experimental` and OFF at three levels (ADR-0153 section 1): the deployment
- * switch `CRM_LEADS_ENABLED`, Module Management's per-tenant enable, and the
- * module's own tenant switch (default off). It declares no `navigation` entry:
- * the admin screen is a recorded follow-up (a nav entry without a page is a
- * permanent 404), and every route is default-deny.
+ * `active` since the operator screens landed (`/admin/crm-leads`, its `/{id}`
+ * detail and `/settings`, with their `navigation` entries in the same change:
+ * ADR-0021 criterion 1). The capability itself ships OFF at three levels
+ * (ADR-0153 section 1): the deployment switch `CRM_LEADS_ENABLED`, Module
+ * Management's per-tenant enable, and the module's own tenant switch (default
+ * off); with the deployment switch off the screens say so instead of failing.
+ * Every route is default-deny.
  */
 export const crmLeadsModule = defineModule({
   key: CRM_LEADS_MODULE_KEY,
   name: "CRM Leads",
   version: "0.1.0",
-  status: "experimental",
+  status: "active",
   description:
     "The reusable lead/prospect pipeline (Issue #1166, ADR-0153): a PRE-CUSTOMER context that never owns the customer, the identity or the consent. A tenant defines pipelines whose stage catalog is VERSIONED (a published revision, its stages and its allowed edges are immutable by database trigger; changing a pipeline publishes a new revision and moves leads out of removed stages only through an explicit, audited stage migration), with a CLOSED platform category per stage (new, working, qualified, converted, lost, disqualified) so reports never depend on tenant stage names, and declarative edge guards from a closed set (owner assigned, contact point present, reason required; no expression language). Lead intake (manual, import, api) is idempotent on the source key (kind, channel account, external event id) as well as on the Idempotency-Key; the first source touch is immutable and later touches are appended. Contact points are ciphertext plus a per-tenant, per-kind keyed hash plus a masked form; identity CANDIDATES are exact hash matches inside one tenant and never a merge; a merge is human-verified, concurrency-checked, idempotent, audited and undoable within the tenant's window. Every stage change is an append-only transition row naming the revision it happened under, decided under a row lock with optimistic concurrency. A conversion is RECORDED from the customer authority's confirmation (an opaque external customer reference, never a customer) or a flagged manual path, and reversed by event, never by editing history. Outbox events carry opaque ids and attribution references only. Soft delete, restore and anonymising erasure that keeps funnel counts. A CrmLeadPort lets a downstream authority read lead state and confirm or reverse a conversion.",
   dependencies: [
@@ -147,6 +149,20 @@ export const crmLeadsModule = defineModule({
       action: "create",
       description:
         "Record a MANUAL conversion with no confirming authority; stored as authority_unconfirmed and reported separately (audited at warning)"
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_crm_leads",
+      path: "/admin/crm-leads",
+      order: 86,
+      requiredPermission: "crm_leads.leads.read"
+    },
+    {
+      labelKey: "admin.layout.nav_crm_leads_settings",
+      path: "/admin/crm-leads/settings",
+      order: 87,
+      requiredPermission: "crm_leads.pipelines.configure"
     }
   ],
   subjectData: [

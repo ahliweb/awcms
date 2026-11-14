@@ -1,0 +1,9 @@
+---
+"awcms": minor
+---
+
+feat(crm_leads): the operator screens for the lead pipeline, and the module becomes `active` (Issue #1166, ADR-0153, ADR-0149). **Nothing changes for a deployment that does not set `CRM_LEADS_ENABLED=true`**: the routes still answer `503`, and the new screens say the pipeline is switched off.
+
+Three server-rendered pages under `/admin/crm-leads` and two sidebar entries (`crm_leads.leads.read`, `crm_leads.pipelines.configure`): the leads list (ADR-0149 data page: pipeline, stage category and owner filters pushed to SQL, first-source filter and search over at most 200 loaded rows, with a notice and no total when more exist), one lead (state, masked contact points, stage / owner / source / conversion history; move along the pipeline's own edges, assign to me, unassign) and the settings (the tenant switch and merge-undo window, and each pipeline's published stage catalogue, read-only). Every screen reads through `crm-leads/application/screen-loaders.ts`, which calls the API's own directory functions for the session's tenant only. No contact value, ciphertext, keyed hash or customer reference is ever rendered. Each control is shown only when the full access chokepoint allows its permission and calls an endpoint that already audits; writes carry `expectedVersion` and an `Idempotency-Key`. "Assign to another person" is shown disabled, because no endpoint lists the eligible owners.
+
+Four of the eleven `crm_leads` permissions leave the `NOT_YET_SCREENED` ledger (`leads.read`, `leads.assign`, `stages.update`, `pipelines.configure`). No migration, no API, OpenAPI or AsyncAPI change. English and Indonesian catalogue entries added; the module READMEs record the remaining screen work (lead create and edit, merge review, conversions, delete and restore, the pipeline editor) and the backend gaps the screens made visible.

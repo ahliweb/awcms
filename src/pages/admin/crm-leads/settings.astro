@@ -1,0 +1,464 @@
+---
+/**
+ * Lead pipeline settings — the tenant switch and the stage catalogue (Issue
+ * #1166, ADR-0153 sections 1 and 3).
+ *
+ * ## What it does
+ *
+ * Two things, each on an endpoint that already audits:
+ *
+ *   - switch the module on or off for this tenant and set the merge-undo window
+ *     (`PATCH /api/v1/crm-leads/settings`, `pipelines.configure`, high-risk:
+ *     `Idempotency-Key`, audited at warning). The module ships OFF for every
+ *     tenant, and while it is off every lead write answers `409`;
+ *   - show each pipeline's PUBLISHED catalogue: the stages (with their closed
+ *     platform category) and the allowed edges with their guards. A published
+ *     revision is immutable by database trigger, so there is nothing here to
+ *     edit in place.
+ *
+ * ## What it does not do
+ *
+ * Creating a pipeline and publishing a new revision of a catalogue
+ * (`POST /pipelines`, `POST /pipelines/{id}/revisions`) take a structured
+ * stage-and-edge definition and, for a removed occupied stage, an explicit
+ * migration map. A form for that is a design of its own, so the catalogue is
+ * read-only here and those two actions stay on the API (recorded in the module
+ * README as the remaining screen work).
+ *
+ * The entry permission is `pipelines.configure`, the permission of every write
+ * on this screen: someone who may not configure the pipeline sees the leads,
+ * not its settings.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  stageCategoryLabel,
+  stageCategoryTone,
+  transitionGuardLabel
+} from "../../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import {
+  loadCrmSettings,
+  uuidOrNull
+} from "../../../modules/crm-leads/application/screen-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+const SETTINGS_PATH = `${LIST_PATH}/settings`;
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims; the
+ * page-contract test holds it equal to `CRM_LEADS_GUARDS.configurePipelines`.
+ */
+const CONFIGURE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "pipelines",
+  action: "configure"
+} as const;
+
+const pipelineParam = uuidOrNull(Astro.url.searchParams.get("pipeline"));
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: CONFIGURE_GUARD,
+  load: ({ tx, auth }) =>
+    loadCrmSettings({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        me: auth.context.tenantUserId
+      },
+      pipelineId: pipelineParam
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads/settings.astro: failed to load the settings",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const settings = data?.settings ?? null;
+const selected = data?.selected ?? null;
+const revision = selected?.currentRevision ?? null;
+const stageName = (key: string) =>
+  revision?.stages.find((stage) => stage.key === key)?.name ?? key;
+
+/** Translated here, read by the page script: a client script cannot translate. */
+const messages = {
+  VALIDATION_ERROR: t(
+    "The merge-undo window must be a whole number of hours from 1 to 720."
+  ),
+  fallback: t("Could not save the settings. Please try again.")
+};
+---
+
+<AdminLayout
+  title={t("Lead pipeline settings")}
+  description={t(
+    "Switch the lead pipeline on for this tenant and review each pipeline's published stages and allowed moves."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the leads")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-settings-denied">
+      {t("You do not have permission to change the lead pipeline settings.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-settings-error">
+      {t(
+        "The lead pipeline settings could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-settings-disabled">
+      {t(
+        "The lead pipeline is switched off on this deployment, so it cannot be configured."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && settings && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-settings-switch-title"
+        id="crm-settings"
+        data-messages={JSON.stringify(messages)}
+      >
+        <h2 class="admin-section-title" id="crm-settings-switch-title">
+          {t("This tenant")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "While the pipeline is off for this tenant, leads can be read but not created or changed. Pipelines can be prepared in the meantime."
+          )}
+        </p>
+
+        <p
+          id="crm-settings-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <form id="crm-settings-form" class="admin-form">
+          <label class="checkbox-label" for="crm-settings-enabled">
+            <input
+              type="checkbox"
+              id="crm-settings-enabled"
+              name="enabled"
+              checked={settings.enabled}
+            />
+            {t("The lead pipeline is on for this tenant")}
+          </label>
+          <label class="field-label" for="crm-settings-undo">
+            {t("Merge-undo window (hours)")}
+          </label>
+          <input
+            class="field-input"
+            id="crm-settings-undo"
+            name="mergeUndoHours"
+            type="number"
+            min="1"
+            max="720"
+            step="1"
+            value={settings.mergeUndoHours}
+            required
+          />
+          <button class="btn btn-primary" type="submit">
+            {t("Save settings")}
+          </button>
+        </form>
+        <p class="cell-muted" id="crm-settings-updated">
+          {settings.updatedAt === null
+            ? t("Never changed: the default is off.")
+            : t("Last changed {time}", {
+                time: formatUtcMinute(settings.updatedAt)
+              })}
+        </p>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-settings-pipelines-title"
+      >
+        <h2 class="admin-section-title" id="crm-settings-pipelines-title">
+          {t("Pipelines")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-settings-pipelines-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-settings-pipelines-table"
+          >
+            <caption id="crm-settings-pipelines-caption">
+              {tn(
+                "{count} pipeline",
+                "{count} pipelines",
+                data.pipelines.length,
+                {
+                  count: data.pipelines.length
+                }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Pipeline")}</th>
+                <th scope="col">{t("Code")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Revision")}</th>
+                <th scope="col">{t("Time zone")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.pipelines.length === 0 ? (
+                <tr>
+                  <td colspan={5}>
+                    <span class="cell-muted">
+                      {t("No pipeline exists yet. Create one through the API.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                data.pipelines.map((pipeline) => (
+                  <tr
+                    data-pipeline-id={pipeline.id}
+                    aria-current={
+                      pipeline.id === selected?.id ? "true" : undefined
+                    }
+                  >
+                    <td data-label={t("Pipeline")}>
+                      <a href={`${SETTINGS_PATH}?pipeline=${pipeline.id}`}>
+                        {pipeline.name}
+                      </a>
+                    </td>
+                    <td data-label={t("Code")}>{pipeline.code}</td>
+                    <td data-label={t("Status")}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          pipeline.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {pipeline.status === "active"
+                          ? t("Active")
+                          : t("Archived")}
+                      </span>
+                    </td>
+                    <td data-label={t("Revision")}>
+                      {pipeline.currentRevisionNumber}
+                    </td>
+                    <td data-label={t("Time zone")}>{pipeline.timeZone}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {selected && revision && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-settings-catalogue-title"
+          id="crm-settings-catalogue"
+          data-pipeline-id={selected.id}
+        >
+          <h2 class="admin-section-title" id="crm-settings-catalogue-title">
+            {t("Catalogue of {name}, revision {number}", {
+              name: selected.name,
+              number: String(revision.revisionNumber)
+            })}
+          </h2>
+          <p class="page-description">
+            {t(
+              "A published revision never changes. A new revision is published through the API; leads in a removed stage are moved by an explicit, audited migration."
+            )}
+          </p>
+
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="crm-settings-stages-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="crm-settings-stages-table"
+            >
+              <caption id="crm-settings-stages-caption">
+                {tn("{count} stage", "{count} stages", revision.stages.length, {
+                  count: revision.stages.length
+                })}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Position")}</th>
+                  <th scope="col">{t("Stage")}</th>
+                  <th scope="col">{t("Key")}</th>
+                  <th scope="col">{t("Category")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {revision.stages.map((stage) => (
+                  <tr data-stage-key={stage.key}>
+                    <td data-label={t("Position")}>{stage.position}</td>
+                    <td data-label={t("Stage")}>
+                      {stage.name}
+                      {stage.key === revision.initialStageKey && (
+                        <span class="cell-muted"> ({t("initial")})</span>
+                      )}
+                    </td>
+                    <td data-label={t("Key")}>{stage.key}</td>
+                    <td
+                      data-label={t("Category")}
+                      data-stage-category={stage.category}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={stageCategoryTone(stage.category)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {stageCategoryLabel(t, stage.category)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="crm-settings-edges-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="crm-settings-edges-table"
+            >
+              <caption id="crm-settings-edges-caption">
+                {tn(
+                  "{count} allowed move",
+                  "{count} allowed moves",
+                  revision.transitions.length,
+                  { count: revision.transitions.length }
+                )}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("From")}</th>
+                  <th scope="col">{t("To")}</th>
+                  <th scope="col">{t("Conditions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {revision.transitions.map((edge) => (
+                  <tr>
+                    <td data-label={t("From")}>{stageName(edge.from)}</td>
+                    <td data-label={t("To")}>{stageName(edge.to)}</td>
+                    <td data-label={t("Conditions")}>
+                      {edge.guards.length === 0
+                        ? "—"
+                        : edge.guards
+                            .map((guard) => transitionGuardLabel(t, guard))
+                            .join(", ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    checkboxChecked,
+    integerValue,
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+
+  const formError = messageBox("crm-settings-error-box");
+  const root = document.getElementById("crm-settings");
+  let messages: Record<string, string> = {};
+
+  try {
+    messages = JSON.parse(root?.dataset.messages ?? "{}");
+  } catch {
+    messages = {};
+  }
+
+  // High-risk: needs the header. A retry of the same body replays.
+  const keyFor = createIdempotencyKeySource();
+
+  function failure(errorCode: string | null): string {
+    return (
+      (errorCode !== null ? messages[errorCode] : undefined) ??
+      messages.fallback ??
+      ""
+    );
+  }
+
+  onSubmit("crm-settings-form", async ({ submit }) => {
+    const body = {
+      enabled: checkboxChecked("crm-settings-enabled"),
+      mergeUndoHours: integerValue("crm-settings-undo", 0)
+    };
+
+    await mutateAndReload(
+      submit,
+      formError,
+      () =>
+        sendJson("PATCH", "/api/v1/crm-leads/settings", body, {
+          "Idempotency-Key": keyFor({
+            url: "/api/v1/crm-leads/settings",
+            body
+          })
+        }),
+      failure
+    );
+  });
+</script>

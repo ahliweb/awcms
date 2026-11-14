@@ -9509,3 +9509,387 @@ msgstr "{sent} terkirim, {failed} gagal, {waiting} menunggu"
 
 msgid "Refresh progress"
 msgstr "Muat ulang progres"
+
+msgid "Unknown pipeline"
+msgstr "Pipeline tidak dikenal"
+
+msgid "Unassigned"
+msgstr "Belum ditugaskan"
+
+msgid "You"
+msgstr "Anda"
+
+msgid "Another staff member"
+msgstr "Staf lain"
+
+msgid "Pipeline: {value}"
+msgstr "Pipeline: {value}"
+
+msgid "Stage: {value}"
+msgstr "Tahap: {value}"
+
+msgid "Owner: {value}"
+msgstr "Pemilik: {value}"
+
+msgid "Assigned to me"
+msgstr "Ditugaskan ke saya"
+
+msgid "Source: {value}"
+msgstr "Sumber: {value}"
+
+msgid "Lead pipeline"
+msgstr "Pipeline lead"
+
+msgid "The tenant's prospects by pipeline stage: owner, first source and how long they have been in their stage. Contact points are always masked."
+msgstr "Prospek tenant menurut tahap pipeline: pemilik, sumber pertama, dan sudah berapa lama berada di tahapnya. Titik kontak selalu disamarkan."
+
+msgid "You do not have permission to view leads."
+msgstr "Anda tidak memiliki izin untuk melihat lead."
+
+msgid "The leads could not be loaded right now. Please try again later."
+msgstr "Lead tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The lead pipeline is switched off on this deployment, so no lead is collected or listed."
+msgstr "Pipeline lead dimatikan pada deployment ini, sehingga tidak ada lead yang dikumpulkan atau ditampilkan."
+
+msgid "Leads"
+msgstr "Lead"
+
+msgid "Newest first. A lead is a prospect, not a customer: the customer record stays with the system that owns it."
+msgstr "Terbaru lebih dulu. Lead adalah prospek, bukan pelanggan: catatan pelanggan tetap berada di sistem yang memilikinya."
+
+msgid "Pipelines and settings"
+msgstr "Pipeline dan pengaturan"
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be changed. Existing leads can still be read."
+msgstr "Pipeline lead dimatikan untuk tenant ini, sehingga lead tidak dapat diubah. Lead yang ada masih dapat dibaca."
+
+msgid "There are more leads than this screen loads. Showing the newest {count}. The pipeline, stage and owner filters cover every lead; the source filter and search cover only these. The API lists the rest."
+msgstr "Jumlah lead melebihi yang dimuat layar ini. Menampilkan {count} terbaru. Filter pipeline, tahap, dan pemilik mencakup setiap lead; filter sumber dan pencarian hanya mencakup yang dimuat. API menampilkan sisanya."
+
+msgid "Search leads"
+msgstr "Cari lead"
+
+msgid "Pipeline"
+msgstr "Pipeline"
+
+msgid "All pipelines"
+msgstr "Semua pipeline"
+
+msgid "Stage"
+msgstr "Tahap"
+
+msgid "All stages"
+msgstr "Semua tahap"
+
+msgid "Anyone"
+msgstr "Siapa saja"
+
+msgid "All sources"
+msgstr "Semua sumber"
+
+msgid "In stage since"
+msgstr "Di tahap sejak"
+
+msgid "Lead"
+msgstr "Lead"
+
+msgid "No leads yet"
+msgstr "Belum ada lead"
+
+msgid "Leads appear here when they are entered by hand, imported, or sent by an integration through the API."
+msgstr "Lead muncul di sini saat dimasukkan manual, diimpor, atau dikirim oleh integrasi melalui API."
+
+msgid "Unnamed lead"
+msgstr "Lead tanpa nama"
+
+msgid "The merge-undo window must be a whole number of hours from 1 to 720."
+msgstr "Jendela pembatalan penggabungan harus berupa bilangan bulat jam dari 1 sampai 720."
+
+msgid "Could not save the settings. Please try again."
+msgstr "Pengaturan tidak dapat disimpan. Silakan coba lagi."
+
+msgid "Lead pipeline settings"
+msgstr "Pengaturan pipeline lead"
+
+msgid "Switch the lead pipeline on for this tenant and review each pipeline's published stages and allowed moves."
+msgstr "Aktifkan pipeline lead untuk tenant ini dan tinjau tahap terbit serta perpindahan yang diizinkan pada setiap pipeline."
+
+msgid "Back to the leads"
+msgstr "Kembali ke daftar lead"
+
+msgid "You do not have permission to change the lead pipeline settings."
+msgstr "Anda tidak memiliki izin untuk mengubah pengaturan pipeline lead."
+
+msgid "The lead pipeline settings could not be loaded right now. Please try again later."
+msgstr "Pengaturan pipeline lead tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The lead pipeline is switched off on this deployment, so it cannot be configured."
+msgstr "Pipeline lead dimatikan pada deployment ini, sehingga tidak dapat dikonfigurasi."
+
+msgid "This tenant"
+msgstr "Tenant ini"
+
+msgid "While the pipeline is off for this tenant, leads can be read but not created or changed. Pipelines can be prepared in the meantime."
+msgstr "Selama pipeline mati untuk tenant ini, lead dapat dibaca tetapi tidak dapat dibuat atau diubah. Pipeline dapat disiapkan sementara itu."
+
+msgid "The lead pipeline is on for this tenant"
+msgstr "Pipeline lead aktif untuk tenant ini"
+
+msgid "Merge-undo window (hours)"
+msgstr "Jendela pembatalan penggabungan (jam)"
+
+msgid "Save settings"
+msgstr "Simpan pengaturan"
+
+msgid "Never changed: the default is off."
+msgstr "Belum pernah diubah: bawaannya mati."
+
+msgid "Last changed {time}"
+msgstr "Terakhir diubah {time}"
+
+msgid "Pipelines"
+msgstr "Pipeline"
+
+msgid "Revision"
+msgstr "Revisi"
+
+msgid "No pipeline exists yet. Create one through the API."
+msgstr "Belum ada pipeline. Buat satu melalui API."
+
+msgid "Catalogue of {name}, revision {number}"
+msgstr "Katalog {name}, revisi {number}"
+
+msgid "A published revision never changes. A new revision is published through the API; leads in a removed stage are moved by an explicit, audited migration."
+msgstr "Revisi yang terbit tidak pernah berubah. Revisi baru diterbitkan melalui API; lead pada tahap yang dihapus dipindahkan lewat migrasi eksplisit yang diaudit."
+
+msgid "initial"
+msgstr "awal"
+
+msgid "Conditions"
+msgstr "Syarat"
+
+msgid "Someone else changed this lead. Reload the page and try again."
+msgstr "Orang lain mengubah lead ini. Muat ulang halaman lalu coba lagi."
+
+msgid "The pipeline does not allow this move."
+msgstr "Pipeline tidak mengizinkan perpindahan ini."
+
+msgid "This move needs something the lead does not have yet (an owner, a contact point or a reason)."
+msgstr "Perpindahan ini membutuhkan sesuatu yang belum dimiliki lead (pemilik, titik kontak, atau alasan)."
+
+msgid "A converted stage is entered only by recording a conversion."
+msgstr "Tahap terkonversi hanya dimasuki dengan mencatat konversi."
+
+msgid "A converted lead leaves its stage only by reversing the conversion."
+msgstr "Lead terkonversi hanya meninggalkan tahapnya dengan membatalkan konversi."
+
+msgid "That stage is no longer part of the pipeline. Reload the page and try again."
+msgstr "Tahap itu tidak lagi menjadi bagian pipeline. Muat ulang halaman lalu coba lagi."
+
+msgid "You cannot be made the owner of this lead."
+msgstr "Anda tidak dapat dijadikan pemilik lead ini."
+
+msgid "This lead can no longer be changed."
+msgstr "Lead ini tidak dapat diubah lagi."
+
+msgid "The lead pipeline is switched off for this tenant."
+msgstr "Pipeline lead dimatikan untuk tenant ini."
+
+msgid "That lead is no longer available."
+msgstr "Lead itu tidak lagi tersedia."
+
+msgid "Could not save the change. Please try again."
+msgstr "Perubahan tidak dapat disimpan. Silakan coba lagi."
+
+msgid "State, history and actions of one lead. Contact points are always masked."
+msgstr "Status, riwayat, dan aksi satu lead. Titik kontak selalu disamarkan."
+
+msgid "The lead could not be loaded right now. Please try again later."
+msgstr "Lead tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The lead pipeline is switched off on this deployment."
+msgstr "Pipeline lead dimatikan pada deployment ini."
+
+msgid "That lead was not found."
+msgstr "Lead itu tidak ditemukan."
+
+msgid "Contact points"
+msgstr "Titik kontak"
+
+msgid "revoked"
+msgstr "dicabut"
+
+msgid "The lead pipeline is switched off for this tenant, so this lead cannot be changed."
+msgstr "Pipeline lead dimatikan untuk tenant ini, sehingga lead ini tidak dapat diubah."
+
+msgid "This lead is converted. It leaves this stage only by reversing the conversion."
+msgstr "Lead ini terkonversi. Ia meninggalkan tahap ini hanya dengan membatalkan konversi."
+
+msgid "This lead is in a stage the pipeline no longer defines, so it cannot be moved from here."
+msgstr "Lead ini berada di tahap yang tidak lagi didefinisikan pipeline, sehingga tidak dapat dipindahkan dari sini."
+
+msgid "The pipeline defines no move out of this stage."
+msgstr "Pipeline tidak mendefinisikan perpindahan keluar dari tahap ini."
+
+msgid "Move to"
+msgstr "Pindahkan ke"
+
+msgid "Move lead"
+msgstr "Pindahkan lead"
+
+msgid "Assign to me"
+msgstr "Tugaskan ke saya"
+
+msgid "Unassign"
+msgstr "Batalkan penugasan"
+
+msgid "Assign to another person"
+msgstr "Tugaskan ke orang lain"
+
+msgid "Not available yet: there is no list of the people eligible to own a lead. They can assign the lead to themselves."
+msgstr "Belum tersedia: belum ada daftar orang yang berhak memiliki lead. Mereka dapat menugaskan lead ke diri sendiri."
+
+msgid "Stage history"
+msgstr "Riwayat tahap"
+
+msgid "By"
+msgstr "Oleh"
+
+msgid "No history yet."
+msgstr "Belum ada riwayat."
+
+msgid "Owner history"
+msgstr "Riwayat pemilik"
+
+msgid "Campaign"
+msgstr "Kampanye"
+
+msgid "Landing page"
+msgstr "Halaman tujuan"
+
+msgid "Legal basis stated"
+msgstr "Dasar hukum yang dinyatakan"
+
+msgid "Conversions"
+msgstr "Konversi"
+
+msgid "How"
+msgstr "Cara"
+
+msgid "No conversion recorded."
+msgstr "Belum ada konversi tercatat."
+
+msgid "New"
+msgstr "Baru"
+
+msgid "Working"
+msgstr "Dikerjakan"
+
+msgid "Qualified"
+msgstr "Terkualifikasi"
+
+msgid "Converted"
+msgstr "Terkonversi"
+
+msgid "Lost"
+msgstr "Hilang"
+
+msgid "Disqualified"
+msgstr "Didiskualifikasi"
+
+msgid "Website form"
+msgstr "Formulir situs web"
+
+msgid "Inbound message"
+msgstr "Pesan masuk"
+
+msgid "Import"
+msgstr "Impor"
+
+msgid "Entered by hand"
+msgstr "Dimasukkan manual"
+
+msgid "Not recorded"
+msgstr "Tidak tercatat"
+
+msgid "Moved"
+msgstr "Dipindahkan"
+
+msgid "Moved by a catalogue change"
+msgstr "Dipindahkan oleh perubahan katalog"
+
+msgid "Conversion reversed"
+msgstr "Konversi dibatalkan"
+
+msgid "Merged into another lead"
+msgstr "Digabung ke lead lain"
+
+msgid "Merge undone"
+msgstr "Penggabungan dibatalkan"
+
+msgid "needs an owner"
+msgstr "butuh pemilik"
+
+msgid "needs a contact point"
+msgstr "butuh titik kontak"
+
+msgid "needs a reason"
+msgstr "butuh alasan"
+
+msgid "Confirmed by the customer authority"
+msgstr "Dikonfirmasi oleh otoritas pelanggan"
+
+msgid "Recorded by hand, not confirmed"
+msgstr "Dicatat manual, tidak dikonfirmasi"
+
+msgid "Anonymised"
+msgstr "Dianonimkan"
+
+msgid "Steps towards a contract"
+msgstr "Langkah menuju kontrak"
+
+msgid "Legitimate interest"
+msgstr "Kepentingan sah"
+
+msgid "Not stated"
+msgstr "Tidak dinyatakan"
+
+msgid "{count} lead matches your search and filters"
+msgid_plural "{count} leads match your search and filters"
+msgstr[0] "{count} lead cocok dengan pencarian dan filter Anda"
+
+msgid "{count} lead"
+msgid_plural "{count} leads"
+msgstr[0] "{count} lead"
+
+msgid "{count} pipeline"
+msgid_plural "{count} pipelines"
+msgstr[0] "{count} pipeline"
+
+msgid "{count} stage"
+msgid_plural "{count} stages"
+msgstr[0] "{count} tahap"
+
+msgid "{count} allowed move"
+msgid_plural "{count} allowed moves"
+msgstr[0] "{count} perpindahan diizinkan"
+
+msgid "{count} stage change"
+msgid_plural "{count} stage changes"
+msgstr[0] "{count} perubahan tahap"
+
+msgid "{count} owner change"
+msgid_plural "{count} owner changes"
+msgstr[0] "{count} perubahan pemilik"
+
+msgid "{count} source touch (the first is immutable)"
+msgid_plural "{count} source touches (the first is immutable)"
+msgstr[0] "{count} sentuhan sumber (yang pertama tidak dapat diubah)"
+
+msgid "{count} conversion"
+msgid_plural "{count} conversions"
+msgstr[0] "{count} konversi"
+
+msgid "Pipeline settings"
+msgstr "Pengaturan pipeline"

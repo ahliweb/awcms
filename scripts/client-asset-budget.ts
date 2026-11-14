@@ -1188,8 +1188,18 @@ export const READER_BUDGET_BYTES = 24_000;
  * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
  * carried a script, and duplicates nothing: no other screen consumes a cursor
  * stream (the push console's counters are a dozen lines with no fallback).
+ *
+ * **Raised for Issue #1166** (the lead pipeline screens): +1,600 B (365,600 ->
+ * 367,200), measured 367,112 locally with this change, with 88 B of margin for
+ * the local/CI build difference. Two page scripts, each on its own screen only:
+ * the lead detail (`/admin/crm-leads/[id]`: move and assign, each sentence
+ * translated on the server and carried in a `data-messages` attribute) and the
+ * settings (`/admin/crm-leads/settings`: the tenant switch). The list screen
+ * ships no script. The lifecycle is the shared `admin-form-client.ts` and the
+ * key source the shared `admin-idempotency-key.ts`, so there is no per-screen
+ * duplication to recover.
  */
-export const APP_BUDGET_BYTES = 365_600;
+export const APP_BUDGET_BYTES = 367_200;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
