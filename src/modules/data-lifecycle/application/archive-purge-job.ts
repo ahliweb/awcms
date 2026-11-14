@@ -112,6 +112,61 @@ function assertSafeIdentifier(name: string, kind: "table" | "column"): string {
   return name;
 }
 
+/**
+ * Primary-key columns per table, resolved once per process from the catalog.
+ * Keyed by the (already pattern-validated) table name; a table without a key
+ * is NEVER cached so a later migration that adds one is picked up.
+ */
+const primaryKeyColumnsCache = new Map<string, readonly string[]>();
+
+/** Test seam: forget resolved keys (tests drop and recreate fixture tables). */
+export function clearPrimaryKeyColumnsCache(): void {
+  primaryKeyColumnsCache.clear();
+}
+
+/**
+ * The primary-key columns of `tableName`, in key order, each already validated
+ * against the column-identifier pattern. Throws a clear error for a table that
+ * has no primary key: the bounded `DELETE ... WHERE (pk) IN (SELECT pk ...
+ * LIMIT n)` has nothing to address a row by, and a guessed `id` column used to
+ * fail with an opaque "column does not exist" at purge time.
+ */
+export async function resolvePrimaryKeyColumns(
+  tx: Bun.SQL,
+  tableName: string
+): Promise<readonly string[]> {
+  const table = assertSafeIdentifier(tableName, "table");
+  const cached = primaryKeyColumnsCache.get(table);
+
+  if (cached) {
+    return cached;
+  }
+
+  const rows = (await tx.unsafe(
+    `SELECT a.attname AS column_name
+       FROM pg_index i
+       JOIN pg_attribute a
+         ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+      WHERE i.indrelid = to_regclass($1) AND i.indisprimary
+      ORDER BY array_position(i.indkey::int2[], a.attnum)`,
+    [table]
+  )) as { column_name: string }[];
+
+  if (rows.length === 0) {
+    throw new Error(
+      `data-lifecycle archive/purge: table "${table}" has no primary key; the generic engine cannot purge it in bounded batches. Refusing to execute.`
+    );
+  }
+
+  const columns = rows.map((row) =>
+    assertSafeIdentifier(row.column_name, "column")
+  );
+
+  primaryKeyColumnsCache.set(table, columns);
+
+  return columns;
+}
+
 function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(value as string);
 }
@@ -319,10 +374,13 @@ export async function runGenericPurgePass(
         archivedThroughBound = applyCursorBoundarySafetyMargin(archivedThrough);
       }
 
+      const pkColumns = (await resolvePrimaryKeyColumns(tx, tableName))
+        .map((column) => `"${column}"`)
+        .join(", ");
       const deleted = (await tx.unsafe(
         `DELETE FROM ${tableName}
-         WHERE id IN (
-           SELECT id FROM ${tableName}
+         WHERE (${pkColumns}) IN (
+           SELECT ${pkColumns} FROM ${tableName}
            WHERE ${tenantColumn} = $1 AND ${cursorColumn} < ${cursorBoundSql(descriptor.cursorColumnType, 2)}
              AND ($3::timestamptz IS NULL OR ${cursorColumn} <= ${cursorBoundSql(descriptor.cursorColumnType, 3)})
            ORDER BY ${cursorColumn} ASC
