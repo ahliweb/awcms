@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:ccebccfa2d49c08a2672a8ea337a577558ad512331a777925fcaece0140e65cb -->
+<!-- i18n-source-hash: sha256:26d7e5b1533c77d71c6ea7e93274a05ba3b0aafc6708dc2a97981db8919aa6ab -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-220 titik masuk di 74 berkas; 216 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-216 itu dijaga `lockElement`/`mutateAndReload` pada 201, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 216 dari 220 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+224 titik masuk di 76 berkas; 220 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-220 itu dijaga `lockElement`/`mutateAndReload` pada 205, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 220 dari 224 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                        | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | --------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -163,6 +163,10 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/channel-accounts/[id].astro` | `.js-channel-default-sender`                   | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/comments.astro`              | `[data-comments-queue] button[data-action]`    | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/comments.astro`              | `[data-bulk-bar] button[data-bulk-action]`     | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-leads/[id].astro`        | `crm-lead-move-form`                           | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-leads/[id].astro`        | `.js-lead-assign-me`                           | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-leads/[id].astro`        | `.js-lead-unassign`                            | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/crm-leads/settings.astro`    | `crm-settings-form`                            | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/data-lifecycle.astro`        | `data-lifecycle-plan-form`                     | onSubmit                | tanpa request                                                                                                                              | single-flight (helper)    | —                       |
 | `src/pages/admin/data-lifecycle.astro`        | `data-lifecycle-hold-form`                     | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/data-lifecycle.astro`        | `form[data-release-form]`                      | onSubmitAll             | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |

@@ -497,6 +497,12 @@ export type LeadListFilter = {
   stageCategory: StageCategory | null;
   ownerTenantUserId: string | null;
   includeDeleted: boolean;
+  /**
+   * Only leads still in play (`status = 'open'`): a merged lead is a duplicate
+   * of its survivor and an anonymised one is a tombstone. The admin list asks
+   * for this; the API leaves it unset and returns every status.
+   */
+  openOnly?: boolean;
   cursor: { createdAt: string; id: string } | null;
   limit: number;
 };
@@ -518,6 +524,7 @@ export async function listLeads(
     FROM awcms_crm_leads
     WHERE tenant_id = ${tenantId}
       AND (${filter.includeDeleted}::boolean OR deleted_at IS NULL)
+      AND (NOT ${filter.openOnly ?? false}::boolean OR status = 'open')
       AND (${filter.pipelineId}::uuid IS NULL OR pipeline_id = ${filter.pipelineId}::uuid)
       AND (${filter.stageCategory}::text IS NULL OR stage_category = ${filter.stageCategory}::text)
       AND (${filter.ownerTenantUserId}::uuid IS NULL

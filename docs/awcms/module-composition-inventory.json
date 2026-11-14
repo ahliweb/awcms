@@ -147,7 +147,7 @@
       "key": "crm_leads",
       "name": "CRM Leads",
       "version": "0.1.0",
-      "status": "experimental",
+      "status": "active",
       "type": "domain",
       "dependencies": [
         "tenant_admin",
@@ -160,7 +160,7 @@
       "capabilitiesProvided": ["crm_lead"],
       "capabilitiesConsumed": [],
       "permissionCount": 11,
-      "navigationCount": 0,
+      "navigationCount": 2,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

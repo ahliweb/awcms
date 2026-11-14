@@ -9547,3 +9547,396 @@ msgstr ""
 
 msgid "Refresh progress"
 msgstr ""
+
+msgid "Unknown pipeline"
+msgstr ""
+
+msgid "Unassigned"
+msgstr ""
+
+msgid "You"
+msgstr ""
+
+msgid "Another staff member"
+msgstr ""
+
+msgid "Pipeline: {value}"
+msgstr ""
+
+msgid "Stage: {value}"
+msgstr ""
+
+msgid "Owner: {value}"
+msgstr ""
+
+msgid "Assigned to me"
+msgstr ""
+
+msgid "Source: {value}"
+msgstr ""
+
+msgid "Lead pipeline"
+msgstr ""
+
+msgid "The tenant's prospects by pipeline stage: owner, first source and how long they have been in their stage. Contact points are always masked."
+msgstr ""
+
+msgid "You do not have permission to view leads."
+msgstr ""
+
+msgid "The leads could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The lead pipeline is switched off on this deployment, so no lead is collected or listed."
+msgstr ""
+
+msgid "Leads"
+msgstr ""
+
+msgid "Newest first. A lead is a prospect, not a customer: the customer record stays with the system that owns it."
+msgstr ""
+
+msgid "Pipelines and settings"
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be changed. Existing leads can still be read."
+msgstr ""
+
+msgid "There are more leads than this screen loads. Showing the newest {count}. The pipeline, stage and owner filters cover every lead; the source filter and search cover only these. The API lists the rest."
+msgstr ""
+
+msgid "Search leads"
+msgstr ""
+
+msgid "Pipeline"
+msgstr ""
+
+msgid "All pipelines"
+msgstr ""
+
+msgid "Stage"
+msgstr ""
+
+msgid "All stages"
+msgstr ""
+
+msgid "Anyone"
+msgstr ""
+
+msgid "All sources"
+msgstr ""
+
+msgid "In stage since"
+msgstr ""
+
+msgid "Lead"
+msgstr ""
+
+msgid "No leads yet"
+msgstr ""
+
+msgid "Leads appear here when they are entered by hand, imported, or sent by an integration through the API."
+msgstr ""
+
+msgid "Unnamed lead"
+msgstr ""
+
+msgid "The merge-undo window must be a whole number of hours from 1 to 720."
+msgstr ""
+
+msgid "Could not save the settings. Please try again."
+msgstr ""
+
+msgid "Lead pipeline settings"
+msgstr ""
+
+msgid "Switch the lead pipeline on for this tenant and review each pipeline's published stages and allowed moves."
+msgstr ""
+
+msgid "Back to the leads"
+msgstr ""
+
+msgid "You do not have permission to change the lead pipeline settings."
+msgstr ""
+
+msgid "The lead pipeline settings could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The lead pipeline is switched off on this deployment, so it cannot be configured."
+msgstr ""
+
+msgid "This tenant"
+msgstr ""
+
+msgid "While the pipeline is off for this tenant, leads can be read but not created or changed. Pipelines can be prepared in the meantime."
+msgstr ""
+
+msgid "The lead pipeline is on for this tenant"
+msgstr ""
+
+msgid "Merge-undo window (hours)"
+msgstr ""
+
+msgid "Save settings"
+msgstr ""
+
+msgid "Never changed: the default is off."
+msgstr ""
+
+msgid "Last changed {time}"
+msgstr ""
+
+msgid "Pipelines"
+msgstr ""
+
+msgid "Revision"
+msgstr ""
+
+msgid "No pipeline exists yet. Create one through the API."
+msgstr ""
+
+msgid "Catalogue of {name}, revision {number}"
+msgstr ""
+
+msgid "A published revision never changes. A new revision is published through the API; leads in a removed stage are moved by an explicit, audited migration."
+msgstr ""
+
+msgid "initial"
+msgstr ""
+
+msgid "Conditions"
+msgstr ""
+
+msgid "Someone else changed this lead. Reload the page and try again."
+msgstr ""
+
+msgid "The pipeline does not allow this move."
+msgstr ""
+
+msgid "This move needs something the lead does not have yet (an owner, a contact point or a reason)."
+msgstr ""
+
+msgid "A converted stage is entered only by recording a conversion."
+msgstr ""
+
+msgid "A converted lead leaves its stage only by reversing the conversion."
+msgstr ""
+
+msgid "That stage is no longer part of the pipeline. Reload the page and try again."
+msgstr ""
+
+msgid "You cannot be made the owner of this lead."
+msgstr ""
+
+msgid "This lead can no longer be changed."
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant."
+msgstr ""
+
+msgid "That lead is no longer available."
+msgstr ""
+
+msgid "Could not save the change. Please try again."
+msgstr ""
+
+msgid "State, history and actions of one lead. Contact points are always masked."
+msgstr ""
+
+msgid "The lead could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The lead pipeline is switched off on this deployment."
+msgstr ""
+
+msgid "That lead was not found."
+msgstr ""
+
+msgid "Contact points"
+msgstr ""
+
+msgid "revoked"
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so this lead cannot be changed."
+msgstr ""
+
+msgid "This lead is converted. It leaves this stage only by reversing the conversion."
+msgstr ""
+
+msgid "This lead is in a stage the pipeline no longer defines, so it cannot be moved from here."
+msgstr ""
+
+msgid "The pipeline defines no move out of this stage."
+msgstr ""
+
+msgid "Move to"
+msgstr ""
+
+msgid "Move lead"
+msgstr ""
+
+msgid "Assign to me"
+msgstr ""
+
+msgid "Unassign"
+msgstr ""
+
+msgid "Assign to another person"
+msgstr ""
+
+msgid "Not available yet: there is no list of the people eligible to own a lead. They can assign the lead to themselves."
+msgstr ""
+
+msgid "Stage history"
+msgstr ""
+
+msgid "By"
+msgstr ""
+
+msgid "No history yet."
+msgstr ""
+
+msgid "Owner history"
+msgstr ""
+
+msgid "Campaign"
+msgstr ""
+
+msgid "Landing page"
+msgstr ""
+
+msgid "Legal basis stated"
+msgstr ""
+
+msgid "Conversions"
+msgstr ""
+
+msgid "How"
+msgstr ""
+
+msgid "No conversion recorded."
+msgstr ""
+
+msgid "New"
+msgstr ""
+
+msgid "Working"
+msgstr ""
+
+msgid "Qualified"
+msgstr ""
+
+msgid "Converted"
+msgstr ""
+
+msgid "Lost"
+msgstr ""
+
+msgid "Disqualified"
+msgstr ""
+
+msgid "Website form"
+msgstr ""
+
+msgid "Inbound message"
+msgstr ""
+
+msgid "Import"
+msgstr ""
+
+msgid "Entered by hand"
+msgstr ""
+
+msgid "Not recorded"
+msgstr ""
+
+msgid "Moved"
+msgstr ""
+
+msgid "Moved by a catalogue change"
+msgstr ""
+
+msgid "Conversion reversed"
+msgstr ""
+
+msgid "Merged into another lead"
+msgstr ""
+
+msgid "Merge undone"
+msgstr ""
+
+msgid "needs an owner"
+msgstr ""
+
+msgid "needs a contact point"
+msgstr ""
+
+msgid "needs a reason"
+msgstr ""
+
+msgid "Confirmed by the customer authority"
+msgstr ""
+
+msgid "Recorded by hand, not confirmed"
+msgstr ""
+
+msgid "Anonymised"
+msgstr ""
+
+msgid "Steps towards a contract"
+msgstr ""
+
+msgid "Legitimate interest"
+msgstr ""
+
+msgid "Not stated"
+msgstr ""
+
+msgid "{count} lead matches your search and filters"
+msgid_plural "{count} leads match your search and filters"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} lead"
+msgid_plural "{count} leads"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} pipeline"
+msgid_plural "{count} pipelines"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} stage"
+msgid_plural "{count} stages"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} allowed move"
+msgid_plural "{count} allowed moves"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} stage change"
+msgid_plural "{count} stage changes"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} owner change"
+msgid_plural "{count} owner changes"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} source touch (the first is immutable)"
+msgid_plural "{count} source touches (the first is immutable)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} conversion"
+msgid_plural "{count} conversions"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Pipeline settings"
+msgstr ""

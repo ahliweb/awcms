@@ -1,0 +1,771 @@
+---
+/**
+ * One lead — state, history and the two actions a salesperson needs (Issue
+ * #1166, ADR-0153).
+ *
+ * ## What it shows
+ *
+ * The lead as `GET /api/v1/crm-leads/leads/{id}` returns it: the display name
+ * and the MASKED contact points, the stage and its category, the owner (you,
+ * someone else, nobody) and the append-only history: stage transitions (with
+ * the reason a staff member typed), owner changes, source touches (the first is
+ * immutable) and conversions. A contact value is never shown, a conversion's
+ * customer reference is never shown (the customer authority owns it), and a
+ * staff member's identity is not resolved here.
+ *
+ * ## The actions, and why each one is there
+ *
+ * Every control calls an endpoint that already audits, and is rendered only
+ * when the caller holds that endpoint's permission (the endpoint stays the
+ * authority):
+ *
+ *   - move to another stage needs `stages.update`: only the edges the
+ *     pipeline's current revision defines out of the lead's stage are offered,
+ *     the guards of each edge are named, and a converted stage is never offered
+ *     (it is entered only by recording a conversion);
+ *   - assign to me / unassign need `leads.assign` (high-risk,
+ *     Idempotency-Key).
+ *
+ * "Assign to another person" is shown DISABLED with its reason: no endpoint
+ * lists the people eligible to own a lead, and a raw user-id box would be a
+ * worse affordance than none. Editing the lead, merging, converting,
+ * deleting and restoring have endpoints but no screen yet (the module README
+ * lists them).
+ *
+ * Every write carries `expectedVersion`, so two staff members acting on the
+ * same lead get exactly one winner and a "someone else changed it" message for
+ * the other, never a silent overwrite.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  conversionModeLabel,
+  leadSourceKindLabel,
+  leadStatusLabel,
+  leadTransitionKindLabel,
+  legalBasisLabel,
+  stageCategoryLabel,
+  stageCategoryTone,
+  transitionGuardLabel
+} from "../../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import {
+  loadLeadDetail,
+  uuidOrNull
+} from "../../../modules/crm-leads/application/screen-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+const leadId = uuidOrNull(Astro.params.id);
+
+/**
+ * The guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to `CRM_LEADS_GUARDS` and
+ * to the endpoint that enforces it.
+ */
+const READ_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "read"
+} as const;
+const MOVE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "stages",
+  action: "update"
+} as const;
+const ASSIGN_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "assign"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    // The lookup chain is the module's loader (see `screen-loaders.ts`): the
+    // behavioural integration test runs it as a real viewer.
+    loadLeadDetail({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        me: auth.context.tenantUserId
+      },
+      leadId,
+      moveGuard: MOVE_GUARD,
+      assignGuard: ASSIGN_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads/[id].astro: failed to load a lead",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const detail = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const lead = detail?.lead ?? null;
+const history = detail?.history ?? null;
+const revision = detail?.revision ?? null;
+
+/** Writes need a live lead, the tenant switch on, and a lead that is still `open`. */
+const writable =
+  detail !== null && detail.tenantEnabled && lead?.status === "open";
+const stageName = (key: string | null) =>
+  key === null
+    ? "—"
+    : (revision?.stages.find((stage) => stage.key === key)?.name ?? key);
+const currentStage = revision?.stages.find(
+  (stage) => stage.key === lead?.stageKey
+);
+/** The edges out of the lead's stage, except into a converted stage (a conversion is recorded, not moved). */
+const targets =
+  revision === null || lead === null
+    ? []
+    : revision.transitions
+        .filter((edge) => edge.from === lead.stageKey)
+        .map((edge) => ({
+          edge,
+          stage: revision.stages.find((stage) => stage.key === edge.to)
+        }))
+        .filter(
+          (target) =>
+            target.stage !== undefined && target.stage.category !== "converted"
+        );
+const converted = lead?.stageCategory === "converted";
+
+function actorText(id: string | null): string {
+  if (id === null) return t("System");
+
+  return id === detail?.me ? t("You") : t("Another staff member");
+}
+
+const ownerText =
+  lead === null || lead.ownerTenantUserId === null
+    ? t("Unassigned")
+    : lead.ownerTenantUserId === detail?.me
+      ? t("You")
+      : t("Another staff member");
+
+/** Translated here, read by the page script: a client script cannot translate. */
+const messages = {
+  VERSION_CONFLICT: t(
+    "Someone else changed this lead. Reload the page and try again."
+  ),
+  TRANSITION_NOT_ALLOWED: t("The pipeline does not allow this move."),
+  GUARD_NOT_MET: t(
+    "This move needs something the lead does not have yet (an owner, a contact point or a reason)."
+  ),
+  CONVERSION_REQUIRED: t(
+    "A converted stage is entered only by recording a conversion."
+  ),
+  REVERSAL_REQUIRED: t(
+    "A converted lead leaves its stage only by reversing the conversion."
+  ),
+  STAGE_NOT_FOUND: t(
+    "That stage is no longer part of the pipeline. Reload the page and try again."
+  ),
+  OWNER_NOT_FOUND: t("You cannot be made the owner of this lead."),
+  LEAD_NOT_OPEN: t("This lead can no longer be changed."),
+  CRM_LEADS_TENANT_DISABLED: t(
+    "The lead pipeline is switched off for this tenant."
+  ),
+  RESOURCE_NOT_FOUND: t("That lead is no longer available."),
+  fallback: t("Could not save the change. Please try again.")
+};
+---
+
+<AdminLayout
+  title={t("Lead")}
+  description={t(
+    "State, history and actions of one lead. Contact points are always masked."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the leads")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-lead-denied">
+      {t("You do not have permission to view leads.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-lead-error">
+      {t("The lead could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-lead-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {canRead && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="crm-lead-not-found">
+      {t("That lead was not found.")}
+    </p>
+  )}
+
+  {detail && lead && history && revision && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-title"
+        id="crm-lead"
+        data-lead-id={lead.id}
+        data-version={lead.version}
+        data-messages={JSON.stringify(messages)}
+      >
+        <h2 class="admin-section-title" id="crm-lead-title">
+          {lead.displayName ?? t("Unnamed lead")}
+        </h2>
+
+        <p
+          id="crm-lead-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <dl class="admin-detail-list" id="crm-lead-summary">
+          <dt>{t("Pipeline")}</dt>
+          <dd>{detail.pipeline.name}</dd>
+          <dt>{t("Stage")}</dt>
+          <dd data-stage-category={lead.stageCategory}>
+            <span
+              class="admin-status-pill"
+              data-tone={stageCategoryTone(lead.stageCategory)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {stageCategoryLabel(t, lead.stageCategory)}
+            </span>
+            <span class="cell-muted"> {stageName(lead.stageKey)}</span>
+          </dd>
+          <dt>{t("In stage since")}</dt>
+          <dd>{formatUtcMinute(lead.stageEnteredAt)}</dd>
+          <dt>{t("Owner")}</dt>
+          <dd>{ownerText}</dd>
+          <dt>{t("Status")}</dt>
+          <dd data-lead-status={lead.status}>
+            {leadStatusLabel(t, lead.status)}
+          </dd>
+          <dt>{t("Contact points")}</dt>
+          <dd>
+            {lead.contactPoints.length === 0
+              ? "—"
+              : lead.contactPoints.map((point) => (
+                  <span class="cell-muted" data-contact-kind={point.kind}>
+                    {point.erased ? t("Erased") : (point.masked ?? "—")}
+                    {point.revokedAt !== null ? ` (${t("revoked")})` : ""}{" "}
+                  </span>
+                ))}
+          </dd>
+          <dt>{t("Created")}</dt>
+          <dd>{formatUtcMinute(lead.createdAt)}</dd>
+        </dl>
+
+        {!detail.tenantEnabled && (
+          <p class="state-notice" id="crm-lead-tenant-off">
+            {t(
+              "The lead pipeline is switched off for this tenant, so this lead cannot be changed."
+            )}
+          </p>
+        )}
+        {detail.tenantEnabled && lead.status !== "open" && (
+          <p class="state-notice" id="crm-lead-not-open">
+            {t("This lead can no longer be changed.")}
+          </p>
+        )}
+      </section>
+
+      {(detail.canMove || detail.canAssign) && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-lead-actions-title"
+        >
+          <h2 class="admin-section-title" id="crm-lead-actions-title">
+            {t("Actions")}
+          </h2>
+
+          {detail.canMove && (
+            <>
+              {converted ? (
+                <p class="cell-muted" id="crm-lead-move-converted">
+                  {t(
+                    "This lead is converted. It leaves this stage only by reversing the conversion."
+                  )}
+                </p>
+              ) : targets.length === 0 ? (
+                <p class="cell-muted" id="crm-lead-move-none">
+                  {currentStage === undefined
+                    ? t(
+                        "This lead is in a stage the pipeline no longer defines, so it cannot be moved from here."
+                      )
+                    : t("The pipeline defines no move out of this stage.")}
+                </p>
+              ) : (
+                <form id="crm-lead-move-form" class="admin-form">
+                  <label class="field-label" for="crm-lead-move-stage">
+                    {t("Move to")}
+                  </label>
+                  <select
+                    class="field-input"
+                    id="crm-lead-move-stage"
+                    name="toStageKey"
+                    disabled={!writable}
+                  >
+                    {targets.map((target) => (
+                      <option value={target.stage!.key}>
+                        {target.stage!.name} (
+                        {stageCategoryLabel(t, target.stage!.category)}
+                        {target.edge.guards.length > 0
+                          ? `; ${target.edge.guards
+                              .map((guard) => transitionGuardLabel(t, guard))
+                              .join(", ")}`
+                          : ""}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                  <label class="field-label" for="crm-lead-move-reason">
+                    {t("Reason (optional)")}
+                  </label>
+                  <textarea
+                    class="field-input"
+                    id="crm-lead-move-reason"
+                    name="reason"
+                    rows="2"
+                    maxlength="500"
+                    disabled={!writable}
+                  />
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    disabled={!writable}
+                  >
+                    {t("Move lead")}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+
+          {detail.canAssign && (
+            <div id="crm-lead-assignment" class="admin-form">
+              <p class="field-label">{t("Owner")}</p>
+              <button
+                class="btn btn-secondary js-lead-assign-me"
+                type="button"
+                data-owner={detail.me}
+                disabled={!writable || lead.ownerTenantUserId === detail.me}
+              >
+                {t("Assign to me")}
+              </button>
+              <button
+                class="btn btn-secondary js-lead-unassign"
+                type="button"
+                disabled={!writable || lead.ownerTenantUserId === null}
+              >
+                {t("Unassign")}
+              </button>
+              <button
+                class="btn btn-secondary"
+                type="button"
+                disabled
+                aria-describedby="crm-lead-assign-other-why"
+              >
+                {t("Assign to another person")}
+              </button>
+              <p class="cell-muted" id="crm-lead-assign-other-why">
+                {t(
+                  "Not available yet: there is no list of the people eligible to own a lead. They can assign the lead to themselves."
+                )}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-stages-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-stages-title">
+          {t("Stage history")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-stages-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-stages-table"
+          >
+            <caption id="crm-lead-stages-caption">
+              {tn(
+                "{count} stage change",
+                "{count} stage changes",
+                history.transitions.length,
+                { count: history.transitions.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("What")}</th>
+                <th scope="col">{t("From")}</th>
+                <th scope="col">{t("To")}</th>
+                <th scope="col">{t("By")}</th>
+                <th scope="col">{t("Reason")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.transitions.length === 0 ? (
+                <tr>
+                  <td colspan={6}>
+                    <span class="cell-muted">{t("No history yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                history.transitions.map((row) => (
+                  <tr data-transition-kind={String(row.kind)}>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(String(row.occurredAt))}
+                    </td>
+                    <td data-label={t("What")}>
+                      {leadTransitionKindLabel(t, String(row.kind))}
+                    </td>
+                    <td data-label={t("From")}>
+                      {stageName(
+                        row.fromStageKey === null
+                          ? null
+                          : String(row.fromStageKey)
+                      )}
+                    </td>
+                    <td data-label={t("To")}>
+                      {stageName(String(row.toStageKey))}
+                    </td>
+                    <td data-label={t("By")}>
+                      {actorText(
+                        row.actorTenantUserId === null
+                          ? null
+                          : String(row.actorTenantUserId)
+                      )}
+                    </td>
+                    <td data-label={t("Reason")}>
+                      {row.reason === null ? "—" : String(row.reason)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-owners-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-owners-title">
+          {t("Owner history")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-owners-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-owners-table"
+          >
+            <caption id="crm-lead-owners-caption">
+              {tn(
+                "{count} owner change",
+                "{count} owner changes",
+                history.assignments.length,
+                { count: history.assignments.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("From")}</th>
+                <th scope="col">{t("To")}</th>
+                <th scope="col">{t("By")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.assignments.length === 0 ? (
+                <tr>
+                  <td colspan={4}>
+                    <span class="cell-muted">{t("No history yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                history.assignments.map((row) => (
+                  <tr>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(String(row.assignedAt))}
+                    </td>
+                    <td data-label={t("From")}>
+                      {row.fromOwnerTenantUserId === null
+                        ? t("Unassigned")
+                        : actorText(String(row.fromOwnerTenantUserId))}
+                    </td>
+                    <td data-label={t("To")}>
+                      {row.toOwnerTenantUserId === null
+                        ? t("Unassigned")
+                        : actorText(String(row.toOwnerTenantUserId))}
+                    </td>
+                    <td data-label={t("By")}>
+                      {actorText(
+                        row.assignedBy === null ? null : String(row.assignedBy)
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-sources-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-sources-title">
+          {t("Source")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-sources-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-sources-table"
+          >
+            <caption id="crm-lead-sources-caption">
+              {tn(
+                "{count} source touch (the first is immutable)",
+                "{count} source touches (the first is immutable)",
+                history.touches.length,
+                { count: history.touches.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("Source")}</th>
+                <th scope="col">{t("Campaign")}</th>
+                <th scope="col">{t("Landing page")}</th>
+                <th scope="col">{t("Legal basis stated")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.touches.length === 0 ? (
+                <tr>
+                  <td colspan={5}>
+                    <span class="cell-muted">{t("No history yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                history.touches.map((row) => (
+                  <tr data-touch-number={String(row.touchNumber)}>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(String(row.occurredAt))}
+                    </td>
+                    <td data-label={t("Source")}>
+                      {leadSourceKindLabel(t, String(row.sourceKind))}
+                    </td>
+                    <td data-label={t("Campaign")}>
+                      {[
+                        row.campaignRef,
+                        row.utmSource,
+                        row.utmMedium,
+                        row.utmCampaign
+                      ]
+                        .filter((part) => part !== null && part !== undefined)
+                        .map(String)
+                        .join(" / ") || "—"}
+                    </td>
+                    <td data-label={t("Landing page")}>
+                      {row.landingPath === null ? "—" : String(row.landingPath)}
+                    </td>
+                    <td data-label={t("Legal basis stated")}>
+                      {legalBasisLabel(t, String(row.legalBasis))}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-conversions-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-conversions-title">
+          {t("Conversions")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-conversions-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-conversions-table"
+          >
+            <caption id="crm-lead-conversions-caption">
+              {tn(
+                "{count} conversion",
+                "{count} conversions",
+                history.conversions.length,
+                { count: history.conversions.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("How")}</th>
+                <th scope="col">{t("Reversed")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.conversions.length === 0 ? (
+                <tr>
+                  <td colspan={3}>
+                    <span class="cell-muted">
+                      {t("No conversion recorded.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                history.conversions.map((row) => (
+                  <tr data-conversion-mode={String(row.mode)}>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(String(row.occurredAt))}
+                    </td>
+                    <td data-label={t("How")}>
+                      {conversionModeLabel(t, String(row.mode))}
+                    </td>
+                    <td data-label={t("Reversed")}>
+                      {row.reversedAt === null
+                        ? "—"
+                        : formatUtcMinute(String(row.reversedAt))}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+
+  const actionError = messageBox("crm-lead-error-box");
+  const root = document.getElementById("crm-lead");
+  const leadId = root?.dataset.leadId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  const base = `/api/v1/crm-leads/leads/${leadId}`;
+  // The sentences were translated on the server and ride on the element.
+  let messages: Record<string, string> = {};
+
+  try {
+    messages = JSON.parse(root?.dataset.messages ?? "{}");
+  } catch {
+    messages = {};
+  }
+
+  // Both writes are high-risk and need the header. One key per distinct
+  // (method, url, body): a retry replays, a different request gets a new key.
+  const keyFor = createIdempotencyKeySource();
+
+  function failure(errorCode: string | null): string {
+    return (
+      (errorCode !== null ? messages[errorCode] : undefined) ??
+      messages.fallback ??
+      ""
+    );
+  }
+
+  onSubmit("crm-lead-move-form", async ({ data, submit }) => {
+    const reason = String(data.get("reason") ?? "").trim();
+    const body = {
+      expectedVersion: version,
+      toStageKey: String(data.get("toStageKey") ?? ""),
+      ...(reason.length > 0 ? { reason } : {})
+    };
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("POST", `${base}/move`, body, {
+          "Idempotency-Key": keyFor({ url: `${base}/move`, body })
+        }),
+      failure
+    );
+  });
+
+  function assign(button: HTMLButtonElement, owner: string | null) {
+    const body = { expectedVersion: version, ownerTenantUserId: owner };
+
+    return mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `${base}/assign`, body, {
+          "Idempotency-Key": keyFor({ url: `${base}/assign`, body })
+        }),
+      failure
+    );
+  }
+
+  onAction(".js-lead-assign-me", (button) =>
+    assign(button, button.dataset.owner ?? null)
+  );
+  onAction(".js-lead-unassign", (button) => assign(button, null));
+</script>

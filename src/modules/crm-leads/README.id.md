@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b2727c2da99830ea8618f787682c557d7e1448f67fe5e2d3ff0b5a5a0760ee8a -->
+<!-- i18n-source-hash: sha256:874bf1e500658968059dbf12bed52c46ca85b332a8580942f5ee93eeabc2161e -->
 
 # `crm_leads`
 
@@ -16,6 +16,7 @@
 - **Penghapusan**: `POST /leads/{id}/anonymize` menghapus nama, titik kontak, alasan, dan catatan; fakta tahap, sentuhan, transisi, dan konversi tetap ada sehingga hitungan funnel tidak berubah. Respons mutasi tidak pernah membawa nama tampilan atau bentuk kontak tersamar, sehingga replay idempotensi yang tersimpan tidak bisa melampaui penghapusan. Intake yang diulang hanya menjawab `{id, duplicate: true}`.
 - **Event** (outbox, AsyncAPI): `awcms.crm_leads.lead.{created,stage_changed,assigned,merged,merge_reverted,converted,conversion_reversed,lost}`, hanya id opak dan referensi atribusi, `privacyClass: pseudonymous`.
 - **Port**: `CrmLeadPort` (`_shared/ports/crm-lead-port.ts`, kapabilitas `crm_lead` 1.0.0) bagi otoritas hilir untuk membaca status lead serta mengonfirmasi atau membalik konversi.
+- **Layar admin** (halaman data ADR-0149, dirender server, `active` dengan dua entri `navigation`): `/admin/crm-leads` (lead hidup, keyset atas paling banyak 200 baris termuat; filter pipeline, kategori tahap, dan pemilik di SQL, filter sumber pertama dan pencarian atas baris termuat), `/admin/crm-leads/{id}` (status, titik kontak tersamar, riwayat tahap / pemilik / sumber / konversi; pindah sepanjang edge pipeline sendiri dan tugaskan ke saya / batalkan, masing-masing lewat endpoint beraudit yang sudah ada dengan `expectedVersion` dan `Idempotency-Key`) dan `/admin/crm-leads/settings` (saklar tenant dan jendela pembatalan merge; katalog terbit tiap pipeline, hanya-baca). Rantai baca ada di `application/screen-loaders.ts`, yang dijalankan tes integrasi perilaku lewat chokepoint akses sungguhan. Saat saklar deployment mati, layar menjelaskannya, bukan gagal. Tidak ada nilai kontak, ciphertext, hash berkunci, atau referensi pelanggan yang pernah dirender.
 - **Tabel** `sql/342`, permission `sql/343`, trigger integritas `sql/344`; RLS `FORCE` di semua tabel, foreign key tenant komposit, tanpa `DELETE` bagi `awcms_app`, tanpa grant sama sekali bagi `awcms_worker`.
 
 ## Pemetaan permission (nama kerja ADR-0153 → kunci yang di-seed)
@@ -38,7 +39,8 @@
 
 ## Ditunda (dicatat, tidak dibangun di irisan ini)
 
-- Layar admin (modul `experimental` tanpa entri navigasi; permission ada di `NOT_YET_SCREENED`).
+- Sisa pekerjaan layar (masing-masing punya endpoint tetapi belum punya kontrol; permission-nya tetap di `NOT_YET_SCREENED`): membuat atau mengubah lead dan titik kontaknya, tinjauan merge dengan kandidat dan pembatalan, mencatat atau membalik konversi, soft delete dan restore, dan editor pipeline / revisi (katalog ditampilkan hanya-baca; `POST /pipelines` dan `POST /pipelines/{id}/revisions` tetap di API). "Tugaskan ke orang lain" ditampilkan nonaktif: tidak ada endpoint yang mendaftar orang yang berhak memiliki lead.
+- Celah backend yang terlihat oleh layar (tidak dibangun di sini): `GET /leads` hanya menyaring menurut pipeline, kategori tahap, dan pemilik (tanpa filter pemilik `unassigned`, tanpa filter sumber, tanpa hitungan per tahap), sehingga filter sumber dan pencarian berjalan atas 200 baris termuat; tidak ada daftar pemilik yang layak; dan tidak ada lead yang dibatasi business scope (di atas).
 - Intake `website_form` lewat langganan `website_engagement.submission.received` dan aturan tenant `inbound_message` (O8); kedua jenis sumber ditolak lewat HTTP sampai konsumennya ada.
 - Impor/ekspor CSV dengan netralisasi formula (T-X1) dan `leads.export`; milestone; ekstensi bertipe (O9 menyarankan tanpa ekstensi `pii` di v1); referensi consent dan `lead.consent_changed`; catatan; tautan `profile_id` opsional (O6).
 - Proyeksi pelaporan dengan versi definisi dan bucket zona bisnis (T-R1); tabel transisi sudah membawa fakta dan indeks funnel yang diperlukan.
