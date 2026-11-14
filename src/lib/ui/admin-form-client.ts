@@ -324,6 +324,8 @@ export function messageBox(id: string): MessageBox {
 
 const FLASH_STORAGE_KEY = "awcms.admin.flash";
 const FLASH_KEY_PATTERN = /^[a-z0-9-]{1,40}$/;
+/** A flash older than this is a reload that went elsewhere; it is dropped. */
+const FLASH_MAX_AGE_MS = 10_000;
 
 /**
  * Remembers WHICH of the page's own messages to show, then reloads — so a
@@ -331,7 +333,8 @@ const FLASH_KEY_PATTERN = /^[a-z0-9-]{1,40}$/;
  *
  * ## What is stored, and what is deliberately not
  *
- * `sessionStorage` holds a short CATALOG KEY (`^[a-z0-9-]{1,40}$`), never the
+ * `sessionStorage` holds a short CATALOG KEY (`^[a-z0-9-]{1,40}$`) with the
+ * page path and a timestamp (so it neither crosses screens nor outlives ~10 s), never the
  * message text and never data from the response. The text itself is rendered
  * server-side, already translated, into `data-flash-<key>` attributes on the
  * status element, so {@link showFlash} can only ever show a sentence the page
@@ -347,7 +350,17 @@ const FLASH_KEY_PATTERN = /^[a-z0-9-]{1,40}$/;
 export function flashAndReload(key: string): void {
   try {
     if (FLASH_KEY_PATTERN.test(key)) {
-      sessionStorage.setItem(FLASH_STORAGE_KEY, key);
+      // Scoped to the page and the moment: a reload that lands elsewhere
+      // (step-up, login) must not surface this sentence on a later visit, nor
+      // on another screen that happens to share the key.
+      sessionStorage.setItem(
+        FLASH_STORAGE_KEY,
+        JSON.stringify({
+          key,
+          path: window.location.pathname,
+          at: Date.now()
+        })
+      );
     }
   } catch {
     /* blocked storage: reload without the message */
@@ -355,6 +368,34 @@ export function flashAndReload(key: string): void {
 
   holdForNavigation();
   window.location.reload();
+}
+
+/**
+ * The catalog key inside a stored flash, or `null` when the record is
+ * malformed, belongs to another path, or is older than the allowed age.
+ */
+function parseFlash(raw: string): string | null {
+  let value: unknown;
+
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (typeof value !== "object" || value === null) return null;
+
+  const { key, path, at } = value as Record<string, unknown>;
+
+  if (typeof key !== "string" || !FLASH_KEY_PATTERN.test(key)) return null;
+  if (typeof path !== "string" || path !== window.location.pathname) {
+    return null;
+  }
+  if (typeof at !== "number") return null;
+
+  const age = Date.now() - at;
+
+  return age >= 0 && age <= FLASH_MAX_AGE_MS ? key : null;
 }
 
 /**
@@ -367,10 +408,14 @@ export function flashAndReload(key: string): void {
  */
 export function showFlash(id: string): void {
   try {
-    const key = sessionStorage.getItem(FLASH_STORAGE_KEY);
+    const raw = sessionStorage.getItem(FLASH_STORAGE_KEY);
+
+    if (raw === null) return;
+    sessionStorage.removeItem(FLASH_STORAGE_KEY);
+
+    const key = parseFlash(raw);
 
     if (key === null) return;
-    sessionStorage.removeItem(FLASH_STORAGE_KEY);
 
     const element = document.getElementById(id);
     const message =
