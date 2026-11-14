@@ -1682,6 +1682,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/omnichannel-inbox/progress.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/omnichannel-inbox/projection/rebuild.ts",
       "workClass": "interactive",
       "source": "factory"

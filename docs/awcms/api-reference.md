@@ -16271,6 +16271,58 @@ Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibi
 | 409    | `VERSION_CONFLICT`.         | [`ApiError`](#standard-error-envelope)                                                           |
 | 422    | `TAG_UNKNOWN`.              | [`ApiError`](#standard-error-envelope)                                                           |
 
+### `GET /api/v1/omnichannel-inbox/progress` — Snapshot of the inbox's live work counts (the stream's REST snapshot and polling fallback)
+
+- **operationId**: `getOmnichannelInboxProgress`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1171, ADR-0154. Counts of ACTIVE work (open or pending conversations): `open`, `pending`, `awaitingReply`, `unassigned` and `slaBreached`; the 20 most recently changed conversations (id, status, when; never a source reference, an assignee, a tag, a message body or a customer identifier) and the `cursor` a stream resumes from. It is the page's state with no stream, the polling fallback, and what a client re-fetches on `snapshot-required`. Requires `omnichannel_inbox.status.read`. Rows are filtered exactly as the conversation list is: a scope-confined caller sees only conversations of the business scopes they cover and never a tenant-wide one. `404` while OMNICHANNEL_INBOX_ENABLED is off.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The progress snapshot.      | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omnichannel-inbox/progress/stream` — Server-Sent Events stream of the inbox's live work counts, re-authorized every tick
+
+- **operationId**: `streamOmnichannelInboxProgress`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1171, ADR-0154. `text/event-stream` from the existing Bun process; there is no WebSocket. A hint projected from committed conversation rows: a frame never causes a send, an enqueue or a status change, and carries no preview (the page re-fetches the list through the authorized REST read).
+
+**Opening.** A present `Origin` that is not the site's own origin, or `Sec-Fetch-Site: cross-site`, or `Sec-Fetch-Mode: navigate`, is refused with `403 ORIGIN_REFUSED` before any work. The caller needs `omnichannel_inbox.status.read`; otherwise `401`/`403`, and `404` while the inbox is switched off. Rows are filtered as in the snapshot. Over the per-actor, per-tenant or per-instance cap the answer is `429 STREAM_CAPACITY_REACHED` with `Retry-After`, never a queued stream. A client resumes by sending the last event id back as `Last-Event-ID` (`EventSource` does this by itself).
+
+**Events.** Every data event carries `id: <cursor>` (a database keyset position). `progress` carries an `OmnichannelInboxProgressFrame`: the current counts (coalesced, latest value per tick) and the conversations that changed since the previous cursor, at most 50; a tick with nothing new writes a heartbeat comment instead. `snapshot-required` means re-fetch `GET /api/v1/omnichannel-inbox/progress`: the `Last-Event-ID` was malformed, foreign or purged, or more than 50 conversations changed at once. Terminal: `authorization-revoked` (do NOT reconnect; the role, the assignment, the business scope or the session ended; audited), `stream-error` (the database refused; back off with jitter), `slow-consumer` (the client fell behind and was evicted) and `stream-expired` (the 10-minute lifetime ended; reconnect with the cursor). Re-authorized every 5 s, which is also the revocation latency.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                    |
+| ------------------ | ------ | -------- | ------ | -------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                |
+| `Last-Event-ID`    | header | no       | string | The cursor of the last event received, sent back on reconnect. |
+
+**Responses**
+
+| Status | Description                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The event stream.                                                                   | string                                 |
+| 400    | Validation error.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 429    | A connection cap is reached; retry after `Retry-After` seconds or use the snapshot. | [`ApiError`](#standard-error-envelope) |
+| 503    | The database refused the opening transaction; retry later.                          | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/omnichannel-inbox/projection/rebuild` — Replay the verified inbound events into the projection (one batch)
 
 - **operationId**: `rebuildOmnichannelInboxProjection`

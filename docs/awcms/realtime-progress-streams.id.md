@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](realtime-progress-streams.md)
 
-<!-- i18n-source-hash: sha256:dd3ba73aba2e4a634a9da48f0f9a4d4cc000af53733f63fac63a9d46388947ec -->
+<!-- i18n-source-hash: sha256:b4c6ffa7966437012c3fa3eb1a19a18c6e51b5ffbde68c5891d4fb6e5742968e -->
 
 # Stream progres real-time — operasional
 
@@ -12,7 +12,8 @@ Issue [#1171](https://github.com/ahliweb/awcms/issues/1171), diputuskan oleh
 - **Transport:** Server-Sent Events dari proses Bun yang sudah ada
   (`bun ./dist/standalone-entry.mjs`). Tanpa listener kedua, tanpa port kedua,
   tanpa WebSocket, tanpa Socket.IO, tanpa proses Node.
-- **Satu topik yang diadmisi:** `whatsapp.sender.progress` — progres pengiriman
+- **Dua topik yang diadmisi.** `whatsapp.sender.progress` yang pertama; `inbox.status.progress` ada di bawahnya.
+- **Topik `whatsapp.sender.progress`:** — progres pengiriman
   satu pengirim WhatsApp milik tenant, diproyeksikan dari
   `awcms_whatsapp_messages`.
   - Stream: `GET /api/v1/whatsapp/senders/{id}/progress/stream`
@@ -20,10 +21,31 @@ Issue [#1171](https://github.com/ahliweb/awcms/issues/1171), diputuskan oleh
   - Permission: `whatsapp_delivery.progress.read` (di-seed `sql/360`)
   - Layar: panel progres di `/admin/channel-accounts/{id}` untuk pengirim
     WhatsApp.
-- **Belum dibangun:** topik inbox (inbox, Issue #1164, belum ada), topik
-  kampanye (tidak ada entitas kampanye), status pesan lintas kanal. Masing-masing
-  ditambahkan ke `src/modules/_shared/realtime-topics.ts` dalam perubahan yang
-  membangun baris sumbernya.
+- **Topik `inbox.status.progress`:** hitungan kerja langsung inbox omnichannel
+  (terbuka, tertunda, menunggu balasan, belum ditugaskan, SLA terlampaui),
+  diproyeksikan dari `awcms_inbox_conversations`. Ia adalah **petunjuk**: per
+  percakapan yang berubah hanya id, status, dan waktunya; halaman mengambil ulang
+  daftar lewat pembacaan REST yang terotorisasi. Tidak ada referensi sumber,
+  penerima tugas, tag, isi, atau identitas pelanggan yang dialirkan. Hanya kerja
+  AKTIF yang dihitung (terbuka atau tertunda), sehingga biaya satu tick mengikuti
+  kerja yang sedang berjalan, bukan isi jendela retensi.
+  - Stream: `GET /api/v1/omnichannel-inbox/progress/stream`
+  - Snapshot dan fallback polling: `GET /api/v1/omnichannel-inbox/progress`
+  - Permission: `omnichannel_inbox.status.read` (di-seed `sql/413`, yang juga
+    menambah indeks keyset dan kerja-aktif pada `awcms_inbox_conversations`)
+  - Visibilitasnya sama dengan daftar percakapan: pemanggil yang terbatas scope
+    hanya melihat business scope yang ia liputi dan tidak pernah percakapan
+    seluruh-tenant. Mati (`OMNICHANNEL_INBOX_ENABLED` tidak diset) menjawab `404`.
+    Tidak ada parameter path; resource-nya selalu tampilan pemanggil atas inbox
+    tenantnya sendiri.
+  - Belum ada layar admin yang memakainya: layar inbox dirender di server dan
+    belum melakukan polling.
+- **Belum dibangun:** topik kampanye (tidak ada entitas kampanye) dan status
+  per-pesan lintas kanal. Masing-masing ditambahkan ke
+  `src/modules/_shared/realtime-topics.ts` dalam perubahan yang membangun baris
+  sumbernya. WebSocket dan fan-out lintas-instance tetap di luar ADR-0154 (ADR
+  berikutnya yang mengadmisinya; sambungan ulang sudah melanjutkan lewat cursor
+  di instance mana pun).
 
 Stream adalah **proyeksi baris yang sudah di-commit**. Ia tidak pernah mengirim,
 mengantrekan, atau mengubah status. Ia bukan tanda terima pengiriman dan bukan
@@ -94,6 +116,11 @@ dispatcher **menunggu** sampai kedua build selesai. Untuk antrean besar,
 jalankan migrasi di jendela sepi, atau hentikan `whatsapp:dispatch` selama
 berlangsung. Kedua indeks parsial (`sender_account_id IS NOT NULL`); deployment
 yang tidak pernah merutekan lewat pengirim bernama membangunnya atas nol baris.
+
+`sql/413` membangun dua indeks di `awcms_inbox_conversations`, juga **tanpa
+`CONCURRENTLY`** dan dengan kunci SHARE yang sama. Tabel itu berisi satu baris
+per percakapan pelanggan dalam jendela retensi (ribuan, bukan jutaan), sehingga
+tunggunya singkat; deployment dengan inbox mati membangunnya di atas nol baris.
 
 ## Konfigurasi
 
@@ -173,7 +200,7 @@ Alasan penolakan: `origin`, `auth_denied`, `not_found`, `capped_actor`,
   berakhir". Bila tidak, periksa `awcms_audit_events` untuk
   `realtime_stream.revoked`.
 - **Tenant lama tidak mendapat permission:** seperti setiap seed permission,
-  `sql/360` hanya memperluas katalog global; jalankan
+  `sql/360` dan `sql/413` hanya memperluas katalog global; jalankan
   `bun run identity-access:permissions:backfill`.
 
 ## Menambah topik

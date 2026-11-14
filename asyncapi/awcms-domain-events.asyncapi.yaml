@@ -17,7 +17,10 @@ info:
     is a Server-Sent Events projection of committed queue rows, re-read and
     re-authorized per tick; it publishes no domain event, consumes none, and
     is not a broker. Its frame (`WhatsappSenderProgressFrame`) is documented
-    in the OpenAPI contract with the endpoint that serves it.
+    in the OpenAPI contract with the endpoint that serves it. The same holds
+    for `GET /api/v1/omnichannel-inbox/progress/stream`
+    (`OmnichannelInboxProgressFrame`), a projection of the inbox's committed
+    conversation rows.
 channels:
   awcms.domain-event-runtime.sample.recorded:
     address: awcms.domain-event-runtime.sample.recorded

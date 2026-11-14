@@ -10,17 +10,36 @@ Issue [#1171](https://github.com/ahliweb/awcms/issues/1171), decided by
 - **Transport:** Server-Sent Events from the existing Bun process
   (`bun ./dist/standalone-entry.mjs`). No second listener, no second port, no
   WebSocket, no Socket.IO, no Node process.
-- **One admitted topic:** `whatsapp.sender.progress` — the delivery progress of
+- **Two admitted topics.** `whatsapp.sender.progress` is first; `inbox.status.progress` is below it.
+- **Topic `whatsapp.sender.progress`:** — the delivery progress of
   one tenant-owned WhatsApp sender, projected from `awcms_whatsapp_messages`.
   - Stream: `GET /api/v1/whatsapp/senders/{id}/progress/stream`
   - Snapshot and polling fallback: `GET /api/v1/whatsapp/senders/{id}/progress`
   - Permission: `whatsapp_delivery.progress.read` (seeded by `sql/360`)
   - Screen: the progress panel on `/admin/channel-accounts/{id}` for a WhatsApp
     sender.
-- **Not built:** an inbox topic (the inbox, Issue #1164, does not exist), a
-  campaign topic (no campaign entity exists), cross-channel message status.
-  Each is added to `src/modules/_shared/realtime-topics.ts` in the change that
-  builds its source rows.
+- **Topic `inbox.status.progress`:** the omnichannel inbox's live work counts
+  (open, pending, awaiting a reply, unassigned, SLA breached), projected from
+  `awcms_inbox_conversations`. It is a **hint**: per changed conversation only
+  its id, status and time; the page re-fetches the list through the authorized
+  REST read. No source reference, assignee, tag, body or customer identifier is
+  streamed. Only ACTIVE work is counted (open or pending), so a tick costs what
+  the work in progress costs, not what the retention window holds.
+  - Stream: `GET /api/v1/omnichannel-inbox/progress/stream`
+  - Snapshot and polling fallback: `GET /api/v1/omnichannel-inbox/progress`
+  - Permission: `omnichannel_inbox.status.read` (seeded by `sql/413`, which also
+    adds the keyset and active-work indexes on `awcms_inbox_conversations`)
+  - Visibility is the conversation list's: a scope-confined caller sees only
+    the business scopes they cover and never a tenant-wide conversation. Off
+    (`OMNICHANNEL_INBOX_ENABLED` unset) is `404`. There is no path parameter;
+    the resource is always the caller's own view of their tenant's inbox.
+  - No admin screen consumes it yet: the inbox screens render server-side and
+    poll nothing today.
+- **Not built:** a campaign topic (no campaign entity exists) and
+  cross-channel per-message status. Each is added to
+  `src/modules/_shared/realtime-topics.ts` in the change that builds its source
+  rows. WebSocket and cross-instance fan-out stay outside ADR-0154 (a later ADR
+  admits them; a reconnect already resumes by cursor on any instance).
 
 A stream is a **projection of committed rows**. It never sends, enqueues or
 changes a status. It is not a delivery receipt and it is not durable push: a
@@ -87,6 +106,11 @@ finalisations **wait** until both builds finish. On a large queue run the
 migration in a quiet window, or stop `whatsapp:dispatch` for its duration. Both
 indexes are partial (`sender_account_id IS NOT NULL`); a deployment that never
 routes through a named sender builds them over zero rows.
+
+`sql/413` builds two indexes on `awcms_inbox_conversations`, also without
+`CONCURRENTLY` and with the same SHARE lock. That table holds one row per
+customer conversation inside the retention window (thousands, not millions), so
+the wait is short; a deployment with the inbox off builds them over zero rows.
 
 ## Configuration
 
@@ -165,7 +189,7 @@ Refusal reasons: `origin`, `auth_denied`, `not_found`, `capped_actor`,
   within one tick (5 s). A page left open shows "Access ended". If not, check
   `awcms_audit_events` for `realtime_stream.revoked`.
 - **Existing tenants do not get the permission:** like every permission seed,
-  `sql/360` extends the global catalogue only; run
+  `sql/360` and `sql/413` extend the global catalogue only; run
   `bun run identity-access:permissions:backfill`.
 
 ## Adding a topic
