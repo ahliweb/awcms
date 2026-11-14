@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e32363d07e1432eac58cd12a4c5ec8d502f7ee8fd8351419db53758929ef2f41 -->
+<!-- i18n-source-hash: sha256:e8977b61cff80f2cd8fe3bc5ef94e15985500c13cf3b6139b1531200ba00554b -->
 
 # `omnichannel_inbox`
 
@@ -9,7 +9,7 @@ Antrean kerja staf per tenant di atas envelope inbound terverifikasi (Issue
 **Diterima** 2026-11-11; menyempurnakan ADR-0150 §1 hanya untuk state kerja
 staf).
 
-Dikirim **`experimental` dan mati** (`OMNICHANNEL_INBOX_ENABLED`): setiap rute
+Dikirim **`active` dan mati** (`OMNICHANNEL_INBOX_ENABLED`): layar menyatakan inbox dimatikan, setiap rute
 menjawab `404`, konsumen proyektor tidak melakukan apa pun dan `bun run
 omnichannel-inbox:sla` inert.
 
@@ -132,9 +132,45 @@ menghidupkan kembali percakapan yang sudah di-purge.
   trigger baris tanpa menjalankan ulang proyektor di SQL. Diterima sebagai
   sisa risiko; kredensial worker adalah rahasia operator.
 
+## Layar (Issue #1164, UP-14)
+
+Halaman Astro server-rendered di `/admin/omnichannel-inbox`, satu entri sidebar
+(`omnichannel_inbox.conversations.read`), seluruhnya membaca lewat fungsi milik
+rute sendiri (`visibilityFor`, `listConversations`, `getConversation`,
+`listSlaPolicies`), sehingga pembatasan lingkup bisnis dan isolasi tenant adalah
+milik API, bukan salinan. Tidak menampilkan isi pesan, nama, alamat, atau id
+Telegram: staf disebut "Anda" atau "staf lain".
+
+- `/admin/omnichannel-inbox` — antrean (halaman data ADR-0149): filter status,
+  penerima tugas (saya / belum ditugaskan), terlambat, sumber, dan label
+  didorong ke SQL; pencarian dan urutan atas baris yang dimuat (maksimal 200,
+  dengan pemberitahuan bila lebih banyak dan tanpa total yang tak bisa
+  dipertanggungjawabkan).
+- `/admin/omnichannel-inbox/{id}` — status, label, tenggat, dan riwayat
+  append-only; ubah status, atur label, catat respons (`conversations.update`),
+  tugaskan ke saya / batalkan penugasan (`conversations.assign`,
+  `Idempotency-Key`). Setiap tulis membawa `expectedVersion`. **"Tugaskan ke
+  orang lain" ditampilkan nonaktif**: belum ada endpoint yang mendaftar calon
+  penerima tugas.
+- `/admin/omnichannel-inbox/settings` — kebijakan SLA (daftar; buat bawaan
+  tenant, pensiunkan), katalog label (buat, hapus), dan bangun ulang proyeksi.
+  Kebijakan untuk satu lingkup bisnis ditulis lewat API; pemilih lingkup adalah
+  tindak lanjut.
+
+## Keputusan terbuka
+
+- Q2/Q3/Q4 ADR-0160 tetap terbuka dan gagal-tertutup; layar tidak menambah
+  keputusan.
+- Inbox commerce di hilir (utas milik embedder) **tidak** diproyeksikan ke inbox
+  ini. Perlu-tidaknya adalah keputusan manusia; tidak ada yang membacanya di sini.
+- Sengaja belum dibangun: tampilan utas split-pane, catatan internal dan balasan
+  cepat (inbox tidak menyimpan teks, ADR-0160 bagian 1), dan toolbar aksi massal
+  (tidak ada API massal).
+
 ## Tindak lanjut
 
-- Layar operator (`/admin/*`); 7 permission-nya ada di `NOT_YET_SCREENED`.
+- Pemilih orang untuk "tugaskan ke orang lain" butuh endpoint yang mendaftar
+  calon penerima tugas; pemilih lingkup bisnis untuk kebijakan SLA per lingkup.
 - Topik realtime "inbox hint" (registry ADR-0154), event outbound "balasan
   diantrekan" dari modul kanal untuk menggantikan pencatatan respons manual,
   dan inbound WhatsApp setelah tersedia.

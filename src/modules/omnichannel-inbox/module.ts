@@ -92,17 +92,18 @@ function delegated(input: {
  *
  * ## Status
  *
- * `experimental`: the operator screen is a follow-up, so no `navigation` entry
- * (a nav entry without a page is a permanent 404). Off by default at the
- * deployment (`OMNICHANNEL_INBOX_ENABLED`), module and tenant level; with the
- * switch off the routes answer `404`, the projector does nothing and the SLA job
- * is inert.
+ * `active`: the operator screens (`/admin/omnichannel-inbox`, its
+ * `/{id}` detail and `/settings`) land with the `navigation` entry in this same
+ * change (ADR-0021 criterion 1). The capability itself ships INERT: off by
+ * default at the deployment (`OMNICHANNEL_INBOX_ENABLED`), module and tenant
+ * level; with the switch off the routes answer `404`, the screens say so, the
+ * projector does nothing and the SLA job is inert.
  */
 export const omnichannelInboxModule = defineModule({
   key: OMNICHANNEL_INBOX_MODULE_KEY,
   name: "Omnichannel Inbox",
   version: "0.1.0",
-  status: "experimental",
+  status: "active",
   description:
     "A tenant-scoped staff work queue over verified inbound envelopes (Issue #1164, ADR-0160, Accepted). A descriptor-declared consumer, run by the domain-event dispatcher as awcms_worker on column-level grants (never the assignee or the response stamps), projects awcms.telegram_engagement.interaction.received and awcms.website_engagement.submission.received / withdrawn into one conversation row per (source kind, opaque envelope reference): the account-scoped contact id or the submission id, the channel account and its business scope (brand), first/last inbound time and a customer state. Never a message body, a content reference, a sender address, a Telegram id, a name or media. awcms.telegram_engagement.consent.changed is projected but NOT subscribed (its dispatcher role may not write delivery rows): it is read back when a conversation is created and swept by the SLA job, which also re-applies website withdrawals a delivery missed. The projection is idempotent by value (a duplicate or replayed event has one effect; a customer-state change applies only if its event sequence is newer; a withdrawal is terminal) and can be rebuilt from the event log inside the retention window (365 days, the purge's only setting: there is no per-tenant override) without touching staff work state. Staff work state is authored: status (open, pending, resolved, closed; an unanswered inbound reopens a settled conversation), assignment with an append-only history, tags from a per-tenant catalogue, and first/next-response SLA in business minutes on a working calendar (IANA zone, weekday hours, holidays). Every write is optimistic-concurrency guarded; assignment and rebuild are idempotent and audited. Visibility follows channel_accounts' confinement rule: only a caller who is not scope-confined AND holds the route's permission on a tenant-wide grant sees everything (and may configure tags, the tenant default SLA policy and the rebuild); anyone else, including one whose confinement has not started yet, sees only conversations of the scopes they cover and never a tenant-wide one. An assignee must be an active user holding conversations.update tenant-wide and, if confined, an active assignment on the conversation's scope or an ancestor; the SLA job re-checks that (bounded, least recently checked first) and unassigns anyone who lost it, stamps breaches once and notifies only the assignee through the existing workflow_notification e-mail port. The inbox sends nothing to a customer and has no send facade; a reply goes through the arrival channel's own route.",
   dependencies: [
@@ -206,6 +207,20 @@ export const omnichannelInboxModule = defineModule({
       action: "configure",
       description:
         "Rebuild the conversation projection by replaying the verified inbound events still inside the retention window; staff work state is never touched (high-risk, Idempotency-Key, audited at warning)"
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_omnichannel_inbox",
+      path: "/admin/omnichannel-inbox",
+      order: 84,
+      requiredPermission: "omnichannel_inbox.conversations.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omnichannel_inbox_settings",
+      path: "/admin/omnichannel-inbox/settings",
+      order: 85,
+      requiredPermission: "omnichannel_inbox.sla_policies.read"
     }
   ],
   jobs: [

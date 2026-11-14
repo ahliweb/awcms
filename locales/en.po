@@ -9547,3 +9547,351 @@ msgstr ""
 
 msgid "Refresh progress"
 msgstr ""
+
+msgid "Add tag"
+msgstr ""
+
+msgid "All sources"
+msgstr ""
+
+msgid "All tags"
+msgstr ""
+
+msgid "Another staff member"
+msgstr ""
+
+msgid "Anyone"
+msgstr ""
+
+msgid "Any response state"
+msgstr ""
+
+msgid "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
+msgstr ""
+
+msgid "Assigned"
+msgstr ""
+
+msgid "Assigned to me"
+msgstr ""
+
+msgid "Assignee"
+msgstr ""
+
+msgid "Assignee removed (no longer eligible)"
+msgstr ""
+
+msgid "Assignee: {value}"
+msgstr ""
+
+msgid "Assignment"
+msgstr ""
+
+msgid "Assign to another person"
+msgstr ""
+
+msgid "Assign to me"
+msgstr ""
+
+msgid "Back to the inbox"
+msgstr ""
+
+msgid "By"
+msgstr ""
+
+msgid "Can be answered"
+msgstr ""
+
+msgid "Closes at (24-hour, HH:MM)"
+msgstr ""
+
+msgid "Conversation"
+msgstr ""
+
+msgid "Conversations"
+msgstr ""
+
+msgid "Conversations appear here when a customer writes to a connected Telegram bot or submits a website form."
+msgstr ""
+
+msgid "{count} conversation"
+msgid_plural "{count} conversations"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} conversation matches your search and filters"
+msgid_plural "{count} conversations match your search and filters"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} history entry (newest first)"
+msgid_plural "{count} history entries (newest first)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} holiday"
+msgid_plural "{count} holidays"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} tag"
+msgid_plural "{count} tags"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} working minute"
+msgid_plural "{count} working minutes"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Customer"
+msgstr ""
+
+msgid "First inbound"
+msgstr ""
+
+msgid "First response"
+msgstr ""
+
+msgid "First response (working minutes)"
+msgstr ""
+
+msgid "Friday"
+msgstr ""
+
+msgid "Holidays (one date per line, YYYY-MM-DD)"
+msgstr ""
+
+msgid "How long staff have to answer, counted only inside working hours. A new policy replaces the active one for the same scope; replaced policies are kept so an overdue conversation always names the terms it was measured against."
+msgstr ""
+
+msgid "Inbox settings"
+msgstr ""
+
+msgid "Last inbound"
+msgstr ""
+
+msgid "Last response recorded"
+msgstr ""
+
+msgid "Lower-case letters, digits, hyphen or underscore."
+msgstr ""
+
+msgid "Monday"
+msgstr ""
+
+msgid "New default policy"
+msgstr ""
+
+msgid "Newest inbound first. A conversation here is a work item over an opaque reference: to read or answer the customer, use the channel it arrived through, then record the response on the conversation."
+msgstr ""
+
+msgid "New tag"
+msgstr ""
+
+msgid "Next response"
+msgstr ""
+
+msgid "Next response (working minutes)"
+msgstr ""
+
+msgid "No conversations yet"
+msgstr ""
+
+msgid "No history yet."
+msgstr ""
+
+msgid "No policy yet. Without one, conversations have no response deadline."
+msgstr ""
+
+msgid "No response due"
+msgstr ""
+
+msgid "No tags exist yet. An administrator creates them."
+msgstr ""
+
+msgid "No tags yet."
+msgstr ""
+
+msgid "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
+msgstr ""
+
+msgid "Omnichannel inbox"
+msgstr ""
+
+msgid "On track"
+msgstr ""
+
+msgid "Open days"
+msgstr ""
+
+msgid "Opens at (24-hour, HH:MM)"
+msgstr ""
+
+msgid "Rebuild now"
+msgstr ""
+
+msgid "Rebuild the conversation list"
+msgstr ""
+
+msgid "Record that I answered"
+msgstr ""
+
+msgid "Removed tag"
+msgstr ""
+
+msgid "Replaced the previous assignee"
+msgstr ""
+
+msgid "Replays the verified inbound events still inside the retention window (365 days) into the conversation list, for example after a restore. Status, assignment and tags are never changed. It runs in batches and reports what it processed."
+msgstr ""
+
+msgid "Response"
+msgstr ""
+
+msgid "Response deadline missed"
+msgstr ""
+
+msgid "Response due"
+msgstr ""
+
+msgid "Response policies"
+msgstr ""
+
+msgid "Response policies, the tag catalogue and the conversation projection of the omnichannel inbox."
+msgstr ""
+
+msgid "Response recorded"
+msgstr ""
+
+msgid "Response: {value}"
+msgstr ""
+
+msgid "Retire"
+msgstr ""
+
+msgid "Retired {when}"
+msgstr ""
+
+msgid "Saturday"
+msgstr ""
+
+msgid "Save status"
+msgstr ""
+
+msgid "Save tags"
+msgstr ""
+
+msgid "Search conversations"
+msgstr ""
+
+msgid "Source: {value}"
+msgstr ""
+
+msgid "State, history and actions of one inbox conversation. Message text and customer identifiers are never shown."
+msgstr ""
+
+msgid "Status changed"
+msgstr ""
+
+msgid "Sunday"
+msgstr ""
+
+msgid "Tag"
+msgstr ""
+
+msgid "Tag added"
+msgstr ""
+
+msgid "Tag removed"
+msgstr ""
+
+msgid "Tags and response policies"
+msgstr ""
+
+msgid "Tag: {value}"
+msgstr ""
+
+msgid "Telegram bot"
+msgstr ""
+
+msgid "That conversation was not found."
+msgstr ""
+
+msgid "The conversation could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The inbox could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The inbox sends nothing to the customer. Answer through the channel the conversation arrived on, then record the response here to stop the deadline clock."
+msgstr ""
+
+msgid "The omnichannel inbox is switched off on this deployment."
+msgstr ""
+
+msgid "The omnichannel inbox is switched off on this deployment, so no conversation is collected or listed."
+msgstr ""
+
+msgid "The person does not cover this business scope"
+msgstr ""
+
+msgid "The person lost the permission"
+msgstr ""
+
+msgid "The person no longer covers this business scope"
+msgstr ""
+
+msgid "The person was deactivated"
+msgstr ""
+
+msgid "There are more conversations than this screen loads. Showing the newest {count}. The status, assignee, overdue, source and tag filters cover every conversation; search covers only these. The API lists the rest."
+msgstr ""
+
+msgid "The settings could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The staff work queue over verified inbound conversations: status, assignment, tags and response deadlines. Message text and customer identifiers are never shown."
+msgstr ""
+
+msgid "This customer opted out or withdrew. The conversation cannot be answered, reopened, assigned or tagged."
+msgstr ""
+
+msgid "Thursday"
+msgstr ""
+
+msgid "Timezone (IANA name)"
+msgstr ""
+
+msgid "Tuesday"
+msgstr ""
+
+msgid "Unassign"
+msgstr ""
+
+msgid "Unassigned"
+msgstr ""
+
+msgid "Website form"
+msgstr ""
+
+msgid "Wednesday"
+msgstr ""
+
+msgid "Whole tenant (default)"
+msgstr ""
+
+msgid "Withdrew"
+msgstr ""
+
+msgid "Working week"
+msgstr ""
+
+msgid "You"
+msgstr ""
+
+msgid "You do not have permission to view the inbox."
+msgstr ""
+
+msgid "You do not have permission to view the inbox settings."
+msgstr ""

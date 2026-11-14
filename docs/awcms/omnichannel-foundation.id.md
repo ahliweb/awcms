@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-foundation.md)
 
-<!-- i18n-source-hash: sha256:7381fc5598b33c9d3bd87507709589f256c968e94a97dc8d08c4d6b8ade4ecfc -->
+<!-- i18n-source-hash: sha256:dfbeed39f17911f95ca87b7aa82b33a230c8b34b42dfb51b9f7ae508096dd2bb -->
 
 # Fondasi omnichannel — paket kesiapan (v1, 24 Oktober 2026)
 
@@ -10,16 +10,16 @@ Sumber fakta provider adalah dokumen resmi yang ditautkan dari Issue #1139 dan a
 
 ## 1. Lingkup dan otoritas
 
-| Lapisan                        | Hari ini di `main`                                                                                            | Pemilik keputusan                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Model akun dan kredensial      | tidak ada (tautan sosial situs bukan akun tersambung)                                                         | ADR-0148 §1 C1                                                                         |
-| Pengiriman WhatsApp            | `whatsapp_delivery`: satu antrean, satu provider deployment (`log` / Fonnte / Meta), tanpa pemilihan pengirim | ADR-0133, diperluas ADR-0148 §4                                                        |
-| Publikasi sosial               | `SocialPublishingPort` ada; modul `social_publishing` tidak; `blog_content` memakai adapter no-op             | ADR-0148 §1 C3, dibangun #1145                                                         |
-| Email                          | `email` dengan satu adapter Mailketing **v1**, satu token deployment, daftar supresi                          | #1158 (ADR sendiri); paket ini hanya menetapkan apa yang harus dipatuhinya             |
-| Telegram                       | `telegram_delivery`, hanya ops staf, satu bot per deployment (ADR-0140)                                       | tidak berubah; bot pelanggan adalah #1155                                              |
-| Percakapan masuk               | tidak ada di hulu; inbox commerce di hilir                                                                    | #1144                                                                                  |
-| Pelanggan CRM, consent, segmen | `commerce` `awcms-one` hilir                                                                                  | hilir; dijangkau lewat port                                                            |
-| Runtime                        | Bun yang dipatok repo; antrean tahan lama ke HTTPS provider                                                   | ADR-0002, [`bun-delivery-realtime-runtime.id.md`](bun-delivery-realtime-runtime.id.md) |
+| Lapisan                        | Hari ini di `main`                                                                                                                                                                                                                            | Pemilik keputusan                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Model akun dan kredensial      | tidak ada (tautan sosial situs bukan akun tersambung)                                                                                                                                                                                         | ADR-0148 §1 C1                                                                         |
+| Pengiriman WhatsApp            | `whatsapp_delivery`: satu antrean, satu provider deployment (`log` / Fonnte / Meta), tanpa pemilihan pengirim                                                                                                                                 | ADR-0133, diperluas ADR-0148 §4                                                        |
+| Publikasi sosial               | `SocialPublishingPort` ada; modul `social_publishing` tidak; `blog_content` memakai adapter no-op                                                                                                                                             | ADR-0148 §1 C3, dibangun #1145                                                         |
+| Email                          | `email` dengan satu adapter Mailketing **v1**, satu token deployment, daftar supresi                                                                                                                                                          | #1158 (ADR sendiri); paket ini hanya menetapkan apa yang harus dipatuhinya             |
+| Telegram                       | `telegram_delivery`, hanya ops staf, satu bot per deployment (ADR-0140)                                                                                                                                                                       | tidak berubah; bot pelanggan adalah #1155                                              |
+| Percakapan masuk               | `omnichannel_inbox` (ADR-0160): proyeksi kerja staf tanpa isi pesan atas amplop Telegram dan situs web terverifikasi, dengan layar di `/admin/omnichannel-inbox`; inbox commerce di hilir tidak diproyeksikan ke dalamnya (keputusan terbuka) | #1144                                                                                  |
+| Pelanggan CRM, consent, segmen | `commerce` `awcms-one` hilir                                                                                                                                                                                                                  | hilir; dijangkau lewat port                                                            |
+| Runtime                        | Bun yang dipatok repo; antrean tahan lama ke HTTPS provider                                                                                                                                                                                   | ADR-0002, [`bun-delivery-realtime-runtime.id.md`](bun-delivery-realtime-runtime.id.md) |
 
 ## 2. Peta kapabilitas dan kamus data logis (v1)
 
