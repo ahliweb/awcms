@@ -134,7 +134,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                                                                                                     | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                                                                                                     | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Base modules                      | **40** (see the list in ARCHITECTURE.md)                                                                                                                                                                       | `src/modules/index.ts`                                                                  |
-| Migrations                        | **282** (`sql/001`–`408`)                                                                                                                                                                                      | `ls sql/`                                                                               |
+| Migrations                        | **283** (`sql/001`–`409`)                                                                                                                                                                                      | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0162** (`0000` = template; highest ADR status: **Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)**) | `ls docs/adr/`                                                                          |
 | Admin screens                     | **86** `.astro` files in `src/pages/admin/`; **5 of 40** modules without `navigation:` (`crm-follow-up`, `crm-leads`, `social-publishing`, `telegram-engagement`, `website-engagement`)                        | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **108** (63.865 lines) — on typechecking see §6                                                                                                                                                                | `find src -name '*.astro'`                                                              |
@@ -405,6 +405,25 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **Append-only ledgers narrowed; two owner decisions recorded — 14 November
+  2026 (#1346, `sql/409`).** Owner decision "1A, 2A". **1A:** the remaining
+  tables documented as append-only are handled in ONE PR following #1341/#1344:
+  `sql/409` revokes UPDATE, DELETE and TRUNCATE from `awcms_app` on the ABAC
+  decision log, the access-policy event history, the business-scope assignment
+  event history and the domain-event outbox, and `security:readiness` pins each
+  to exactly SELECT + INSERT in both directions. Each table was audited by call
+  site first: none has a runtime UPDATE or DELETE path for `awcms_app`; the one
+  legitimate DELETE among them (decision-log retention) belongs to
+  `awcms_worker`, which keeps it; the outbox's processing state lives in
+  `awcms_domain_event_deliveries`, not in the event table, so the dispatcher
+  needs nothing here. Nothing was excluded. **2A:** the database-level `TEMP`
+  privilege stays deliberately UNCHECKED by readiness (reason in #1345: every
+  SECURITY DEFINER function pins `search_path = public, pg_temp`, an exact pin
+  turns the gate red if that order changes, and a `TEMP` check would be red on
+  every standard install because `TEMP` is granted to `PUBLIC`); do not add one.
+  Operator action: where `DATABASE_URL` is the `awcms_app` login, set
+  `WORKER_DATABASE_URL` to `awcms_worker` before or with the migration.
 
 - **`email:senders:verify` SCHEDULED — 14 November 2026 (#1160, ADR-0162).**
   Carries out the owner decision of 11 November 2026 (ADR-0159 entry below).

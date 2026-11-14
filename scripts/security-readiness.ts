@@ -716,6 +716,15 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // legitimate DELETE and it belongs to `awcms_worker` (`WORKER_ROLE_GRANTS`).
   // `sql/019` granted all four verbs schema-wide, so only the REVOKE achieves it.
   awcms_audit_events: ["SELECT", "INSERT"],
+  // Issue #1346 / `sql/409`. The remaining append-only ledgers, narrowed the same
+  // way and for the same reason. Each was audited by call site: the runtime only
+  // INSERTs and SELECTs them. The decision-log retention DELETE belongs to
+  // `awcms_worker` (`WORKER_ROLE_GRANTS`); `awcms_domain_events` is an outbox
+  // whose processing state lives in `awcms_domain_event_deliveries`, not here.
+  awcms_abac_decision_logs: ["SELECT", "INSERT"],
+  awcms_access_policy_events: ["SELECT", "INSERT"],
+  awcms_business_scope_assignment_events: ["SELECT", "INSERT"],
+  awcms_domain_events: ["SELECT", "INSERT"],
   awcms_access_assignments: ["SELECT"],
   // ADR-0087 / `sql/114`. The tenant-scoped MFA factor and its recovery codes,
   // superseded by the principal-scoped pair. Retained populated as history (the

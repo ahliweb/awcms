@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 282   |
+| Migrations                          | 283   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 856   |
+| Test files                          | 857   |
 | Route files                         | 685   |
 | ADR                                 | 326   |
 
@@ -347,6 +347,7 @@
 | 280 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
 | 281 | `sql/397_awcms_blog_revisions_worker_grant.sql`                        |
 | 282 | `sql/408_awcms_audit_events_append_only_for_app_role.sql`              |
+| 283 | `sql/409_awcms_append_only_ledgers_for_app_role.sql`                   |
 
 ### Tables & Row-Level Security
 
@@ -636,7 +637,7 @@
 | ------------- | ---------- |
 | `(root)`      | 634        |
 | `e2e`         | 30         |
-| `integration` | 191        |
+| `integration` | 192        |
 | `unit`        | 1          |
 
 ### Routes

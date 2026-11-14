@@ -1,0 +1,66 @@
+-- Issue #1346 (area:security, area:database) — the remaining append-only
+-- ledgers become append-only for the runtime role, following `sql/408`.
+--
+-- Four tables are documented as append-only (never UPDATEd, never DELETEd by the
+-- runtime): the ABAC decision log, the access-policy lifecycle history, the
+-- business-scope assignment lifecycle history, and the domain-event outbox.
+-- `sql/019` nevertheless granted `awcms_app` SELECT, INSERT, UPDATE and DELETE
+-- on every table in the schema and nothing revoked anything here, exactly the
+-- gap `sql/408` closed for the audit trail. Verified with
+-- `has_table_privilege('awcms_app', <table>, ...)` on a fully migrated database:
+-- UPDATE and DELETE were true on all four. Row-level security does not help; the
+-- policy is a tenant filter, not a verb filter.
+--
+-- Why it matters: a compromised web process could rewrite or erase the record of
+-- which access decisions were made and which grants were issued or revoked, or
+-- rewrite the event stream every consumer replays from.
+--
+-- Per-table write-path audit (call sites, not definitions; the runtime roles are
+-- `awcms_app`, `awcms_worker`, `awcms_setup` and the dedicated dispatch roles):
+--
+--   awcms_abac_decision_logs
+--     INSERT: the decision logger (request path, `awcms_app`).
+--     DELETE: only the generic data_lifecycle retention purge, which runs as
+--     `awcms_worker` (`sql/091` granted it DELETE and it keeps it).
+--     UPDATE: none. Data-subject erasure is `severed_with_subject_row` and
+--     touches no row.
+--
+--   awcms_access_policy_events, awcms_business_scope_assignment_events
+--     INSERT only (policy / assignment writers as `awcms_app`; the expiry job as
+--     `awcms_worker`; `awcms_setup` for the backfill). No UPDATE, no DELETE
+--     anywhere; erasure is `severed_with_subject_row`.
+--
+--   awcms_domain_events
+--     INSERT: `appendDomainEvent` (`awcms_app`, `awcms_worker`, and the dedicated
+--     dispatch roles through their own column-level INSERT/SELECT grants and
+--     policies, none of which this migration touches). The dispatcher
+--     does NOT mark events processed here: delivery state lives in
+--     `awcms_domain_event_deliveries`, which keeps its UPDATE/DELETE grants and
+--     is untouched. The dispatcher's `FOR UPDATE OF d` locks the delivery row,
+--     not the event. No retention descriptor, no erasure UPDATE.
+--
+-- So no legitimate runtime UPDATE or DELETE exists for `awcms_app` on any of the
+-- four, and the one legitimate DELETE (decision-log retention) belongs to
+-- `awcms_worker`, whose grants are not changed here. `awcms_app` keeps SELECT
+-- (the screens, `INSERT ... RETURNING`) and INSERT.
+--
+-- REVOKE is the operative statement, not an omission from a GRANT: `sql/019`
+-- already handed these verbs out, so a GRANT that does not mention them
+-- withholds nothing (the lesson recorded in `sql/125`). TRUNCATE is revoked too:
+-- `awcms_app` does not hold it today, so that part is a no-op that pins the
+-- intent against a future broadening of the schema-wide default. Foreign-key
+-- enforcement and cascades run as the table owner and are unaffected.
+--
+-- Scope: this binds `awcms_app` only. A deployment that has not activated the
+-- role still connects as the schema owner, which is not narrowed here (`sql/019`
+-- header: the dedicated role is opt-in). Where `DATABASE_URL` is the
+-- `awcms_app` login, point `WORKER_DATABASE_URL` at `awcms_worker` before or
+-- together with this migration, or the decision-log retention purge fails;
+-- `security:readiness` reports that configuration.
+--
+-- Forward-only and idempotent: REVOKE of an absent privilege is a no-op.
+
+REVOKE UPDATE, DELETE, TRUNCATE ON awcms_abac_decision_logs FROM awcms_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON awcms_access_policy_events FROM awcms_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON awcms_business_scope_assignment_events FROM awcms_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON awcms_domain_events FROM awcms_app;
