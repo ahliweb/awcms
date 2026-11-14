@@ -432,6 +432,23 @@ describe("/admin/media uploader gating", () => {
     expect(page).toContain(
       "const uploadEnabled = canCreate && canVerify && canCancel && uploadAvailable;"
     );
+
+    // Each per-step flag is the chokepoint's answer AND nothing else: an `||`
+    // fallback would make one key enough again.
+    for (const flag of ["canCreate", "canVerify", "canCancel"]) {
+      expect(page).toContain(
+        `const ${flag} = screen.state === "allowed" && screen.data.${flag};`
+      );
+    }
+
+    // The RENDER point, not just the flag's definition: the uploader section
+    // is guarded by exactly `uploadEnabled` (a refactor to
+    // `(uploadEnabled || canCreate)` or `canCreate && uploadAvailable` would
+    // reopen #1326 while the definition above stayed intact).
+    expect(page).toContain("{uploadEnabled && !loadError && (");
+    expect(page).not.toMatch(
+      /\{\s*\(?\s*(?:uploadEnabled\s*\|\||canCreate\s*&&)/
+    );
   });
 
   test("a partial grant gets a notice naming what is missing, not a dead form", async () => {
@@ -444,6 +461,12 @@ describe("/admin/media uploader gating", () => {
     expect(page).toContain('id="media-upload-unavailable"');
     // Only a PARTIAL grant: holding none of the three stays silent.
     expect(page).toContain("missingUploadKeys.length < 3");
+    // The whole condition, so dropping `> 0` (notice shown to a FULL holder)
+    // or the `!uploadAvailable`-style guard cannot pass unnoticed.
+    expect(page).toMatch(
+      /const uploadIncomplete =[\s\S]*?missingUploadKeys\.length > 0 &&\s*missingUploadKeys\.length < 3;/
+    );
+    expect(page).toContain("{uploadIncomplete && !loadError && canRead && (");
 
     for (const locale of ["locales/en.po", "locales/id.po"]) {
       const catalogue = await readFile(locale, "utf8");

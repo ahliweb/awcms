@@ -35,26 +35,56 @@ function withoutSqlComments(sql: string): string {
 }
 
 /**
- * The `media_library.media.{create,verify,cancel}` keys a migration's
- * role-grant statements name. A statement is any
- * `INSERT INTO awcms_role_permissions` up to its terminating `;`.
+ * The `<module>.<activity>.<action>` keys a migration's role-grant statements
+ * name. A statement is any `INSERT INTO awcms_role_permissions` up to its
+ * terminating `;`. Three spellings are understood, because the repo uses all
+ * of them: the column predicate idiom (`p.module_key = 'm' AND
+ * p.activity_code = 'a' AND p.action IN ('x', 'y')` or `= 'x'`, as in
+ * sql/124), the tuple form (`'m','a','x'`) and the dotted key (`m.a.x`).
  */
-function grantedMediaActions(sql: string): Set<string> {
+function grantedKeys(
+  sql: string,
+  moduleKey: string,
+  activityCode: string
+): Set<string> {
   const granted = new Set<string>();
+  const prefix = `${moduleKey}.${activityCode}`;
 
   for (const statement of withoutSqlComments(sql).split(";")) {
     if (!/INSERT\s+INTO\s+awcms_role_permissions/i.test(statement)) continue;
-    if (!/media_library/.test(statement)) continue;
+    if (!statement.includes(moduleKey)) continue;
 
-    for (const action of ["create", "verify", "cancel"]) {
-      const named = new RegExp(
-        `'media_library'\\s*,\\s*'media'\\s*,\\s*'${action}'|media_library\\.media\\.${action}`
-      );
-      if (named.test(statement)) granted.add(`media_library.media.${action}`);
+    const predicate = new RegExp(
+      `module_key\\s*=\\s*'${moduleKey}'\\s+AND\\s+(?:\\w+\\.)?activity_code\\s*=\\s*'${activityCode}'\\s+AND\\s+(?:\\w+\\.)?action\\s*(?:=\\s*'([^']+)'|IN\\s*\\(([^)]*)\\))`,
+      "i"
+    ).exec(statement);
+    if (predicate) {
+      const list = predicate[1] ?? predicate[2] ?? "";
+      for (const m of list.matchAll(/'([^']+)'/g))
+        granted.add(`${prefix}.${m[1]}`);
+      if (predicate[1]) granted.add(`${prefix}.${predicate[1]}`);
+    }
+
+    for (const m of statement.matchAll(
+      new RegExp(
+        `'${moduleKey}'\\s*,\\s*'${activityCode}'\\s*,\\s*'([^']+)'`,
+        "g"
+      )
+    )) {
+      granted.add(`${prefix}.${m[1]}`);
+    }
+    for (const m of statement.matchAll(
+      new RegExp(`${moduleKey}\\.${activityCode}\\.(\\w+)`, "g")
+    )) {
+      granted.add(`${prefix}.${m[1]}`);
     }
   }
 
   return granted;
+}
+
+function grantedMediaActions(sql: string): Set<string> {
+  return grantedKeys(sql, "media_library", "media");
 }
 
 /** True when `create` is granted without both companions. */
@@ -95,6 +125,47 @@ describe("media upload permissions are seeded as a set", () => {
       false
     );
     expect(grantedMediaActions(commentOnly).size).toBe(0);
+  });
+
+  test("the detector reads the repo's own grant idiom (column predicates), not just tuples", () => {
+    // The real shape every migration uses — taken from sql/124 verbatim, then
+    // from a synthetic media variant in both `IN (...)` and `= '...'` spellings.
+    const real = readFileSync(
+      join(SQL_DIR, "124_awcms_partner_suspension.sql"),
+      "utf8"
+    );
+    expect(
+      [...grantedKeys(real, "identity_access", "partner_registry")].sort()
+    ).toEqual([
+      "identity_access.partner_registry.disable",
+      "identity_access.partner_registry.restore"
+    ]);
+
+    const predicateCreateOnly = `
+      INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+      SELECT s.tenant_id, r.id, p.id FROM awcms_setup_state s
+      JOIN awcms_permissions p
+        ON p.module_key = 'media_library'
+       AND p.activity_code = 'media'
+       AND p.action IN ('create')
+      WHERE s.id = true;`;
+    const predicateEquals = predicateCreateOnly.replace(
+      "IN ('create')",
+      "= 'create'"
+    );
+    const predicateFull = predicateCreateOnly.replace(
+      "IN ('create')",
+      "IN ('create', 'verify', 'cancel')"
+    );
+    expect(
+      grantsCreateWithoutCompanions(grantedMediaActions(predicateCreateOnly))
+    ).toBe(true);
+    expect(
+      grantsCreateWithoutCompanions(grantedMediaActions(predicateEquals))
+    ).toBe(true);
+    expect(
+      grantsCreateWithoutCompanions(grantedMediaActions(predicateFull))
+    ).toBe(false);
   });
 
   test("the owner's blanket grant never excludes one of the three alone", () => {
