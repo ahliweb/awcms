@@ -201,10 +201,11 @@ describe("the screens read through the routes' own functions and show no secret"
 
   test("an unknown, foreign or malformed id is one 'not found' answer", () => {
     expect(detail).toContain("website-engagement-not-found");
-    expect(detail).toContain("isUuid(rawId)");
     expect(loaders).toContain(
-      "if (submissionId === null) return { found: false }"
+      "if (!isUuid(submissionId)) return { found: false }"
     );
+    // The page hands over the RAW parameter; normalising is the loader's job.
+    expect(detail).toContain("submissionId: rawId");
   });
 });
 

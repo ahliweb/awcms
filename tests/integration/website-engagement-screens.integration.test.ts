@@ -406,6 +406,10 @@ suite("website engagement screens (#1153, ADR-0155)", () => {
       found: false
     });
     expect(await detailAs(viewer.token, null)).toEqual({ found: false });
+    // Malformed: answered without touching the database (no 22P02 state).
+    expect(await detailAs(viewer.token, "not-a-uuid")).toEqual({
+      found: false
+    });
 
     const own = await detailAs(viewer.token, mySubmission);
 
@@ -414,6 +418,9 @@ suite("website engagement screens (#1153, ADR-0155)", () => {
 
   test("a viewer holding only submissions.read still gets source options from the rows, never from the sources table", async () => {
     await twoTenants();
+    // A second source WITHOUT submissions: a regression that filled the options
+    // from the sources table would expose it to a submissions.read-only holder.
+    await seedSource(tenantId, "empty");
     const viewer = await seedUser(tenantId, "subonly", [READ_SUBMISSIONS]);
     const list = await listAs(viewer.token);
 
