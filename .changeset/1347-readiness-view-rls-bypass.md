@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+security(readiness): new `critical` check "No view or materialized view bypasses RLS on a FORCE-RLS table" (Issue #1347, follow-up of #1279). Every earlier check read `relkind IN ('r', 'p')`, so a view was invisible: a view owned by a superuser or BYPASSRLS role over a FORCE-RLS table, without `security_invoker`, is read with no row level security by whoever holds SELECT on it. The check follows dependencies transitively through nested views and fails such a view whether or not it is granted; a materialized view (no RLS, no `security_invoker`) over a FORCE-RLS table fails as soon as a restricted role can SELECT it; and grants on relkind v/m now enter a fail-closed view grant matrix (`REVIEWED_VIEW_GRANTS`, empty today: the repository defines no view), covering every non-superuser `awcms_*` role and `PUBLIC`. Note `ALTER DEFAULT PRIVILEGES` (sql/021) hands `awcms_app` DML on any new view, so a future view needs a `REVOKE` or a reviewed entry. No schema, API or event change; the clean schema passes.

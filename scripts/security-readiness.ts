@@ -50,6 +50,7 @@ import {
   findTenantIsolationPolicyDrift,
   probeTenantIsolationUnderDefinerRead
 } from "./lib/schema-create-and-tenant-policy-readiness";
+import { findViewRlsBypass } from "./lib/view-rls-bypass-readiness";
 import {
   pinChannelAccountsAccessGuards,
   probeChannelAccountsAccessGuards
@@ -8440,6 +8441,45 @@ export async function checkTenantIsolationPoliciesCanonical(): Promise<SecurityC
 }
 
 // ---------------------------------------------------------------------------
+// 7h. No view or materialized view bypasses RLS (critical) — #1347
+// ---------------------------------------------------------------------------
+
+export async function checkNoViewBypassesRls(): Promise<SecurityCheckResult> {
+  const name = "No view or materialized view bypasses RLS on a FORCE-RLS table";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const { checkedViews, findings } =
+      await findViewRlsBypass(getDatabaseClient());
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `A view runs as its owner unless it is security_invoker, and FORCE RLS does not bind a superuser or BYPASSRLS owner; a materialized view has no RLS at all. Views also need an entry in the reviewed view grant matrix before a restricted role can touch them: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${checkedViews} view(s)/materialized view(s) in schema public: none that reads a FORCE-RLS table is owned by a superuser or BYPASSRLS role without security_invoker, no materialized view over one is readable by a restricted role, and no restricted role holds a privilege on a view outside the reviewed matrix.`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify views: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -8464,6 +8504,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkDefinerOwnerRolesNoLogin(),
     await checkNoRestrictedSchemaCreate(),
     await checkTenantIsolationPoliciesCanonical(),
+    await checkNoViewBypassesRls(),
     checkAbacDefaultDeny(),
     checkDataLifecycleRegistryValid(),
     checkDataLifecycleLegalHoldReleaseSeparate(),
