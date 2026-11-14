@@ -5,7 +5,7 @@
  * any database work (proved with a database that throws if it is touched).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { resetRateLimitForTests } from "../src/lib/security/rate-limit";
@@ -227,12 +227,28 @@ describe("website_engagement event contract", () => {
     expect(spec).toContain("WebsiteEngagementSubmissionWithdrawn:");
   });
 
-  test("the module is registered, intake-only and declares no navigation without a page", () => {
+  test("the module is registered, intake-only and every navigation entry has a real page", () => {
     expect(listModules().map((module) => module.key)).toContain(
       WEBSITE_ENGAGEMENT_MODULE_KEY
     );
     expect(websiteEngagementModule.type).toBe("system");
-    expect(websiteEngagementModule.navigation ?? []).toEqual([]);
+    // Issue #1153: the operator screens landed with their entries; an entry
+    // without a page is a permanent 404.
+    expect(websiteEngagementModule.status).toBe("active");
+    expect(
+      (websiteEngagementModule.navigation ?? []).map((entry) => entry.path)
+    ).toEqual([
+      "/admin/website-engagement",
+      "/admin/website-engagement/sources"
+    ]);
+
+    for (const entry of websiteEngagementModule.navigation ?? []) {
+      expect(
+        existsSync(`src/pages${entry.path}.astro`),
+        `${entry.path} has no page`
+      ).toBe(true);
+    }
+
     expect(websiteEngagementModule.dataLifecycle?.[0]?.tableName).toBe(
       "awcms_engagement_submissions"
     );
