@@ -36,9 +36,18 @@
  * `accept` attribute comes from the same allow-list the server validates
  * against.
  *
- * `media.verify`/`media.cancel` remain absent as PAGE gates: `cancel` is driven
- * by the uploader's own failure handling rather than by an operator clicking
- * it, and nothing here verifies.
+ * ## The uploader needs THREE permissions, not one
+ *
+ * The browser flow calls three endpoints guarded by three different keys:
+ * `media.create` (open the session), `media.verify` (finalize) and
+ * `media.cancel` (clean up after a failure). The catalog keeps them separate,
+ * so a custom role can hold `create` alone — and then every upload started,
+ * 403s at finalize, 403s again at cancel, and leaves a `pending_upload` row
+ * behind: exactly the misclick the ADR-0056 objection above was about. The
+ * panel therefore renders only for a caller holding all three; a caller
+ * holding some but not all gets a notice naming what is missing instead of a
+ * form that cannot finish. The keys are still decided by the endpoints
+ * (`authorizeInTransaction`); this is UX only.
  *
  * ## Two further deliberate absences
  * - **`enforcement.read`/`enforcement.enable`** — a tenant-wide, ONE-WAY
@@ -228,6 +237,19 @@ const screen = await loadAdminScreen({
       moduleKey: "media_library",
       activityCode: "media",
       action: "create"
+    }),
+    // The uploader's other two steps: `.../finalize` is guarded by `verify`
+    // and `.../cancel` by `cancel`. Without both, a started upload cannot be
+    // finished or cleaned up — see the header.
+    canVerify: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "verify"
+    }),
+    canCancel: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "cancel"
     })
   }),
   onError: (error) => {
@@ -251,6 +273,8 @@ const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canVerify = screen.state === "allowed" && screen.data.canVerify;
+const canCancel = screen.state === "allowed" && screen.data.canCancel;
 const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
 const canAdjudicateRights =
   screen.state === "allowed" && screen.data.canAdjudicateRights;
@@ -298,8 +322,21 @@ const RIGHTS_VARIANT: Record<string, string> = {
  * validates against, so the picker cannot offer a type the server refuses.
  */
 const uploadConfig = resolveNewsMediaR2Config();
-const uploadEnabled =
-  canCreate && uploadConfig.enabled && uploadConfig.allowedMimeTypes.length > 0;
+const uploadAvailable =
+  uploadConfig.enabled && uploadConfig.allowedMimeTypes.length > 0;
+const uploadEnabled = canCreate && canVerify && canCancel && uploadAvailable;
+// Holding some of the three but not all: say so, rather than render a form
+// that starts a session it cannot finish or hide the panel with no
+// explanation. Holding none of them stays silent, as before.
+const missingUploadKeys = [
+  canCreate ? null : "media.create",
+  canVerify ? null : "media.verify",
+  canCancel ? null : "media.cancel"
+].filter((key): key is string => key !== null);
+const uploadIncomplete =
+  uploadAvailable &&
+  missingUploadKeys.length > 0 &&
+  missingUploadKeys.length < 3;
 const uploadAccept = uploadConfig.allowedMimeTypes.join(",");
 const uploadMaxBytes = uploadConfig.maxUploadBytes;
 
@@ -455,6 +492,23 @@ const columnCount = canActOnAny ? 9 : 8;
 
   {canRead && !loadError && (
     <p id="media-action-error" class="admin-create-error" role="alert" hidden />
+  )}
+
+  {uploadIncomplete && !loadError && canRead && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="media-upload-unavailable-title"
+    >
+      <h2 class="admin-section-title" id="media-upload-unavailable-title">
+        {t("Uploading is unavailable for your role")}
+      </h2>
+      <p class="admin-section-hint" id="media-upload-unavailable">
+        {t(
+          "Uploading an image needs all of media.create, media.verify and media.cancel, because a started upload must be finishable and cancellable. Your role is missing: {missing}. Ask a tenant administrator to grant them.",
+          { missing: missingUploadKeys.join(", ") }
+        )}
+      </p>
+    </section>
   )}
 
   {uploadEnabled && !loadError && (

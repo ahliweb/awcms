@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e1b655e900f37f7c1daf09881e85ba6797930470b6f5d7d296643b7f4abb5e0f -->
+<!-- i18n-source-hash: sha256:74bda7e472d4d7aec9b4c3d8fde91eec2bf9b3ae5e4555917711b2d57235676b -->
 
 # media_library
 
@@ -252,14 +252,23 @@ or purge. Four permissions — `media.read`, `.delete`, `.restore`, `.purge`.
 Every mutation posts to the guarded endpoint with a fresh `Idempotency-Key`
 (unlike `/admin/sync`, where no endpoint wants one, all three here require it).
 
-Three deliberate absences (the upload form is NOT one of them any more — Issue
-#595 added it, and Issue #1221 added browser-side compression to it; see
-§Upload size cap above), each pinned by
-`tests/admin-media-page-contract.test.ts` so they stay decisions rather than
-becoming gaps:
+Pengunggah membutuhkan TIGA izin sekaligus — `media.create` (membuka
+sesi), `media.verify` (finalisasi) dan `media.cancel` (membersihkan setelah
+gagal). Ketiganya kunci terpisah di balik endpoint terpisah, sehingga peran
+kustom bisa memegang `create` saja, dan setiap unggahan yang dimulainya akan
+403 saat finalisasi dan saat pembatalan lalu meninggalkan baris
+`pending_upload`. Karena itu halaman hanya menampilkan pengunggah bagi pemanggil
+yang memegang ketiganya, dan menampilkan pesan yang menyebut kunci yang hilang
+bagi pemanggil yang memegang sebagian. Hanya UX: endpoint tetap yang memutuskan.
+Sisi seed dipaku oleh `tests/media-upload-permission-seed.test.ts` (tidak ada
+migrasi yang memberi `create` tanpa dua lainnya).
 
-- **`media.verify`/`media.cancel` as page gates** — `cancel` is driven by the
-  uploader's own failure handling, and nothing on this screen verifies.
+Dua ketiadaan yang disengaja (form unggah BUKAN salah satunya lagi — Issue #595
+menambahkannya, dan Issue #1221 menambahkan kompresi di browser; lihat
+§Upload size cap di atas), masing-masing dipaku oleh
+`tests/admin-media-page-contract.test.ts` agar tetap menjadi keputusan, bukan
+celah:
+
 - **`enforcement.*`** — a tenant-wide ONE-WAY policy switch, not an object
   action. It lives on `/admin/security` with the other policy controls.
 - **No `<img>` preview.** A row can be `pending_upload` or `failed`: the bytes

@@ -89,22 +89,17 @@ export const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
   "workflow.definition.delete":
     "no graph editor; see /admin/approvals contract test",
 
-  // Upload is a three-step browser flow (create -> PUT to R2 -> verify).
+  // Upload is a three-step browser flow (create -> PUT to R2 -> verify), and
+  // `/admin/media` now gates its uploader on all three of `media.create`,
+  // `media.verify` and `media.cancel`: the endpoints behind the steps are
+  // guarded by those separate keys, and a role holding `create` alone started
+  // sessions it could neither finalize nor cancel. `verify` and `cancel` are
+  // therefore SCREENED and no longer belong in this table.
   //
-  // `media_library.media.create` USED to sit here, on the objection that "a
-  // button that STARTS a session but cannot finish it leaves a `pending_upload`
-  // row on every misclick". Issue #595 built the flow that finishes, and every
-  // failure path cancels the session it created — so the objection stopped
-  // applying and the entry was removed rather than left to read as a reviewed
-  // judgement about code that had moved on.
-  //
-  // The other two stay: `cancel` is driven by the uploader's own failure
-  // handling rather than by an operator clicking it, and nothing screens
-  // verification.
-  "media_library.media.verify":
-    "three-step upload; finalisation belongs to the uploading client",
-  "media_library.media.cancel":
-    "three-step upload; only the uploading client knows what to cancel",
+  // `media_library.media.create` once sat here on the objection that "a button
+  // that STARTS a session but cannot finish it leaves a `pending_upload` row on
+  // every misclick". Issue #595 built the flow that finishes; gating on the
+  // other two keys is what makes the objection stay answered.
 
   // `media_library.enforcement.read`/`.enable` USED to sit here, on the
   // reasoning that a one-way tenant posture switch "belongs with the other
