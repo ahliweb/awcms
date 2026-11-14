@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(blog_content): a body-only edit now records a revision, and publishing snapshots the text as published. Two generic defects in the revision history. (1) `isSignificantContentChange` never looked at `bodyPortableText`, the canonical body since ADR-0100, so a `PATCH` carrying only that field (what the admin editor and the preview overlay send) wrote no revision. (2) `createBlogRevision` ran from the two `PATCH` handlers and revision restore only, so create -> publish -> edit left a history whose first row already held the post-edit text and the version readers saw was unrecoverable. `POST /api/v1/blog/posts/{id}/publish`, `POST /api/v1/blog/pages/{id}/publish` and the scheduled-publish sweep now write a revision in the same transaction as the transition; the sweep does it as ONE batched `INSERT` (`createBlogRevisions`) attributed to each post's author, so its query budget stays flat (6 to 7). Republishing unchanged content writes a further revision. No schema, API shape or event change.

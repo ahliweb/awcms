@@ -1,0 +1,17 @@
+-- blog_content -- the scheduled publish sweep records a revision.
+--
+-- `publishDueScheduledPosts` (blog:publish:scheduled) now snapshots each post it
+-- publishes into `awcms_blog_revisions`, in the same transaction as the status
+-- transition, exactly as the manual publish route does. sql/035 granted
+-- `awcms_worker` only what the sweep touched BEFORE that change (posts,
+-- post-terms, settings), so under the least-privilege worker role (doc 18,
+-- sql/022) the revision INSERT failed with `permission denied` (42501), the
+-- tenant transaction rolled back, the post stayed `scheduled` and the run
+-- stopped for every later tenant, including the unpublish half.
+--
+-- SELECT is needed alongside INSERT: the revision number is computed as
+-- `MAX(revision_number) + 1` over the post's existing revisions. No UPDATE and
+-- no DELETE: revisions are append-only history, and the RLS policy
+-- (`awcms_blog_revisions_tenant_isolation`, FORCE) still binds the role to the
+-- transaction tenant. Forward-only; sql/035 is applied and is not edited.
+GRANT SELECT, INSERT ON awcms_blog_revisions TO awcms_worker;

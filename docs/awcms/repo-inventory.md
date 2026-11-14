@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 280   |
+| Migrations                          | 281   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 845   |
+| Test files                          | 846   |
 | Route files                         | 684   |
 | ADR                                 | 326   |
 
@@ -345,6 +345,7 @@
 | 278 | `sql/392_awcms_whatsapp_worker_queue_column_grants.sql`                |
 | 279 | `sql/393_awcms_whatsapp_meta_webhook_clock_and_replay.sql`             |
 | 280 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
+| 281 | `sql/397_awcms_blog_revisions_worker_grant.sql`                        |
 
 ### Tables & Row-Level Security
 
@@ -634,7 +635,7 @@
 | ------------- | ---------- |
 | `(root)`      | 629        |
 | `e2e`         | 30         |
-| `integration` | 185        |
+| `integration` | 186        |
 | `unit`        | 1          |
 
 ### Routes

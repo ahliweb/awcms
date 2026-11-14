@@ -6,6 +6,8 @@ import {
   recordAuditEvents,
   type AuditEventInput
 } from "../../logging/application/audit-log";
+import { createBlogRevisions } from "./blog-revision-directory";
+import type { PortableTextDocument } from "../domain/portable-text";
 import { fetchPostTermIdsForPosts } from "./blog-taxonomy-directory";
 import { fetchBlogSettings } from "./blog-settings-directory";
 import { evaluateContentQualityChecklistForBatch } from "./content-quality-checklist-gate";
@@ -95,6 +97,11 @@ type DuePostRow = {
   featured_media_id: string | null;
   seo_image_media_id: string | null;
   meta_description: string | null;
+  /** ADR-0100 canonical body, carried so the publish can snapshot it. */
+  body_portable_text: PortableTextDocument;
+  seo_title: string | null;
+  canonical_url: string | null;
+  author_tenant_user_id: string;
 };
 
 export async function publishDueScheduledPosts(
@@ -113,7 +120,9 @@ export async function publishDueScheduledPosts(
     async (tx) => {
       const due = (await tx`
         SELECT id, slug, title, excerpt, content_json, content_text,
-               featured_media_id, seo_image_media_id, meta_description
+               featured_media_id, seo_image_media_id, meta_description,
+               body_portable_text, seo_title, canonical_url,
+               author_tenant_user_id
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND status = 'scheduled'
           AND scheduled_at IS NOT NULL AND scheduled_at <= ${now}
@@ -287,6 +296,36 @@ export async function publishDueScheduledPosts(
           WHERE tenant_id = ${tenantId}
             AND id = ANY(${tx.array(publishedPostIds, "uuid")})
         `;
+
+        // A scheduled publish is still a PUBLISH: snapshot the content a reader
+        // will actually see, in the same transaction as the transition (the
+        // manual publish routes do the same). There is no human actor for a
+        // background job, but `created_by_tenant_user_id` is NOT NULL, so each
+        // revision is attributed to the post's own author. ONE batched
+        // statement for the run, not one per post, so the sweep keeps its flat
+        // query budget (`scheduled-publish-budget.integration.test.ts`).
+        await createBlogRevisions(
+          tx,
+          tenantId,
+          "post",
+          publishedPosts.map((post) => ({
+            resourceId: post.id,
+            createdByTenantUserId: post.author_tenant_user_id,
+            snapshot: {
+              title: post.title,
+              contentJson: post.content_json,
+              contentText: post.content_text,
+              bodyPortableText: post.body_portable_text,
+              excerpt: post.excerpt,
+              seoTitle: post.seo_title,
+              metaDescription: post.meta_description,
+              canonicalUrl: post.canonical_url,
+              status: "published"
+            },
+            changeNote: "Published by scheduled publish."
+          })),
+          correlationId
+        );
 
         // AFTER the write, not while classifying: a log line saying a post
         // published is a claim about a statement that ran. Emitting it during

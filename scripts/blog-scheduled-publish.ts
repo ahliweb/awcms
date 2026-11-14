@@ -36,6 +36,7 @@
  * imports either adapter directly, only the port TYPES.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
+import { logScriptFailure } from "../src/lib/logging/error-log";
 import {
   applyJobExitCode,
   formatJobOutcomeLine,
@@ -78,7 +79,8 @@ async function main() {
                 published: 0,
                 blocked: 0,
                 unpublished: 0,
-                partialTenants: 0
+                partialTenants: 0,
+                failedTenants: 0
               },
               detail: "dry-run: no post was published, blocked or unpublished."
             };
@@ -89,32 +91,67 @@ async function main() {
           let totalBlocked = 0;
           let totalUnpublished = 0;
           let partialTenants = 0;
+          let failedTenants = 0;
 
           for (const tenant of tenants) {
             if (ctx.signal.aborted) {
               break;
             }
 
-            const tenantResult = await publishDueScheduledPosts(
-              sql,
-              tenant.id,
-              mediaLibraryPortAdapter,
-              { now: new Date(), correlationId: ctx.correlationId },
-              socialPublishingPort
-            );
+            // Two independent halves: a publish failure (say, a revision the
+            // role may not write) must not also leave the WITHDRAWAL of expired
+            // posts undone for the tenant, which is the half that removes
+            // content readers should no longer see. Each half opens and rolls
+            // back its OWN tenant transaction, so a throw leaves nothing
+            // half-written.
+            let tenantPartial = false;
+            let tenantFailed = false;
 
-            totalPublished += tenantResult.publishedCount;
-            totalBlocked += tenantResult.blockedCount;
+            try {
+              const tenantResult = await publishDueScheduledPosts(
+                sql,
+                tenant.id,
+                mediaLibraryPortAdapter,
+                { now: new Date(), correlationId: ctx.correlationId },
+                socialPublishingPort
+              );
 
-            // Issue #591 — the withdrawing half, in the same iteration so a
-            // tenant is never left half-swept if the loop is cancelled midway.
-            const unpublishResult = await unpublishDuePosts(sql, tenant.id, {
-              now: new Date(),
-              correlationId: ctx.correlationId
-            });
-            totalUnpublished += unpublishResult.unpublishedCount;
+              totalPublished += tenantResult.publishedCount;
+              totalBlocked += tenantResult.blockedCount;
+              tenantPartial = tenantPartial || tenantResult.partial;
+            } catch (error) {
+              // tx-swallow-ok: the sweep's own tenant transaction is already
+              // rolled back; one tenant's failure must not stop the others.
+              tenantFailed = true;
+              logScriptFailure(
+                `blog:publish:scheduled tenant ${tenant.id} publish FAILED`,
+                error
+              );
+            }
 
-            if (tenantResult.partial || unpublishResult.partial) {
+            try {
+              // Issue #591 — the withdrawing half, in the same iteration so a
+              // tenant is never left half-swept if the loop is cancelled midway.
+              const unpublishResult = await unpublishDuePosts(sql, tenant.id, {
+                now: new Date(),
+                correlationId: ctx.correlationId
+              });
+              totalUnpublished += unpublishResult.unpublishedCount;
+              tenantPartial = tenantPartial || unpublishResult.partial;
+            } catch (error) {
+              // tx-swallow-ok: as above.
+              tenantFailed = true;
+              logScriptFailure(
+                `blog:publish:scheduled tenant ${tenant.id} unpublish FAILED`,
+                error
+              );
+            }
+
+            if (tenantFailed) {
+              failedTenants += 1;
+            }
+
+            if (tenantPartial) {
               // This tenant had a full batch this run; its remaining due
               // posts are picked up on the next scheduled run (idempotent).
               partialTenants += 1;
@@ -122,18 +159,27 @@ async function main() {
           }
 
           return {
-            status: partialTenants > 0 ? "partial" : "success",
+            status:
+              partialTenants > 0 || failedTenants > 0 ? "partial" : "success",
             itemCounts: {
               tenantsChecked: tenants.length,
               published: totalPublished,
               blocked: totalBlocked,
               unpublished: totalUnpublished,
-              partialTenants
+              partialTenants,
+              failedTenants
             },
             detail:
-              partialTenants > 0
-                ? `${partialTenants} tenant(s) still had a due-post backlog remaining after this run's batch bound.`
-                : undefined
+              [
+                failedTenants > 0
+                  ? `${failedTenants} tenant(s) FAILED this run (see the logged errors); the others were swept.`
+                  : null,
+                partialTenants > 0
+                  ? `${partialTenants} tenant(s) still had a due-post backlog remaining after this run's batch bound.`
+                  : null
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
           };
         }
       },

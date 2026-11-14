@@ -340,6 +340,14 @@ describe("revision-policy", () => {
     expect(isSignificantContentChange({ contentText: "New body" })).toBe(true);
   });
 
+  test("isSignificantContentChange is true when ONLY bodyPortableText changes (the canonical body, ADR-0100)", () => {
+    expect(isSignificantContentChange({ bodyPortableText: [] })).toBe(true);
+  });
+
+  test("isSignificantContentChange stays false for cosmetic-only input", () => {
+    expect(isSignificantContentChange({})).toBe(false);
+  });
+
   test("isSignificantContentChange is false for an empty input (e.g. a PATCH touching only cosmetic fields)", () => {
     expect(isSignificantContentChange({})).toBe(false);
   });
