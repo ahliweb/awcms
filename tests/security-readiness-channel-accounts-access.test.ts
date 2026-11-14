@@ -170,10 +170,7 @@ describeOrSkip("security:readiness — channel account access guards", () => {
           `) as { def: string }[]
         )[0]!.def;
         await sql.unsafe(
-          original.replace(
-            "v_mode = 'assigned' AND NOT EXISTS",
-            "false AND NOT EXISTS"
-          )
+          original.replace("IF v_mode = 'assigned' THEN", "IF false THEN")
         );
       },
       async (sql) => {
