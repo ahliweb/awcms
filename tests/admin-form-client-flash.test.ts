@@ -33,6 +33,7 @@ const saved: Record<string, unknown> = {};
 let store: Map<string, string>;
 let reloads: number;
 let element: FakeElement;
+let currentPath = "/admin/invitations";
 
 function makeElement(attrs: Record<string, string>): FakeElement {
   return {
@@ -75,7 +76,12 @@ function install(options: { throwingStorage?: boolean } = {}): void {
         removeItem: (key: string) => void store.delete(key)
       };
   globals.window = {
-    location: { reload: () => void (reloads += 1) },
+    location: {
+      get pathname() {
+        return currentPath;
+      },
+      reload: () => void (reloads += 1)
+    },
     addEventListener: () => {}
   };
   globals.document = {
@@ -115,7 +121,10 @@ describe("flashAndReload / showFlash", () => {
 
     flashAndReload("revoked");
 
-    expect([...store.values()]).toEqual(["revoked"]);
+    expect([...store.values()].map((v) => JSON.parse(v).key)).toEqual([
+      "revoked"
+    ]);
+    for (const v of store.values()) expect(v).not.toContain("Invitation");
   });
 
   test("the key is cleared when read, even when the page has no sentence for it", () => {
@@ -156,6 +165,53 @@ describe("flashAndReload / showFlash", () => {
 
     expect(element.hidden).toBe(true);
     expect(element.textContent).toBe("");
+    expect(store.size).toBe(0);
+  });
+
+  test("a flash recorded on another page never shows here, and is forgotten", () => {
+    install();
+
+    currentPath = "/admin/somewhere-else";
+    flashAndReload("resent");
+    currentPath = "/admin/invitations";
+    showFlash("status-box");
+
+    expect(element.hidden).toBe(true);
+    expect(store.size).toBe(0);
+    currentPath = "/admin/invitations";
+  });
+
+  test("a stale flash (older than the window) is dropped, a fresh one shows", () => {
+    install();
+    const realNow = Date.now;
+
+    try {
+      Date.now = () => 1_000_000;
+      flashAndReload("resent");
+      Date.now = () => 1_000_000 + 11_000;
+      showFlash("status-box");
+      expect(element.hidden).toBe(true);
+      expect(store.size).toBe(0);
+
+      Date.now = () => 2_000_000;
+      flashAndReload("resent");
+      Date.now = () => 2_000_000 + 2_000;
+      showFlash("status-box");
+      expect(element.textContent).toBe("Invitation sent again.");
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test("a record without a path or timestamp (the old bare-key shape) is refused", () => {
+    install();
+    store.set("awcms.admin.flash", "resent");
+    showFlash("status-box");
+    expect(element.hidden).toBe(true);
+
+    store.set("awcms.admin.flash", JSON.stringify({ key: "resent" }));
+    showFlash("status-box");
+    expect(element.hidden).toBe(true);
     expect(store.size).toBe(0);
   });
 
