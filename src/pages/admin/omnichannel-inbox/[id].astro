@@ -1,0 +1,558 @@
+---
+/**
+ * One inbox conversation — state, history and the four actions a staff member
+ * needs (Issue #1164, ADR-0160, UP-14).
+ *
+ * ## What it shows
+ *
+ * Only what the projection holds: an opaque reference, the source kind, the
+ * customer state (can it still be answered), the status, the assignee (you,
+ * someone else, nobody), the tags, the response deadline and the append-only
+ * activity history (closed codes and times). Never a message body, a name, an
+ * address or a Telegram id. A staff member's identity is not resolved here: the
+ * history says "you" or "another staff member".
+ *
+ * ## The actions, and why each one is there
+ *
+ * Every control calls an endpoint that already audits, and is rendered only when
+ * the caller holds that endpoint's permission (the endpoint stays the authority):
+ *
+ *   - change status, tags, and "record that I answered" need
+ *     `conversations.update`;
+ *   - assign to me / unassign need `conversations.assign` (high-risk,
+ *     Idempotency-Key).
+ *
+ * "Assign to someone else" is shown DISABLED with its reason: no endpoint lists
+ * the people eligible to be assignees, and a raw user-id box would be a worse
+ * affordance than none. There is NO reply box and no note box: the inbox sends
+ * nothing and stores no text (ADR-0160 section 2); an answer goes out through
+ * the arrival channel's own route and is then recorded here.
+ *
+ * Every write carries `expectedVersion`, so two staff members acting on the same
+ * conversation get exactly one winner and a "someone else changed it" message
+ * for the other, never a silent overwrite.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  activityDetailLabel,
+  activityKindLabel,
+  conversationStatusLabel,
+  conversationStatusTone,
+  customerStateLabel,
+  customerStateTone,
+  dueKindLabel,
+  slaStateLabel,
+  slaStateTone,
+  sourceKindLabel
+} from "../../../lib/i18n/labels/omnichannel-inbox";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { asUuid } from "../../../modules/omnichannel-inbox/application/route-support";
+import { loadInboxDetail } from "../../../modules/omnichannel-inbox/application/screen-loaders";
+import { CONVERSATION_STATUSES } from "../../../modules/omnichannel-inbox/domain/inbox-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/omnichannel-inbox";
+const conversationId = asUuid(Astro.params.id);
+
+/**
+ * The three guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to
+ * `OMNICHANNEL_INBOX_GUARDS` and to the endpoint that enforces it.
+ */
+const READ_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "conversations",
+  action: "read"
+} as const;
+const UPDATE_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "conversations",
+  action: "update"
+} as const;
+const ASSIGN_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "conversations",
+  action: "assign"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    // The visibility -> lookup chain is the module's loader (see
+    // `screen-loaders.ts`): the behavioural integration test runs it as a
+    // confined viewer.
+    loadInboxDetail({
+      context: {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      conversationId,
+      readGuard: READ_GUARD,
+      updateGuard: UPDATE_GUARD,
+      assignGuard: ASSIGN_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omnichannel-inbox/[id].astro: failed to load a conversation",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const detail = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const conversation = detail?.conversation ?? null;
+const tags = detail?.tags ?? [];
+const reachable = conversation?.customerState === "active";
+const tagLabel = (id: string) =>
+  tags.find((tag) => tag.id === id)?.label ?? t("Removed tag");
+
+function actorText(id: string | null): string {
+  if (id === null) return t("System");
+
+  return id === detail?.me ? t("You") : t("Another staff member");
+}
+
+const assigneeText =
+  conversation === null || conversation.assigneeTenantUserId === null
+    ? t("Unassigned")
+    : conversation.assigneeTenantUserId === detail?.me
+      ? t("You")
+      : t("Another staff member");
+---
+
+<AdminLayout
+  title={t("Conversation")}
+  description={t(
+    "State, history and actions of one inbox conversation. Message text and customer identifiers are never shown."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the inbox")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="omnichannel-conversation-denied">
+      {t("You do not have permission to view the inbox.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="omnichannel-conversation-error">
+      {t(
+        "The conversation could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="omnichannel-conversation-disabled">
+      {t("The omnichannel inbox is switched off on this deployment.")}
+    </p>
+  )}
+
+  {canRead && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="omnichannel-conversation-not-found">
+      {t("That conversation was not found.")}
+    </p>
+  )}
+
+  {detail && conversation && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="omnichannel-conversation-title"
+        id="omnichannel-conversation"
+        data-conversation-id={conversation.id}
+        data-version={conversation.version}
+      >
+        <h2 class="admin-section-title" id="omnichannel-conversation-title">
+          {sourceKindLabel(t, conversation.sourceKind)}
+          <span class="cell-muted"> {conversation.sourceRef.slice(0, 8)}</span>
+        </h2>
+
+        <p
+          id="omnichannel-conversation-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <dl class="admin-detail-list" id="omnichannel-conversation-summary">
+          <dt>{t("Status")}</dt>
+          <dd data-status={conversation.status}>
+            <span
+              class="admin-status-pill"
+              data-tone={conversationStatusTone(conversation.status)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {conversationStatusLabel(t, conversation.status)}
+            </span>
+          </dd>
+          <dt>{t("Customer")}</dt>
+          <dd data-customer-state={conversation.customerState}>
+            <span
+              class="admin-status-pill"
+              data-tone={customerStateTone(conversation.customerState)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {customerStateLabel(t, conversation.customerState)}
+            </span>
+          </dd>
+          <dt>{t("Assignee")}</dt>
+          <dd>{assigneeText}</dd>
+          <dt>{t("Tags")}</dt>
+          <dd>
+            {conversation.tagIds.length === 0
+              ? "—"
+              : conversation.tagIds.map(tagLabel).join(", ")}
+          </dd>
+          <dt>{t("Response due")}</dt>
+          <dd data-sla={conversation.sla.state}>
+            <span
+              class="admin-status-pill"
+              data-tone={slaStateTone(conversation.sla.state)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {slaStateLabel(t, conversation.sla.state)}
+            </span>
+            {conversation.sla.dueAt !== null && (
+              <span class="cell-muted">
+                {" "}
+                {dueKindLabel(t, conversation.sla.dueKind)}{" "}
+                {formatUtcMinute(conversation.sla.dueAt)}
+              </span>
+            )}
+          </dd>
+          <dt>{t("First inbound")}</dt>
+          <dd>{formatUtcMinute(conversation.firstInboundAt)}</dd>
+          <dt>{t("Last inbound")}</dt>
+          <dd>{formatUtcMinute(conversation.lastInboundAt)}</dd>
+          <dt>{t("Last response recorded")}</dt>
+          <dd>{formatUtcMinute(conversation.lastRespondedAt)}</dd>
+        </dl>
+
+        {!reachable && (
+          <p class="state-notice" id="omnichannel-conversation-unreachable">
+            {t(
+              "This customer opted out or withdrew. The conversation cannot be answered, reopened, assigned or tagged."
+            )}
+          </p>
+        )}
+      </section>
+
+      {(detail.canUpdate || detail.canAssign) && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="omnichannel-actions-title"
+        >
+          <h2 class="admin-section-title" id="omnichannel-actions-title">
+            {t("Actions")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "The inbox sends nothing to the customer. Answer through the channel the conversation arrived on, then record the response here to stop the deadline clock."
+            )}
+          </p>
+
+          {detail.canUpdate && (
+            <>
+              <form
+                id="omnichannel-status-form"
+                class="admin-form"
+                data-inbox-form="status"
+              >
+                <label class="field-label" for="omnichannel-status-select">
+                  {t("Status")}
+                </label>
+                <select
+                  class="field-input"
+                  id="omnichannel-status-select"
+                  name="status"
+                  disabled={!reachable}
+                >
+                  {CONVERSATION_STATUSES.map((status) => (
+                    <option
+                      value={status}
+                      selected={status === conversation.status}
+                    >
+                      {conversationStatusLabel(t, status)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  class="btn btn-secondary"
+                  type="submit"
+                  disabled={!reachable}
+                >
+                  {t("Save status")}
+                </button>
+              </form>
+
+              <p>
+                <button
+                  class="btn btn-primary js-inbox-respond"
+                  type="button"
+                  disabled={!reachable}
+                >
+                  {t("Record that I answered")}
+                </button>
+              </p>
+
+              <form
+                id="omnichannel-tags-form"
+                class="admin-form"
+                data-inbox-form="tags"
+              >
+                <fieldset disabled={!reachable}>
+                  <legend class="field-label">{t("Tags")}</legend>
+                  {tags.length === 0 ? (
+                    <p class="cell-muted">
+                      {t("No tags exist yet. An administrator creates them.")}
+                    </p>
+                  ) : (
+                    tags.map((tag) => (
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          name="tagId"
+                          value={tag.id}
+                          checked={conversation.tagIds.includes(tag.id)}
+                        />
+                        {tag.label}
+                      </label>
+                    ))
+                  )}
+                </fieldset>
+                {tags.length > 0 && (
+                  <button
+                    class="btn btn-secondary"
+                    type="submit"
+                    disabled={!reachable}
+                  >
+                    {t("Save tags")}
+                  </button>
+                )}
+              </form>
+            </>
+          )}
+
+          {detail.canAssign && (
+            <div id="omnichannel-assignment" class="admin-form">
+              <p class="field-label">{t("Assignment")}</p>
+              <button
+                class="btn btn-secondary js-inbox-assign-me"
+                type="button"
+                data-assignee={detail.me}
+                disabled={
+                  !reachable || conversation.assigneeTenantUserId === detail.me
+                }
+              >
+                {t("Assign to me")}
+              </button>
+              <button
+                class="btn btn-secondary js-inbox-unassign"
+                type="button"
+                disabled={conversation.assigneeTenantUserId === null}
+              >
+                {t("Unassign")}
+              </button>
+              <button
+                class="btn btn-secondary"
+                type="button"
+                disabled
+                aria-describedby="omnichannel-assign-other-why"
+              >
+                {t("Assign to another person")}
+              </button>
+              <p class="cell-muted" id="omnichannel-assign-other-why">
+                {t(
+                  "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
+                )}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="omnichannel-activity-title"
+      >
+        <h2 class="admin-section-title" id="omnichannel-activity-title">
+          {t("History")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omnichannel-activity-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="omnichannel-activity-table"
+          >
+            <caption id="omnichannel-activity-caption">
+              {tn(
+                "{count} history entry (newest first)",
+                "{count} history entries (newest first)",
+                conversation.activity.length,
+                { count: conversation.activity.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("What")}</th>
+                <th scope="col">{t("By")}</th>
+                <th scope="col">{t("Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {conversation.activity.length === 0 ? (
+                <tr>
+                  <td colspan={4}>
+                    <span class="cell-muted">{t("No history yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                conversation.activity.map((entry) => (
+                  <tr data-activity-kind={entry.kind}>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(entry.createdAt)}
+                    </td>
+                    <td data-label={t("What")}>
+                      {activityKindLabel(t, entry.kind)}
+                    </td>
+                    <td data-label={t("By")}>
+                      {actorText(entry.actorTenantUserId)}
+                    </td>
+                    <td data-label={t("Detail")}>
+                      {activityDetailLabel(t, entry.kind, entry.detailCode) ||
+                        "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+
+  const actionError = messageBox("omnichannel-conversation-error-box");
+  const root = document.getElementById("omnichannel-conversation");
+  const conversationId = root?.dataset.conversationId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  const base = `/api/v1/omnichannel-inbox/conversations/${conversationId}`;
+
+  // The assignment requires the header (high-risk). One key per distinct
+  // (method, url, body): a retry replays, a different request gets a new key.
+  const keyFor = createIdempotencyKeySource();
+
+  function failure(errorCode: string | null): string {
+    switch (errorCode) {
+      case "VERSION_CONFLICT":
+        return "Someone else changed this conversation. Reload the page and try again.";
+      case "CUSTOMER_UNREACHABLE":
+        return "This customer opted out or withdrew, so nothing can be changed.";
+      case "ASSIGNEE_NOT_ELIGIBLE":
+        return "You cannot be assigned this conversation.";
+      case "TAG_UNKNOWN":
+        return "One of the tags no longer exists. Reload the page and try again.";
+      case "RESOURCE_NOT_FOUND":
+        return "That conversation is no longer available.";
+      default:
+        return "Could not save the change. Please try again.";
+    }
+  }
+
+  onSubmit("omnichannel-status-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("POST", `${base}/status`, {
+          status: String(data.get("status") ?? ""),
+          expectedVersion: version
+        }),
+      failure
+    );
+  });
+
+  onSubmit("omnichannel-tags-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("PUT", `${base}/tags`, {
+          tagIds: data.getAll("tagId").map(String),
+          expectedVersion: version
+        }),
+      failure
+    );
+  });
+
+  onAction(".js-inbox-respond", async (button) => {
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `${base}/responses`, { expectedVersion: version }),
+      failure
+    );
+  });
+
+  function assign(button: HTMLButtonElement, assignee: string | null) {
+    const body = { assigneeTenantUserId: assignee, expectedVersion: version };
+
+    return mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `${base}/assignment`, body, {
+          "Idempotency-Key": keyFor({ url: `${base}/assignment`, body })
+        }),
+      failure
+    );
+  }
+
+  onAction(".js-inbox-assign-me", (button) =>
+    assign(button, button.dataset.assignee ?? null)
+  );
+  onAction(".js-inbox-unassign", (button) => assign(button, null));
+</script>

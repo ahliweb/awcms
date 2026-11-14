@@ -390,6 +390,54 @@ async function viewOf(
 }
 
 /**
+ * The audit row of one in-place transition. One function for both writers of a
+ * transition (this file's application path and the worker path of
+ * `booking-worker-transition.ts`), so the two cannot drift into auditing
+ * different things.
+ */
+export async function recordTransitionAudit(
+  tx: Sql,
+  ctx: ReservationContext,
+  input: {
+    action: TransitionAction;
+    reservationId: string;
+    reservationNo: string;
+    fromStatus: string;
+    toStatus: string;
+    lateCancellation: boolean;
+    releasedAllocations: number;
+  }
+): Promise<void> {
+  const audit = AUDIT_FOR[input.action];
+
+  await recordAuditEvent(tx, {
+    tenantId: ctx.tenantId,
+    ...(ctx.actorTenantUserId
+      ? { actorTenantUserId: ctx.actorTenantUserId }
+      : {}),
+    moduleKey: BOOKING_MODULE_KEY,
+    action: audit.action,
+    resourceType: "booking_reservation",
+    resourceId: input.reservationId,
+    severity: audit.severity,
+    message: `Reservation ${input.reservationNo} moved from ${input.fromStatus} to ${input.toStatus}.`,
+    // Which reservation and which transition. Never the customer reference, the
+    // note or a reason text (ADR-0094); the reason CODE is on the history row.
+    attributes: {
+      fromStatus: input.fromStatus,
+      toStatus: input.toStatus,
+      ...(input.action === "cancel"
+        ? {
+            lateCancellation: input.lateCancellation,
+            releasedAllocations: input.releasedAllocations
+          }
+        : {})
+    },
+    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {})
+  });
+}
+
+/**
  * `confirm`, `cancel`, `check_in`, `complete` and `no_show` on one reservation.
  * `input.reasonCode` is a cancellation's short code (never free text).
  */
@@ -542,27 +590,15 @@ export async function transitionReservation(
   `;
 
   const reservation = await viewOf(tx, ctx.tenantId, row.id);
-  const audit = AUDIT_FOR[action];
 
-  await recordAuditEvent(tx, {
-    tenantId: ctx.tenantId,
-    ...(ctx.actorTenantUserId
-      ? { actorTenantUserId: ctx.actorTenantUserId }
-      : {}),
-    moduleKey: BOOKING_MODULE_KEY,
-    action: audit.action,
-    resourceType: "booking_reservation",
-    resourceId: row.id,
-    severity: audit.severity,
-    message: `Reservation ${reservation.reservationNo} moved from ${row.status} to ${decision.to}.`,
-    // Which reservation and which transition. Never the customer reference, the
-    // note or a reason text (ADR-0094); the reason CODE is on the history row.
-    attributes: {
-      fromStatus: row.status,
-      toStatus: decision.to,
-      ...(action === "cancel" ? { lateCancellation, releasedAllocations } : {})
-    },
-    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {})
+  await recordTransitionAudit(tx, ctx, {
+    action,
+    reservationId: row.id,
+    reservationNo: reservation.reservationNo,
+    fromStatus: row.status,
+    toStatus: decision.to,
+    lateCancellation,
+    releasedAllocations
   });
 
   await emitReservationEvents(tx, ctx.tenantId, row.id, [

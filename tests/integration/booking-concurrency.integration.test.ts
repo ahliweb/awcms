@@ -2153,6 +2153,19 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         confirmation: "immediate"
       });
 
+      // A dependent table with a foreign key into the reservations, as a
+      // downstream adapter has (Issue #1278): a bare TRUNCATE of the booking
+      // tables is refused while it exists, even when it is empty.
+      await admin.unsafe(`DROP TABLE IF EXISTS awcms_zz_booking_fk_probe`);
+      await admin.unsafe(`
+        CREATE TABLE awcms_zz_booking_fk_probe (
+          tenant_id uuid NOT NULL,
+          reservation_id uuid NOT NULL,
+          FOREIGN KEY (tenant_id, reservation_id)
+            REFERENCES awcms_booking_reservations (tenant_id, id)
+        )
+      `);
+
       try {
         await admin.unsafe(
           "ALTER TABLE awcms_booking_resource_allocations DROP CONSTRAINT awcms_booking_resource_allocations_time_excl"
@@ -2215,12 +2228,15 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
       } finally {
         // Put the schema back EXACTLY: the rows written without the constraint
         // violate it, so the booking tables are emptied first (test database
-        // only).
+        // only). CASCADE: a table that references them (a downstream
+        // adapter's, or the probe above) would otherwise refuse the TRUNCATE.
         await admin.unsafe(`
           TRUNCATE awcms_booking_reservation_events, awcms_booking_resource_allocations,
                    awcms_booking_reservation_items, awcms_booking_reminder_intents,
                    awcms_booking_staff_assignments, awcms_booking_reservations
+          CASCADE
         `);
+        await admin.unsafe(`DROP TABLE IF EXISTS awcms_zz_booking_fk_probe`);
         await admin.unsafe(
           `ALTER TABLE awcms_booking_resource_allocations
              ADD CONSTRAINT awcms_booking_resource_allocations_time_excl ${definition[0]!.def}`

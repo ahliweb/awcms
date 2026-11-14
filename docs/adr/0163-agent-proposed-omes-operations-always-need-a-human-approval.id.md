@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0163-agent-proposed-omes-operations-always-need-a-human-approval.md)
 
-<!-- i18n-source-hash: sha256:e698a85c3ee91e540f35ffc785c98aa91bb02a1edebd7bbfda66b6350b89b7ed -->
+<!-- i18n-source-hash: sha256:d5b2261bde92c728a11766e39fb2e96fa55a089124f3c10f85487f6c16ced79e -->
 
 # ADR-0163 — Operasi OMES yang diusulkan agen selalu memerlukan persetujuan manusia
 
@@ -29,6 +29,13 @@ Yang ada hari ini (diverifikasi di `main` @ `ff426cc`):
 
 Ancaman yang dijawab keputusan ini: prompt injection tidak langsung dan langsung (MITRE ATT&CK v20 T1698/T1699), hasil retrieval yang diracuni (T1608.007), dan _excessive agency_ (OWASP Top 10 for LLM Applications 2025, LLM06). Agen yang dapat mengubah outputnya sendiri menjadi operasi yang dieksekusi akan mengubah masing-masing ancaman itu menjadi dampak di host.
 
+Literatur di balik D10 dan D11 (lihat §Referensi):
+
+- **Persetujuan manusia hanya menjadi kontrol bila tetap terikat pada apa yang dieksekusi.** "Loopjacking" [R7] mereproduksi substitusi persetujuan-ke-efek (manusia menyetujui operasi A, produk mengeksekusi B) di tujuh rilis Agno AgentOS dan dua belas versi LangGraph Agent Server, serta ketidakcocokan tampilan persetujuan di satu rilis OpenClaw; implementasi yang mengikat setiap persetujuan ke invokasi kanonis (OpenAI Agents SDK) menolak substitusi itu. Pertahanannya adalah catatan kanonis lengkap yang dibandingkan saat dipakai.
+- **Allowlist jenis operasi saja tidak cukup.** Di AgentDojo [R2] tool filter menurunkan tingkat keberhasilan serangan menjadi 7,5%, tetapi pada 17% kasus uji tool yang dibutuhkan tugas juga cukup untuk serangan. CaMeL [R3] menjauhkan data tak tepercaya dari alur kontrol dan menyelesaikan 77% tugas AgentDojo dengan keamanan terbukti (84% tanpa pertahanan), sambil mencatat bahwa meminta pengguna mengonfirmasi pelanggaran kebijakan menimbulkan kelelahan persetujuan.
+- **Apa yang ditampilkan kepada penyetuju dapat diracuni.** PoisonedRAG [R5] mencapai tingkat keberhasilan serangan 90% dengan lima teks sisipan per pertanyaan target, dan prompt injection tidak langsung [R1] menunjukkan teks hasil retrieval bertindak sebagai instruksi.
+- **Perhatian manusia terbatas.** Peninjau tersimulasi yang lelah meloloskan lebih banyak bahaya ketika semua hal dieskalasi dibanding pada ambang yang terkalibrasi [R8] (simulasi penulis tunggal, di sini dipakai hanya untuk mekanismenya).
+
 ## Keputusan
 
 **D1 — Usulan agen adalah operation request, bukan modul baru.** Ia adalah baris di `awcms_omes_operation_requests` dengan pengusul berjenis `agent`. Tidak ada tabel kedua, tidak ada modul `ai_agent_actions`, tidak ada antrean kedua. Jalur poll worker, job, lease, hasil, dan audit tetap yang sudah ada.
@@ -48,6 +55,10 @@ Ancaman yang dijawab keputusan ini: prompt injection tidak langsung dan langsung
 **D8 — Audit.** Usulan, verdict, settlement, dan dispatch diaudit dengan correlation id yang sama, jenis dan referensi pengusul, dan tanpa prompt, transkrip, atau output model mentah (aturan `findDisallowedEvidenceKeys` yang ada berlaku).
 
 **D9 — Metrik evaluasi adalah keputusan terpisah di kemudian hari.** Hasil evaluasi RAG dan agen (kualitas retrieval, faithfulness, persentil latensi, jumlah pemanggilan tool, tingkat keberhasilan injection, aksi tanpa persetujuan) tidak diputuskan di sini. `reporting` hari ini tidak dapat menyatakan rasio atau persentil (ADR-0143). Arah yang diharapkan adalah tampilan read-only `omes_control` yang diisi kontrak agregat yang didorong worker, mengikuti tampilan postur privasi AI; ia mendapat ADR sendiri ketika pipeline evaluasi sudah ada.
+
+**D10 — Persetujuan diikat pada digest kanonis operasi, dan diperiksa saat job berjalan.** Saat usulan agen dibuat, AWCMS menghitung `approval_digest = SHA-256` atas encoding JSON kanonis (kunci terurut, tanpa spasi yang tidak bermakna) dari: id tenant, kode operasi, `serverId`, `deploymentId`, `parameters` yang tervalidasi skema, `proposed_by_ref`, workflow key, nonce acak, dan `expires_at`. Layar persetujuan dirender AWCMS dari field yang sama itu, tidak pernah dari teks yang diberikan agen [R6, R7, R10]. Consumer settlement memindahkan baris ke `approved` hanya bila digest yang dihitung ulang dari baris sama dengan yang tersimpan. Job yang di-dispatch membawa digest dan nonce; job runner OMES menghitung ulang digest dari permintaan bertipe, menolak ketidakcocokan, permintaan kedaluwarsa, atau nonce yang sudah pernah dipakai, dan mencatat hasilnya di audit-nya. Digest membuktikan bahwa yang berjalan adalah yang disetujui; ia tidak pernah memberi izin apa pun dengan sendirinya, dan pemeriksaan allowlist serta persetujuan milik runner tetap berlaku.
+
+**D11 — Usulan agen memakai anggaran perhatian manusia yang terbatas.** Per sesi agen dan per tenant, usulan dibatasi lajunya (nilai awal 10 per jam, dapat diatur per tenant), dan usulan untuk target atau operasi di luar kebijakan agen tenant ditolak sebelum sampai ke manusia, dengan satu baris audit. Inbox persetujuan menampilkan jumlah usulan agen yang menunggu per agen; lonjakan di atas batas ditolak, bukan diantrekan. Aturan ini ada agar banjir usulan atau kelelahan persetujuan tidak menjadi jalan bagi usulan hasil injeksi untuk lolos [R3, R8, R9].
 
 ## Opsi yang dipertimbangkan
 
@@ -72,9 +83,10 @@ Ancaman yang dijawab keputusan ini: prompt injection tidak langsung dan langsung
 1. #1335 di-merge (consumer settlement).
 2. OMES: perluas `operation-request` dengan `approval_ref` dan jenis pengusul; rilis; pin ulang di sini.
 3. Migrasi: `proposed_by_kind`, `proposed_by_ref` dengan constraint CHECK; permission `omes_control.deployments.propose`; registrasi workflow key.
-4. Jalur pengajuan untuk usulan agen (D3, D6), aturan SoD (D4), batas kredensial mesin (D5), audit (D8).
+4. Jalur pengajuan untuk usulan agen (D3, D6), aturan SoD (D4), batas kredensial mesin (D5), audit (D8), digest persetujuan dan nonce (D10), batas laju dan pra-filter usulan (D11).
 5. Layar persetujuan menampilkan jenis pengusul dan bukti yang dirujuk.
-6. Tes: usulan agen tidak pernah `approved` tanpa keputusan manusia; pemilik yang bertanggung jawab tidak dapat menyetujui; field teks bebas ditolak; kredensial mesin tidak dapat `operate`.
+6. Tes: usulan agen tidak pernah `approved` tanpa keputusan manusia; pemilik yang bertanggung jawab tidak dapat menyetujui; field teks bebas ditolak; kredensial mesin tidak dapat `operate`; baris yang `parameters`-nya berubah setelah disetujui tidak di-dispatch dan ditolak runner OMES (digest tidak cocok); nonce yang diulang dan persetujuan kedaluwarsa ditolak; lonjakan usulan di atas batas ditolak dengan satu baris audit.
+7. OMES: job runner menghitung ulang dan memeriksa `approval_digest`, menyimpan nonce yang sudah dipakai, dan menambah tes negatif bergaya AgentDojo/InjecAgent untuk eksfiltrasi lewat operasi yang diizinkan dan substitusi persetujuan [R2, R4, R7].
 
 ## Pertanyaan terbuka untuk pemilik
 
@@ -82,3 +94,18 @@ Ancaman yang dijawab keputusan ini: prompt injection tidak langsung dan langsung
 - **Q2.** Apakah agen boleh mengusulkan `rollback` dan restore backup sama sekali, atau hanya operasi siklus hidup (`status`, `preflight`, `start`, `restart`, `update`, `backup`, `stop`)?
 - **Q3.** Apakah satu penyetuju cukup untuk usulan agen, atau usulan agen yang destruktif perlu dua (`quorum`)?
 - **Q4.** Apakah usulan agen yang tidak dijawab sebaiknya kedaluwarsa (mis. setelah 24 jam) alih-alih menunggu tanpa batas?
+
+## Referensi
+
+Diverifikasi terhadap teks lengkap makalah melalui alphaXiv pada 2026-11-14. Butir bertanda _preprint_ adalah karya baru dengan sitasi rendah yang dipakai untuk mekanisme yang dijelaskannya, bukan sebagai bukti yang sudah mapan.
+
+- [R1] K. Greshake dkk., "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection," 2023. <https://www.alphaxiv.org/abs/2302.12173>
+- [R2] E. Debenedetti dkk., "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents," NeurIPS 2024 Datasets and Benchmarks. <https://www.alphaxiv.org/abs/2406.13352>
+- [R3] E. Debenedetti dkk., "Defeating Prompt Injections by Design" (CaMeL), 2025. <https://www.alphaxiv.org/abs/2503.18813>
+- [R4] Q. Zhan dkk., "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents," 2024. <https://www.alphaxiv.org/abs/2403.02691>
+- [R5] W. Zou dkk., "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models," 2024. <https://www.alphaxiv.org/abs/2402.07867>
+- [R6] L. Beurer-Kellner dkk., "Design Patterns for Securing LLM Agents against Prompt Injections," 2025. <https://www.alphaxiv.org/abs/2506.08837>
+- [R7] A. Arun Kumar, "Loopjacking: Hijacking Human-in-the-Loop Approval," 2026, _preprint_. <https://www.alphaxiv.org/abs/2609.21081>
+- [R8] Turan, "Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.08919>
+- [R9] Shahriar dkk., "A Survey on Agentic Security: Applications, Threats and Defenses," 2025. <https://www.alphaxiv.org/abs/2510.06445>
+- [R10] Weng, "What You Approve Is What Executes: Consent Integrity for Black-Box LLM Agents," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.02668>

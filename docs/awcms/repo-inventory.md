@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 276   |
+| Migrations                          | 280   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 834   |
-| Route files                         | 681   |
+| Test files                          | 840   |
+| Route files                         | 684   |
 | ADR                                 | 328   |
 
 ### Modules
@@ -59,7 +59,7 @@
 | `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 | `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 | `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
-| `omnichannel_inbox`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
+| `omnichannel_inbox`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 
 ### Migrations
 
@@ -341,6 +341,10 @@
 | 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
 | 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
 | 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
+| 277 | `sql/388_awcms_booking_worker_transitions.sql`                         |
+| 278 | `sql/392_awcms_whatsapp_worker_queue_column_grants.sql`                |
+| 279 | `sql/393_awcms_whatsapp_meta_webhook_clock_and_replay.sql`             |
+| 280 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
 
 ### Tables & Row-Level Security
 
@@ -628,9 +632,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 621        |
+| `(root)`      | 625        |
 | `e2e`         | 30         |
-| `integration` | 182        |
+| `integration` | 184        |
 | `unit`        | 1          |
 
 ### Routes
@@ -638,7 +642,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 567   |
-| `/admin/**`     | 83    |
+| `/admin/**`     | 86    |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->

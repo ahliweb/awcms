@@ -2151,6 +2151,19 @@ suite("social_publishing against PostgreSQL", () => {
         )
       );
 
+      // One concurrent round may send FEWER than the cap: SKIP LOCKED can split
+      // the candidate rows across dispatchers, and one that loses the
+      // per-account try-lock skips the account for this pass (`skippedBusy`,
+      // PR #1261) instead of waiting (#1339). What it must never do is send
+      // more than the cap, or the same job twice.
+      expect(fb.calls.length).toBeGreaterThan(0);
+      expect(fb.calls.length).toBeLessThanOrEqual(3);
+
+      // Later passes inside the same window fill up to the cap and no further.
+      for (let pass = 0; pass < 3; pass += 1) {
+        await dispatch(TENANT_A, { accountDailyCap: 3, perAccountBatch: 3 });
+      }
+
       expect(fb.calls).toHaveLength(3);
       expect(new Set(fb.calls.map((c) => c.idempotencyKey)).size).toBe(3);
 

@@ -35,6 +35,8 @@ import {
   resetHandlerDatabase,
   teardownHandlerDatabase
 } from "./harness";
+import { loadAdminScreen } from "../../src/lib/auth/admin-screen";
+import type { SsrContext } from "../../src/lib/auth/ssr-session";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { appendDomainEvent } from "../../src/modules/domain-event-runtime/application/append-domain-event";
@@ -44,6 +46,12 @@ import {
   projectEvent,
   rebuildProjection
 } from "../../src/modules/omnichannel-inbox/application/conversation-projector";
+import {
+  loadInboxDetail,
+  loadInboxList,
+  loadInboxSettings,
+  type InboxCan
+} from "../../src/modules/omnichannel-inbox/application/screen-loaders";
 import { runSlaForTenant } from "../../src/modules/omnichannel-inbox/application/sla-job";
 import { officeScopeHierarchyPortAdapter } from "../../src/modules/tenant-admin/application/office-scope-hierarchy-port-adapter";
 import { POST as authLogin } from "../../src/pages/api/v1/auth/login";
@@ -379,6 +387,57 @@ async function conversationRow(sourceRef: string) {
   `) as Record<string, unknown>[];
 
   return rows[0];
+}
+
+const G = (
+  activityCode: string,
+  action: "read" | "update" | "assign" | "configure"
+) => ({ moduleKey: "omnichannel_inbox", activityCode, action }) as const;
+const SCREEN = {
+  read: G("conversations", "read"),
+  update: G("conversations", "update"),
+  assign: G("conversations", "assign"),
+  slaRead: G("sla_policies", "read"),
+  slaConfigure: G("sla_policies", "configure"),
+  tagsConfigure: G("tags", "configure"),
+  projectionConfigure: G("projection", "configure")
+};
+
+/**
+ * Runs one of the SCREENS' loaders the way the pages do: the real
+ * `loadAdminScreen` chokepoint, one transaction, the viewer's real session.
+ */
+async function screen<T>(
+  token: string,
+  entry: ReturnType<typeof G>,
+  run: (input: {
+    context: Parameters<typeof loadInboxList>[0]["context"];
+    can: InboxCan;
+  }) => Promise<T>
+): Promise<T | "denied" | "error"> {
+  const tokenHash = hashSessionToken(token);
+  const outcome = await loadAdminScreen({
+    ssr: { tenantId, tokenHash } as unknown as SsrContext,
+    sql: getHandlerDatabaseClient(),
+    workClass: "interactive",
+    authorize: entry,
+    load: ({ tx, auth, can }) =>
+      run({
+        context: {
+          tx,
+          tenantId,
+          tokenHash,
+          auth,
+          now: new Date(),
+          request: new Request("http://localhost/admin/omnichannel-inbox"),
+          clientAddress: "127.0.0.1"
+        },
+        can
+      }),
+    onError: () => {}
+  });
+
+  return outcome.state === "allowed" ? outcome.data : outcome.state;
 }
 
 const suite = integrationEnabled ? describe : describe.skip;
@@ -1405,5 +1464,179 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
         detail_code: tagId
       }
     ]);
+  });
+
+  test("#1317 audit M-1/L-1: the screens' loaders confine a brand-A viewer, hide controls, and honour the deployment switch", async () => {
+    const brandA = await seedOffice("s-a");
+    const brandB = await seedOffice("s-b");
+    const [cA, cB, cWide] = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID()
+    ];
+
+    await telegramInbound(tenantId, await seedBot(tenantId, brandA), cA);
+    await telegramInbound(tenantId, await seedBot(tenantId, brandB), cB);
+    await telegramInbound(tenantId, await seedBot(tenantId, null), cWide);
+    await dispatch(tenantId);
+
+    const confined = await seedUser(tenantId, "s-confined", [
+      READ,
+      "omnichannel_inbox.sla_policies.read"
+    ]);
+    const wide = await seedUser(tenantId, "s-wide", ALL);
+    const readOnly = await seedUser(tenantId, "s-ro", [
+      READ,
+      "omnichannel_inbox.sla_policies.read"
+    ]);
+    await holdScope(confined.tenantUserId, brandA);
+
+    const listFor = (token: string) =>
+      screen(token, SCREEN.read, ({ context, can }) =>
+        loadInboxList({
+          context,
+          filters: {},
+          readGuard: SCREEN.read,
+          settingsGuard: SCREEN.slaRead,
+          can
+        })
+      );
+    const detailFor = (token: string, id: string) =>
+      screen(token, SCREEN.read, ({ context, can }) =>
+        loadInboxDetail({
+          context,
+          conversationId: id,
+          readGuard: SCREEN.read,
+          updateGuard: SCREEN.update,
+          assignGuard: SCREEN.assign,
+          can
+        })
+      );
+    const settingsFor = (token: string, entry = SCREEN.slaRead) =>
+      screen(token, entry, ({ context, can }) =>
+        loadInboxSettings({
+          context,
+          slaReadGuard: SCREEN.slaRead,
+          conversationsReadGuard: SCREEN.read,
+          slaConfigureGuard: SCREEN.slaConfigure,
+          tagsConfigureGuard: SCREEN.tagsConfigure,
+          projectionConfigureGuard: SCREEN.projectionConfigure,
+          can
+        })
+      );
+
+    // List: a brand-A viewer sees brand A only; the tenant-wide viewer sees all.
+    const mine = await listFor(confined.token);
+    const refs = (data: unknown) =>
+      (data as { conversations: { sourceRef: string }[] }).conversations
+        .map((c) => c.sourceRef)
+        .sort();
+
+    expect(mine).not.toBe("denied");
+    expect(refs(mine)).toEqual([cA]);
+    expect(refs(await listFor(wide.token))).toEqual([cA, cB, cWide].sort());
+
+    // Detail: brand B and the tenant-wide conversation are "not found" to them.
+    const idB = String((await conversationRow(cB))!.id);
+    const idWide = String((await conversationRow(cWide))!.id);
+    const idA = String((await conversationRow(cA))!.id);
+
+    expect(await detailFor(confined.token, idB)).toEqual({
+      enabled: true,
+      found: false
+    });
+    expect(await detailFor(confined.token, idWide)).toEqual({
+      enabled: true,
+      found: false
+    });
+    expect(await detailFor(confined.token, idA)).toMatchObject({ found: true });
+
+    // Controls: a read-only holder gets no write affordance; the manager does.
+    expect(await detailFor(readOnly.token, idA)).toMatchObject({
+      found: true,
+      canUpdate: false,
+      canAssign: false
+    });
+    expect(await detailFor(wide.token, idA)).toMatchObject({
+      canUpdate: true,
+      canAssign: true
+    });
+
+    // Settings: a tenant-wide manager creates the default and a brand-B plan;
+    // the brand-A viewer sees the default only, no rebuild/config controls.
+    const weekdays = [
+      { start: 540, end: 1020 },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ];
+    const policy = (name: string, scope: { type: string; id: string } | null) =>
+      invoke<Envelope>(createPolicyRoute, {
+        method: "POST",
+        path: "/api/v1/omnichannel-inbox/sla-policies",
+        headers: headers(wide.token, {
+          "idempotency-key": crypto.randomUUID()
+        }),
+        body: {
+          name,
+          timezone: "UTC",
+          firstResponseMinutes: 10,
+          nextResponseMinutes: 10,
+          workingHours: weekdays,
+          ...(scope ? { businessScope: scope } : {})
+        }
+      });
+
+    await admin()`
+      INSERT INTO awcms_business_scope_assignments
+        (tenant_id, tenant_user_id, scope_type, scope_id,
+         granted_by_tenant_user_id, effective_from)
+      VALUES (${tenantId}, ${wide.tenantUserId}, 'tenant', ${tenantId},
+              ${ownerTenantUserId}, now() - interval '1 minute')
+    `;
+    expect((await policy("Default", null)).status).toBe(201);
+    expect(
+      (await policy("Brand B", { type: "office", id: brandB })).status
+    ).toBe(201);
+
+    const mineSettings = await settingsFor(confined.token);
+
+    expect(
+      (mineSettings as { policies: { name: string }[] }).policies.map(
+        (p) => p.name
+      )
+    ).toEqual(["Default"]);
+    expect(mineSettings).toMatchObject({
+      canConfigurePolicies: false,
+      canConfigureTags: false,
+      canRebuild: false
+    });
+    // `conversations.read` held: the tag catalogue is present (empty, not null).
+    expect((mineSettings as { tags: unknown }).tags).toEqual([]);
+    expect(
+      ((await settingsFor(wide.token)) as { policies: unknown[] }).policies
+    ).toHaveLength(2);
+
+    // No `conversations.read`: no tag catalogue section at all.
+    const slaOnly = await seedUser(tenantId, "s-sla-only", [
+      "omnichannel_inbox.sla_policies.read"
+    ]);
+    expect(await settingsFor(slaOnly.token)).toMatchObject({ tags: null });
+
+    // The switch: OFF yields the disabled shape and reads nothing.
+    delete process.env.OMNICHANNEL_INBOX_ENABLED;
+    expect(await listFor(wide.token)).toMatchObject({
+      enabled: false,
+      conversations: []
+    });
+    expect(await detailFor(wide.token, idA)).toEqual({ enabled: false });
+    expect(await settingsFor(wide.token)).toMatchObject({
+      enabled: false,
+      policies: [],
+      tags: null
+    });
   });
 });

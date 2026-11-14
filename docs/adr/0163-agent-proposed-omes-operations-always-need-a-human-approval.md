@@ -27,6 +27,13 @@ What exists today (verified on `main` @ `ff426cc`):
 
 Threats this decision answers: indirect and direct prompt injection (MITRE ATT&CK v20 T1698/T1699), poisoned retrieval results (T1608.007), and excessive agency (OWASP Top 10 for LLM Applications 2025, LLM06). An agent that can turn its own output into an executed operation turns each of those into host impact.
 
+The literature behind D10 and D11 (see §References):
+
+- **A human approval is only a control if it stays bound to what executes.** "Loopjacking" [R7] reproduced approval-to-effect substitution (a human approves operation A, the product executes B) in seven Agno AgentOS releases and twelve LangGraph Agent Server versions, and an approval-view mismatch in one OpenClaw release; an implementation that bound each approval to the canonical invocation (OpenAI Agents SDK) rejected the substitution. Its defence is a complete canonical record compared at use time.
+- **An allowlist of operation types is not enough on its own.** In AgentDojo [R2] a tool filter cut the attack success rate to 7.5%, but in 17% of test cases the tools the task needs are also sufficient for the attack. CaMeL [R3] keeps untrusted data out of control flow and solved 77% of AgentDojo tasks with provable security (84% undefended), while noting that asking users to confirm policy violations causes approval fatigue.
+- **What an approver is shown can itself be poisoned.** PoisonedRAG [R5] reached a 90% attack success rate with five injected texts per target question, and indirect prompt injection [R1] shows retrieved text acting as instructions.
+- **Human attention is finite.** Simulated reviewers under fatigue let more danger through when everything is escalated than at a calibrated threshold [R8] (a single-author simulation, used here for the mechanism only).
+
 ## Decision
 
 **D1 — An agent proposal is an operation request, not a new module.** It is a row in `awcms_omes_operation_requests` with a proposer of kind `agent`. No second table, no `ai_agent_actions` module, no second queue. The worker poll, job, lease, result and audit paths stay the ones that exist.
@@ -46,6 +53,10 @@ Threats this decision answers: indirect and direct prompt injection (MITRE ATT&C
 **D8 — Audit.** Proposal, verdict, settlement and dispatch are audited with the same correlation id, the proposer kind and reference, and no raw prompt, transcript or model output (the existing `findDisallowedEvidenceKeys` rule applies).
 
 **D9 — Evaluation metrics are a separate, later decision.** RAG and agent evaluation results (retrieval quality, faithfulness, latency percentiles, tool-call counts, injection success rate, unapproved actions) are not decided here. `reporting` cannot express ratios or percentiles today (ADR-0143). The expected direction is a read-only `omes_control` view fed by a worker-pushed, aggregate-only contract, following the AI privacy posture view; it gets its own ADR when an evaluation pipeline exists.
+
+**D10 — An approval is bound to a canonical digest of the operation, checked when the job runs.** When an agent proposal is created, AWCMS computes `approval_digest = SHA-256` over a canonical JSON encoding (sorted keys, no insignificant whitespace) of: tenant id, operation code, `serverId`, `deploymentId`, the schema-validated `parameters`, `proposed_by_ref`, the workflow key, a random nonce and `expires_at`. The approval screen is rendered by AWCMS from those same fields, never from text the agent supplied [R6, R7, R10]. The settlement consumer moves the row to `approved` only if the digest recomputed from the row equals the stored one. The dispatched job carries the digest and the nonce; the OMES job runner recomputes the digest from the typed request, refuses a mismatch, an expired request or a nonce it has already consumed, and records the outcome in its audit. The digest proves that what ran is what was approved; it never grants anything by itself, and the runner's own allowlist and approval checks stay in force.
+
+**D11 — Agent proposals spend a bounded budget of human attention.** Per agent session and per tenant, proposals are rate-limited (a starting value of 10 per hour, configurable per tenant), and a proposal for a target or operation outside the tenant's agent policy is refused before it reaches a person, with an audit row. The approval inbox shows the number of pending agent proposals per agent; a burst over the limit is refused, not queued. These rules exist so that flooding or approval fatigue cannot become the way an injected proposal gets through [R3, R8, R9].
 
 ## Options considered
 
@@ -70,9 +81,10 @@ Threats this decision answers: indirect and direct prompt injection (MITRE ATT&C
 1. #1335 merged (settlement consumer).
 2. OMES: extend `operation-request` with `approval_ref` and proposer kind; release; re-pin here.
 3. Migration: `proposed_by_kind`, `proposed_by_ref` with a CHECK constraint; permission `omes_control.deployments.propose`; workflow key registration.
-4. Submission path for agent proposals (D3, D6), SoD rule (D4), machine-credential ceiling (D5), audit (D8).
+4. Submission path for agent proposals (D3, D6), SoD rule (D4), machine-credential ceiling (D5), audit (D8), approval digest and nonce (D10), proposal rate limit and pre-filter (D11).
 5. Approval screen shows the proposer kind and the referenced evidence.
-6. Tests: an agent proposal is never `approved` without a human decision; the accountable owner cannot approve; free-text fields are refused; a machine credential cannot `operate`.
+6. Tests: an agent proposal is never `approved` without a human decision; the accountable owner cannot approve; free-text fields are refused; a machine credential cannot `operate`; a row whose `parameters` change after approval is not dispatched and is refused by the OMES runner (digest mismatch); a replayed nonce and an expired approval are refused; a proposal burst over the limit is refused with an audit row.
+7. OMES: the job runner recomputes and checks `approval_digest`, keeps a consumed-nonce store, and adds negative tests in the style of AgentDojo/InjecAgent for exfiltration through allowed operations and approval substitution [R2, R4, R7].
 
 ## Open questions for the owner
 
@@ -80,3 +92,18 @@ Threats this decision answers: indirect and direct prompt injection (MITRE ATT&C
 - **Q2.** Should an agent be allowed to propose `rollback` and backup restore at all, or only lifecycle operations (`status`, `preflight`, `start`, `restart`, `update`, `backup`, `stop`)?
 - **Q3.** Is a single approver enough for agent proposals, or should destructive agent proposals need two (`quorum`)?
 - **Q4.** Should an unanswered agent proposal expire (for example after 24 hours) rather than wait indefinitely?
+
+## References
+
+Verified against the papers' full text through alphaXiv on 2026-11-14. Items marked _preprint_ are recent, low-citation work used for the mechanism they describe, not as settled evidence.
+
+- [R1] K. Greshake et al., "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection," 2023. <https://www.alphaxiv.org/abs/2302.12173>
+- [R2] E. Debenedetti et al., "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents," NeurIPS 2024 Datasets and Benchmarks. <https://www.alphaxiv.org/abs/2406.13352>
+- [R3] E. Debenedetti et al., "Defeating Prompt Injections by Design" (CaMeL), 2025. <https://www.alphaxiv.org/abs/2503.18813>
+- [R4] Q. Zhan et al., "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents," 2024. <https://www.alphaxiv.org/abs/2403.02691>
+- [R5] W. Zou et al., "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models," 2024. <https://www.alphaxiv.org/abs/2402.07867>
+- [R6] L. Beurer-Kellner et al., "Design Patterns for Securing LLM Agents against Prompt Injections," 2025. <https://www.alphaxiv.org/abs/2506.08837>
+- [R7] A. Arun Kumar, "Loopjacking: Hijacking Human-in-the-Loop Approval," 2026, _preprint_. <https://www.alphaxiv.org/abs/2609.21081>
+- [R8] Turan, "Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.08919>
+- [R9] Shahriar et al., "A Survey on Agentic Security: Applications, Threats and Defenses," 2025. <https://www.alphaxiv.org/abs/2510.06445>
+- [R10] Weng, "What You Approve Is What Executes: Consent Integrity for Black-Box LLM Agents," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.02668>

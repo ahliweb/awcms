@@ -91,6 +91,11 @@ import {
   type TransitionAction
 } from "./booking-reservation-service";
 import type { ReservationView } from "./booking-reservation-directory";
+import {
+  isWorkerConnection,
+  isWorkerTransitionAction,
+  workerTransitionReservation
+} from "./booking-worker-transition";
 
 type Sql = Bun.SQL;
 
@@ -133,7 +138,7 @@ function refused(code: string): { ok: false; reason: BookingRefusal } {
 }
 
 function outcomeOf(
-  reservation: ReservationView,
+  reservation: Pick<ReservationView, "id" | "status" | "holdExpiresAt">,
   replayed: boolean
 ): BookingOutcome {
   return {
@@ -184,7 +189,14 @@ async function once(
   idempotencyKey: string,
   actor: string,
   payload: unknown,
-  produce: () => Promise<BookingOutcome>
+  produce: () => Promise<BookingOutcome>,
+  /**
+   * False for the worker role: it may READ the store (a replay or a conflict is
+   * honoured) but holds no INSERT on it (`sql/009`/`sql/022`), and the narrow
+   * function of `sql/388` writes none. Its retry safety is layer 2, the state
+   * check (asking for the state already reached writes nothing).
+   */
+  store: boolean = true
 ): Promise<BookingOutcome> {
   const requestHash = computeRequestHash({
     actor,
@@ -224,7 +236,7 @@ async function once(
   try {
     const produced = await produce();
 
-    if (produced.ok) {
+    if (produced.ok && store) {
       await saveIdempotencyRecord(
         tx,
         tenantId,
@@ -528,6 +540,12 @@ async function transition(
   },
   reasonCode: string | null
 ): Promise<BookingOutcome> {
+  // Confirm and cancel as the background-job role go through the narrow function
+  // of sql/388 (Issue #1278); every other role, and every other verb, run
+  // `transitionReservation`.
+  const asWorker =
+    isWorkerTransitionAction(action) && (await isWorkerConnection(tx));
+
   return once(
     tx,
     input.tenantId,
@@ -536,14 +554,24 @@ async function transition(
     input.actorTenantUserId,
     withoutBookkeeping(input),
     async () => {
-      const result = await transitionReservation(
-        tx,
-        // A transition claims nothing: no staff constraint is intended here.
-        contextOf(input, NO_OP_STAFF_AVAILABILITY),
-        input.reservationId,
-        action,
-        { reasonCode }
-      );
+      // A transition claims nothing: no staff constraint is intended here.
+      const context = contextOf(input, NO_OP_STAFF_AVAILABILITY);
+      const result =
+        asWorker && isWorkerTransitionAction(action)
+          ? await workerTransitionReservation(
+              tx,
+              context,
+              input.reservationId,
+              action,
+              { reasonCode }
+            )
+          : await transitionReservation(
+              tx,
+              context,
+              input.reservationId,
+              action,
+              { reasonCode }
+            );
 
       if (result.outcome === "ok") {
         return outcomeOf(result.reservation, result.replayed);
@@ -552,7 +580,8 @@ async function transition(
       return result.outcome === "not_found"
         ? refused("RESERVATION_NOT_FOUND")
         : refused(result.code);
-    }
+    },
+    !asWorker
   );
 }
 

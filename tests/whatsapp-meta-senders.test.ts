@@ -13,6 +13,7 @@ import {
 import { computeMetaSignature } from "../src/modules/channel-accounts/application/webhook-subscription-directory";
 import { validateCreateWebhookSubscription } from "../src/modules/channel-accounts/domain/channel-accounts-validation";
 import {
+  META_ENTRY_MAX_AGE_MS,
   classifyMetaAccountUpdate,
   decideMetaSend,
   isServiceWindowOpen,
@@ -23,6 +24,7 @@ import {
 } from "../src/modules/whatsapp-delivery/domain/meta-cloud-policy";
 import { validateMetaTemplateRecord } from "../src/modules/whatsapp-delivery/domain/whatsapp-validation";
 import { createMetaCloudWhatsappProvider } from "../src/modules/whatsapp-delivery/infrastructure/meta-cloud-provider";
+import { WHATSAPP_WEBHOOK_RECEIPT_RETENTION_DAYS } from "../src/modules/whatsapp-delivery/application/whatsapp-queue-purge";
 import {
   WORKER_PURGE_POLICIES,
   evaluateWorkerPurgePolicies
@@ -345,7 +347,10 @@ describe("the webhook payload is read within the token's binding", () => {
   // message is ignored, never an `Invalid Date` window.
   test.each([
     ["the year 2100", 4102444800, ["account", "inbound", "template"]],
-    ["1e300", 1e300, ["account", "template"]],
+    // #1298 L2: an unreadable time is no stated time, so the WABA-level changes
+    // are refused (they used to be applied as "now"); the unreadable inbound
+    // timestamp is ignored as before.
+    ["1e300", 1e300, []],
     [
       "a twelve-digit string far in the future",
       "999999999999",
@@ -427,6 +432,92 @@ describe("the webhook payload is read within the token's binding", () => {
     const account = parsed.actions[0] as { eventAt: Date };
 
     expect(account.eventAt.getTime()).toBe(now.getTime() - 3_600_000);
+  });
+});
+
+// #1298 L2: a captured signed body must not apply again once its receipt is
+// gone (purged after eight days, or recorded under a rotated token's older
+// subscription). The WABA-level changes need a STATED entry.time inside the
+// horizon, which sits strictly below the receipt retention.
+describe("the entry.time replay horizon (#1298 L2)", () => {
+  const binding = { wabaId: "222", phoneNumberId: "111" };
+  const now = new Date("2026-11-11T12:00:00Z");
+  const payload = (entry: Record<string, unknown>) => ({
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: "222",
+        ...entry,
+        changes: [
+          {
+            field: "message_template_status_update",
+            value: {
+              event: "APPROVED",
+              message_template_category: "MARKETING",
+              message_template_name: "promo",
+              message_template_language: "en_US"
+            }
+          },
+          { field: "account_update", value: { event: "DISABLED_UPDATE" } },
+          {
+            field: "phone_number_quality_update",
+            value: {
+              display_phone_number: "1",
+              event: "UPGRADE",
+              current_limit: "TIER_1K"
+            }
+          },
+          {
+            field: "messages",
+            value: {
+              metadata: { phone_number_id: "111" },
+              statuses: [{ id: "wamid.AAA", status: "read" }]
+            }
+          }
+        ]
+      }
+    ]
+  });
+  const kinds = (entry: Record<string, unknown>) =>
+    parseMetaWebhook(payload(entry), binding, now)
+      .actions.map((action) => action.kind)
+      .sort();
+  const seconds = (ageMs: number) => Math.floor((now.getTime() - ageMs) / 1000);
+
+  test("the horizon is strictly below the receipt retention, so the two overlap", () => {
+    expect(META_ENTRY_MAX_AGE_MS).toBeLessThan(
+      WHATSAPP_WEBHOOK_RECEIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000
+    );
+    // Meta retries for up to seven days: a genuine retry is never refused.
+    expect(META_ENTRY_MAX_AGE_MS).toBeGreaterThanOrEqual(
+      7 * 24 * 60 * 60 * 1000
+    );
+  });
+
+  test("an entry inside the horizon applies all of its changes", () => {
+    expect(kinds({ time: seconds(6 * 24 * 60 * 60 * 1000) })).toEqual([
+      "account",
+      "limit",
+      "status",
+      "template"
+    ]);
+  });
+
+  test("an entry older than the horizon changes no WABA state; its status still reads (forward-only by rank)", () => {
+    const parsed = parseMetaWebhook(
+      payload({ time: seconds(META_ENTRY_MAX_AGE_MS + 60_000) }),
+      binding,
+      now
+    );
+
+    expect(parsed.actions.map((action) => action.kind)).toEqual(["status"]);
+    expect(parsed.ignored).toBe(3);
+  });
+
+  test("an entry with no stated time (a captured body stripped of it) changes no WABA state either", () => {
+    expect(kinds({})).toEqual(["status"]);
+    expect(kinds({ time: "not-a-number" })).toEqual(["status"]);
+    expect(kinds({ time: 0 })).toEqual(["status"]);
   });
 });
 
@@ -539,19 +630,33 @@ describe("security:readiness pins the worker's purge-only DELETE (review L-2)", 
   });
 
   test("every widening, weakening or loss is a finding (mutations go red)", () => {
+    // Mutates ONE policy (by index) and keeps the others, so each case yields
+    // exactly one finding.
+    const change =
+      (index: number, patch: Partial<(typeof exact)[number]>) =>
+      (rows: typeof exact) =>
+        rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    const drop = (index: number) => (rows: typeof exact) =>
+      rows.filter((_, i) => i !== index);
     const mutations: ((rows: typeof exact) => typeof exact)[] = [
-      (rows) => rows.slice(1),
-      (rows) => [{ ...rows[0]!, restrictive: false }, rows[1]!],
-      (rows) => [{ ...rows[0]!, command: "*" }, rows[1]!],
-      (rows) => [{ ...rows[0]!, worker_only: false }, rows[1]!],
-      (rows) => [
-        {
-          ...rows[0]!,
-          expression: "(last_inbound_at < (now() - '00:00:00'::interval))"
-        },
-        rows[1]!
-      ],
-      (rows) => [rows[0]!, { ...rows[1]!, expression: "true" }]
+      drop(0),
+      drop(2),
+      change(0, { restrictive: false }),
+      change(0, { command: "*" }),
+      change(0, { worker_only: false }),
+      change(0, {
+        expression: "(last_inbound_at < (now() - '00:00:00'::interval))"
+      }),
+      change(1, { expression: "true" }),
+      // sql/394 (audit LOW-1): the queue policy loses its status or its age half,
+      // is made permissive, or is widened.
+      change(2, { expression: "(updated_at < (now() - '7 days'::interval))" }),
+      change(2, {
+        expression:
+          "(status = ANY (ARRAY['sent'::text, 'failed'::text, 'cancelled'::text, 'expired'::text]))"
+      }),
+      change(2, { restrictive: false }),
+      change(2, { expression: "true" })
     ];
 
     for (const mutate of mutations) {
