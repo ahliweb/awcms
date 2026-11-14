@@ -2894,6 +2894,8 @@ export const ID_CATALOG: CompiledCatalog = {
   "Upload": ["Unggah"],
   "Upload an image": ["Unggah gambar"],
   "Uploaded": ["Diunggah"],
+  "Uploading an image needs all of media.create, media.verify and media.cancel, because a started upload must be finishable and cancellable. Your role is missing: {missing}. Ask a tenant administrator to grant them.": ["Mengunggah gambar memerlukan media.create, media.verify, dan media.cancel sekaligus, karena unggahan yang dimulai harus bisa diselesaikan dan dibatalkan. Peran Anda belum memiliki: {missing}. Mintalah administrator tenant untuk memberikannya."],
+  "Uploading is unavailable for your role": ["Pengunggahan tidak tersedia untuk peran Anda"],
   "Upstream project": ["Proyek hulu"],
   "Usable now": ["Dapat dipakai sekarang"],
   "Usage rights": ["Hak penggunaan"],
