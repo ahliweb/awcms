@@ -38,17 +38,19 @@ const NO_LEAD_DATA =
  *
  * ## Status
  *
- * `experimental` and OFF at three levels: the deployment switch
- * `CRM_FOLLOW_UP_ENABLED`, Module Management's per-tenant enable, and the
- * module's own tenant switch (default off). It declares no `navigation` entry:
- * the worklist screen is a recorded follow-up (a nav entry without a page is a
- * permanent 404), and every route is default-deny.
+ * `active`: the worklist, task detail and rules screens
+ * (`/admin/crm-follow-up`, `/{id}`, `/rules`) land with the `navigation` entry
+ * in the same change (ADR-0021 criterion 1). The capability itself ships INERT,
+ * off at three levels: the deployment switch `CRM_FOLLOW_UP_ENABLED`, Module
+ * Management's per-tenant enable, and the module's own tenant switch (default
+ * off); with the deployment switch off the screens say so. Every route is
+ * default-deny.
  */
 export const crmFollowUpModule = defineModule({
   key: CRM_FOLLOW_UP_MODULE_KEY,
   name: "CRM Follow-up",
   version: "0.1.0",
-  status: "experimental",
+  status: "active",
   description:
     "Rule-versioned follow-up tasks for STAFF, keyed by crm_leads events (Issue #1165, ADR-0159, extending ADR-0153 N5). A tenant defines rules whose revisions are IMMUTABLE once published (database trigger and no UPDATE grant): a CLOSED trigger (lead created, stage entered, lead assigned) with optional pipeline, stage-category and stage-key filters, a due offset and an optional escalation offset in WORKING minutes over the revision's own calendar (IANA zone, working weekdays, daily window, holidays), an assignee mode (the lead's owner or a fixed user), which staff notices to send and a per-lead cap on open tasks. No expression language. A read-only simulation evaluates a draft revision against a sample trigger and writes nothing. A descriptor-declared consumer creates at most one task per (rule, source event), reassigns lead-owner tasks when the owner changes, and records STOP SIGNALS from conversion, loss and merge; staff record reply, consent-withdrawn, sender-blocked and manual stops. A stop cancels the lead's open tasks and pending notices and WINS every race: creation, stop, reassignment and dispatch serialise on a per-lead advisory lock, and a database trigger refuses a task for a stopped lead. Tasks move open -> escalated -> completed/cancelled with optimistic concurrency, a closed outcome and an append-only action history. `crm-follow-up:dispatch` escalates overdue tasks and hands due notices to the existing workflow_notification port (e-mail, three fixed categories whose variables cannot carry anything about the lead) after re-checking the task, the stop signals, that the recipient is still an ACTIVE user, quiet hours and an hourly per-recipient cap. Nothing is ever sent to the lead; no lead copy is stored; no second workflow engine, no cross-channel facade.",
   dependencies: [
@@ -113,6 +115,20 @@ export const crmFollowUpModule = defineModule({
       environmentNotes:
         "Database-only operation, no external network dependency and no credential: the port's enqueue adds one row to the e-mail module's outbox, sent later by `email:dispatch`. Runs as `awcms_worker` under a per-tenant context with the grants of sql/369 (no rule or revision write, no DELETE) and the e-mail category allow-list of sql/371. Inert (visits no tenant) unless CRM_FOLLOW_UP_ENABLED=true; a tenant is visited only when Module Management and its own switch are on. Bounded per-tenant passes (50 items) in the maintenance work class; per-lead advisory lock plus SKIP LOCKED, safe alongside request traffic. `--dry-run` counts the escalations and notices due now.",
       safeInOfflineLan: true
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_crm_follow_up",
+      path: "/admin/crm-follow-up",
+      order: 86,
+      requiredPermission: "crm_follow_up.tasks.read"
+    },
+    {
+      labelKey: "admin.layout.nav_crm_follow_up_rules",
+      path: "/admin/crm-follow-up/rules",
+      order: 87,
+      requiredPermission: "crm_follow_up.rules.read"
     }
   ],
   permissions: [

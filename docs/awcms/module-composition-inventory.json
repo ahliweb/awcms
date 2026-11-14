@@ -113,7 +113,7 @@
       "key": "crm_follow_up",
       "name": "CRM Follow-up",
       "version": "0.1.0",
-      "status": "experimental",
+      "status": "active",
       "type": "domain",
       "dependencies": [
         "tenant_admin",
@@ -137,7 +137,7 @@
         }
       ],
       "permissionCount": 5,
-      "navigationCount": 0,
+      "navigationCount": 2,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

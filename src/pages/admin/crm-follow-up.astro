@@ -1,0 +1,397 @@
+---
+/**
+ * CRM follow-up — the staff worklist (Issue #1165, ADR-0159, ADR-0149 data
+ * page).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the READ side of the follow-up queue: the tasks rules created from lead
+ * events, with who they are assigned to, when they are due and whether they are
+ * overdue. "Assigned to me" is the daily worklist; "Overdue" is the overdue
+ * queue. One task's history, notices and actions are on
+ * `/admin/crm-follow-up/{id}`; the rules and the tenant switch are on
+ * `/admin/crm-follow-up/rules`.
+ *
+ * It shows NOTHING about the prospect: a task carries an opaque lead id, a
+ * tenant-authored title, closed codes and instants (ADR-0153: no lead copy). A
+ * staff member is "You" or "Another staff member", never resolved to a name.
+ *
+ * ## It shows exactly what the API shows
+ *
+ * The list runs, through `loadWorklist`, the SAME `listTasks` the API route
+ * uses. The status, assignee and overdue filters are pushed to SQL. By default
+ * only live work (open and escalated) is loaded: the queue is ordered by due
+ * time, so completed history would otherwise fill the bounded load and push
+ * live tasks off it.
+ *
+ * ## Paging
+ *
+ * The loader reads at most 200 tasks per status (two keyset pages of the API's
+ * own query, soonest due first) and the screen sorts and slices them in memory
+ * through the ADR-0149 contract. The totals are exact for the loaded rows; when
+ * more exist the page says so instead of showing a total it cannot stand
+ * behind.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  taskStatusLabel,
+  taskStatusTone,
+  triggerKindLabel
+} from "../../lib/i18n/labels/crm-follow-up";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
+import {
+  STATUS_VIEW_ALL,
+  loadWorklist
+} from "../../modules/crm-follow-up/application/screen-loaders";
+import type { TaskView } from "../../modules/crm-follow-up/application/task-engine";
+import { TASK_STATUSES } from "../../modules/crm-follow-up/domain/crm-follow-up-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims, and held
+ * equal to the module's own guard by the page-contract test.
+ */
+const READ_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "tasks",
+  action: "read"
+} as const;
+/** Only to decide whether to LINK to the rules screen; that screen gates itself. */
+const RULES_READ_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "rules",
+  action: "read"
+} as const;
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/crm-follow-up";
+const SPEC: DataPageSpec = {
+  filterKeys: ["status", "assignee", "overdue"],
+  sortKeys: ["due", "status"],
+  defaultSort: "due",
+  defaultDir: "asc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    // The listing chain is the module's loader, not inline here: it is what the
+    // behavioural integration test runs as a limited viewer.
+    loadWorklist({
+      context: { tx, tenantId: ssr.tenantId, auth, now: new Date() },
+      filters: query.filters,
+      rulesReadGuard: RULES_READ_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-follow-up.astro: failed to load the worklist",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "an empty queue" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const tasks: TaskView[] = data?.tasks ?? [];
+const statusLabel = (status: string) => taskStatusLabel(t, status);
+
+function assigneeText(task: TaskView): string {
+  if (task.assigneeTenantUserId === null) return t("Unassigned");
+
+  return task.assigneeTenantUserId === data?.me
+    ? t("You")
+    : t("Another staff member");
+}
+
+// The search matches what the page SHOWS: the title and the status label.
+const needle = query.q.toLowerCase();
+const matching = tasks.filter(
+  (task) =>
+    needle === "" ||
+    task.title.toLowerCase().includes(needle) ||
+    statusLabel(task.status).toLowerCase().includes(needle)
+);
+const page = sliceKeyset(matching, {
+  sortValue: (task) => (query.sort === "status" ? task.status : task.dueAt),
+  id: (task) => task.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(PATH, SPEC, query, change);
+const sortState = (key: string) => buildSortHeaderState(PATH, SPEC, query, key);
+const clearHref = buildClearFiltersHref(PATH, SPEC, query);
+const chips = buildActiveFilterChips(PATH, SPEC, query, (key, value) =>
+  key === "q"
+    ? t("Search: {value}", { value })
+    : key === "status"
+      ? t("Status: {value}", {
+          value:
+            value === STATUS_VIEW_ALL ? t("All statuses") : statusLabel(value)
+        })
+      : key === "assignee"
+        ? t("Assignee: {value}", { value: t("Assigned to me") })
+        : t("Due: {value}", { value: t("Overdue") })
+);
+const summary = filtered
+  ? tn(
+      "{count} task matches your search and filters",
+      "{count} tasks match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
+---
+
+<AdminLayout
+  title={t("Follow-up worklist")}
+  description={t(
+    "The follow-up tasks staff have to do, who they are assigned to and when they are due. Nothing about the prospect is shown."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-denied">
+      {t("You do not have permission to view follow-up tasks.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-error">
+      {t(
+        "The follow-up worklist could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-disabled">
+      {t(
+        "Follow-up tasks are switched off on this deployment, so no task is created or listed."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="crm-follow-up-title"
+    >
+      <h2 class="admin-section-title" id="crm-follow-up-title">
+        {t("Tasks")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "Soonest due first. Choose Assigned to me for your daily worklist, or Overdue for what is late."
+        )}
+        {data.canSeeRules && (
+          <>
+            {" "}
+            <a href={`${PATH}/rules`} id="crm-follow-up-rules-link">
+              {t("Rules and settings")}
+            </a>
+          </>
+        )}
+      </p>
+
+      {!data.tenantEnabled && (
+        <p class="state-notice" id="crm-follow-up-tenant-off">
+          {t(
+            "Follow-up is switched off for this organisation. No new task is created, and tasks cannot be completed or cancelled until it is switched on."
+          )}
+        </p>
+      )}
+
+      {data.more && (
+        <p class="state-notice" id="crm-follow-up-truncated">
+          {t(
+            "There are more tasks than this screen loads. Showing the {count} due soonest. The status, assignee and overdue filters cover every task; search covers only these. The API lists the rest.",
+            { count: tasks.length }
+          )}
+        </p>
+      )}
+
+      <DataListToolbar
+        action={PATH}
+        idPrefix="crm-follow-up"
+        landmarkLabel={t("Search tasks")}
+        searchLabel={t("Search")}
+        q={query.q}
+        filters={[
+          {
+            name: "status",
+            label: t("Status"),
+            value: query.filters.status ?? "",
+            allLabel: t("Open and escalated"),
+            options: [
+              ...TASK_STATUSES.map((status) => ({
+                value: status,
+                label: statusLabel(status)
+              })),
+              { value: STATUS_VIEW_ALL, label: t("All statuses") }
+            ]
+          },
+          {
+            name: "assignee",
+            label: t("Assignee"),
+            value: query.filters.assignee ?? "",
+            allLabel: t("Anyone"),
+            options: [{ value: "me", label: t("Assigned to me") }]
+          },
+          {
+            name: "overdue",
+            label: t("Due"),
+            value: query.filters.overdue ?? "",
+            allLabel: t("Any due date"),
+            options: [{ value: "true", label: t("Overdue") }]
+          }
+        ]}
+        sort={{
+          label: t("Sort by"),
+          value: query.sort,
+          options: [
+            { value: "due", label: t("Due") },
+            { value: "status", label: t("Status") }
+          ],
+          dirLabel: t("Sort order"),
+          dir: query.dir,
+          ascLabel: t("Ascending"),
+          descLabel: t("Descending")
+        }}
+        preserve={
+          query.limit === DEFAULT_DATA_PAGE_SIZE
+            ? {}
+            : { limit: String(query.limit) }
+        }
+        chips={chips}
+        clearHref={clearHref}
+        summary={summary}
+        submitLabel={t("Search")}
+        clearLabel={t("Clear filters")}
+        chipsLabel={t("Active filters")}
+        removeLabel={(label) => t("Remove filter: {label}", { label })}
+      />
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="crm-follow-up-table-caption"
+      >
+        <table class="data-table data-table--stack" id="crm-follow-up-table">
+          <caption id="crm-follow-up-table-caption">
+            {tn("{count} task", "{count} tasks", page.total, {
+              count: page.total
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Task")}</th>
+              <SortableHeader label={t("Status")} {...sortState("status")} />
+              <th scope="col">{t("Assignee")}</th>
+              <SortableHeader label={t("Due")} {...sortState("due")} />
+              <th scope="col">{t("Started by")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.items.length === 0 ? (
+              <DataEmptyState
+                colspan={5}
+                filtered={filtered}
+                query={query.q}
+                clearHref={clearHref}
+                title={t("No follow-up tasks")}
+                text={t(
+                  "Tasks appear here when a rule matches a lead event, such as a lead being created, entering a stage or being assigned."
+                )}
+              />
+            ) : (
+              page.items.map((task) => (
+                <tr data-task-id={task.id}>
+                  <td data-label={t("Task")}>
+                    <a href={`${PATH}/${task.id}`}>{task.title}</a>
+                    <span class="cell-muted"> {task.leadId.slice(0, 8)}</span>
+                  </td>
+                  <td data-label={t("Status")} data-status={task.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={taskStatusTone(task.status)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {statusLabel(task.status)}
+                    </span>
+                  </td>
+                  <td data-label={t("Assignee")}>{assigneeText(task)}</td>
+                  <td data-label={t("Due")} data-overdue={String(task.overdue)}>
+                    {task.overdue && (
+                      <span class="admin-status-pill" data-tone="danger">
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {t("Overdue")}
+                      </span>
+                    )}{" "}
+                    {formatUtcMinute(task.dueAt)}
+                  </td>
+                  <td data-label={t("Started by")}>
+                    {triggerKindLabel(t, task.triggerKind)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <KeysetPager
+        prevHref={
+          page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+        }
+        nextHref={
+          page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+        }
+        from={page.from}
+        to={page.to}
+        total={data.more ? undefined : page.total}
+        limit={query.limit}
+        sizes={DATA_PAGE_SIZES.map((value) => ({
+          value,
+          href: href({ limit: value })
+        }))}
+      />
+    </section>
+  )}
+</AdminLayout>

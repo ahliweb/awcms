@@ -1,0 +1,496 @@
+---
+/**
+ * CRM follow-up rules and the tenant switch (Issue #1165, ADR-0159).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the READ side of the rule catalogue: every rule with its current
+ * revision, and, for the rule opened with `?rule=`, the whole immutable
+ * revision history. A revision never changes once published, so what is shown
+ * is exactly what will run.
+ *
+ * The one write is the tenant's own switch (`PATCH /settings`, `rules.configure`,
+ * audited at warning, `Idempotency-Key`). Creating a rule, publishing a revision,
+ * archiving and the simulation have API endpoints but no form here yet: the rule
+ * editor is the recorded follow-up (module README), and nothing here pretends to
+ * offer it.
+ *
+ * It shows NOTHING about any prospect: a rule describes a process. A person a
+ * rule names is "You" or "Another staff member".
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  assigneeModeLabel,
+  stageCategoryLabel,
+  triggerKindLabel,
+  weekdayLabel
+} from "../../../lib/i18n/labels/crm-follow-up";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import {
+  minutesToClock,
+  offsetParts
+} from "../../../lib/ui/crm-follow-up-screen";
+import { asUuid } from "../../../modules/crm-follow-up/application/route-support";
+import { loadRules } from "../../../modules/crm-follow-up/application/screen-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-follow-up";
+const PATH = `${LIST_PATH}/rules`;
+const selectedRuleId = asUuid(Astro.url.searchParams.get("rule"));
+
+/**
+ * The guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to
+ * `CRM_FOLLOW_UP_GUARDS` and to the endpoint that enforces it.
+ */
+const READ_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "rules",
+  action: "read"
+} as const;
+const CONFIGURE_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "rules",
+  action: "configure"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    loadRules({
+      context: { tx, tenantId: ssr.tenantId, auth, now: new Date() },
+      selectedRuleId,
+      configureGuard: CONFIGURE_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-follow-up/rules.astro: failed to load the rules",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const rules = data?.rules ?? [];
+const selected = data?.selected ?? null;
+const revision = selected?.rule.currentRevision ?? null;
+const definition = revision?.definition ?? null;
+const me = data?.me ?? null;
+
+function personText(id: string | null): string {
+  if (id === null) return "—";
+
+  return id === me ? t("You") : t("Another staff member");
+}
+
+function durationText(totalMinutes: number): string {
+  const { hours, minutes } = offsetParts(totalMinutes);
+
+  return t("{hours} h {minutes} min of working time", { hours, minutes });
+}
+---
+
+<AdminLayout
+  title={t("Follow-up rules")}
+  description={t(
+    "The rules that turn lead events into follow-up tasks, their immutable revisions, and the organisation's follow-up switch."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the worklist")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-rules-denied">
+      {t("You do not have permission to view follow-up rules.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-rules-error">
+      {t("The rules could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-rules-disabled">
+      {t("Follow-up tasks are switched off on this deployment.")}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-switch-title"
+        id="crm-follow-up-switch"
+        data-enabled={String(data.settings.enabled)}
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-switch-title">
+          {t("Follow-up for this organisation")}
+        </h2>
+
+        <p
+          id="crm-follow-up-switch-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <p>
+          <span
+            class="admin-status-pill"
+            data-tone={data.settings.enabled ? "success" : "neutral"}
+          >
+            <span class="admin-status-pill-dot" aria-hidden="true" />
+            {data.settings.enabled ? t("On") : t("Off")}
+          </span>
+        </p>
+        <p class="page-description">
+          {data.settings.enabled
+            ? t(
+                "Rules create tasks, due tasks are escalated and staff are notified."
+              )
+            : t(
+                "While follow-up is off no task is created and no notice is sent. Rules can still be read."
+              )}{" "}
+          {t("Staff notices per person per hour: {count}", {
+            count: data.settings.maxNoticesPerRecipientHour
+          })}
+        </p>
+
+        {data.canConfigure && (
+          <button
+            class="btn btn-secondary js-follow-up-switch"
+            type="button"
+            data-currently-on={String(data.settings.enabled)}
+          >
+            {data.settings.enabled
+              ? t("Switch follow-up off")
+              : t("Switch follow-up on")}
+          </button>
+        )}
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-rules-title"
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-rules-title">
+          {t("Rules")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
+          )}
+        </p>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-follow-up-rules-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-follow-up-rules-table"
+          >
+            <caption id="crm-follow-up-rules-caption">
+              {tn("{count} rule", "{count} rules", rules.length, {
+                count: rules.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Rule")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Starts when")}</th>
+                <th scope="col">{t("Due after")}</th>
+                <th scope="col">{t("Revision")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.length === 0 ? (
+                <tr>
+                  <td colspan={5}>
+                    <span class="cell-muted">
+                      {t("No follow-up rules yet.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                rules.map((rule) => (
+                  <tr data-rule-id={rule.id} data-status={rule.status}>
+                    <td data-label={t("Rule")}>
+                      <a href={`${PATH}?rule=${rule.id}`}>{rule.name}</a>
+                      <span class="cell-muted"> {rule.code}</span>
+                    </td>
+                    <td data-label={t("Status")}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          rule.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {rule.status === "active" ? t("Active") : t("Archived")}
+                      </span>
+                    </td>
+                    <td data-label={t("Starts when")}>
+                      {rule.currentRevision
+                        ? triggerKindLabel(
+                            t,
+                            rule.currentRevision.definition.trigger.kind
+                          )
+                        : "—"}
+                    </td>
+                    <td data-label={t("Due after")}>
+                      {rule.currentRevision
+                        ? durationText(
+                            rule.currentRevision.definition.dueAfterMinutes
+                          )
+                        : "—"}
+                    </td>
+                    <td data-label={t("Revision")}>
+                      {rule.currentRevisionNumber}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {data.selectedNotFound && (
+        <p class="state-notice" id="crm-follow-up-rule-not-found">
+          {t("That rule was not found.")}
+        </p>
+      )}
+
+      {selected && definition && revision && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-follow-up-rule-title"
+          id="crm-follow-up-rule"
+          data-rule-id={selected.rule.id}
+        >
+          <h2 class="admin-section-title" id="crm-follow-up-rule-title">
+            {selected.rule.name}
+            <span class="cell-muted"> {selected.rule.code}</span>
+          </h2>
+          <dl class="admin-detail-list" id="crm-follow-up-rule-summary">
+            <dt>{t("Starts when")}</dt>
+            <dd>{triggerKindLabel(t, definition.trigger.kind)}</dd>
+            {definition.trigger.stageCategory !== null && (
+              <>
+                <dt>{t("Only for stage category")}</dt>
+                <dd>
+                  {stageCategoryLabel(t, definition.trigger.stageCategory)}
+                </dd>
+              </>
+            )}
+            {definition.trigger.stageKey !== null && (
+              <>
+                <dt>{t("Only for stage")}</dt>
+                <dd>{definition.trigger.stageKey}</dd>
+              </>
+            )}
+            {definition.trigger.pipelineId !== null && (
+              <>
+                <dt>{t("Only for pipeline")}</dt>
+                <dd>
+                  <span class="cell-muted">
+                    {definition.trigger.pipelineId}
+                  </span>
+                </dd>
+              </>
+            )}
+            <dt>{t("Task title")}</dt>
+            <dd>{definition.taskTitle}</dd>
+            <dt>{t("Assigned to")}</dt>
+            <dd>
+              {assigneeModeLabel(t, definition.assignee.mode)}
+              {definition.assignee.tenantUserId !== null && (
+                <span class="cell-muted">
+                  {" "}
+                  ({personText(definition.assignee.tenantUserId)})
+                </span>
+              )}
+            </dd>
+            <dt>{t("Due after")}</dt>
+            <dd>{durationText(definition.dueAfterMinutes)}</dd>
+            <dt>{t("Escalates after")}</dt>
+            <dd>
+              {definition.escalation === null
+                ? t("Never")
+                : durationText(definition.escalation.afterMinutes)}
+              {definition.escalation?.recipientTenantUserId != null && (
+                <span class="cell-muted">
+                  {" "}
+                  ({personText(definition.escalation.recipientTenantUserId)})
+                </span>
+              )}
+            </dd>
+            <dt>{t("Staff notices")}</dt>
+            <dd>
+              {[
+                definition.notify.onAssign ? t("When assigned") : null,
+                definition.notify.onDue ? t("When due") : null
+              ]
+                .filter((item) => item !== null)
+                .join(", ") || t("None")}
+            </dd>
+            <dt>{t("Open tasks per lead, at most")}</dt>
+            <dd>{definition.maxOpenPerLead}</dd>
+            <dt>{t("Working time")}</dt>
+            <dd>
+              {definition.calendar.workingDays
+                .map((day) => weekdayLabel(t, day))
+                .join(", ")}{" "}
+              {minutesToClock(definition.calendar.workStartMinute)}-
+              {minutesToClock(definition.calendar.workEndMinute)}{" "}
+              <span class="cell-muted">{definition.calendar.timeZone}</span>
+            </dd>
+            <dt>{t("Holidays")}</dt>
+            <dd>
+              {definition.calendar.holidays.length === 0
+                ? t("None")
+                : definition.calendar.holidays.join(", ")}
+            </dd>
+          </dl>
+
+          <h3 class="admin-section-title" id="crm-follow-up-revisions-title">
+            {t("Revisions")}
+          </h3>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="crm-follow-up-revisions-title"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="crm-follow-up-revisions-table"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">{t("Revision")}</th>
+                  <th scope="col">{t("Published")}</th>
+                  <th scope="col">{t("By")}</th>
+                  <th scope="col">{t("Fingerprint")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...selected.revisions]
+                  .sort((a, b) => b.revisionNumber - a.revisionNumber)
+                  .map((item) => (
+                    <tr
+                      data-revision={item.revisionNumber}
+                      data-current={String(
+                        item.revisionNumber ===
+                          selected.rule.currentRevisionNumber
+                      )}
+                    >
+                      <td data-label={t("Revision")}>
+                        {item.revisionNumber}
+                        {item.revisionNumber ===
+                          selected.rule.currentRevisionNumber && (
+                          <span class="cell-muted"> {t("Current")}</span>
+                        )}
+                      </td>
+                      <td data-label={t("Published")}>
+                        {formatUtcMinute(item.publishedAt)}
+                      </td>
+                      <td data-label={t("By")}>
+                        {personText(item.publishedBy)}
+                      </td>
+                      <td data-label={t("Fingerprint")}>
+                        <span class="cell-muted">
+                          {item.definitionHash.slice(0, 12)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import { switchBody } from "../../../lib/ui/crm-follow-up-screen";
+
+  const switchError = messageBox("crm-follow-up-switch-error-box");
+  const BASE = "/api/v1/crm-follow-up";
+
+  // The switch is high-risk and requires the header. One key per distinct
+  // (url, body): a retry replays, the opposite switch gets a new key.
+  const keyFor = createIdempotencyKeySource();
+
+  function failure(errorCode: string | null): string {
+    switch (errorCode) {
+      case "INTERACTIVE_SESSION_REQUIRED":
+        return "This needs a signed-in person.";
+      case "ACCESS_DENIED":
+        return "You may not change the follow-up switch.";
+      default:
+        return "Could not save the change. Please try again.";
+    }
+  }
+
+  onAction(".js-follow-up-switch", async (button) => {
+    const url = `${BASE}/settings`;
+    const body = switchBody(button.dataset.currentlyOn === "true");
+
+    if (
+      !(await confirmAction(
+        body.enabled
+          ? "Switch follow-up on? Rules will start creating tasks and staff will receive notices."
+          : "Switch follow-up off? No task will be created and no notice sent until it is switched on again."
+      ))
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      switchError,
+      () =>
+        sendJson("PATCH", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      failure
+    );
+  });
+</script>

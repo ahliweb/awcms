@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:28bbf9c7b637bc6f90bc16fe68e40791eedfba2ec084092fbaec84e9b84e9496 -->
+<!-- i18n-source-hash: sha256:d22aa4b1127456f2337ea01b6d08029934600b4734b3167199e7c3ff534faee3 -->
 
 # `crm_follow_up`
 
@@ -10,7 +10,19 @@ Ia **tidak pernah mengirim apa pun ke lead**, **tidak menyimpan salinan lead** (
 
 ## Status
 
-`experimental`, **mati di tiga tingkat**: `CRM_FOLLOW_UP_ENABLED=true` (deployment; bila tidak, setiap rute menjawab `503 CRM_FOLLOW_UP_DISABLED` setelah otorisasi, consumer mengabaikan setiap event, dan job tidak mengunjungi tenant mana pun), enable per tenant di Module Management, dan saklar tenant milik modul (`PATCH /api/v1/crm-follow-up/settings`, bawaan mati). Belum ada entri navigasi maupun layar admin (kelima permission ada di `NOT_YET_SCREENED`).
+`experimental`, **mati di tiga tingkat**: `CRM_FOLLOW_UP_ENABLED=true` (deployment; bila tidak, setiap rute menjawab `503 CRM_FOLLOW_UP_DISABLED` setelah otorisasi, consumer mengabaikan setiap event, dan job tidak mengunjungi tenant mana pun), enable per tenant di Module Management, dan saklar tenant milik modul (`PATCH /api/v1/crm-follow-up/settings`, bawaan mati). `active` dengan tiga layar admin (di bawah); bila saklar deployment mati, layar menjelaskannya, tidak gagal.
+
+## Layar admin
+
+Admin SISTEM ([ADR-0051](../../../docs/adr/0051-admin-screens-consolidated-in-awcms.md)), halaman data server-rendered ([ADR-0149](../../../docs/adr/0149-the-admin-data-page-is-a-server-rendered-keyset-paged-pattern-with-shared-primitives.md)). Tiap halaman membaca lewat `application/screen-loaders.ts`, yang memanggil fungsi direktori YANG SAMA dengan rute API, sehingga yang ditampilkan layar adalah yang ditampilkan API; tes integrasi perilaku menjalankan loader itu lewat chokepoint `loadAdminScreen` sungguhan dengan sesi sungguhan.
+
+| Layar                        | Permission   | Fungsinya                                                                                                                                                                                                                                                       |
+| ---------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/admin/crm-follow-up`       | `tasks.read` | Daftar kerja. Tampilan bawaan adalah pekerjaan yang masih hidup (terbuka dan dieskalasi, digabung menurut urutan tenggat); filter status, "ditugaskan kepada saya" (daftar harian, diselesaikan dari sesi), dan terlambat; keyset, muatan terbatas              |
+| `/admin/crm-follow-up/{id}`  | `tasks.read` | Satu tugas: ringkasan, riwayat append-only, pemberitahuan staf beserta penyelesaiannya yang tertutup, sinyal penghentian prospek. `tasks.update` menambah selesaikan (hasil tertutup) dan batalkan; `stop_signals.create` menambah "hentikan untuk prospek ini" |
+| `/admin/crm-follow-up/rules` | `rules.read` | Katalog aturan dan, dengan `?rule=`, definisi satu aturan beserta riwayat revisinya yang tak dapat diubah. `rules.configure` menambah saklar tenant (diaudit pada level warning, `Idempotency-Key`, konfirmasi)                                                 |
+
+Setiap penulisan membawa `Idempotency-Key`; penulisan tugas membawa `expectedVersion` (staf kedua mendapat `VERSION_CONFLICT`, bukan penimpaan diam-diam). Selama saklar tenant mati, kontrol dinonaktifkan beserta alasannya. "Tugaskan ulang" ditampilkan nonaktif: tak ada endpoint yang memindahkan tugas secara manual. Staf tampil sebagai "Anda" atau "Staf lain", bukan nama, dan tak ada data prospek yang dirender (memang tak disimpan). Tidak ada dimensi business scope untuk dibatasi: tugas hanya memuat id prospek buram, persis seperti `GET /tasks` mendaftar antrean tenant. Satu penyimpangan yang disengaja dari "apa yang ditampilkan API": status saklar tenant ditampilkan kepada pemegang `tasks.read` meski `GET /settings` menuntut `rules.read`; ia hanya satu boolean yang menjelaskan mengapa penulisan ditolak, dan pemegang `tasks.update` mengetahuinya dari `409 CRM_FOLLOW_UP_TENANT_DISABLED`.
 
 ## Cara kerja
 
@@ -43,6 +55,6 @@ Ia **tidak pernah mengirim apa pun ke lead**, **tidak menyimpan salinan lead** (
 
 ## Tindak lanjut tercatat
 
-- Layar admin SISTEM (daftar kerja, antrean terlambat, editor aturan dengan riwayat revisi dan simulasi, sinyal berhenti, saklar tenant) dan entri navigasinya, yang mengubah modul menjadi `active`.
+- Editor aturan di `/admin/crm-follow-up/rules`: membuat aturan, menerbitkan revisi, mengarsipkan, dan formulir simulasi. Endpoint-nya ada (`POST /rules`, `/rules/{id}/revisions`, `/rules/{id}/archive`, `POST /rules/simulate`); layar saat ini hanya baca untuk aturan dan menyatakannya.
 - Penyapuan retensi yang sadar status (ADR-0159 O4); sampai saat itu ketujuh tabel tercatat di `BOUNDED_BY_DESIGN`.
 - Sinyal berhenti karena balasan dan penarikan consent dari batas inbound (#1144/#1164) dan modul consent kanal, lewat port (O2); saat ini staf mencatatnya lewat API.

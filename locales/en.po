@@ -9547,3 +9547,418 @@ msgstr ""
 
 msgid "Refresh progress"
 msgstr ""
+
+msgid "Escalated"
+msgstr ""
+
+msgid "Reached the lead"
+msgstr ""
+
+msgid "No answer"
+msgstr ""
+
+msgid "Not interested"
+msgstr ""
+
+msgid "Lead created"
+msgstr ""
+
+msgid "Stage entered"
+msgstr ""
+
+msgid "Lead assigned"
+msgstr ""
+
+msgid "Lead converted"
+msgstr ""
+
+msgid "Lead lost"
+msgstr ""
+
+msgid "Lead merged"
+msgstr ""
+
+msgid "Reply received"
+msgstr ""
+
+msgid "Consent withdrawn"
+msgstr ""
+
+msgid "Sender blocked"
+msgstr ""
+
+msgid "Stopped by staff"
+msgstr ""
+
+msgid "Reassigned"
+msgstr ""
+
+msgid "Started by a rule"
+msgstr ""
+
+msgid "The lead's owner changed"
+msgstr ""
+
+msgid "The assignee is no longer active"
+msgstr ""
+
+msgid "Cancelled by staff"
+msgstr ""
+
+msgid "Stopped: {reason}"
+msgstr ""
+
+msgid "Assignment notice"
+msgstr ""
+
+msgid "Due notice"
+msgstr ""
+
+msgid "Escalation notice"
+msgstr ""
+
+msgid "Waiting to be sent"
+msgstr ""
+
+msgid "Handed to e-mail"
+msgstr ""
+
+msgid "Not sent"
+msgstr ""
+
+msgid "The task was closed"
+msgstr ""
+
+msgid "Follow-up for the lead was stopped"
+msgstr ""
+
+msgid "The recipient is no longer active"
+msgstr ""
+
+msgid "The task moved to someone else"
+msgstr ""
+
+msgid "The rule's calendar has no working time"
+msgstr ""
+
+msgid "No e-mail template is set up"
+msgstr ""
+
+msgid "The lead's owner"
+msgstr ""
+
+msgid "A fixed person"
+msgstr ""
+
+msgid "New"
+msgstr ""
+
+msgid "Working"
+msgstr ""
+
+msgid "Qualified"
+msgstr ""
+
+msgid "Converted"
+msgstr ""
+
+msgid "Lost"
+msgstr ""
+
+msgid "Disqualified"
+msgstr ""
+
+msgid "Monday"
+msgstr ""
+
+msgid "Tuesday"
+msgstr ""
+
+msgid "Wednesday"
+msgstr ""
+
+msgid "Thursday"
+msgstr ""
+
+msgid "Friday"
+msgstr ""
+
+msgid "Saturday"
+msgstr ""
+
+msgid "Sunday"
+msgstr ""
+
+msgid "Unassigned"
+msgstr ""
+
+msgid "You"
+msgstr ""
+
+msgid "Another staff member"
+msgstr ""
+
+msgid "Assignee: {value}"
+msgstr ""
+
+msgid "Assigned to me"
+msgstr ""
+
+msgid "Due: {value}"
+msgstr ""
+
+msgid "Follow-up worklist"
+msgstr ""
+
+msgid "The follow-up tasks staff have to do, who they are assigned to and when they are due. Nothing about the prospect is shown."
+msgstr ""
+
+msgid "You do not have permission to view follow-up tasks."
+msgstr ""
+
+msgid "The follow-up worklist could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Follow-up tasks are switched off on this deployment, so no task is created or listed."
+msgstr ""
+
+msgid "Soonest due first. Choose Assigned to me for your daily worklist, or Overdue for what is late."
+msgstr ""
+
+msgid "Rules and settings"
+msgstr ""
+
+msgid "Follow-up is switched off for this organisation. No new task is created, and tasks cannot be completed or cancelled until it is switched on."
+msgstr ""
+
+msgid "There are more tasks than this screen loads. Showing the {count} due soonest. The status, assignee and overdue filters cover every task; search covers only these. The API lists the rest."
+msgstr ""
+
+msgid "Search tasks"
+msgstr ""
+
+msgid "Open and escalated"
+msgstr ""
+
+msgid "Assignee"
+msgstr ""
+
+msgid "Anyone"
+msgstr ""
+
+msgid "Any due date"
+msgstr ""
+
+msgid "Task"
+msgstr ""
+
+msgid "Started by"
+msgstr ""
+
+msgid "No follow-up tasks"
+msgstr ""
+
+msgid "Tasks appear here when a rule matches a lead event, such as a lead being created, entering a stage or being assigned."
+msgstr ""
+
+msgid "Follow-up task"
+msgstr ""
+
+msgid "State, history and actions of one follow-up task. Nothing about the prospect is shown."
+msgstr ""
+
+msgid "Back to the worklist"
+msgstr ""
+
+msgid "The task could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Follow-up tasks are switched off on this deployment."
+msgstr ""
+
+msgid "That task was not found."
+msgstr ""
+
+msgid "Escalates"
+msgstr ""
+
+msgid "Escalated at {time}"
+msgstr ""
+
+msgid "Lead"
+msgstr ""
+
+msgid "Cancelled because"
+msgstr ""
+
+msgid "This module sends nothing to the lead. Staff notices go out by e-mail; contact the lead through your own channel, then record the result here."
+msgstr ""
+
+msgid "Follow-up is switched off for this organisation, so tasks cannot be completed or cancelled and stops cannot be recorded."
+msgstr ""
+
+msgid "This task is closed and cannot be changed."
+msgstr ""
+
+msgid "Complete task"
+msgstr ""
+
+msgid "Cancel task"
+msgstr ""
+
+msgid "Not available: a task follows the lead's owner (or the rule's fixed person). Change the lead's owner to move it."
+msgstr ""
+
+msgid "Stop follow-up for this lead"
+msgstr ""
+
+msgid "A stop is permanent. It cancels every open task of this lead and its waiting notices, and no new task is created for the lead."
+msgstr ""
+
+msgid "Record stop"
+msgstr ""
+
+msgid "By"
+msgstr ""
+
+msgid "No history yet."
+msgstr ""
+
+msgid "Staff notices"
+msgstr ""
+
+msgid "Notice"
+msgstr ""
+
+msgid "No staff notice was scheduled for this task."
+msgstr ""
+
+msgid "Stop signals for this lead"
+msgstr ""
+
+msgid "Follow-up for this lead has not been stopped."
+msgstr ""
+
+msgid "Stopped because"
+msgstr ""
+
+msgid "Lead event"
+msgstr ""
+
+msgid "{hours} h {minutes} min of working time"
+msgstr ""
+
+msgid "Follow-up rules"
+msgstr ""
+
+msgid "The rules that turn lead events into follow-up tasks, their immutable revisions, and the organisation's follow-up switch."
+msgstr ""
+
+msgid "You do not have permission to view follow-up rules."
+msgstr ""
+
+msgid "The rules could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Follow-up for this organisation"
+msgstr ""
+
+msgid "Rules create tasks, due tasks are escalated and staff are notified."
+msgstr ""
+
+msgid "While follow-up is off no task is created and no notice is sent. Rules can still be read."
+msgstr ""
+
+msgid "Staff notices per person per hour: {count}"
+msgstr ""
+
+msgid "Switch follow-up off"
+msgstr ""
+
+msgid "Switch follow-up on"
+msgstr ""
+
+msgid "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
+msgstr ""
+
+msgid "Starts when"
+msgstr ""
+
+msgid "Due after"
+msgstr ""
+
+msgid "Revision"
+msgstr ""
+
+msgid "No follow-up rules yet."
+msgstr ""
+
+msgid "That rule was not found."
+msgstr ""
+
+msgid "Only for stage category"
+msgstr ""
+
+msgid "Only for stage"
+msgstr ""
+
+msgid "Only for pipeline"
+msgstr ""
+
+msgid "Task title"
+msgstr ""
+
+msgid "Assigned to"
+msgstr ""
+
+msgid "Escalates after"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "When assigned"
+msgstr ""
+
+msgid "When due"
+msgstr ""
+
+msgid "Open tasks per lead, at most"
+msgstr ""
+
+msgid "Working time"
+msgstr ""
+
+msgid "Holidays"
+msgstr ""
+
+msgid "Fingerprint"
+msgstr ""
+
+msgid "Follow-up"
+msgstr ""
+
+msgid "{count} task matches your search and filters"
+msgid_plural "{count} tasks match your search and filters"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} task"
+msgid_plural "{count} tasks"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} history entry (oldest first)"
+msgid_plural "{count} history entries (oldest first)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} staff notice"
+msgid_plural "{count} staff notices"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} rule"
+msgid_plural "{count} rules"
+msgstr[0] ""
+msgstr[1] ""
