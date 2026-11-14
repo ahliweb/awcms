@@ -450,6 +450,7 @@
 | `awcms_email_sender_policies`                  | `sql/346_awcms_email_sender_routing.sql`                   | yes | yes   |
 | `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_worker_categories`                | `sql/410_awcms_email_worker_categories_allow_list.sql`     | no  | no    |
 | `awcms_engagement_source_domains`              | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
 | `awcms_engagement_sources`                     | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
 | `awcms_engagement_submissions`                 | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |

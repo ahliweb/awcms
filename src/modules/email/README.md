@@ -99,10 +99,13 @@ three `hr.attendance_correction_{applied,rejected,cancelled}` categories
 (`userName`, `employeeName`, `correctionDate`; never a reason) that
 `hr_workforce` sends through the `workflow_notification` capability this module
 now provides (`application/workflow-notification-port-adapter.ts`, subject
-rendered in the tenant's default locale). A derived
-app registers its own `derived.<name>` category via
-`registerDerivedEmailTemplateCategory` before use; an unknown category is
-rejected at create (fail-closed).
+rendered in the tenant's default locale). A module
+declares its own `derived.<name>` category in its descriptor
+(`emailTemplateCategories`, ADR-0164), resolved on demand in every process
+including `email:dispatch`; an undeclared category is rejected at create
+(fail-closed). The categories a worker transaction may enqueue are rows of
+`awcms_email_worker_categories` (sql/410), not a function body: a module seeds
+its row in its own migration.
 
 - Body columns are `jsonb` per-locale (`{"en": "...", "id": "..."}`, doc 04
   §Multi-language content). Rendering (`domain/email-template-render.ts`)

@@ -28,7 +28,6 @@
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
-import { registerBookingWhatsappTemplates } from "../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
 import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
@@ -43,10 +42,9 @@ type TenantRow = { id: string };
 
 async function main() {
   const sql = getWorkerDatabaseClient();
-  // The template registry is process-local: a consumer's templates (booking's
-  // reminders, Issue #943) must be registered here too, or a queued message
-  // fails terminally as `template_unknown` at send time.
-  registerBookingWhatsappTemplates();
+  // A consumer's templates (booking's reminders) are declared in its module
+  // descriptor and loaded by the template registry on first lookup (ADR-0164):
+  // nothing to import or register here.
   const correlationId = crypto.randomUUID();
 
   try {

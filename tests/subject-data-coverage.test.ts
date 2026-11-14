@@ -425,6 +425,8 @@ describe("the contract version records the addition", () => {
     // 4.5.0 (Issue #944) adds `ProjectionCursorMetricRule.sumColumn`; likewise.
     // 4.6.0 (ADR-0142) adds `SubjectDataDescriptor.subjectVia`: an indirect,
     // one-hop path to the subject through a parent row. Optional, so MINOR.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.6.0");
+    // 4.7.0 (ADR-0164) adds `emailTemplateCategories` and `whatsappTemplates`;
+    // likewise nothing here.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.7.0");
   });
 });

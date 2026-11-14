@@ -25,6 +25,7 @@ import {
   getProviderCircuitBreaker,
   resetProviderCircuitBreakersForTests
 } from "../src/lib/database/circuit-breaker";
+import { listModules } from "../src/modules";
 import { whatsappDeliveryModule } from "../src/modules/whatsapp-delivery/module";
 import {
   KNOWN_WHATSAPP_PROVIDERS,
@@ -311,14 +312,14 @@ describe("the template registry enforces purpose and the variable allow-list", (
 
   test("a placeholder naming an unlisted variable renders empty", () => {
     registerWhatsappTemplate({
-      key: "booking.reminder",
+      key: "fixture.reminder",
       version: 1,
       purpose: "transactional",
       body: "Hi {{name}}, see {{secretThing}}.",
       variables: ["name"]
     });
     const rendered = renderWhatsappTemplate(
-      getWhatsappTemplate("booking.reminder")!,
+      getWhatsappTemplate("fixture.reminder")!,
       {
         name: "Sari",
         secretThing: "leak"
@@ -394,10 +395,14 @@ describe("the template registry enforces purpose and the variable allow-list", (
     ).toThrow(WhatsappTemplateRegistrationError);
   });
 
-  test("upstream ships only the neutral system.notice", () => {
-    expect(listWhatsappTemplates().map((t) => t.key)).toEqual([
-      "system.notice"
-    ]);
+  test("upstream ships only the neutral system.notice of its own; the rest are module-DECLARED (ADR-0164)", () => {
+    const declared = listModules()
+      .flatMap((module) => module.whatsappTemplates ?? [])
+      .map((template) => template.key);
+
+    expect(listWhatsappTemplates().map((t) => t.key)).toEqual(
+      ["system.notice", ...declared].sort()
+    );
   });
 });
 

@@ -166,7 +166,7 @@ export function validateCreateEmailTemplateInput(
   } else if (!isKnownEmailTemplateCategory(record.templateKey)) {
     errors.push({
       field: "templateKey",
-      message: `templateKey "${record.templateKey}" is not a recognized category. Base categories are fixed; a "derived.*" category must be registered first (registerDerivedEmailTemplateCategory).`
+      message: `templateKey "${record.templateKey}" is not a recognized category. Base categories are fixed; a "derived.*" category must be declared in its module descriptor (emailTemplateCategories, ADR-0164).`
     });
   } else {
     templateKey = record.templateKey;

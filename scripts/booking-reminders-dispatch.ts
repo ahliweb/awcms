@@ -31,14 +31,11 @@ import {
 } from "../src/lib/jobs/job-runner";
 import { runBookingReminderDispatch } from "../src/modules/booking/application/booking-reminder-job";
 import { getBookingReminderRecipients } from "../src/modules/booking/application/booking-reminder-recipients";
-import { registerBookingWhatsappTemplates } from "../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import { whatsappDeliveryPortAdapter } from "../src/modules/whatsapp-delivery/application/whatsapp-enqueue";
 
 async function main() {
   const sql = getWorkerDatabaseClient();
   const cliOptions = parseJobCliArgs(process.argv.slice(2));
-
-  registerBookingWhatsappTemplates();
 
   try {
     const result = await runJob(

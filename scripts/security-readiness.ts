@@ -673,7 +673,14 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   awcms_principal_preferences: ["DELETE"],
   awcms_entitlements: ["INSERT", "UPDATE", "DELETE"],
   awcms_plans: ["INSERT", "UPDATE", "DELETE"],
-  awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"]
+  awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"],
+  // The worker's e-mail category allow-list (ADR-0164, sql/410). Global and
+  // read-only at runtime for the strongest reason on this list: a runtime path
+  // holding INSERT here could widen its own worker repertoire (queue phishing in
+  // any category) and no RLS policy would object, there being no tenant column.
+  // Adding a category is a migration. `awcms_worker` keeps SELECT (the guard
+  // trigger runs as the inserting role) and is keyed in `WORKER_ROLE_GRANTS`.
+  awcms_email_worker_categories: ["INSERT", "UPDATE", "DELETE"]
 };
 
 /**
@@ -1543,6 +1550,9 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_email_delivery_attempts: ["INSERT", "DELETE", "SELECT"],
   awcms_email_templates: ["SELECT"],
   awcms_email_suppression_list: ["SELECT"],
+  // `sql/410` (ADR-0164): the guard trigger of `awcms_email_messages` reads the
+  // category allow-list as the inserting role. SELECT only, never a write verb.
+  awcms_email_worker_categories: ["SELECT"],
   // `sql/379` (Issue #1161) for `bun run email:queue:purge`: the quarantine of
   // provider-reported events, under a RESTRICTIVE delete floor on
   // `received_at` (a column only the table's trigger writes).

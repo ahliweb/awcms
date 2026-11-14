@@ -196,6 +196,11 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "The migration ledger. It records which SQL file ran and when, which is a fact about the deployment and about nobody."
   },
   {
+    table: "awcms_email_worker_categories",
+    reason:
+      "ADR-0164 (sql/410). The allow-list of e-mail category NAMES an awcms_worker transaction may enqueue, migration-written and read-only for both runtime roles. A category name is a string a module author chose; it identifies no one."
+  },
+  {
     table: "awcms_plan_entitlements",
     reason:
       "ADR-0084. The join between a plan and the entitlements it carries — two catalogue keys per row, both authored by an operator rather than observed about anyone."

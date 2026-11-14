@@ -23,7 +23,7 @@ ADR-0074 already made `push_delivery` a second outbox, so the issue's constraint
 - `getStatusByCorrelation` reads state back by the caller's own record id (masked recipient, never the number); `cancelByCorrelation` cancels still-waiting messages and is a no-op once sent.
 - The port performs **no access check and writes no audit row**: the consumer authorises and audits its own business action.
 
-Consumers register templates with `registerWhatsappTemplate` (module-prefixed keys, e.g. `booking.reminder`). A template has **exactly one purpose** and a variable allow-list; a variable that is not on the list is **dropped** by the renderer, which is what keeps a payroll notice free of salary data.
+Consumers declare templates in their module descriptor (`whatsappTemplates`, ADR-0164; module-prefixed keys, e.g. `booking.reminder`); the registry loads them on first lookup in every process, `whatsapp:dispatch` included. A template has **exactly one purpose** and a variable allow-list; a variable that is not on the list is **dropped** by the renderer, which is what keeps a payroll notice free of salary data.
 
 ## Purpose classes and consent
 

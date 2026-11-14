@@ -587,6 +587,9 @@ export async function teardownIntegrationDatabase(): Promise<void> {
  * make the next migration run replay everything) and `awcms_permissions` (the
  * global ABAC seed catalog INSERTed by migrations — wiping it would silently
  * break every access check and turn real 200s into misleading 403s).
+ * `awcms_email_worker_categories` (sql/410, ADR-0164) is preserved for the same
+ * reason: it is migration-seeded data, and wiping it would make the worker
+ * guard refuse every category, the hr notices included.
  *
  * ALSO resets the two pieces of PROCESS-GLOBAL in-memory state `withTenant`
  * consults on every call: the database circuit breaker and the work-class
@@ -612,7 +615,8 @@ async function truncateAwcmsTables(sql: Bun.SQL): Promise<void> {
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public'
       AND tablename LIKE 'awcms\\_%'
-      AND tablename NOT IN ('awcms_schema_migrations', 'awcms_permissions')
+      AND tablename NOT IN ('awcms_schema_migrations', 'awcms_permissions',
+                            'awcms_email_worker_categories')
   `) as { tablename: string }[];
 
   if (rows.length === 0) {

@@ -3,6 +3,10 @@ import {
   NEWSLETTER_ACTIVITY_CODE,
   NEWSLETTER_MODULE_KEY
 } from "./domain/newsletter-permissions";
+import {
+  NEWSLETTER_CONFIRMATION_TEMPLATE_KEY,
+  NEWSLETTER_CONFIRMATION_VARIABLES
+} from "./domain/newsletter-mail";
 
 /**
  * `newsletter` — a reader can join a list (Issue #598, ADR-0103).
@@ -52,6 +56,15 @@ export const newsletterModule = defineModule({
     // lower-casing rule would eventually disagree with the first. The masker is
     // what keeps an audit row from becoming a second copy of the list.
     "profile_identity"
+  ],
+  // ADR-0164: declared, not registered. The confirmation mail is rendered by
+  // `email:dispatch`, a different process from the one that enqueues it; without
+  // a declaration there the confirmation link rendered as an empty string.
+  emailTemplateCategories: [
+    {
+      category: NEWSLETTER_CONFIRMATION_TEMPLATE_KEY,
+      allowedVariables: [...NEWSLETTER_CONFIRMATION_VARIABLES]
+    }
   ],
   type: "domain",
   api: {
