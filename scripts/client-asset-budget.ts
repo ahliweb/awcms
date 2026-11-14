@@ -1315,10 +1315,12 @@ export const READER_BUDGET_BYTES = 24_000;
  * B (measured + 139 B for the local/CI build difference).
  *
  * Rebase note: `main` had moved to 382,470 B, so this branch's own raise
- * (+1,860 B, written against 379,850 B) is stacked on it, giving
- * 384,330 B; the gate re-measures the combined bundle.
+ * (+1,860 B, written against 379,850 B) stacked on it would give 384,330 B,
+ * but the combined bundle measures 384,730 B (shared chunks do not add up
+ * linearly), so the budget is 384,870 B: measured + 140 B, the same tight
+ * margin as the raises above.
  */
-export const APP_BUDGET_BYTES = 384_330;
+export const APP_BUDGET_BYTES = 384_870;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
