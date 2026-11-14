@@ -228,9 +228,9 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@changesets/cli": "^3.0.3",
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "@types/bun": "^1.4.4",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "prettier-plugin-astro": "^1.1.2",
     "typescript": "^7.0.2",
     "yaml": "^2.9.1"
@@ -249,7 +249,7 @@
     "undici": "^8.10.2"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.11",
-    "astro": "^7.4.7"
+    "@astrojs/node": "^11.1.13",
+    "astro": "^7.4.12"
   }
 }
