@@ -1896,6 +1896,18 @@ msgstr ""
 msgid "Invite somebody"
 msgstr ""
 
+msgid "Invitation sent."
+msgstr ""
+
+msgid "Invitation sent again."
+msgstr ""
+
+msgid "Invitation revoked."
+msgstr ""
+
+msgid "Invite user"
+msgstr ""
+
 msgid "IP hash"
 msgstr ""
 

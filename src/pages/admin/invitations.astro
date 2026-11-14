@@ -178,7 +178,15 @@ function isPending(invitation: InvitationView): boolean {
         role="alert"
         hidden
       />
-      <p id="invitations-notice" class="state-notice" role="status" hidden />
+      <p
+        id="invitations-notice"
+        class="state-notice"
+        role="status"
+        data-flash-created={t("Invitation sent.")}
+        data-flash-resent={t("Invitation sent again.")}
+        data-flash-revoked={t("Invitation revoked.")}
+        hidden
+      />
 
       {canCreate && (
         <section class="fade-in-up" aria-labelledby="invitations-new-heading">
@@ -376,14 +384,22 @@ function isPending(invitation: InvitationView): boolean {
   import {
     field,
     lockElement,
+    flashAndReload,
     messageBox,
     onAction,
     onSubmit,
-    sendJsonForData
+    sendJsonForData,
+    showFlash
   } from "../../lib/ui/admin-form-client";
 
   const actionError = messageBox("invitations-action-error");
   const noticeBox = messageBox("invitations-notice");
+
+  // A success reloads the page, which used to say nothing: the invitation (or
+  // its resend) had worked and the screen looked untouched. The reload now
+  // carries a catalog KEY across it and the notice shows the page's own
+  // already-translated sentence for it (see `flashAndReload`).
+  showFlash("invitations-notice");
 
   function clearBoxes(): void {
     actionError.clear();
@@ -429,7 +445,7 @@ function isPending(invitation: InvitationView): boolean {
     }
 
     if (result.ok) {
-      window.location.reload();
+      flashAndReload("created");
       return;
     }
 
@@ -479,7 +495,7 @@ function isPending(invitation: InvitationView): boolean {
     }
 
     if (result.ok) {
-      window.location.reload();
+      flashAndReload(resending ? "resent" : "revoked");
       return;
     }
 
