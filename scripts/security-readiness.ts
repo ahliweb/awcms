@@ -676,9 +676,10 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"],
   // The worker's e-mail category allow-list (ADR-0164, sql/410). Global and
   // read-only at runtime for the strongest reason on this list: a runtime path
-  // holding INSERT here could widen its own worker repertoire (queue phishing in
-  // any category) and no RLS policy would object, there being no tenant column.
-  // Adding a category is a migration. `awcms_worker` keeps SELECT (the guard
+  // holding INSERT here could widen what the INSERT guard admits and no RLS
+  // policy would object, there being no tenant column. The guard covers INSERT
+  // only: `awcms_worker` also holds a table-level UPDATE on awcms_email_messages
+  // (sql/022), a separate pre-existing gap. Adding a category is a migration. `awcms_worker` keeps SELECT (the guard
   // trigger runs as the inserting role) and is keyed in `WORKER_ROLE_GRANTS`.
   awcms_email_worker_categories: ["INSERT", "UPDATE", "DELETE"]
 };
@@ -2863,6 +2864,21 @@ export const EMAIL_PROVIDER_EVENT_TRIGGERS: readonly PinnedTrigger[] = [
 ];
 
 /**
+ * sql/410 (ADR-0164, audit Low of PR #1361): the BEFORE INSERT guard on the
+ * worker's e-mail queue. Pinned so an override, a disable or a detach shows up
+ * whatever lexer trick a later migration used to hide it.
+ */
+export const EMAIL_WORKER_GUARD_TRIGGERS: readonly PinnedTrigger[] = [
+  {
+    table: "awcms_email_messages",
+    trigger: "awcms_email_messages_worker_guard",
+    fn: "awcms_email_guard_worker_insert",
+    events: "insert",
+    body: "DECLARE by_worker boolean; BEGIN by_worker := NOT EXISTS ( SELECT 1 FROM pg_roles r WHERE r.rolname IN (session_user, current_user) AND r.rolsuper ) AND (pg_has_role(session_user, 'awcms_worker', 'MEMBER') OR pg_has_role(current_user, 'awcms_worker', 'MEMBER')); IF NOT by_worker THEN RETURN NEW; END IF; IF NOT EXISTS ( SELECT 1 FROM awcms_email_worker_categories c WHERE c.category = NEW.category ) THEN RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_CATEGORY_NOT_ALLOWED' USING ERRCODE = '42501'; END IF; IF NEW.category IN ('crm.follow_up_assigned', 'crm.follow_up_due', 'crm.follow_up_escalated') THEN IF NOT EXISTS ( SELECT 1 FROM awcms_tenant_users tu JOIN awcms_identities i ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id WHERE tu.tenant_id = NEW.tenant_id AND tu.status = 'active' AND lower(btrim(i.login_identifier)) = NEW.to_address ) THEN RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_RECIPIENT_NOT_STAFF' USING ERRCODE = '42501'; END IF; IF NEW.variables IS NOT NULL AND (jsonb_typeof(NEW.variables) <> 'object' OR EXISTS ( SELECT 1 FROM jsonb_object_keys(NEW.variables) AS k(key) WHERE k.key NOT IN ('userName', 'taskTitle', 'dueAt', 'taskReference') )) THEN RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_VARIABLE_NOT_ALLOWED' USING ERRCODE = '42501'; END IF; END IF; RETURN NEW; END;"
+  }
+];
+
+/**
  * sql/392 and sql/393 (Issue #1298): the value guard on the dispatcher's queue
  * writes, the database clock of the webhook receipts (the stamp the worker's
  * purge floor rests on) and the cap on a service window's time.
@@ -4703,6 +4719,11 @@ export async function checkWorkerSetupRoleGrants(
       }
 
       for (const pin of WHATSAPP_META_AUDIT_TRIGGERS) {
+        const finding = await pinTriggerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+      for (const pin of EMAIL_WORKER_GUARD_TRIGGERS) {
         const finding = await pinTriggerFunction(sql, pin);
 
         if (finding) findings.push(finding);

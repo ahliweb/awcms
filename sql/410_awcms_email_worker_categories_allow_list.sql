@@ -32,10 +32,12 @@
 -- * `awcms_app` and `awcms_worker` hold SELECT and nothing else. The guard runs
 --   as the inserting role, so the worker needs SELECT to evaluate it; neither
 --   role can add, change or remove a row, because a runtime path that could add
---   a category could widen its own repertoire, and no tenant column exists
+--   a category could widen what the INSERT guard admits, and no tenant column exists
 --   here for RLS to police (the same reasoning as `awcms_plan_entitlements`,
 --   sql/109). Adding a category is a migration, reviewed with the module that
---   needs it, and the descriptor flag `workerInsert` is cross-checked against
+--   needs it. The guard is BEFORE INSERT only: `awcms_worker` also holds a
+--   table-level UPDATE on awcms_email_messages (sql/022) that the guard does not
+--   see, a pre-existing gap handled separately, and the descriptor flag `workerInsert` is cross-checked against
 --   the seeded rows by the gate.
 -- * Everything else of the sql/371 body is unchanged: the membership test is
 --   checked for BOTH `session_user` and `current_user`, superusers exempt,

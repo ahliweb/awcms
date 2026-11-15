@@ -32,6 +32,7 @@ import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../src/modules/email/domain/email-template-categories";
 import { listModules } from "../src/modules";
 import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { EMAIL_WORKER_GUARD_TRIGGERS } from "../scripts/security-readiness";
 import { loadMigrations } from "../scripts/lib/migrations";
 import { bookingModule } from "../src/modules/booking/module";
 import { newsletterModule } from "../src/modules/newsletter/module";
@@ -638,6 +639,70 @@ CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LAN
       expect(
         re("COMMENT ON FUNCTION awcms_email_guard_worker_insert() IS 'x'")
       ).toEqual([]);
+    });
+
+    test("a line comment ends at a bare carriage return", () => {
+      const sql =
+        "-- note\rINSERT INTO awcms_email_worker_categories (category) VALUES ('auth.password_reset');";
+      const { seeded } = seedOf(sql);
+
+      expect([...seeded]).toEqual(["auth.password_reset"]);
+      expect(
+        findGuardFunctionReissues([
+          {
+            name: "411_awcms_c.sql",
+            sql: "-- x\rCREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"
+          }
+        ])
+      ).toEqual(["411_awcms_c.sql"]);
+    });
+
+    test("an E-string continuation keeps its backslash escapes", () => {
+      const sql = `SELECT E'x'\n'\\'';\nCREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $g$ BEGIN RETURN NEW; END $g$;\n-- '`;
+
+      expect(
+        findGuardFunctionReissues([{ name: "411_awcms_c.sql", sql }])
+      ).toEqual(["411_awcms_c.sql"]);
+    });
+
+    test("a Unicode-escaped identifier fails closed", () => {
+      const sql = `CREATE OR REPLACE FUNCTION U&"awcms\\005femail_guard_worker_insert"() RETURNS trigger LANGUAGE plpgsql AS $g$ BEGIN RETURN NEW; END $g$;`;
+
+      expect(scanSqlStatements(sql).error).toBeDefined();
+      expect(
+        findGuardFunctionReissues([{ name: "411_awcms_c.sql", sql }])
+      ).toEqual(["411_awcms_c.sql"]);
+      expect(
+        seedOf(
+          `INSERT INTO U&"awcms\\005femail_worker_categories" (category) VALUES ('a.b');`
+        ).unparseable
+      ).toHaveLength(1);
+    });
+
+    test.each(["USER", "ALL"])(
+      "ALTER TABLE awcms_email_messages DISABLE TRIGGER %s is flagged",
+      (kind) => {
+        expect(
+          findGuardFunctionReissues([
+            {
+              name: "411_awcms_c.sql",
+              sql: `ALTER TABLE public.awcms_email_messages DISABLE TRIGGER ${kind};`
+            }
+          ])
+        ).toEqual(["411_awcms_c.sql"]);
+      }
+    );
+
+    test("the pinned readiness trigger body is the body of sql/410", () => {
+      const sql = readFileSync(
+        `${ROOT}sql/410_awcms_email_worker_categories_allow_list.sql`,
+        "utf8"
+      );
+      const body = /AS \$\$([\s\S]*?)\$\$;/.exec(sql)![1]!;
+      const pin = EMAIL_WORKER_GUARD_TRIGGERS[0]!;
+
+      expect(pin.body).toBe(body.replace(/\s+/g, " ").trim());
+      expect(pin.events).toBe("insert");
     });
 
     test.each([

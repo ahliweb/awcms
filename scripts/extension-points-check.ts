@@ -100,6 +100,8 @@ export function collectBaseWorkerAllowances(
 
 const IDENT_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
 /** A dollar-quote tag as Postgres lexes it: `$$` or `$name$`, where `name` starts with a letter, underscore or non-ASCII character and continues with digits too. */
+/** What may sit between two string segments that Postgres joins: whitespace and `--` comments. */
+const CONTINUATION_GAP = /^(?:[ \t\f\r\n]|--[^\r\n]*)*$/;
 const DOLLAR_TAG = /^\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/;
 
 export type SqlScan = {
@@ -125,6 +127,8 @@ export function scanSqlStatements(sql: string): SqlScan {
   let current = "";
   let i = 0;
   let error: string | undefined;
+  /** End offset of the last string literal when it processed escapes (an E-string segment), else -1. */
+  let eStringEnd = -1;
 
   const push = () => {
     if (current.trim() !== "") statements.push(current.trim());
@@ -135,8 +139,20 @@ export function scanSqlStatements(sql: string): SqlScan {
     const ch = sql[i]!;
     const next = sql[i + 1];
 
+    if (
+      (ch === "U" || ch === "u") &&
+      next === "&" &&
+      (sql[i + 2] === '"' || sql[i + 2] === "'") &&
+      !(i > 0 && IDENT_CHAR.test(sql[i - 1]!))
+    ) {
+      // A Unicode-escaped identifier or string spells a name this reader cannot
+      // match (U&"awcms\005femail..."); refuse rather than guess.
+      error ??= "a Unicode-escape literal (U&\"...\" or U&'...')";
+    }
+
     if (ch === "-" && next === "-") {
-      while (i < sql.length && sql[i] !== "\n") i++;
+      // A line comment ends at `\n` OR `\r` (scan.l: newline = [\n\r]).
+      while (i < sql.length && sql[i] !== "\n" && sql[i] !== "\r") i++;
       current += " ";
     } else if (ch === "/" && next === "*") {
       let depth = 1;
@@ -156,9 +172,15 @@ export function scanSqlStatements(sql: string): SqlScan {
       current += " ";
     } else if (ch === "'") {
       const prev = sql[i - 1];
+      // Postgres continues a string across whitespace that holds a newline, and
+      // the continuation segment keeps the escape rules of an E-string (state xe).
+      const gap = eStringEnd >= 0 ? sql.slice(eStringEnd, i) : "";
+      const continuesEString =
+        gap !== "" && CONTINUATION_GAP.test(gap) && /[\r\n]/.test(gap);
       const escapes =
-        (prev === "e" || prev === "E") &&
-        !(i >= 2 && IDENT_CHAR.test(sql[i - 2]!));
+        continuesEString ||
+        ((prev === "e" || prev === "E") &&
+          !(i >= 2 && IDENT_CHAR.test(sql[i - 2]!)));
       const start = i++;
       let closed = false;
 
@@ -173,6 +195,7 @@ export function scanSqlStatements(sql: string): SqlScan {
       }
 
       if (!closed) error ??= "an unterminated string literal";
+      eStringEnd = escapes ? i : -1;
       current += sql.slice(start, Math.min(i, sql.length));
     } else if (ch === '"') {
       const start = i++;
@@ -238,6 +261,9 @@ export function findSqlScanErrors(
 
 /** Whether the raw text names the table, the guard function or its trigger, in any spelling. */
 function mentionsGuardObjects(sql: string): boolean {
+  // A U&"..." spelling can name any of them without the plain text appearing.
+  if (/(?<![A-Za-z0-9_$])U&["']/i.test(sql)) return true;
+
   return /awcms_email_worker_categories|awcms_email_guard_worker_insert|awcms_email_messages_worker_guard/i.test(
     sql
   );
@@ -259,6 +285,11 @@ const GUARD_IDENTIFIER = new RegExp(
 export const GUARD_TRIGGER_NAME = "awcms_email_messages_worker_guard";
 const TRIGGER_IDENTIFIER = new RegExp(
   `(?<![A-Za-z0-9_$"])${identifierPattern(GUARD_TRIGGER_NAME)}`,
+  "i"
+);
+
+const MESSAGES_TABLE_IDENTIFIER = new RegExp(
+  `(?<![A-Za-z0-9_$"])${identifierPattern("awcms_email_messages")}`,
   "i"
 );
 
@@ -468,6 +499,16 @@ export function findGuardFunctionReissues(
         // A DO block, EXECUTE or CALL can re-create the guard inside its body,
         // so those count alongside CREATE / ALTER / DROP.
         /^(?:CREATE|ALTER|DROP|DO|EXECUTE|PREPARE|CALL)\b/i.test(statement)
+      ) {
+        offenders.add(migration.name);
+      }
+
+      // Disabling every user trigger of the table silences the guard without
+      // naming it.
+      if (
+        /^ALTER\s+TABLE\b/i.test(statement) &&
+        MESSAGES_TABLE_IDENTIFIER.test(statement) &&
+        /\bDISABLE\s+TRIGGER\s+(?:USER|ALL)\b/i.test(statement)
       ) {
         offenders.add(migration.name);
       }
