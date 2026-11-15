@@ -244,8 +244,11 @@ export async function authorizeInTransaction(
      */
     clientIp?: string;
     /**
-     * `false` suppresses the `awcms_abac_decision_logs` row of THIS call only
-     * (Issue #1171 audit M-1). For a caller that asks the same chokepoint many
+     * `false` suppresses the `awcms_abac_decision_logs` row of THIS call only,
+     * and ONLY when the decision is an ALLOW: a deny, MFA refusal or SoD block
+     * is logged regardless (#1363 audit). Only the progress-SSE scope probes
+     * may pass it; `tests/decision-log-quiet-allow.test.ts` pins the allow-list
+     * of source files. (Issue #1171 audit M-1). For a caller that asks the same chokepoint many
      * auxiliary questions on a timer — "which of these business scopes does the
      * caller cover", once per candidate scope per stream tick — each of which
      * would otherwise append an allow/deny row to the ledger. The decision
@@ -256,8 +259,31 @@ export async function authorizeInTransaction(
     recordDecision?: boolean;
   }
 ): Promise<AuthorizeResult> {
-  const recordDecisionLog: typeof writeDecisionLog =
-    options?.recordDecision === false ? async () => {} : writeDecisionLog;
+  const quietAllow = options?.recordDecision === false;
+  // `recordDecision: false` may only skip a repeated ALLOW. A deny, an MFA
+  // refusal and a SoD block always append their row (#1363 audit L-2): they
+  // are exactly what the decision log exists to answer, and a quiet caller
+  // must not be able to hide them.
+  const recordDecisionLog: typeof writeDecisionLog = (
+    tx,
+    tenantId,
+    tenantUserId,
+    request,
+    outcome,
+    machineCredentialId,
+    delegatedGrantId
+  ) =>
+    quietAllow && outcome.allowed
+      ? Promise.resolve()
+      : writeDecisionLog(
+          tx,
+          tenantId,
+          tenantUserId,
+          request,
+          outcome,
+          machineCredentialId,
+          delegatedGrantId
+        );
 
   // ADR-0088 — THE invariant of Gelombang 7 PR 7.4, and the reason it is the
   // very first statement in this function.

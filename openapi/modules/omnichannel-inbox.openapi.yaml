@@ -701,9 +701,13 @@ paths:
         once. Terminal: `authorization-revoked` (do NOT reconnect; the
         `omnichannel_inbox.status.read` permission or the session ended;
         audited). Losing or changing a business scope does NOT end the stream:
-        it only changes which conversations later frames include (counts and
-        ids narrow on the next tick, and no scope at all shows nothing), and an
-        assignee change has no effect on visibility. Other terminal events:
+        it only changes which conversations later frames include (swapping to
+        another scope narrows the frames to it; removing the caller's LAST scope
+        ends their confinement, so a caller holding the permission through a
+        tenant-wide role then sees the whole tenant, the same rule as the
+        conversation list; to cut access, revoke the permission or role, which
+        ends the stream), and an assignee change has no effect on
+        visibility. Other terminal events:
         `stream-error` (the database refused; back off with jitter),
         `slow-consumer` (the client fell behind and was evicted) and
         `stream-expired` (the 10-minute lifetime ended; reconnect with the

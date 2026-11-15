@@ -17,7 +17,9 @@ import { inboxStatusProgressTopic } from "../../../../../modules/omnichannel-inb
  * (`omnichannel_inbox.conversations.read` coverage); the counts follow
  * `status.read` alone. Losing the permission or the session ends the stream on
  * the next tick with `authorization-revoked` (audited). Losing or changing a
- * business scope does NOT end it: it narrows what later frames include. An
+ * business scope does NOT end it: swapping scope narrows the frames, while
+ * removing the LAST scope ends confinement (a tenant-wide role then sees the
+ * whole tenant; revoke the permission or role to cut access). An
  * assignee change has no effect. Guarded by `omnichannel_inbox.status.read`
  * — written out here as a literal for the gates that read source text:
  *
