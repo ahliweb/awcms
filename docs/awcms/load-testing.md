@@ -3,9 +3,10 @@
 # Distributed load testing (Issue #1283, ADR-0161)
 
 > A **procedure**, not a result. This repository ships the harness. **No
-> baseline number is recorded here**, because no load test has been run yet. The
-> baseline table at the end stays empty until a real run happens and its result
-> is accepted by the saturation check (§Reading a result).
+> accepted baseline is recorded here**: the only runs so far are a local dry run
+> on a shared workstation, all rejected by the saturation check and explicitly
+> not an NFR measurement (§Measured baseline). A baseline needs a run on the
+> approved environment that the saturation check accepts (§Reading a result).
 
 ## What this is for
 
@@ -163,10 +164,46 @@ separate decision under ADR-0083.
 
 ## Measured baseline
 
-**Not recorded.** No run has been performed. When one is, add the table here
-(date, environment, method, run id, accepted yes/no, per-scenario numbers, and
-the held/revise verdict per ADR-0161 value) in the same pull request as the
-numbers, in both languages.
+**No accepted baseline.** The approved-environment baseline (issue #1283 steps 3
+and 4) has not been run.
+
+### Local dry run, 15 November 2026 (NOT an NFR measurement)
+
+Recorded only to show the harness works end to end and what it rejects. The
+environment was the ephemeral one above, on a developer workstation (20 logical
+CPUs) that was **shared with unrelated builds and tests**: the load average was
+between 22 and 143 during the runs. Three k6 generators (`--k6-docker`) ran on
+the same host as the app and the database, so generator and system under test
+competed for the same CPUs. Synthetic tenant with 50 posts, no CDN, no edge
+cache, PostgreSQL on tmpfs. Profile `baseline` with `--hold 60s`.
+
+| Scenario                     | Target rps | Mean rps | p95 ms | p99 ms | 5xx   | Dropped | Accepted |
+| ---------------------------- | ---------- | -------- | ------ | ------ | ----- | ------- | -------- |
+| `public-page` (smoke)        | 150        | 243      | 429    | 699    | 12.9% | 5.6%    | no       |
+| `public-page`                | 40         | 33       | 13     | 41,735 | 2.4%  | 39.3%   | no       |
+| `admin-read`                 | 40         | 27       | 10     | 23     | 0%    | 0%      | no       |
+| `api-write` (synthetic post) | 20         | 14       | 25     | 36     | 0%    | 0%      | no       |
+
+**None of these is accepted**: the saturation check reported a generator CPU
+peak of 78% to 93% (limit 70%). That sampler reads whole-host CPU, so on this
+shared workstation it cannot tell the generators from the neighbours; the check
+did what it is for and refused the numbers. Treat every figure above as
+indicative of nothing but the harness. Do not compare it with ADR-0161.
+
+One observation is worth following up, without drawing a capacity conclusion:
+at 150 rps on public blog pages the app logged
+`database.pool.rejected` for the `interactive` work-class (8 active, queue of
+32 full) and answered 5xx. Uncached public rendering takes a pooled connection
+per request, so with `EDGE_CACHE_MODE=off` the origin's ceiling is set by that
+pool and its queue. Whether that holds on the approved environment, and whether
+the work-class limits need revisiting, is for the approved-environment run.
+The long p99 in the second row coincided with the heaviest host load and is
+not reproduced on the other scenarios.
+
+When the approved-environment run is done, add its table here (date,
+environment, method, run id, accepted yes/no, per-scenario numbers, and the
+held/revise verdict per ADR-0161 value) in the same pull request, in both
+languages.
 
 ## Related
 
