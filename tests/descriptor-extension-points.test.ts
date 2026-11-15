@@ -22,6 +22,7 @@ import {
   findPriorGuardCategories,
   findSqlScanErrors,
   findWorkerCategoryProblems,
+  isContinuationGap,
   scanSqlStatements
 } from "../scripts/extension-points-check";
 import {
@@ -663,6 +664,32 @@ CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LAN
       expect(
         findGuardFunctionReissues([{ name: "411_awcms_c.sql", sql }])
       ).toEqual(["411_awcms_c.sql"]);
+    });
+
+    test.each([
+      ["", true],
+      [" \t\f\r\n", true],
+      ["\n-- note", true],
+      ["-- a -- b\n  ", true],
+      ["--\r--", true],
+      ["\nx", false],
+      ["-\n", false],
+      ["/* c */\n", false],
+      ["-- a\nb", false]
+    ])("the continuation gap %j is %p", (gap, expected) => {
+      expect(isContinuationGap(gap)).toBe(expected);
+    });
+
+    test("a run of `--` before an E-string continuation is read in linear time (CodeQL js/redos)", () => {
+      const run = "--".repeat(50_000);
+      const sql = `SELECT E'a'${run}\nx'b'; ${INSERT}`;
+      const started = performance.now();
+
+      expect(isContinuationGap(`${run}\nx`)).toBe(false);
+      expect(isContinuationGap(`${run}\n`)).toBe(true);
+      expect(scanSqlStatements(sql).error).toBeUndefined();
+      expect([...seedOf(sql).seeded]).toEqual(["derived.real"]);
+      expect(performance.now() - started).toBeLessThan(1000);
     });
 
     test("a Unicode-escaped identifier fails closed", () => {

@@ -100,9 +100,38 @@ export function collectBaseWorkerAllowances(
 
 const IDENT_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
 /** A dollar-quote tag as Postgres lexes it: `$$` or `$name$`, where `name` starts with a letter, underscore or non-ASCII character and continues with digits too. */
-/** What may sit between two string segments that Postgres joins: whitespace and `--` comments. */
-const CONTINUATION_GAP = /^(?:[ \t\f\r\n]|--[^\r\n]*)*$/;
 const DOLLAR_TAG = /^\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/;
+
+/**
+ * What may sit between two string segments that Postgres joins: whitespace
+ * (` \t\f\r\n`) and `--` comments running to the next `\r`/`\n` or the end.
+ * A single forward pass, not a regex: `(?:ws|--[^\r\n]*)*` backtracks
+ * exponentially on a run of `--` (CodeQL js/redos).
+ */
+export function isContinuationGap(gap: string): boolean {
+  let i = 0;
+
+  while (i < gap.length) {
+    const ch = gap[i]!;
+
+    if (
+      ch === " " ||
+      ch === "\t" ||
+      ch === "\f" ||
+      ch === "\r" ||
+      ch === "\n"
+    ) {
+      i++;
+    } else if (ch === "-" && gap[i + 1] === "-") {
+      i += 2;
+      while (i < gap.length && gap[i] !== "\r" && gap[i] !== "\n") i++;
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export type SqlScan = {
   /** Statements split on `;` outside every quoted construct, comments replaced by a space. */
@@ -176,7 +205,7 @@ export function scanSqlStatements(sql: string): SqlScan {
       // the continuation segment keeps the escape rules of an E-string (state xe).
       const gap = eStringEnd >= 0 ? sql.slice(eStringEnd, i) : "";
       const continuesEString =
-        gap !== "" && CONTINUATION_GAP.test(gap) && /[\r\n]/.test(gap);
+        gap !== "" && isContinuationGap(gap) && /[\r\n]/.test(gap);
       const escapes =
         continuesEString ||
         ((prev === "e" || prev === "E") &&
