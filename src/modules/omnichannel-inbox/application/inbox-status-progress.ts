@@ -19,7 +19,10 @@
  *
  * `visibilityFor` (`route-support.ts`) — `channel_accounts`' rules through the
  * chokepoint, decided per call (per tick, on a fresh request identity) so a
- * scope gained or lost mid-stream changes the rows on the next tick. A caller
+ * scope gained or lost mid-stream changes the rows on the next tick. The ids in
+ * a frame are further limited to what the actor's `conversations.read` covers
+ * (`InboxStatusVisibility`); the counts follow `status.read` alone. The per-scope
+ * decisions write no decision-log row (`recordDecision: false`). A caller
  * who is not unconfined never sees a tenant-wide conversation (its scope is
  * NULL and never matches the key list). An empty scope list shows nothing.
  *
@@ -44,6 +47,7 @@ import type {
   ProgressTopic,
   ProgressTopicContext
 } from "../../_shared/progress-sse-route";
+import { evaluateFieldAccessInTransaction } from "../../identity-access/application/access-guard";
 import { INBOX_STATUS_PROGRESS_TOPIC } from "../../_shared/realtime-topics";
 import { isOmnichannelInboxEnabled } from "../domain/inbox-config";
 import {
@@ -54,6 +58,40 @@ import type { ConversationVisibility } from "./conversation-directory";
 import { visibilityFor } from "./route-support";
 
 export const INBOX_STATUS_GUARD = OMNICHANNEL_INBOX_GUARDS.readStatus;
+const INBOX_LIST_GUARD = OMNICHANNEL_INBOX_GUARDS.readConversations;
+
+/**
+ * What a status viewer may see, in two parts (Issue #1171 audit L-1):
+ *
+ * - `counts`: the rows the COUNTS are computed over — `status.read` and its
+ *   business-scope coverage. Counts are aggregates, not rows.
+ * - `rows`: the rows whose ID, status and time may be named in `changes` /
+ *   `recent` — the INTERSECTION of the `status.read` coverage and the caller's
+ *   `conversations.read` coverage, i.e. only conversations the same actor could
+ *   list through the REST list (ADR-0154 R6). A holder of `status.read` without
+ *   `conversations.read` gets counts only; an ABAC deny of `conversations.read`
+ *   for a brand removes that brand's ids from the frame.
+ */
+export type InboxStatusVisibility = {
+  counts: ConversationVisibility;
+  rows: ConversationVisibility;
+};
+
+/** The rows both coverages allow: unconfined only when both are, else the intersection of the key lists. */
+export function intersectVisibility(
+  a: ConversationVisibility,
+  b: ConversationVisibility
+): ConversationVisibility {
+  if (a.unconfined) return b;
+  if (b.unconfined) return a;
+
+  const allowed = new Set(b.scopeKeys);
+
+  return {
+    unconfined: false,
+    scopeKeys: a.scopeKeys.filter((key) => allowed.has(key))
+  };
+}
 
 /** The one resource of this topic: the caller's own view of the tenant's inbox. */
 export const INBOX_STATUS_RESOURCE_ID = "inbox";
@@ -115,13 +153,46 @@ function isStatus(value: string): value is ConversationStatus {
  * Visibility of the inbox: the module's switch, then the list's rules. A
  * switched-off inbox is "not here" (`null`, the route answers `404`); a failed
  * load of the scope rules shows nothing, never everything (`visibilityFor`).
+ *
+ * The scope questions are decided WITHOUT a decision-log row each
+ * (`recordDecision: false`, audit M-1): this runs on every tick, and one row per
+ * candidate scope per tick would flood the append-only ledger. The tick's own
+ * `status.read` decision (made by the stream factory through the chokepoint)
+ * still logs exactly once, and every deny rule still applies.
  */
 export async function resolveInboxStatusVisibility(
   context: ProgressTopicContext
-): Promise<ConversationVisibility | null> {
+): Promise<InboxStatusVisibility | null> {
   if (!isOmnichannelInboxEnabled()) return null;
 
-  return visibilityFor(context, INBOX_STATUS_GUARD);
+  const quiet = { recordDecision: false };
+  const counts = await visibilityFor(context, INBOX_STATUS_GUARD, quiet);
+
+  // Nothing is countable, so nothing is listable: skip the second question.
+  if (!counts.unconfined && counts.scopeKeys.length === 0) {
+    return { counts, rows: counts };
+  }
+
+  // The list permission itself, through the ABAC evaluator (RBAC grant AND no
+  // applicable deny) and without a log row: `visibilityFor` reads the raw grant
+  // for a tenant-wide caller, which an ABAC deny of `conversations.read` would
+  // not remove. No permission, or a deny, means counts only.
+  const mayList = await evaluateFieldAccessInTransaction(
+    context.tx,
+    context.tenantId,
+    context.auth.context,
+    context.auth.grantedPermissionKeys,
+    INBOX_LIST_GUARD,
+    context.now
+  );
+
+  if (!mayList) {
+    return { counts, rows: { unconfined: false, scopeKeys: [] } };
+  }
+
+  const listable = await visibilityFor(context, INBOX_LIST_GUARD, quiet);
+
+  return { counts, rows: intersectVisibility(counts, listable) };
 }
 
 /**
@@ -306,7 +377,7 @@ export function inboxCursorTimestampMs(cursor: string): number | null {
 }
 
 export const inboxStatusProgressTopic: ProgressTopic<
-  ConversationVisibility,
+  InboxStatusVisibility,
   InboxStatusCounts,
   InboxStatusChange
 > = {
@@ -316,19 +387,29 @@ export const inboxStatusProgressTopic: ProgressTopic<
   parseResourceId: parseInboxResourceId,
   resolveResource: (context) => resolveInboxStatusVisibility(context),
   readHead: (context, visibility) =>
-    readInboxHead(context.tx, context.tenantId, visibility),
+    readInboxHead(context.tx, context.tenantId, visibility.rows),
   isCursorHonourable: (context, visibility, cursor) =>
-    isInboxCursorHonourable(context.tx, context.tenantId, visibility, cursor),
+    isInboxCursorHonourable(
+      context.tx,
+      context.tenantId,
+      visibility.rows,
+      cursor
+    ),
   readChangesSince: (context, visibility, cursor, limit) =>
     readInboxChangesSince(
       context.tx,
       context.tenantId,
-      visibility,
+      visibility.rows,
       cursor,
       limit
     ),
   readCounts: (context, visibility) =>
-    readInboxCounts(context.tx, context.tenantId, visibility, context.now),
+    readInboxCounts(
+      context.tx,
+      context.tenantId,
+      visibility.counts,
+      context.now
+    ),
   cursorTimestampMs: inboxCursorTimestampMs
 };
 
@@ -346,15 +427,20 @@ export type InboxStatusSnapshot = {
 
 export async function readInboxStatusSnapshot(
   context: ProgressTopicContext,
-  visibility: ConversationVisibility,
+  visibility: InboxStatusVisibility,
   recentLimit: number
 ): Promise<InboxStatusSnapshot> {
   const { tx, tenantId } = context;
   // Head first, then counts: anything committed in between appears in the
   // counts and again later as a change, never the other way round.
-  const cursor = await readInboxHead(tx, tenantId, visibility);
-  const counts = await readInboxCounts(tx, tenantId, visibility, context.now);
-  const scope = rowScope(tx, visibility);
+  const cursor = await readInboxHead(tx, tenantId, visibility.rows);
+  const counts = await readInboxCounts(
+    tx,
+    tenantId,
+    visibility.counts,
+    context.now
+  );
+  const scope = rowScope(tx, visibility.rows);
   const rows = (await tx`
     SELECT id::text AS id, status, updated_at
     FROM awcms_inbox_conversations

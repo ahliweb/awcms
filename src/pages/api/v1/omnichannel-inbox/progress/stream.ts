@@ -12,9 +12,13 @@ import { inboxStatusProgressTopic } from "../../../../../modules/omnichannel-inb
  *
  * Authorization: `omnichannel_inbox.status.read` through the chokepoint, and
  * the rows visible by the same rule as the conversation list (business scope of
- * a confined caller), decided at open AND on every tick. A role, an assignment
- * or a business scope removed mid-stream ends it on the next tick with
- * `authorization-revoked` (audited). Guarded by `omnichannel_inbox.status.read`
+ * a confined caller), decided at open AND on every tick. The ids named in a
+ * frame are further limited to conversations the caller could list
+ * (`omnichannel_inbox.conversations.read` coverage); the counts follow
+ * `status.read` alone. Losing the permission or the session ends the stream on
+ * the next tick with `authorization-revoked` (audited). Losing or changing a
+ * business scope does NOT end it: it narrows what later frames include. An
+ * assignee change has no effect. Guarded by `omnichannel_inbox.status.read`
  * — written out here as a literal for the gates that read source text:
  *
  *   moduleKey: "omnichannel_inbox", activityCode: "status", action: "read"
@@ -22,8 +26,12 @@ import { inboxStatusProgressTopic } from "../../../../../modules/omnichannel-inb
  * Numbers, each chosen here as ADR-0075 requires:
  *
  * - `tickIntervalMs: 5000` — the revocation latency and the freshness: staff
- *   work in minutes (SLA budgets are in business minutes), and one guard chain
- *   plus three indexed reads per tick per connection.
+ *   work in minutes (SLA budgets are in business minutes), and per tick per
+ *   connection: one logged guard decision (`status.read`), a handful of indexed
+ *   reads, and, for a scope-confined caller, one UNLOGGED chokepoint evaluation
+ *   per candidate scope (at most 200, twice: `status.read` and
+ *   `conversations.read`). Those scope probes write no decision-log row, so the
+ *   ledger grows by one row per tick however many scopes the caller holds.
  * - `heartbeatMs: 15000` — below the 60 s idle timeout of common proxies.
  * - `maxConnectionMs: 600000` — ten minutes, then `stream-expired`; the client
  *   reconnects with `Last-Event-ID` and loses nothing.

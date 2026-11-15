@@ -38,6 +38,7 @@ import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { defineProgressSseRoute } from "../../src/modules/_shared/progress-sse-route";
 import { createSseConnectionRegistry } from "../../src/modules/_shared/sse-progress";
+import { invalidatePolicyCache } from "../../src/modules/identity-access/application/policy-cache";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
 import {
   inboxStatusProgressTopic,
@@ -50,6 +51,8 @@ import { POST as setupInitialize } from "../../src/pages/api/v1/setup/initialize
 
 const OWNER_PASSWORD = randomBytes(12).toString("hex") + "-Aa1!";
 const STATUS = ["omnichannel_inbox.status.read"];
+/** What a viewer needs to see conversation ids in a frame: the counts permission AND the list permission (audit L-1). */
+const ROWS = [...STATUS, "omnichannel_inbox.conversations.read"];
 
 type Envelope<T = unknown> = {
   success: boolean;
@@ -474,7 +477,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
     await conversation(tenantId, { officeId: brandB });
     await conversation(tenantId, { officeId: null });
 
-    const wide = await seedUser(tenantId, "wide", STATUS);
+    const wide = await seedUser(tenantId, "wide", ROWS);
     const wideSnap = await snapshot(wide.token);
 
     expect(wideSnap.status).toBe(200);
@@ -489,7 +492,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
     expect(parseInboxCursor(wideSnap.body.data!.cursor)).not.toBeNull();
     expect(wideSnap.body.data!.recent.length).toBe(5);
 
-    const confined = await seedUser(tenantId, "confined", STATUS);
+    const confined = await seedUser(tenantId, "confined", ROWS);
 
     await holdScope(confined.tenantUserId, brandA);
 
@@ -533,7 +536,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
 
   test("live: a change committed to the row arrives as a frame with a database cursor; only ids, statuses and times are streamed", async () => {
     const first = await conversation(tenantId, { awaiting: true });
-    const viewer = await seedUser(tenantId, "viewer", STATUS);
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
     const stream = await open(testRoute({}), viewer.token);
 
     expect(stream.response.status).toBe(200);
@@ -582,7 +585,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
     const brandA = await seedOffice("brand-a");
     const brandB = await seedOffice("brand-b");
     const a = await conversation(tenantId, { officeId: brandA });
-    const viewer = await seedUser(tenantId, "viewer", STATUS);
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
 
     await holdScope(viewer.tenantUserId, brandA);
 
@@ -664,6 +667,12 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
     await stream.waitFor(
       progressWith((d) => (d.counts as Record<string, number>).open === 0)
     );
+    // Losing a business scope narrows the frames; it does not end the stream
+    // (audit L-2: the contract says so).
+    await Bun.sleep(150);
+    expect(stream.events.some((e) => e.event === "authorization-revoked")).toBe(
+      false
+    );
     stream.close();
     await stream.ended;
   });
@@ -689,7 +698,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
 
   test("reconnect with Last-Event-ID resumes after the cursor, also on a fresh instance; a malformed or unknown cursor is snapshot-required", async () => {
     const c1 = await conversation(tenantId);
-    const viewer = await seedUser(tenantId, "viewer", STATUS);
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
     const first = await open(testRoute({}), viewer.token);
     const opening = await first.waitFor((e) => e.event === "progress");
 
@@ -735,7 +744,7 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
   });
 
   test("a change set too large for one frame becomes snapshot-required, not a bigger frame", async () => {
-    const viewer = await seedUser(tenantId, "viewer", STATUS);
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
     const stream = await open(
       testRoute({ maxChangesPerFrame: 2 }),
       viewer.token
@@ -803,5 +812,91 @@ suite("realtime progress stream: inbox.status.progress (#1171)", () => {
     expect(third.response.status).toBe(200);
     third.close();
     await third.ended;
+  });
+
+  /** The decision-log rows an actor produced for the inbox. */
+  async function inboxDecisionRows(tenantUserId: string): Promise<number> {
+    const rows = (await admin()`
+      SELECT count(*)::int AS n FROM awcms_abac_decision_logs
+      WHERE tenant_id = ${tenantId} AND tenant_user_id = ${tenantUserId}
+        AND module_key = 'omnichannel_inbox'
+    `) as { n: number }[];
+
+    return rows[0]!.n;
+  }
+
+  test("the decision log grows by one row per tick, not 1 + N per tick, however many business scopes the viewer holds (audit M-1)", async () => {
+    const few = await seedUser(tenantId, "few", ROWS);
+    const many = await seedUser(tenantId, "many", ROWS);
+
+    await holdScope(few.tenantUserId, await seedOffice("few-0"));
+    for (let i = 0; i < 20; i += 1) {
+      await holdScope(many.tenantUserId, await seedOffice(`many-${i}`));
+    }
+
+    const window = async (viewer: { token: string }) => {
+      const stream = await open(testRoute({}), viewer.token);
+
+      await stream.waitFor((e) => e.event === "progress");
+      await Bun.sleep(1_000);
+      stream.close();
+      await stream.ended;
+    };
+
+    await window(few);
+    await window(many);
+
+    const fewRows = await inboxDecisionRows(few.tenantUserId);
+    const manyRows = await inboxDecisionRows(many.tenantUserId);
+
+    // Before the fix: 1 scope -> ~30 rows, 20 scopes -> ~189 rows per second.
+    expect(fewRows).toBeGreaterThan(0);
+    expect(manyRows).toBeLessThanOrEqual(fewRows + 3);
+  });
+
+  test("a status.read holder without conversations.read gets counts and no conversation ids; a deny of conversations.read does the same (audit L-1)", async () => {
+    const brandA = await seedOffice("brand-a");
+    const c = await conversation(tenantId, { officeId: brandA });
+    const statusOnly = await seedUser(tenantId, "statusonly", STATUS);
+    const stream = await open(testRoute({}), statusOnly.token);
+    const snap = (await snapshot(statusOnly.token)).body.data!;
+
+    expect(snap.counts.open).toBe(1);
+    expect(snap.recent).toEqual([]);
+
+    const opening = await stream.waitFor((e) => e.event === "progress");
+
+    expect((opening.data as { counts: { open: number } }).counts.open).toBe(1);
+    await touch(c, "pending");
+    await stream.waitFor(
+      progressWith((d) => (d.counts as Record<string, number>).pending === 1)
+    );
+    expect(JSON.stringify(stream.events)).not.toContain(c);
+    stream.close();
+    await stream.ended;
+
+    // Holding the list permission shows the id...
+    const both = await seedUser(tenantId, "both", ROWS);
+
+    expect(
+      (await snapshot(both.token)).body.data!.recent.map((r) => r.id)
+    ).toContain(c);
+
+    // ...until an ABAC policy denies conversations.read: counts stay, ids go.
+    await admin()`
+      INSERT INTO awcms_abac_policies
+        (tenant_id, policy_code, effect, module_key, activity_code, action,
+         conditions, is_dsl_managed, is_active)
+      VALUES (${tenantId}, 'test.deny-inbox-list', 'deny', 'omnichannel_inbox',
+              'conversations', 'read', '{"allOf": []}'::jsonb, true, true)
+    `;
+
+    // The policy cache is per process; a real policy write invalidates it.
+    invalidatePolicyCache(tenantId);
+
+    const denied = (await snapshot(both.token)).body.data!;
+
+    expect(denied.counts.pending).toBe(1);
+    expect(denied.recent).toEqual([]);
   });
 });

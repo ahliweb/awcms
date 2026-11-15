@@ -471,12 +471,15 @@ export function scopeCoveredFor(
   context: AccountRouteContext,
   guard: AccountGuard,
   scope: ScopeRef,
-  resource: { type: string } = { type: "channel_account" }
+  resource: { type: string } = { type: "channel_account" },
+  options: { recordDecision?: boolean } = {}
 ): Promise<boolean> {
+  const quiet = options.recordDecision === false ? ":quiet" : "";
+
   return memoised(
     context,
-    `scope:${guard.activityCode}.${guard.action}:${scope.type}:${scope.id}:${resource.type}`,
-    () => decideScope(context, guard, scope, resource)
+    `scope:${guard.activityCode}.${guard.action}:${scope.type}:${scope.id}:${resource.type}${quiet}`,
+    () => decideScope(context, guard, scope, resource, options)
   );
 }
 
@@ -484,7 +487,8 @@ async function decideScope(
   context: AccountRouteContext,
   guard: AccountGuard,
   scope: ScopeRef,
-  resource: { type: string }
+  resource: { type: string },
+  options: { recordDecision?: boolean } = {}
 ): Promise<boolean> {
   const decision = await authorizeInTransaction(
     context.tx,
@@ -502,7 +506,8 @@ async function decideScope(
     {
       clientIp: resolveClientIp(context.request, context.clientAddress),
       hierarchyPort: HIERARCHY_PORT,
-      readCache: readCacheFor(context)
+      readCache: readCacheFor(context),
+      ...(options.recordDecision === false ? { recordDecision: false } : {})
     }
   );
 
@@ -565,12 +570,18 @@ const MAX_COVERED_SCOPE_CANDIDATES = 200;
  * deny or an expired assignment removes it exactly as it would for a single
  * request. Bounded and fail-closed: a truncated candidate list hides rows, it
  * never shows more. Memoised per `context.request`, like every decision here.
+ *
+ * `options.recordDecision: false` decides each candidate WITHOUT appending a
+ * decision-log row (audit M-1): a timer-driven caller (the inbox stream, one
+ * call per tick) would otherwise write 1 + N rows per tick. The decisions are
+ * identical; the primary decision of the caller still logs.
  */
 export function coveredScopesFor(
   context: AccountRouteContext,
-  guard: AccountGuard
+  guard: AccountGuard,
+  options: { recordDecision?: boolean } = {}
 ): Promise<ScopeRef[]> {
-  const memoKey = `covered:${guard.moduleKey}.${guard.activityCode}.${guard.action}`;
+  const memoKey = `covered:${guard.moduleKey}.${guard.activityCode}.${guard.action}${options.recordDecision === false ? ":quiet" : ""}`;
   let memo = coveredScopesMemo.get(context.request);
 
   if (!memo) {
@@ -581,7 +592,7 @@ export function coveredScopesFor(
   let pending = memo.get(memoKey);
 
   if (!pending) {
-    pending = decideCoveredScopes(context, guard);
+    pending = decideCoveredScopes(context, guard, options);
     memo.set(memoKey, pending);
   }
 
@@ -595,7 +606,8 @@ const coveredScopesMemo = new WeakMap<
 
 async function decideCoveredScopes(
   context: AccountRouteContext,
-  guard: AccountGuard
+  guard: AccountGuard,
+  options: { recordDecision?: boolean }
 ): Promise<ScopeRef[]> {
   const held = (await context.tx`
     SELECT scope_type, scope_id::text AS scope_id
@@ -640,7 +652,15 @@ async function decideCoveredScopes(
   const covered: ScopeRef[] = [];
 
   for (const candidate of candidates.values()) {
-    if (await scopeCoveredFor(context, guard, candidate))
+    if (
+      await scopeCoveredFor(
+        context,
+        guard,
+        candidate,
+        { type: "channel_account" },
+        options
+      )
+    )
       covered.push(candidate);
   }
 

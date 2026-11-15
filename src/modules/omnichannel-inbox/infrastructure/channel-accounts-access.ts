@@ -28,7 +28,8 @@ export type InboxScopeAccess = {
   /** The scopes a confined caller covers for `guard`, decided at the chokepoint. Bounded, fail-closed. */
   coveredScopes(
     context: InboxAccessContext,
-    guard: InboxGuard
+    guard: InboxGuard,
+    options?: { recordDecision?: boolean }
   ): Promise<ScopeRef[]>;
   /** `Response` (403/422) when the caller may not name this scope (or tenant-wide, when confined); `null` to go on. */
   authorizeScope(
@@ -45,8 +46,8 @@ export async function loadInboxScopeAccess(): Promise<InboxScopeAccess | null> {
 
     return {
       isConfined: (context) => support.callerIsScopeConfined(context),
-      coveredScopes: (context, guard) =>
-        support.coveredScopesFor(context, guard),
+      coveredScopes: (context, guard, options) =>
+        support.coveredScopesFor(context, guard, options),
       authorizeScope: (context, guard, scope) =>
         support.authorizeRequestedScope(context, guard, scope)
     };

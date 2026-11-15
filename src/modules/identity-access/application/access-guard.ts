@@ -51,7 +51,7 @@ import {
   cachedRead,
   type AuthorizationReadCache
 } from "./authorization-read-cache";
-import { recordDecisionLog } from "./decision-log";
+import { recordDecisionLog as writeDecisionLog } from "./decision-log";
 import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
 import { resolveActiveMachineCredential } from "./machine-credential-lookup";
@@ -243,8 +243,22 @@ export async function authorizeInTransaction(
      * owns, so the omission can only happen in a hand-written one.
      */
     clientIp?: string;
+    /**
+     * `false` suppresses the `awcms_abac_decision_logs` row of THIS call only
+     * (Issue #1171 audit M-1). For a caller that asks the same chokepoint many
+     * auxiliary questions on a timer — "which of these business scopes does the
+     * caller cover", once per candidate scope per stream tick — each of which
+     * would otherwise append an allow/deny row to the ledger. The decision
+     * itself is unchanged (RBAC, ABAC deny-overrides-allow, MFA, SoD all run);
+     * only the append is skipped. The primary, resource-access decision of the
+     * request is made WITHOUT this flag and still logs. Default: log.
+     */
+    recordDecision?: boolean;
   }
 ): Promise<AuthorizeResult> {
+  const recordDecisionLog: typeof writeDecisionLog =
+    options?.recordDecision === false ? async () => {} : writeDecisionLog;
+
   // ADR-0088 — THE invariant of Gelombang 7 PR 7.4, and the reason it is the
   // very first statement in this function.
   //
