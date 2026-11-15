@@ -94,6 +94,18 @@ describe("evaluateViewRlsBypass (pure)", () => {
     ).toContain("holds INSERT on view awcms_v, which is beyond");
   });
 
+  test("an owner row can read a materialized view but is never a matrix grant", () => {
+    const mv = view({ relkind: "m", owner_bypasses_rls: false });
+    const out = evaluateViewRlsBypass(
+      [mv],
+      [grant({ grantee: "awcms_own", is_owner: true })],
+      []
+    );
+
+    expect(out.length).toBe(1);
+    expect(out[0]).toContain("awcms_own can SELECT it");
+  });
+
   test("a reviewed grant that vanished is reported", () => {
     expect(
       evaluateViewRlsBypass(
@@ -139,11 +151,17 @@ describeOrSkip("security:readiness — views (database)", () => {
     DROP VIEW IF EXISTS public.awcms_rdy_view_chain;
     DROP VIEW IF EXISTS public.awcms_rdy_view;
     DROP MATERIALIZED VIEW IF EXISTS public.awcms_rdy_matview;
-    DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'awcms_rdy_owner') THEN
-        REVOKE ALL ON public.awcms_blog_posts FROM awcms_rdy_owner;
-        DROP ROLE awcms_rdy_owner;
-      END IF;
+    DROP SCHEMA IF EXISTS awcms_rdy_schema CASCADE;
+    DO $$
+    DECLARE r text;
+    BEGIN
+      FOREACH r IN ARRAY ARRAY['awcms_rdy_owner', 'rdy_runtime', 'rdy_group', 'rdy_member']
+      LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+          EXECUTE format('DROP OWNED BY %I', r);
+          EXECUTE format('DROP ROLE %I', r);
+        END IF;
+      END LOOP;
     END $$;
   `;
 
@@ -263,6 +281,104 @@ describeOrSkip("security:readiness — views (database)", () => {
 
         expect(text).toContain("materialized view awcms_rdy_matview");
         expect(text).toContain("no row level security of its own");
+      }
+    );
+  });
+
+  // Mutation tests for the audit of PR #1360. Each goes red when the matching
+  // part of the query in view-rls-bypass-readiness.ts is reverted.
+  const matview = `CREATE MATERIALIZED VIEW public.awcms_rdy_matview AS SELECT * FROM public.awcms_blog_posts;`;
+
+  test("a materialized view OWNED by a restricted role is readable by it, with no grant at all", async () => {
+    await mutated(
+      `CREATE ROLE awcms_rdy_owner NOLOGIN;
+       ${matview}
+       ALTER MATERIALIZED VIEW public.awcms_rdy_matview OWNER TO awcms_rdy_owner;
+       ${stripDefaultGrants("awcms_rdy_matview")}`,
+      undo,
+      async () => {
+        const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
+
+        expect(findings.join("; ")).toContain("awcms_rdy_owner can SELECT it");
+        // The owner's implicit privileges are not a matrix grant.
+        expect(findings.join("; ")).not.toContain("not in the reviewed");
+      }
+    );
+  });
+
+  test("a COLUMN-level SELECT grant on a materialized view counts as a reader", async () => {
+    await mutated(
+      `${matview}
+       ${stripDefaultGrants("awcms_rdy_matview")}
+       GRANT SELECT (id) ON public.awcms_rdy_matview TO awcms_app;`,
+      undo,
+      async () => {
+        const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
+
+        expect(findings.join("; ")).toContain("awcms_app can SELECT it");
+      }
+    );
+  });
+
+  test("a PUBLIC column-level grant counts, and membership of a granted role counts even NOINHERIT", async () => {
+    await mutated(
+      `${matview}
+       ${stripDefaultGrants("awcms_rdy_matview")}
+       CREATE ROLE rdy_group NOLOGIN;
+       CREATE ROLE rdy_member LOGIN NOINHERIT;
+       GRANT rdy_group TO rdy_member;
+       GRANT SELECT ON public.awcms_rdy_matview TO rdy_group;`,
+      undo,
+      async () => {
+        const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
+
+        expect(findings.join("; ")).toContain("rdy_member");
+        await withAdmin((sql) =>
+          sql.unsafe(
+            `REVOKE SELECT ON public.awcms_rdy_matview FROM rdy_group;
+             GRANT SELECT (id) ON public.awcms_rdy_matview TO PUBLIC;`
+          )
+        );
+        expect(
+          (await withAdmin((sql) => findViewRlsBypass(sql))).findings.join("; ")
+        ).toMatch(/yet (.*, )?PUBLIC[ ,]/);
+      }
+    );
+  });
+
+  test("a superuser-owned view in ANOTHER schema, read through a public view, is found", async () => {
+    await mutated(
+      `CREATE SCHEMA awcms_rdy_schema;
+       CREATE VIEW awcms_rdy_schema.inner_view AS SELECT * FROM public.awcms_blog_posts;
+       CREATE VIEW public.awcms_rdy_view WITH (security_invoker = true)
+         AS SELECT * FROM awcms_rdy_schema.inner_view;
+       ${stripDefaultGrants("awcms_rdy_view")}`,
+      undo,
+      async () => {
+        const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
+
+        expect(findings.join("; ")).toContain(
+          "view awcms_rdy_schema.inner_view reads FORCE-RLS table(s) awcms_blog_posts as its owner"
+        );
+      }
+    );
+  });
+
+  test("a runtime role that is NOT named awcms_* is still a grantee", async () => {
+    await mutated(
+      `CREATE ROLE rdy_runtime LOGIN;
+       ${matview}
+       ${stripDefaultGrants("awcms_rdy_matview")}
+       GRANT SELECT ON public.awcms_rdy_matview TO rdy_runtime;`,
+      undo,
+      async () => {
+        const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
+        const text = findings.join("; ");
+
+        expect(text).toContain("rdy_runtime can SELECT it");
+        expect(text).toContain(
+          "rdy_runtime holds SELECT on view awcms_rdy_matview"
+        );
       }
     );
   });

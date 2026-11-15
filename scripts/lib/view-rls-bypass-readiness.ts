@@ -33,10 +33,14 @@ const VIEW_PRIVILEGES = [
 export type ViewPrivilege = (typeof VIEW_PRIVILEGES)[number];
 
 /**
- * The view grant matrix. A view or materialized view in schema `public` that a
- * restricted role (any non-superuser `awcms_*` role other than the view's own
- * owner, and `PUBLIC`) can touch must be declared here with EXACTLY the
- * privileges it may hold; any other privilege is a finding. Empty today: this
+ * The view grant matrix. A view or materialized view in ANY non-system schema
+ * that a restricted role (every role that is neither a superuser nor BYPASSRLS,
+ * whatever its name, other than the view's own owner; and `PUBLIC`) can touch
+ * must be declared here with EXACTLY the privileges it may hold; any other
+ * privilege is a finding. A privilege counts however it is reached: directly,
+ * through membership of another role (even NOINHERIT: the member can SET ROLE),
+ * through PUBLIC, or through a column-level grant. A view outside `public` is
+ * named `schema.view` here. Empty today: this
  * repository defines no view. Adding one is a migration AND an edit here, on
  * purpose, the same contract as `REVIEWED_PERMISSIVE_POLICIES`.
  */
@@ -63,6 +67,12 @@ export type ViewGrantRow = {
   relname: string;
   grantee: string;
   privileges: string[];
+  /**
+   * The grantee owns the relation. An owner holds every privilege by
+   * definition, so it is not a grant for the matrix, but it still READS the
+   * relation: a materialized view owned by a restricted role is readable by it.
+   */
+  is_owner?: boolean;
 };
 
 /** Pure decision over the catalog rows, exported for the unit tests. */
@@ -109,6 +119,8 @@ export function evaluateViewRlsBypass(
   const seen = new Set<string>();
 
   for (const grant of grants) {
+    if (grant.is_owner) continue;
+
     const pinned = pinnedBy.get(key(grant.relname, grant.grantee));
     const excess = grant.privileges.filter(
       (privilege) => !pinned?.privileges.includes(privilege as ViewPrivilege)
@@ -136,7 +148,7 @@ export function evaluateViewRlsBypass(
 }
 
 /**
- * Reads every view/materialized view in schema `public` (relkind v/m) with its
+ * Reads every view/materialized view in every non-system schema (relkind v/m) with its
  * transitive FORCE-RLS dependencies and the privileges restricted roles hold on
  * it, then applies `evaluateViewRlsBypass`. Never throws on a clean database; a
  * driver error propagates to the caller.
@@ -146,7 +158,7 @@ export async function findViewRlsBypass(
   reviewed: readonly ReviewedViewGrant[] = REVIEWED_VIEW_GRANTS
 ): Promise<{ checkedViews: number; findings: string[] }> {
   const views = (await sql`
-    SELECT c.relname::text AS relname, c.relkind::text AS relkind,
+    SELECT (CASE WHEN n.nspname = 'public' THEN c.relname::text ELSE n.nspname || '.' || c.relname END) AS relname, c.relkind::text AS relkind,
            o.rolname::text AS owner,
            (o.rolsuper OR o.rolbypassrls) AS owner_bypasses_rls,
            EXISTS (
@@ -155,8 +167,9 @@ export async function findViewRlsBypass(
                AND lower(opt.option_value) IN ('true', 'on', 'yes', 'y', 't', '1')
            ) AS security_invoker,
            ARRAY(
-             SELECT t.relname::text
+             SELECT (CASE WHEN tn.nspname = 'public' THEN t.relname::text ELSE tn.nspname || '.' || t.relname END)
              FROM pg_class t
+             JOIN pg_namespace tn ON tn.oid = t.relnamespace
              WHERE t.relkind IN ('r', 'p')
                AND t.relrowsecurity AND t.relforcerowsecurity
                AND t.oid IN (
@@ -179,12 +192,19 @@ export async function findViewRlsBypass(
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_roles o ON o.oid = c.relowner
-    WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
-    ORDER BY c.relname
+    WHERE c.relkind IN ('v', 'm') AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND left(n.nspname, 8) <> 'pg_toast' AND left(n.nspname, 7) <> 'pg_temp'
+    ORDER BY 1
   `) as ViewRow[];
 
+  // Every role that is neither a superuser nor BYPASSRLS is a reader to worry
+  // about, whatever its name (a runtime/reporting role need not be `awcms_*`),
+  // and so is every NOLOGIN group a login role belongs to. A privilege reaches
+  // a role if it, or any role it is a member of (pg_has_role MEMBER ignores
+  // NOINHERIT on purpose: a member can SET ROLE), holds it on the table or on
+  // a column of it. The owner is NOT excluded: it reads its own relation.
   const grantRows = (await sql`
-    SELECT c.relname::text AS relname, g.name AS grantee,
+    SELECT (CASE WHEN n.nspname = 'public' THEN c.relname::text ELSE n.nspname || '.' || c.relname END) AS relname, g.name AS grantee,
+           (g.oid = c.relowner) AS is_owner,
            ARRAY(
              SELECT p FROM unnest(${sql.array([...VIEW_PRIVILEGES], "text")}::text[]) AS p
              WHERE CASE WHEN g.oid = 0
@@ -192,7 +212,20 @@ export async function findViewRlsBypass(
                           SELECT 1
                           FROM aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
                           WHERE a.grantee = 0 AND a.privilege_type = p)
-                        ELSE has_table_privilege(g.oid, c.oid, p) END
+                          OR (p IN ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES')
+                              AND EXISTS (
+                                SELECT 1
+                                FROM pg_attribute at,
+                                     aclexplode(at.attacl) a
+                                WHERE at.attrelid = c.oid AND at.attacl IS NOT NULL
+                                  AND a.grantee = 0 AND a.privilege_type = p))
+                        ELSE EXISTS (
+                          SELECT 1 FROM pg_roles h
+                          WHERE pg_has_role(g.oid, h.oid, 'MEMBER')
+                            AND (has_table_privilege(h.oid, c.oid, p)
+                                 OR (p IN ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES')
+                                     AND has_any_column_privilege(h.oid, c.oid, p))))
+                   END
            ) AS privileges
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -201,10 +234,10 @@ export async function findViewRlsBypass(
       UNION ALL
       SELECT r.oid, r.rolname::text
       FROM pg_roles r
-      WHERE r.rolname LIKE 'awcms\_%' AND NOT r.rolsuper AND r.oid <> c.relowner
+      WHERE NOT r.rolsuper AND NOT r.rolbypassrls AND left(r.rolname, 3) <> 'pg_'
     ) g
-    WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
-    ORDER BY c.relname, g.name
+    WHERE c.relkind IN ('v', 'm') AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND left(n.nspname, 8) <> 'pg_toast' AND left(n.nspname, 7) <> 'pg_temp'
+    ORDER BY 1, g.name
   `) as ViewGrantRow[];
 
   return {
