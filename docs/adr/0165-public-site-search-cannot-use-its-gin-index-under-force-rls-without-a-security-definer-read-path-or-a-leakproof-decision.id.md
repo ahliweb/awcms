@@ -1,10 +1,10 @@
-🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0163-public-site-search-cannot-use-its-gin-index-under-force-rls-without-a-security-definer-read-path-or-a-leakproof-decision.md)
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0165-public-site-search-cannot-use-its-gin-index-under-force-rls-without-a-security-definer-read-path-or-a-leakproof-decision.md)
 
-<!-- i18n-source-hash: sha256:10c42c71c0a834b4bdd0f69602689743251fe9218735a56202646653270806be -->
+<!-- i18n-source-hash: sha256:5fa4800f59dd129f94bd92a1a2bd63b12b0c3c6d5807f7b9c2c6db6f529cc4c2 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
-# ADR-0163 — Pencarian situs publik tidak bisa memakai indeks GIN-nya di bawah FORCE RLS tanpa jalur baca SECURITY DEFINER atau keputusan LEAKPROOF
+# ADR-0165 — Pencarian situs publik tidak bisa memakai indeks GIN-nya di bawah FORCE RLS tanpa jalur baca SECURITY DEFINER atau keputusan LEAKPROOF
 
 - **Status:** Diusulkan (menunggu keputusan pemilik, pertanyaan Q1)
 - **Tanggal:** 2026-11-15

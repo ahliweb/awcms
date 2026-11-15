@@ -1,6 +1,6 @@
-🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0163-public-site-search-cannot-use-its-gin-index-under-force-rls-without-a-security-definer-read-path-or-a-leakproof-decision.id.md)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0165-public-site-search-cannot-use-its-gin-index-under-force-rls-without-a-security-definer-read-path-or-a-leakproof-decision.id.md)
 
-# ADR-0163 — Public site search cannot use its GIN index under FORCE RLS without a SECURITY DEFINER read path or a LEAKPROOF decision
+# ADR-0165 — Public site search cannot use its GIN index under FORCE RLS without a SECURITY DEFINER read path or a LEAKPROOF decision
 
 - **Status:** Proposed (awaiting the owner's decision, question Q1)
 - **Date:** 2026-11-15
