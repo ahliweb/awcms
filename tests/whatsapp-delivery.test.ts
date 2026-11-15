@@ -17,6 +17,7 @@
  * - the module descriptor: delegated retention that names TERMINAL statuses,
  *   nine permissions mirrored by the seed, and a navigation entry.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -25,6 +26,7 @@ import {
   getProviderCircuitBreaker,
   resetProviderCircuitBreakersForTests
 } from "../src/lib/database/circuit-breaker";
+import { listModules } from "../src/modules";
 import { whatsappDeliveryModule } from "../src/modules/whatsapp-delivery/module";
 import {
   KNOWN_WHATSAPP_PROVIDERS,
@@ -66,6 +68,9 @@ import { createMetaCloudWhatsappProvider } from "../src/modules/whatsapp-deliver
 import { resolveWhatsappProvider } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-provider-resolver";
 import type { WhatsappHttpClient } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-http-client";
 import type { WhatsappSendRequest } from "../src/modules/whatsapp-delivery/domain/whatsapp-provider-contract";
+
+// Composition root for this test process (ADR-0164).
+installExtensionPointSource(listModules);
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const NUMBER = "+6281234567890";
@@ -311,14 +316,14 @@ describe("the template registry enforces purpose and the variable allow-list", (
 
   test("a placeholder naming an unlisted variable renders empty", () => {
     registerWhatsappTemplate({
-      key: "booking.reminder",
+      key: "fixture.reminder",
       version: 1,
       purpose: "transactional",
       body: "Hi {{name}}, see {{secretThing}}.",
       variables: ["name"]
     });
     const rendered = renderWhatsappTemplate(
-      getWhatsappTemplate("booking.reminder")!,
+      getWhatsappTemplate("fixture.reminder")!,
       {
         name: "Sari",
         secretThing: "leak"
@@ -394,10 +399,14 @@ describe("the template registry enforces purpose and the variable allow-list", (
     ).toThrow(WhatsappTemplateRegistrationError);
   });
 
-  test("upstream ships only the neutral system.notice", () => {
-    expect(listWhatsappTemplates().map((t) => t.key)).toEqual([
-      "system.notice"
-    ]);
+  test("upstream ships only the neutral system.notice of its own; the rest are module-DECLARED (ADR-0164)", () => {
+    const declared = listModules()
+      .flatMap((module) => module.whatsappTemplates ?? [])
+      .map((template) => template.key);
+
+    expect(listWhatsappTemplates().map((t) => t.key)).toEqual(
+      ["system.notice", ...declared].sort()
+    );
   });
 });
 

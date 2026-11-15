@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ef8a1ed787b8cb850f890767218fcc30ab061a41a8cecd424b3a3809600daf29 -->
+<!-- i18n-source-hash: sha256:eaa1322f1fa9e8b6d8f13a74345725b175f0485863dd0f5bdc7131074065a521 -->
 
 # Email
 
@@ -107,9 +107,13 @@ diizinkan, dan (#1044) tiga kategori
 `employeeName`, `correctionDate`; tak pernah alasan) yang dikirim `hr_workforce`
 lewat capability `workflow_notification` yang kini disediakan modul ini
 (`application/workflow-notification-port-adapter.ts`, subjek dirender dalam
-locale default tenant). Aplikasi turunan mendaftarkan kategori `derived.<name>`-nya sendiri
-lewat `registerDerivedEmailTemplateCategory` sebelum dipakai; kategori tak
-dikenal ditolak saat pembuatan (fail-closed).
+locale default tenant). Sebuah modul
+mendeklarasikan kategori `derived.<name>`-nya sendiri di descriptor
+(`emailTemplateCategories`, ADR-0164), di-resolve sesuai kebutuhan di setiap
+proses termasuk `email:dispatch`; kategori yang tak dideklarasikan ditolak saat
+pembuatan (fail-closed). Kategori yang boleh di-enqueue transaksi worker adalah
+baris `awcms_email_worker_categories` (sql/410), bukan isi fungsi: modul
+menanam barisnya sendiri di migrasinya.
 
 - Kolom body bertipe `jsonb` per-locale (`{"en": "...", "id": "..."}`, doc 04
   §Konten multi-bahasa). Perenderan (`domain/email-template-render.ts`)

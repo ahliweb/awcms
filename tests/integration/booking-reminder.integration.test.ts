@@ -47,7 +47,6 @@ import {
 } from "../../src/modules/booking/application/booking-reservation-service";
 import type { PlaceHoldInput } from "../../src/modules/booking/domain/booking-allocation";
 import { reminderIdempotencyKey } from "../../src/modules/booking/domain/booking-reminder";
-import { registerBookingWhatsappTemplates } from "../../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import type { BookingReminderRecipientPort } from "../../src/modules/_shared/ports/booking-reminder-recipient-port";
 import type { WhatsappDeliveryPort } from "../../src/modules/_shared/ports/whatsapp-delivery-port";
 import { createSuppression } from "../../src/modules/whatsapp-delivery/application/whatsapp-consent-directory";
@@ -78,8 +77,6 @@ const DISABLED = {
 
 // The consent / suppression functions read the key ring from the process env.
 process.env.WHATSAPP_RECIPIENT_HASH_KEYS = `k1:${KEY}`;
-
-registerBookingWhatsappTemplates();
 
 let env: NodeJS.ProcessEnv = ENABLED;
 let phoneSequence = 0;

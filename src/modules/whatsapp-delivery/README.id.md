@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:82566586ea91abf27dc38871a74d91a9680ebee3840088cffa140a784beaaf8b -->
+<!-- i18n-source-hash: sha256:ab00c9c8f28320c17bca8d3fac8a079c8faf770cb368001e84caba2967627e4a -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -27,7 +27,7 @@ ADR-0074 sudah menjadikan `push_delivery` outbox kedua, sehingga batasan di issu
 - `getStatusByCorrelation` membaca kembali status lewat id rekaman milik pemanggil sendiri (penerima disamarkan, tidak pernah nomornya); `cancelByCorrelation` membatalkan pesan yang masih menunggu dan tidak berbuat apa-apa setelah terkirim.
 - Port **tidak melakukan pemeriksaan akses dan tidak menulis baris audit**: konsumen mengotorisasi dan mengaudit aksi bisnisnya sendiri.
 
-Konsumen mendaftarkan templat dengan `registerWhatsappTemplate` (kunci berawalan modul, mis. `booking.reminder`). Sebuah templat punya **tepat satu tujuan** dan daftar variabel yang diizinkan; variabel yang tidak ada dalam daftar **dibuang** oleh renderer, itulah yang menjaga pemberitahuan gaji bebas dari data gaji.
+Konsumen mendeklarasikan templat di descriptor modulnya (`whatsappTemplates`, ADR-0164; kunci berawalan modul, mis. `booking.reminder`); registry memuatnya pada pencarian pertama di setiap proses, termasuk `whatsapp:dispatch`. Sebuah templat punya **tepat satu tujuan** dan daftar variabel yang diizinkan; variabel yang tidak ada dalam daftar **dibuang** oleh renderer, itulah yang menjaga pemberitahuan gaji bebas dari data gaji.
 
 ## Kelas tujuan dan persetujuan
 

@@ -1,3 +1,6 @@
+import { requireExtensionPointModules } from "../../_shared/extension-point-source";
+import type { ModuleDescriptor } from "../../_shared/module-contract";
+
 /**
  * Template registry for `whatsapp_delivery` (Issue #963, ADR-0133 sections 2
  * and 4). A template key is registered with exactly ONE purpose and a versioned
@@ -9,6 +12,13 @@
  * `registerWhatsappTemplate` from their own module scope with a module-prefixed
  * key (`booking.reminder`, `commerce.order_paid`). Upstream ships no business
  * wording except the neutral `system.notice`.
+ *
+ * Since ADR-0164 (Issue #1277) a module DECLARES its templates in its
+ * descriptor (`ModuleDescriptor.whatsappTemplates`) and this registry loads
+ * them on first lookup, in whatever process asks. A process that never imported
+ * the owning module (`whatsapp:dispatch`) used to fail the message terminally
+ * as `template_unknown`; `registerWhatsappTemplate` is now the loader's tool,
+ * and `bun run extension-points:check` rejects any other caller outside tests.
  */
 export type WhatsappPurpose = "transactional" | "security" | "marketing";
 
@@ -129,19 +139,55 @@ export function registerWhatsappTemplate(
   registry.set(definition.key, Object.freeze({ ...definition }));
 }
 
+let loadedDescriptors = new WeakSet<ModuleDescriptor>();
+
+/**
+ * Registers every template a not-yet-seen module descriptor declares. Cheap and
+ * idempotent: a descriptor is processed once, so a module added after startup
+ * (a test, a composition) is still picked up by the next lookup.
+ */
+export function loadDescriptorWhatsappTemplates(): void {
+  for (const module of requireExtensionPointModules(
+    "The WhatsApp template registry"
+  )) {
+    if (loadedDescriptors.has(module)) {
+      continue;
+    }
+
+    for (const template of module.whatsappTemplates ?? []) {
+      registerWhatsappTemplate({ ...template });
+    }
+
+    loadedDescriptors.add(module);
+  }
+}
+
 export function getWhatsappTemplate(
   key: string
 ): WhatsappTemplateDefinition | undefined {
+  // A built-in (or already loaded) key needs no descriptor; anything else can
+  // only come from one, so a process without a source fails loudly here.
+  const known = registry.get(key);
+
+  if (known) {
+    return known;
+  }
+
+  loadDescriptorWhatsappTemplates();
+
   return registry.get(key);
 }
 
 export function listWhatsappTemplates(): WhatsappTemplateDefinition[] {
+  loadDescriptorWhatsappTemplates();
+
   return [...registry.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /** Test seam only. */
 export function resetWhatsappTemplatesForTests(): void {
   registry.clear();
+  loadedDescriptors = new WeakSet<ModuleDescriptor>();
   registerBuiltInTemplates();
 }
 

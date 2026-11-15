@@ -3,6 +3,8 @@
  * ADR-0131, ADR-0133 sections 3 and 8). The behaviour against PostgreSQL is
  * `tests/integration/booking-reminder.integration.test.ts`.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -24,11 +26,13 @@ import {
   settlementFor,
   staleIntentStatus
 } from "../src/modules/booking/domain/booking-reminder";
-import { registerBookingWhatsappTemplates } from "../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import {
   getWhatsappTemplate,
   renderWhatsappTemplate
 } from "../src/modules/whatsapp-delivery/domain/whatsapp-templates";
+
+// Composition root for this test process (ADR-0164).
+installExtensionPointSource(listModules);
 
 const root = join(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -148,9 +152,6 @@ describe("the message", () => {
   });
 
   test("both templates register as transactional with only non-personal variables", () => {
-    registerBookingWhatsappTemplates();
-    registerBookingWhatsappTemplates();
-
     for (const template of BOOKING_WHATSAPP_TEMPLATES) {
       const registered = getWhatsappTemplate(template.key)!;
 
@@ -160,8 +161,6 @@ describe("the message", () => {
   });
 
   test("a variable that is not on the allow-list (a name, a number) is dropped, never sent", () => {
-    registerBookingWhatsappTemplates();
-
     const rendered = renderWhatsappTemplate(
       getWhatsappTemplate("booking.reminder")!,
       {
@@ -211,15 +210,16 @@ describe("booking holds no channel credential and no second queue", () => {
     );
   });
 
-  test("booking reaches whatsapp_delivery's code in exactly one declared place", () => {
+  test("booking imports no whatsapp_delivery code; it declares its templates on the descriptor (ADR-0164)", () => {
     const importers = listFiles("src/modules/booking").filter(
       (file) =>
         file.endsWith(".ts") &&
         /from "(\.\.\/)+whatsapp-delivery\//.test(read(file))
     );
 
-    expect(importers).toEqual([
-      "src/modules/booking/infrastructure/booking-whatsapp-templates.ts"
+    expect(importers).toEqual([]);
+    expect(bookingModule.whatsappTemplates).toEqual([
+      ...BOOKING_WHATSAPP_TEMPLATES
     ]);
     expect(bookingModule.capabilities?.consumes).toContainEqual({
       capability: "whatsapp_delivery",
@@ -238,13 +238,14 @@ describe("booking holds no channel credential and no second queue", () => {
 });
 
 describe("the registry is complete in every process that sends", () => {
-  test("the reminder job and whatsapp:dispatch both register booking's templates", () => {
-    expect(read("scripts/booking-reminders-dispatch.ts")).toContain(
-      "registerBookingWhatsappTemplates()"
-    );
-    expect(read("scripts/whatsapp-dispatch.ts")).toContain(
-      "registerBookingWhatsappTemplates()"
-    );
+  test("no process registers booking's templates by hand: the registry loads the descriptor's", () => {
+    for (const script of [
+      "scripts/booking-reminders-dispatch.ts",
+      "scripts/whatsapp-dispatch.ts",
+      "scripts/whatsapp-meta-preflight.ts"
+    ]) {
+      expect(read(script)).not.toContain("registerBookingWhatsappTemplates");
+    }
   });
 
   test("the job is declared on the descriptor and wired in package.json", () => {

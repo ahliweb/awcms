@@ -3,8 +3,9 @@
  *
  * ## The template key is a `derived.*` category
  *
- * `email`'s base categories are fixed; a domain module registers its own with
- * `registerDerivedEmailTemplateCategory` and an explicit variable allow-list.
+ * `email`'s base categories are fixed; a domain module declares its own in its
+ * descriptor (`emailTemplateCategories`, ADR-0164) with an explicit variable
+ * allow-list.
  * The allow-list is what stops a template author interpolating something the
  * renderer was never told about — an unrecognised variable is a validation
  * error, never "no restriction".

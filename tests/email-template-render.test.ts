@@ -8,6 +8,11 @@ import {
   registerDerivedEmailTemplateCategory,
   resetDerivedEmailTemplateCategoriesForTests
 } from "../src/modules/email/domain/email-template-categories";
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
+
+// Composition root for this test process (ADR-0164).
+installExtensionPointSource(listModules);
 
 const PASSWORD_RESET_TEMPLATE = {
   subjectTemplate: {

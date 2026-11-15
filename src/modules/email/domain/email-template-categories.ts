@@ -1,3 +1,5 @@
+import { requireExtensionPointModules } from "../../_shared/extension-point-source";
+
 /**
  * Template category → allowed variable names (Issue #498, epic #492).
  * `template_key` (`sql/020`'s format check, dot-separated) doubles as the
@@ -7,10 +9,20 @@
  * Base categories are fixed here. `derived.*` is an **extension
  * namespace** (per the issue: "derived.transactional as an extension
  * category pattern for derived apps") — a domain module in `src/modules/`
- * registers its own `derived.<name>` categories via
- * `registerDerivedEmailTemplateCategory` before using them; an
- * unregistered `derived.*` category is rejected (fail-closed), not
- * implicitly allowed with an empty/unlimited allowlist.
+ * DECLARES its own `derived.<name>` categories in its descriptor
+ * (`ModuleDescriptor.emailTemplateCategories`, ADR-0164); an undeclared
+ * `derived.*` category is rejected (fail-closed), not implicitly allowed with
+ * an empty/unlimited allowlist.
+ *
+ * Descriptor declarations are resolved ON DEMAND from the source a composition
+ * root installed (`_shared/extension-point-source.ts`: the web entry and the
+ * dispatcher scripts), so this file does not import the module list and drag
+ * every descriptor into the closure of each job that enqueues a base-category
+ * e-mail. A `derived.*` lookup in a process with no source installed THROWS;
+ * it is never "unknown, no variables" (that omission rendered a one-time code
+ * as an empty string, Issue #1277). `registerDerivedEmailTemplateCategory`
+ * remains for tests only; `bun run extension-points:check` rejects any other
+ * caller.
  */
 
 export const BASE_EMAIL_TEMPLATE_CATEGORIES = [
@@ -108,11 +120,31 @@ const BASE_CATEGORY_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = {
 
 const derivedCategoryAllowlists = new Map<string, readonly string[]>();
 
+/** The allow-list a module DECLARED for `category`, or `undefined`. First declaration wins; duplicates are a gate failure, not a runtime race. */
+function declaredCategoryAllowlist(
+  category: string
+): readonly string[] | undefined {
+  if (!category.startsWith("derived.")) {
+    return undefined;
+  }
+
+  for (const module of requireExtensionPointModules(
+    `The e-mail category "${category}"`
+  )) {
+    for (const entry of module.emailTemplateCategories ?? []) {
+      if (entry.category === category) {
+        return entry.allowedVariables;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
- * A domain module calls this once at startup to register its own
- * `derived.<name>` category (e.g. `derived.order_confirmation`) with its
- * allowed variable names, before any template using that category is
- * created or rendered. Throws if `category` is not `derived.`-prefixed —
+ * TEST-ONLY seam. A module declares its category in its descriptor
+ * (`emailTemplateCategories`, ADR-0164); calling this from application code is
+ * the process-local registration that Issue #1277 removed. Throws if `category` is not `derived.`-prefixed —
  * base categories are fixed and not extensible this way.
  */
 export function registerDerivedEmailTemplateCategory(
@@ -136,7 +168,8 @@ export function resetDerivedEmailTemplateCategoriesForTests(): void {
 export function isKnownEmailTemplateCategory(category: string): boolean {
   return (
     Object.prototype.hasOwnProperty.call(BASE_CATEGORY_ALLOWLISTS, category) ||
-    derivedCategoryAllowlists.has(category)
+    derivedCategoryAllowlists.has(category) ||
+    declaredCategoryAllowlist(category) !== undefined
   );
 }
 
@@ -147,6 +180,7 @@ export function getAllowedVariablesForCategory(
   return (
     BASE_CATEGORY_ALLOWLISTS[category] ??
     derivedCategoryAllowlists.get(category) ??
+    declaredCategoryAllowlist(category) ??
     null
   );
 }

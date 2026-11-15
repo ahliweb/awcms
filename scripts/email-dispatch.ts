@@ -19,6 +19,8 @@
  * is decrypted in memory per lane, for the claimed rows' tenant; with
  * `EMAIL_SENDER_ROUTING_ENABLED` off no tenant-sender row is claimed at all.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
@@ -33,6 +35,10 @@ import { dispatchEmailQueue } from "../src/modules/email/application/email-dispa
 const MAX_PASSES_PER_TENANT = 20;
 
 type TenantRow = { id: string };
+
+// Composition root (ADR-0164): this process renders or sends declared
+// categories/templates, so it installs the descriptor source itself.
+installExtensionPointSource(listModules);
 
 async function main() {
   // `getWorkerDatabaseClient` connects as the least-privilege worker role

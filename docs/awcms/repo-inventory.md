@@ -8,13 +8,13 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 287   |
-| `awcms_*` tables                    | 277   |
+| Migrations                          | 288   |
+| `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
-| RLS-free tables (global, by design) | 18    |
-| Test files                          | 882   |
+| RLS-free tables (global, by design) | 19    |
+| Test files                          | 884   |
 | Route files                         | 697   |
-| ADR                                 | 330   |
+| ADR                                 | 332   |
 
 ### Modules
 
@@ -350,8 +350,9 @@
 | 283 | `sql/399_awcms_channel_accounts_last_owner_guard.sql`                  |
 | 284 | `sql/408_awcms_audit_events_append_only_for_app_role.sql`              |
 | 285 | `sql/409_awcms_append_only_ledgers_for_app_role.sql`                   |
-| 286 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
-| 287 | `sql/414_awcms_omes_workflow_verdict_worker_grants.sql`                |
+| 286 | `sql/410_awcms_email_worker_categories_allow_list.sql`                 |
+| 287 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
+| 288 | `sql/414_awcms_omes_workflow_verdict_worker_grants.sql`                |
 
 ### Tables & Row-Level Security
 
@@ -451,6 +452,7 @@
 | `awcms_email_sender_policies`                  | `sql/346_awcms_email_sender_routing.sql`                   | yes | yes   |
 | `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_worker_categories`                | `sql/410_awcms_email_worker_categories_allow_list.sql`     | no  | no    |
 | `awcms_engagement_source_domains`              | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
 | `awcms_engagement_sources`                     | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
 | `awcms_engagement_submissions`                 | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
@@ -639,9 +641,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 649        |
+| `(root)`      | 650        |
 | `e2e`         | 30         |
-| `integration` | 201        |
+| `integration` | 202        |
 | `unit`        | 2          |
 
 ### Routes

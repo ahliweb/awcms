@@ -16,13 +16,18 @@ Follow `src/modules/email/README.md` (full architecture: provider contract, Mail
    `system.maintenance`, `workflow.task_assigned`,
    `workflow.decision_required`) already have a built-in variable allowlist
    (`domain/email-template-categories.ts`'s `BASE_EMAIL_TEMPLATE_CATEGORIES`).
-   Your own categories must be `derived.*` and must be registered first:
+   Your own categories must be `derived.*` and must be DECLARED in your module descriptor (ADR-0164), never registered by an
+   import at startup — `email:dispatch` is another process and would not have it:
    ```ts
-   registerDerivedEmailTemplateCategory("derived.order_confirmation", [
-     "orderNumber",
-     "total",
-     "trackingUrl"
-   ]);
+   emailTemplateCategories: [
+     {
+       category: "derived.order_confirmation",
+       allowedVariables: ["orderNumber", "total", "trackingUrl"]
+       // workerInsert: true  (only if enqueued from a worker transaction; then
+       // seed `awcms_email_worker_categories` in your migration, never re-issue
+       // the guard function)
+     }
+   ],
    ```
    Unknown categories are rejected at template create time (fail-closed) —
    **do not** try to reuse an existing base category for something else,

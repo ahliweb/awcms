@@ -5,7 +5,7 @@ description: Kirim email transaksional (password reset, announcement, workflow n
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:4f98cdc01688c186fe2919a2e5d171cec5caab4adab6572b8e88c6bf063cde7f -->
+<!-- i18n-source-hash: sha256:68d791bf733152e4770ac4483ccaf85e94a2f20cd529f819ccb07169cb162cee -->
 
 # AWCMS — Email Module
 
@@ -18,13 +18,18 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
    `system.maintenance`, `workflow.task_assigned`,
    `workflow.decision_required`) sudah punya allowlist variabel bawaan
    (`domain/email-template-categories.ts`'s `BASE_EMAIL_TEMPLATE_CATEGORIES`).
-   Kategori sendiri harus `derived.*` dan didaftarkan dulu:
+   Kategori sendiri harus `derived.*` dan DIDEKLARASIKAN di descriptor modulmu (ADR-0164), tidak pernah didaftarkan lewat
+   impor saat startup — `email:dispatch` proses lain dan tidak akan memilikinya:
    ```ts
-   registerDerivedEmailTemplateCategory("derived.order_confirmation", [
-     "orderNumber",
-     "total",
-     "trackingUrl"
-   ]);
+   emailTemplateCategories: [
+     {
+       category: "derived.order_confirmation",
+       allowedVariables: ["orderNumber", "total", "trackingUrl"]
+       // workerInsert: true  (hanya bila di-enqueue dari transaksi worker; lalu
+       // seed `awcms_email_worker_categories` di migrasimu, jangan terbitkan
+       // ulang fungsi guard)
+     }
+   ],
    ```
    Kategori yang tidak dikenal ditolak saat create template (fail-closed) —
    **jangan** coba pakai kategori base yang sudah ada untuk kebutuhan lain,

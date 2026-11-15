@@ -21,21 +21,24 @@
  * a number, a recipient, a hash, a body or a token.
  *
  * Exit code: 0 when nothing would fail, 1 when something would (or a tenant
- * could not be read). The template registry is process-local, like the
- * dispatcher's, so a consumer's templates are registered here too.
+ * could not be read). A consumer's templates are declared in its module
+ * descriptor and loaded on first lookup (ADR-0164).
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
-import { registerBookingWhatsappTemplates } from "../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import { runMetaEnablementPreflight } from "../src/modules/whatsapp-delivery/application/whatsapp-meta-preflight";
 
 type TenantRow = { id: string; tenant_code: string };
 
+// Composition root (ADR-0164): this process renders or sends declared
+// categories/templates, so it installs the descriptor source itself.
+installExtensionPointSource(listModules);
+
 async function main(): Promise<void> {
   const sql = getWorkerDatabaseClient();
-
-  registerBookingWhatsappTemplates();
 
   const tenants = (await sql`
     SELECT id, tenant_code FROM awcms_tenants ORDER BY tenant_code

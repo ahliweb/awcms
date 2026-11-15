@@ -291,6 +291,47 @@ export type ModuleCapabilityContract = {
   consumes?: readonly ModuleCapabilityDependency[];
 };
 
+/** One `derived.*` e-mail category a module owns (ADR-0164). */
+export type ModuleEmailTemplateCategory = {
+  /** `derived.<name>`, lower-case snake segments. Base categories are fixed in `email`. */
+  category: string;
+  /** The variable allow-list; a variable not on it is never substituted. */
+  allowedVariables: readonly string[];
+  /**
+   * `true` when the category is enqueued from an `awcms_worker` transaction (a
+   * domain-event consumer, a job). The database refuses a worker insert in any
+   * category that is not a row of `awcms_email_worker_categories`, so the
+   * module's migration must seed one; `bun run extension-points:check` fails
+   * if it does not. Omit for categories enqueued on the request path.
+   */
+  workerInsert?: boolean;
+};
+
+/**
+ * One BASE e-mail category (not `derived.*`) a module's `awcms_worker`
+ * transactions enqueue (ADR-0164). Base categories cannot be redeclared in
+ * `emailTemplateCategories`; this is how the owning module claims the worker
+ * allowance. `bun run extension-points:check` requires the claim and the rows
+ * of `awcms_email_worker_categories` to match exactly.
+ */
+export type ModuleWorkerEmailCategory = {
+  category: string;
+  /** Why this module's worker transaction sends it; reviewed with the claim. */
+  reason: string;
+};
+
+/** One WhatsApp template a module owns (ADR-0164); the shape `registerWhatsappTemplate` validates. */
+export type ModuleWhatsappTemplate = {
+  /** `<moduleKey>.<name>`, lower-case snake segments. */
+  key: string;
+  version: number;
+  purpose: "transactional" | "security" | "marketing";
+  body: string;
+  variables: readonly string[];
+  secretVariables?: readonly string[];
+  providerTemplate?: { name: string; language: string };
+};
+
 export type ModuleDescriptor = {
   key: string;
   name: string;
@@ -353,6 +394,28 @@ export type ModuleDescriptor = {
    * `domain_event_runtime` in `dependencies` (the runtime itself excepted).
    */
   domainEventConsumers?: ModuleDomainEventConsumer[];
+  /**
+   * `derived.*` e-mail template categories this module OWNS (ADR-0164, Issue
+   * #1277). `email` resolves a category's variable allow-list from every
+   * module's array on demand, in EVERY process (web, `email:dispatch`, a
+   * script), so a module never registers one at startup and a second process
+   * can never lack it. A declaring module must list `email` in `dependencies`.
+   */
+  emailTemplateCategories?: ModuleEmailTemplateCategory[];
+  /**
+   * BASE e-mail categories this module enqueues from an `awcms_worker`
+   * transaction (ADR-0164). Not a `dependencies` edge: the e-mail path is
+   * optional for these modules. See `ModuleWorkerEmailCategory`.
+   */
+  workerEmailCategories?: ModuleWorkerEmailCategory[];
+  /**
+   * WhatsApp templates this module OWNS (ADR-0164, Issue #1277). The template
+   * registry of `whatsapp_delivery` resolves them from every module's array on
+   * demand, in EVERY process, including `whatsapp:dispatch`. Keys are
+   * `<moduleKey>.<name>`. A declaring module must list `whatsapp_delivery` in
+   * `dependencies` or in `capabilities.consumes`.
+   */
+  whatsappTemplates?: ModuleWhatsappTemplate[];
   /**
    * High-volume table lifecycle descriptors this module owns (ported from
    * awcms-micro Issue #745, ADR-0037) — see `HighVolumeTableDescriptor`'s own
@@ -1406,6 +1469,17 @@ export type SubjectDataDescriptor = {
  * quantity (the first user is `booking`: unit-nights and seconds booked) through
  * the same `cursor_table` engine instead of a second one.
  *
+ * `4.7.0` (ADR-0164, Issue #1277) — added the optional
+ * `ModuleDescriptor.emailTemplateCategories`, `workerEmailCategories` and
+ * `whatsappTemplates` fields plus the `ModuleEmailTemplateCategory` /
+ * `ModuleWorkerEmailCategory` / `ModuleWhatsappTemplate` types.
+ * MINOR: purely additive, no existing descriptor changes meaning. It is a
+ * behaviour change for module AUTHORS: a derived e-mail category or a WhatsApp
+ * template is declared in the owning module's descriptor and resolved by the
+ * dispatcher processes, instead of registered by a side-effect import in an
+ * upstream-owned file. The worker category allow-list of `awcms_email_messages`
+ * is now rows of `awcms_email_worker_categories`, not a function body.
+ *
  * `4.6.0` (ADR-0142, Issue #985) — added the optional
  * `SubjectDataDescriptor.subjectVia` field plus the `SubjectDataJoin` type, so a
  * table that reaches the subject only through a parent row (a foreign key to
@@ -1414,7 +1488,7 @@ export type SubjectDataDescriptor = {
  * join (the registry gate requires `retain_under_obligation`); the first users
  * are `awcms_hr_employment_terms` and `awcms_hr_shift_assignments`.
  */
-export const MODULE_CONTRACT_VERSION = "4.6.0";
+export const MODULE_CONTRACT_VERSION = "4.7.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

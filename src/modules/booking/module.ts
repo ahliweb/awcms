@@ -81,6 +81,7 @@ import { resolveStaffAvailability } from "./application/booking-staff-availabili
 import type { StaffAvailabilityPort } from "../_shared/ports/staff-availability-port";
 import { BOOKING_MODULE_KEY } from "./domain/booking-permissions";
 import { BOOKING_REPORTING_PROJECTIONS } from "./domain/booking-reporting";
+import { BOOKING_WHATSAPP_TEMPLATES } from "./domain/booking-reminder";
 import { BOOKING_EVENT_TYPES } from "./domain/booking-reservation-events";
 
 /**
@@ -532,6 +533,9 @@ export const bookingModule = defineModule({
   // declared: the engine reads descriptors through `listModules()`, and a tenant
   // without `reporting` simply never refreshes them.
   reportingProjections: BOOKING_REPORTING_PROJECTIONS,
+  // ADR-0164: loaded by the template registry in every process that renders or
+  // sends a message, including `whatsapp:dispatch`, with no import of this module.
+  whatsappTemplates: [...BOOKING_WHATSAPP_TEMPLATES],
   dataLifecycle: [
     retained({
       key: "booking.settings",
