@@ -40,7 +40,11 @@ describe("omes_control module descriptor", () => {
     // "omes_control -> workflow" (Issue ahliweb/omes#198): a hard
     // `dependencies` edge would make `workflow` un-disablable for any
     // tenant that has ever enabled omes_control.
-    expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
+    expect(mod?.dependencies).toEqual([
+      "tenant_admin",
+      "identity_access",
+      "domain_event_runtime"
+    ]);
   });
 
   test("declares navigation for all fifteen screens ahliweb/omes#200, #201, #233, #232, #246 (parts 2 and 3), and #265 landed", () => {

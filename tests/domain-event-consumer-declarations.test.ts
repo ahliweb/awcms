@@ -253,6 +253,8 @@ describe("buildDomainEventConsumerRegistry", () => {
       "domain_event_runtime.activity_rollup_projector",
       "hr_workforce.attendance_correction_settler",
       "logging.sample_event_audit_projector",
+      // Issue #1335: a workflow's later verdict -> omes operation request / egress.
+      "omes_control.workflow_verdict_settler",
       "omnichannel_inbox.conversation_projector",
       "reporting.event_activity_projector"
     ]);
