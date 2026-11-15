@@ -307,6 +307,19 @@ export type ModuleEmailTemplateCategory = {
   workerInsert?: boolean;
 };
 
+/**
+ * One BASE e-mail category (not `derived.*`) a module's `awcms_worker`
+ * transactions enqueue (ADR-0164). Base categories cannot be redeclared in
+ * `emailTemplateCategories`; this is how the owning module claims the worker
+ * allowance. `bun run extension-points:check` requires the claim and the rows
+ * of `awcms_email_worker_categories` to match exactly.
+ */
+export type ModuleWorkerEmailCategory = {
+  category: string;
+  /** Why this module's worker transaction sends it; reviewed with the claim. */
+  reason: string;
+};
+
 /** One WhatsApp template a module owns (ADR-0164); the shape `registerWhatsappTemplate` validates. */
 export type ModuleWhatsappTemplate = {
   /** `<moduleKey>.<name>`, lower-case snake segments. */
@@ -389,6 +402,12 @@ export type ModuleDescriptor = {
    * can never lack it. A declaring module must list `email` in `dependencies`.
    */
   emailTemplateCategories?: ModuleEmailTemplateCategory[];
+  /**
+   * BASE e-mail categories this module enqueues from an `awcms_worker`
+   * transaction (ADR-0164). Not a `dependencies` edge: the e-mail path is
+   * optional for these modules. See `ModuleWorkerEmailCategory`.
+   */
+  workerEmailCategories?: ModuleWorkerEmailCategory[];
   /**
    * WhatsApp templates this module OWNS (ADR-0164, Issue #1277). The template
    * registry of `whatsapp_delivery` resolves them from every module's array on
@@ -1451,8 +1470,9 @@ export type SubjectDataDescriptor = {
  * the same `cursor_table` engine instead of a second one.
  *
  * `4.7.0` (ADR-0164, Issue #1277) — added the optional
- * `ModuleDescriptor.emailTemplateCategories` and `whatsappTemplates` fields
- * plus the `ModuleEmailTemplateCategory` / `ModuleWhatsappTemplate` types.
+ * `ModuleDescriptor.emailTemplateCategories`, `workerEmailCategories` and
+ * `whatsappTemplates` fields plus the `ModuleEmailTemplateCategory` /
+ * `ModuleWorkerEmailCategory` / `ModuleWhatsappTemplate` types.
  * MINOR: purely additive, no existing descriptor changes meaning. It is a
  * behaviour change for module AUTHORS: a derived e-mail category or a WhatsApp
  * template is declared in the owning module's descriptor and resolved by the

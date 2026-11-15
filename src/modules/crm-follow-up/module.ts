@@ -63,6 +63,24 @@ export const crmFollowUpModule = defineModule({
     // The only source of triggers and of the event-sourced stop signals.
     "crm_leads"
   ],
+  // The worker allowance of sql/371 (#1165): `crm-follow-up:dispatch` runs as
+  // awcms_worker. sql/371 also pins the recipient and the variable keys of
+  // these three categories inside the guard (ADR-0159 section 2).
+  workerEmailCategories: [
+    {
+      category: "crm.follow_up_assigned",
+      reason: "a follow-up task was assigned to a staff user (sql/371, #1165)"
+    },
+    {
+      category: "crm.follow_up_due",
+      reason:
+        "a follow-up task assigned to a staff user is due (sql/371, #1165)"
+    },
+    {
+      category: "crm.follow_up_escalated",
+      reason: "a follow-up task was escalated to a staff user (sql/371, #1165)"
+    }
+  ],
   type: "domain",
   api: {
     openApiPath: "openapi/modules/crm-follow-up.openapi.yaml",

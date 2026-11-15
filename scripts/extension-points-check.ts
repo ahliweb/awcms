@@ -71,34 +71,65 @@ export function findManualRegistrations(
 }
 
 /**
- * The e-mail categories a BASE module's worker transactions legitimately
- * enqueue. Base categories are not declared by any descriptor (a descriptor may
- * only declare `derived.*`), so the allow-list that gates them is this
- * reviewed list: one reason per entry, and the rule is EXACT in both
- * directions. A seeded row for a base category that is not named here is an
- * allowance nobody owns, however base the category is; an entry here that no
- * migration seeds is a stale reason. Adding an entry is a reviewed change to
- * this file.
+ * The BASE e-mail categories a module's worker transactions enqueue, with the
+ * reason each module gave in `workerEmailCategories` on its own descriptor.
+ * Base categories are not `emailTemplateCategories` (a descriptor may only
+ * declare `derived.*`), so ownership of a seeded base row is this descriptor
+ * field: a seeded row no descriptor claims is an allowance nobody owns, and a
+ * claim no migration seeds is a stale one. The rule is EXACT in both
+ * directions, and two modules cannot claim the same category.
  */
-export const BASE_WORKER_CATEGORY_ALLOWANCES: Readonly<Record<string, string>> =
-  {
-    "hr.attendance_correction_applied":
-      "hr_workforce tells a correction's requester how it ended, from the worker transaction that resolves it (sql/302, #1044)",
-    "hr.attendance_correction_rejected":
-      "hr_workforce tells a correction's requester how it ended, from the worker transaction that resolves it (sql/302, #1044)",
-    "hr.attendance_correction_cancelled":
-      "hr_workforce tells a correction's requester how it ended, from the worker transaction that resolves it (sql/302, #1044)"
-  };
+export function collectBaseWorkerAllowances(
+  modules: readonly ModuleDescriptor[]
+): Record<string, string> {
+  const out: Record<string, string> = {};
+
+  for (const module of modules) {
+    for (const entry of module.workerEmailCategories ?? []) {
+      out[entry.category] = `${module.key}: ${entry.reason}`;
+    }
+  }
+
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // SQL reading. Fail-closed: every statement that mentions the allow-list table
 // or the guard must be one this file understands, or the gate reports it.
 // ---------------------------------------------------------------------------
 
-/** Removes `-- line` and `/* block *\/` comments, leaving string literals and dollar-quoted bodies intact. */
-function stripSqlComments(sql: string): string {
-  let out = "";
+const IDENT_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
+/** A dollar-quote tag as Postgres lexes it: `$$` or `$name$`, where `name` starts with a letter, underscore or non-ASCII character and continues with digits too. */
+const DOLLAR_TAG = /^\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/;
+
+export type SqlScan = {
+  /** Statements split on `;` outside every quoted construct, comments replaced by a space. */
+  statements: string[];
+  /** Set when the text ends inside a string, identifier, comment or dollar quote: the reader lost sync and cannot vouch for anything. */
+  error?: string;
+};
+
+/**
+ * One scanner for both jobs (strip comments, split statements), so the two can
+ * never disagree about where a literal ends. It follows the Postgres lexer:
+ * `--` line comments; NESTED `/* *\/` block comments; `'...'` strings with `''`
+ * and, for an `E'...'` string, backslash escapes; `"..."` identifiers with
+ * `""`; and dollar quotes `$tag$ ... $tag$` whose tag may contain digits
+ * (`$fn1$`) and whose body is opaque, so a different dollar tag inside it is
+ * plain text. A `$` that continues an identifier (`a$b$`) or starts a
+ * parameter (`$1`) is not a tag. Anything left open at the end of the text is
+ * reported in `error` (fail closed).
+ */
+export function scanSqlStatements(sql: string): SqlScan {
+  const statements: string[] = [];
+  let current = "";
   let i = 0;
+  let error: string | undefined;
+
+  const push = () => {
+    if (current.trim() !== "") statements.push(current.trim());
+    current = "";
+  };
 
   while (i < sql.length) {
     const ch = sql[i]!;
@@ -106,65 +137,69 @@ function stripSqlComments(sql: string): string {
 
     if (ch === "-" && next === "-") {
       while (i < sql.length && sql[i] !== "\n") i++;
+      current += " ";
     } else if (ch === "/" && next === "*") {
-      const end = sql.indexOf("*/", i + 2);
-      i = end === -1 ? sql.length : end + 2;
-      out += " ";
+      let depth = 1;
+      i += 2;
+
+      while (i < sql.length && depth > 0) {
+        if (sql[i] === "/" && sql[i + 1] === "*") {
+          depth++;
+          i += 2;
+        } else if (sql[i] === "*" && sql[i + 1] === "/") {
+          depth--;
+          i += 2;
+        } else i++;
+      }
+
+      if (depth > 0) error ??= "an unterminated block comment";
+      current += " ";
     } else if (ch === "'") {
+      const prev = sql[i - 1];
+      const escapes =
+        (prev === "e" || prev === "E") &&
+        !(i >= 2 && IDENT_CHAR.test(sql[i - 2]!));
       const start = i++;
+      let closed = false;
+
       while (i < sql.length) {
-        if (sql[i] === "'" && sql[i + 1] === "'") i += 2;
+        if (escapes && sql[i] === "\\") i += 2;
+        else if (sql[i] === "'" && sql[i + 1] === "'") i += 2;
         else if (sql[i] === "'") {
           i++;
+          closed = true;
           break;
         } else i++;
       }
-      out += sql.slice(start, i);
-    } else if (ch === "$") {
-      const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
 
-      if (tag) {
-        const end = sql.indexOf(tag[0], i + tag[0].length);
-        const stop = end === -1 ? sql.length : end + tag[0].length;
-        out += sql.slice(i, stop);
-        i = stop;
-      } else {
-        out += ch;
-        i++;
-      }
-    } else {
-      out += ch;
-      i++;
-    }
-  }
-
-  return out;
-}
-
-/** Splits comment-free SQL into statements on `;` outside quotes and dollar-quoted bodies. */
-function splitSqlStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let current = "";
-  let i = 0;
-
-  while (i < sql.length) {
-    const ch = sql[i]!;
-
-    if (ch === "'") {
+      if (!closed) error ??= "an unterminated string literal";
+      current += sql.slice(start, Math.min(i, sql.length));
+    } else if (ch === '"') {
       const start = i++;
+      let closed = false;
+
       while (i < sql.length) {
-        if (sql[i] === "'" && sql[i + 1] === "'") i += 2;
-        else if (sql[i] === "'") {
+        if (sql[i] === '"' && sql[i + 1] === '"') i += 2;
+        else if (sql[i] === '"') {
           i++;
+          closed = true;
           break;
         } else i++;
       }
-      current += sql.slice(start, i);
+
+      if (!closed) error ??= "an unterminated quoted identifier";
+      current += sql.slice(start, Math.min(i, sql.length));
     } else if (ch === "$") {
-      const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
+      const tag =
+        i > 0 && IDENT_CHAR.test(sql[i - 1]!)
+          ? null
+          : DOLLAR_TAG.exec(sql.slice(i, i + 256));
 
       if (tag) {
         const end = sql.indexOf(tag[0], i + tag[0].length);
+
+        if (end === -1) error ??= `an unterminated dollar quote ${tag[0]}`;
+
         const stop = end === -1 ? sql.length : end + tag[0].length;
         current += sql.slice(i, stop);
         i = stop;
@@ -173,8 +208,7 @@ function splitSqlStatements(sql: string): string[] {
         i++;
       }
     } else if (ch === ";") {
-      if (current.trim() !== "") statements.push(current.trim());
-      current = "";
+      push();
       i++;
     } else {
       current += ch;
@@ -182,9 +216,31 @@ function splitSqlStatements(sql: string): string[] {
     }
   }
 
-  if (current.trim() !== "") statements.push(current.trim());
+  push();
 
-  return statements;
+  return error === undefined ? { statements } : { statements, error };
+}
+
+/** The migrations whose text this scanner cannot tokenize to the end: every applied migration must. */
+export function findSqlScanErrors(
+  migrations: readonly { name: string; sql: string }[]
+): string[] {
+  const out: string[] = [];
+
+  for (const migration of migrations) {
+    const { error } = scanSqlStatements(migration.sql);
+
+    if (error !== undefined) out.push(`${migration.name}: ${error}`);
+  }
+
+  return out;
+}
+
+/** Whether the raw text names the table, the guard function or its trigger, in any spelling. */
+function mentionsGuardObjects(sql: string): boolean {
+  return /awcms_email_worker_categories|awcms_email_guard_worker_insert|awcms_email_messages_worker_guard/i.test(
+    sql
+  );
 }
 
 /** An identifier as SQL may spell it: bare or quoted, optionally schema-qualified, any spacing around the dot. */
@@ -234,9 +290,15 @@ export function collectSeededWorkerCategories(
   );
 
   for (const migration of migrations) {
-    for (const statement of splitSqlStatements(
-      stripSqlComments(migration.sql)
-    )) {
+    const scan = scanSqlStatements(migration.sql);
+
+    if (scan.error !== undefined && mentionsGuardObjects(migration.sql)) {
+      unparseable.push(
+        `${migration.name}: the SQL reader lost sync (${scan.error}) in a migration that names the worker allow-list`
+      );
+    }
+
+    for (const statement of scan.statements) {
       if (!TABLE_IDENTIFIER.test(statement)) continue;
       const writesTable = new RegExp(
         `(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM|TRUNCATE(?:\\s+TABLE)?(?:\\s+ONLY)?)\\s+${identifierPattern(WORKER_CATEGORY_TABLE)}`,
@@ -301,9 +363,31 @@ export function findWorkerCategoryProblems(
   seeded: ReadonlySet<string>,
   baseAllowances: Readonly<
     Record<string, string>
-  > = BASE_WORKER_CATEGORY_ALLOWANCES
+  > = collectBaseWorkerAllowances(modules)
 ): string[] {
   const problems: string[] = [];
+  const claimedBy = new Map<string, string>();
+
+  for (const module of modules) {
+    for (const entry of module.workerEmailCategories ?? []) {
+      const other = claimedBy.get(entry.category);
+
+      if (other !== undefined) {
+        problems.push(
+          `modules "${other}" and "${module.key}" both claim "${entry.category}" in workerEmailCategories.`
+        );
+      } else {
+        claimedBy.set(entry.category, module.key);
+      }
+
+      if (entry.reason.trim() === "") {
+        problems.push(
+          `module "${module.key}" claims "${entry.category}" in workerEmailCategories without a reason.`
+        );
+      }
+    }
+  }
+
   const declaredWorker = new Set<string>();
   const declaredAny = new Set<string>();
 
@@ -333,20 +417,20 @@ export function findWorkerCategoryProblems(
         declaredAny.has(category)
           ? "declared by a module without workerInsert: true"
           : base.has(category)
-            ? "a base category with no entry in BASE_WORKER_CATEGORY_ALLOWANCES"
-            : "neither claimed by a descriptor (workerInsert: true) nor listed in BASE_WORKER_CATEGORY_ALLOWANCES"
-      }. An allowance nobody owns widens the worker silently; declare it workerInsert, give it a reviewed reason in BASE_WORKER_CATEGORY_ALLOWANCES, or drop the row.`
+            ? "a base category no module claims in workerEmailCategories"
+            : "neither claimed by a descriptor (workerInsert: true) nor listed in workerEmailCategories"
+      }. An allowance nobody owns widens the worker silently; declare it workerInsert, claim it with a reason in the module descriptor workerEmailCategories, or drop the row.`
     );
   }
 
   for (const category of Object.keys(baseAllowances)) {
     if (!base.has(category)) {
       problems.push(
-        `BASE_WORKER_CATEGORY_ALLOWANCES names "${category}", which is not a base e-mail category.`
+        `workerEmailCategories names "${category}", which is not a base e-mail category.`
       );
     } else if (!seeded.has(category)) {
       problems.push(
-        `BASE_WORKER_CATEGORY_ALLOWANCES names "${category}" but no migration seeds it into ${WORKER_CATEGORY_TABLE}; drop the stale entry.`
+        `workerEmailCategories names "${category}" but no migration seeds it into ${WORKER_CATEGORY_TABLE}; drop the stale entry.`
       );
     }
   }
@@ -371,13 +455,19 @@ export function findGuardFunctionReissues(
 
     if (!(prefix > GUARD_FUNCTION_MIGRATION_PREFIX)) continue;
 
-    for (const statement of splitSqlStatements(
-      stripSqlComments(migration.sql)
-    )) {
+    const scan = scanSqlStatements(migration.sql);
+
+    if (scan.error !== undefined && mentionsGuardObjects(migration.sql)) {
+      offenders.add(migration.name);
+    }
+
+    for (const statement of scan.statements) {
       if (
         (GUARD_IDENTIFIER.test(statement) ||
           TRIGGER_IDENTIFIER.test(statement)) &&
-        /^(?:CREATE|ALTER|DROP)\b/i.test(statement)
+        // A DO block, EXECUTE or CALL can re-create the guard inside its body,
+        // so those count alongside CREATE / ALTER / DROP.
+        /^(?:CREATE|ALTER|DROP|DO|EXECUTE|PREPARE|CALL)\b/i.test(statement)
       ) {
         offenders.add(migration.name);
       }
@@ -385,6 +475,115 @@ export function findGuardFunctionReissues(
   }
 
   return [...offenders];
+}
+
+export type PriorGuardCategories = {
+  /** Migration that holds the LAST definition of the guard before sql/410, and the categories its body allows. */
+  migration: string | null;
+  categories: Set<string>;
+  /** Why the body could not be read; fail closed, never an empty set. */
+  error?: string;
+};
+
+/**
+ * The categories the guard function allowed immediately before sql/410
+ * replaced it: the literal list of the LATEST pre-410 `CREATE [OR REPLACE]
+ * FUNCTION awcms_email_guard_worker_insert` (latest wins, sql/371 today, not
+ * sql/302). sql/410 must seed a superset of it, or the migration silently
+ * narrows what the worker may send. A body this reader cannot read is an
+ * error, never an empty list.
+ */
+export function findPriorGuardCategories(
+  migrations: readonly { name: string; sql: string }[]
+): PriorGuardCategories {
+  const categories = new Set<string>();
+  let migrationName: string | null = null;
+  let body: string | null = null;
+  let error: string | undefined;
+
+  const ordered = [...migrations].sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const migration of ordered) {
+    const prefix = Number.parseInt(migration.name.slice(0, 4), 10);
+
+    if (!(prefix < GUARD_FUNCTION_MIGRATION_PREFIX)) continue;
+
+    const scan = scanSqlStatements(migration.sql);
+
+    if (scan.error !== undefined && mentionsGuardObjects(migration.sql)) {
+      error = `${migration.name}: the SQL reader lost sync (${scan.error})`;
+    }
+
+    for (const statement of scan.statements) {
+      if (
+        /^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/i.test(statement) &&
+        GUARD_IDENTIFIER.test(statement)
+      ) {
+        migrationName = migration.name;
+        body = statement;
+      }
+    }
+  }
+
+  if (body === null) {
+    return {
+      migration: null,
+      categories,
+      error: error ?? "no definition of the guard function found before sql/410"
+    };
+  }
+
+  const list = /\bNEW\.category\s+NOT\s+IN\s*\(([^)]*)\)/i.exec(body);
+
+  if (!list) {
+    return {
+      migration: migrationName,
+      categories,
+      error: `${migrationName}: the guard body has no literal "NEW.category NOT IN (...)" list this gate can read`
+    };
+  }
+
+  for (const part of list[1]!.split(",")) {
+    const m = /^\s*'((?:[^']|'')*)'\s*$/.exec(part);
+
+    if (!m) {
+      return {
+        migration: migrationName,
+        categories,
+        error: `${migrationName}: the category list holds something other than string literals`
+      };
+    }
+
+    categories.add(m[1]!.replace(/''/g, "'"));
+  }
+
+  return error === undefined
+    ? { migration: migrationName, categories }
+    : { migration: migrationName, categories, error };
+}
+
+/** Problems when the seed of sql/410 (plus anything seeded later) does not cover the prior guard's allow-list. */
+export function findNarrowedWorkerCategories(
+  prior: PriorGuardCategories,
+  seeded: ReadonlySet<string>
+): string[] {
+  const problems: string[] = [];
+
+  if (prior.error !== undefined) {
+    problems.push(
+      `cannot read the pre-sql/410 guard allow-list: ${prior.error}`
+    );
+  }
+
+  for (const category of prior.categories) {
+    if (!seeded.has(category)) {
+      problems.push(
+        `the guard allowed "${category}" for the worker before sql/${GUARD_FUNCTION_MIGRATION_PREFIX} (${prior.migration}) but no migration seeds it into ${WORKER_CATEGORY_TABLE}; sql/${GUARD_FUNCTION_MIGRATION_PREFIX} would silently refuse it.`
+      );
+    }
+  }
+
+  return problems;
 }
 
 /** Composition roots that must install the descriptor source (ADR-0164), and the file that proves it. */
@@ -505,6 +704,19 @@ function main(): void {
 
   for (const problem of findWorkerCategoryProblems(
     modules,
+    seededRows.seeded
+  )) {
+    failures.push(problem);
+  }
+
+  for (const error of findSqlScanErrors(migrations)) {
+    failures.push(
+      `${error}. Every applied migration must tokenize to its end; a reader that lost sync cannot vouch for the allow-list.`
+    );
+  }
+
+  for (const problem of findNarrowedWorkerCategories(
+    findPriorGuardCategories(migrations),
     seededRows.seeded
   )) {
     failures.push(problem);

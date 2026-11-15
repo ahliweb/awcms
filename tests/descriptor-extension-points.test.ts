@@ -12,13 +12,17 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
-  BASE_WORKER_CATEGORY_ALLOWANCES,
   COMPOSITION_ROOTS,
+  collectBaseWorkerAllowances,
   collectSeededWorkerCategories,
   findCompositionProblems,
   findGuardFunctionReissues,
   findManualRegistrations,
-  findWorkerCategoryProblems
+  findNarrowedWorkerCategories,
+  findPriorGuardCategories,
+  findSqlScanErrors,
+  findWorkerCategoryProblems,
+  scanSqlStatements
 } from "../scripts/extension-points-check";
 import {
   validateEmailCategoryDeclarations,
@@ -33,6 +37,10 @@ import { bookingModule } from "../src/modules/booking/module";
 import { newsletterModule } from "../src/modules/newsletter/module";
 
 const ROOT = new URL("..", import.meta.url).pathname;
+
+/** The base worker allowances the real descriptors claim (hr_workforce, crm_follow_up). */
+const BASE_WORKER_CATEGORY_ALLOWANCES =
+  collectBaseWorkerAllowances(listModules());
 
 // This test file is a composition root for the in-process tests below.
 installExtensionPointSource(listModules);
@@ -358,17 +366,24 @@ describe("the gate's probes go red when the protection is removed", () => {
     const hr = new Set(Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES));
 
     expect(
-      findWorkerCategoryProblems([owner], hr).filter((m) =>
-        m.includes("no migration seeds")
-      )
+      findWorkerCategoryProblems(
+        [owner],
+        hr,
+        BASE_WORKER_CATEGORY_ALLOWANCES
+      ).filter((m) => m.includes("no migration seeds"))
     ).toHaveLength(1);
     expect(
-      findWorkerCategoryProblems([owner], new Set([...hr, "derived.otp_mail"]))
+      findWorkerCategoryProblems(
+        [owner],
+        new Set([...hr, "derived.otp_mail"]),
+        BASE_WORKER_CATEGORY_ALLOWANCES
+      )
     ).toEqual([]);
     expect(
       findWorkerCategoryProblems(
         [fixture({})],
-        new Set([...hr, "derived.orphan"])
+        new Set([...hr, "derived.orphan"]),
+        BASE_WORKER_CATEGORY_ALLOWANCES
       )
     ).toHaveLength(1);
   });
@@ -379,14 +394,19 @@ describe("the gate's probes go red when the protection is removed", () => {
     // `auth.password_reset` is a base category, and used to be waved through.
     const problems = findWorkerCategoryProblems(
       [fixture({})],
-      new Set([...hr, "auth.password_reset"])
+      new Set([...hr, "auth.password_reset"]),
+      BASE_WORKER_CATEGORY_ALLOWANCES
     );
 
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain("base category with no entry");
+    expect(problems[0]).toContain("base category no module claims");
     // An allowance entry no migration seeds is a stale reason.
     expect(
-      findWorkerCategoryProblems([fixture({})], new Set(hr.slice(1)))
+      findWorkerCategoryProblems(
+        [fixture({})],
+        new Set(hr.slice(1)),
+        BASE_WORKER_CATEGORY_ALLOWANCES
+      )
     ).toHaveLength(1);
     // And an allowance entry must name a base category.
     expect(
@@ -546,6 +566,222 @@ ON CONFLICT (category) DO NOTHING;`
     ).toEqual([]);
   });
 
+  describe("the SQL reader follows the Postgres lexer", () => {
+    const seedOf = (sql: string) =>
+      collectSeededWorkerCategories([{ name: "411_awcms_z.sql", sql }]);
+    const INSERT =
+      "INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.real');";
+
+    test.each([
+      [
+        "a dollar tag with a digit",
+        `DO $fn1$ BEGIN PERFORM 1; END $fn1$; ${INSERT}`
+      ],
+      [
+        "a tag-less dollar quote holding a semicolon",
+        `SELECT $$ a; b $$; ${INSERT}`
+      ],
+      [
+        "a dollar quote nested in another tag",
+        `DO $outer$ BEGIN EXECUTE $inner$ SELECT ';' $inner$; END $outer$; ${INSERT}`
+      ],
+      [
+        "an E string with an escaped quote",
+        `SELECT E'it\\'s; here'; ${INSERT}`
+      ],
+      [
+        "a standard string with a doubled quote",
+        `SELECT 'it''s; here'; ${INSERT}`
+      ],
+      ["a quote inside a line comment", `-- don't\n${INSERT}`],
+      ["a quote inside a block comment", `/* it's; */ ${INSERT}`],
+      ["a nested block comment", `/* a /* b */ still; comment */ ${INSERT}`],
+      [
+        "a semicolon in a quoted identifier",
+        `CREATE TABLE "a;b'c" (id int); ${INSERT}`
+      ],
+      [
+        "an apostrophe inside a digit-tagged body",
+        `SELECT $t1$ it's $t1$; ${INSERT}`
+      ],
+      ["a dollar parameter", `SELECT $1, $2; ${INSERT}`],
+      ["a dollar inside an identifier", `SELECT a$b$ FROM t; ${INSERT}`]
+    ])("%s does not desynchronise the reader", (_name, sql) => {
+      const { seeded, unparseable } = seedOf(sql);
+
+      expect(unparseable).toEqual([]);
+      expect([...seeded]).toEqual(["derived.real"]);
+      expect(scanSqlStatements(sql).error).toBeUndefined();
+    });
+
+    test("a re-issue after a digit-tag body is still found", () => {
+      expect(
+        findGuardFunctionReissues([
+          {
+            name: "411_awcms_c.sql",
+            sql: `DO $fn1$ BEGIN NULL; END $fn1$;
+CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $g2$ BEGIN RETURN NEW; END $g2$;`
+          }
+        ])
+      ).toEqual(["411_awcms_c.sql"]);
+    });
+
+    test("a DO block or EXECUTE that re-creates the guard is flagged; a comment or grant is not", () => {
+      const re = (sql: string) =>
+        findGuardFunctionReissues([{ name: "411_awcms_c.sql", sql }]);
+
+      expect(
+        re(
+          "DO $x1$ BEGIN CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $y$ BEGIN RETURN NEW; END $y$; END $x1$"
+        )
+      ).toEqual(["411_awcms_c.sql"]);
+      expect(
+        re("COMMENT ON FUNCTION awcms_email_guard_worker_insert() IS 'x'")
+      ).toEqual([]);
+    });
+
+    test.each([
+      ["an unterminated dollar quote", "SELECT $fn1$ never closed"],
+      ["an unterminated string", "SELECT 'never closed"],
+      ["an unterminated block comment", "SELECT 1 /* never closed"],
+      ["an unterminated quoted identifier", 'SELECT "never closed']
+    ])("%s fails closed when the migration names the guard", (_name, tail) => {
+      const sql = `-- awcms_email_worker_categories\n${tail}`;
+
+      expect(scanSqlStatements(sql).error).toBeDefined();
+      expect(seedOf(sql).unparseable).toHaveLength(1);
+      expect(
+        findGuardFunctionReissues([{ name: "411_awcms_c.sql", sql }])
+      ).toEqual(["411_awcms_c.sql"]);
+      expect(
+        findSqlScanErrors([{ name: "411_awcms_c.sql", sql }])
+      ).toHaveLength(1);
+    });
+
+    test("an unrelated migration that cannot be tokenized is still reported by the scan-error sweep", () => {
+      expect(
+        findSqlScanErrors([{ name: "411_awcms_c.sql", sql: "SELECT 'open" }])
+      ).toHaveLength(1);
+      expect(findSqlScanErrors(loadMigrations())).toEqual([]);
+    });
+  });
+
+  describe("the pre-410 guard allow-list is preserved (latest definition wins)", () => {
+    test("the latest pre-410 body is sql/371's, not sql/302's, and covers six categories", () => {
+      const prior = findPriorGuardCategories(loadMigrations());
+
+      expect(prior.error).toBeUndefined();
+      expect(prior.migration).toBe(
+        "371_awcms_crm_follow_up_email_categories.sql"
+      );
+      expect([...prior.categories].sort()).toEqual(
+        [
+          "crm.follow_up_assigned",
+          "crm.follow_up_due",
+          "crm.follow_up_escalated",
+          "hr.attendance_correction_applied",
+          "hr.attendance_correction_cancelled",
+          "hr.attendance_correction_rejected"
+        ].sort()
+      );
+    });
+
+    test("a seed narrower than the prior body is flagged per missing category", () => {
+      const migrations = loadMigrations();
+      const prior = findPriorGuardCategories(migrations);
+      const seeded = collectSeededWorkerCategories(migrations).seeded;
+
+      expect(findNarrowedWorkerCategories(prior, seeded)).toEqual([]);
+
+      const narrowed = new Set(seeded);
+      narrowed.delete("crm.follow_up_due");
+
+      const problems = findNarrowedWorkerCategories(prior, narrowed);
+
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain("crm.follow_up_due");
+    });
+
+    test("a prior body the reader cannot read is an error, never an empty allow-list", () => {
+      for (const sql of [
+        "SELECT 1;",
+        "CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+        "CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category NOT IN (lower('x')) THEN RETURN NULL; END IF; RETURN NEW; END $$;"
+      ]) {
+        const prior = findPriorGuardCategories([
+          { name: "302_awcms_a.sql", sql }
+        ]);
+
+        expect(prior.error).toBeDefined();
+        expect(findNarrowedWorkerCategories(prior, new Set())).not.toEqual([]);
+      }
+    });
+
+    test("a later CREATE of the guard before 410 supersedes an earlier one", () => {
+      const def = (list: string) =>
+        `CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category NOT IN (${list}) THEN RETURN NULL; END IF; RETURN NEW; END $$;`;
+      const prior = findPriorGuardCategories([
+        { name: "302_awcms_a.sql", sql: def("'a.one'") },
+        { name: "371_awcms_b.sql", sql: def("'a.one', 'b.two'") },
+        { name: "420_awcms_c.sql", sql: def("'z.late'") }
+      ]);
+
+      expect([...prior.categories].sort()).toEqual(["a.one", "b.two"]);
+    });
+
+    test("sql/410 seeds a superset of every category the prior guard allowed", () => {
+      const prior = findPriorGuardCategories(loadMigrations());
+      const seeded = collectSeededWorkerCategories([
+        { name: "410_awcms_x.sql", sql: loadMigrationText("410") }
+      ]).seeded;
+
+      for (const category of prior.categories) {
+        expect(seeded.has(category)).toBe(true);
+      }
+    });
+  });
+
+  test("each base worker row is claimed by a module descriptor, and an unclaimed claim or duplicate is flagged", () => {
+    expect(Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES).sort()).toEqual([
+      "crm.follow_up_assigned",
+      "crm.follow_up_due",
+      "crm.follow_up_escalated",
+      "hr.attendance_correction_applied",
+      "hr.attendance_correction_cancelled",
+      "hr.attendance_correction_rejected"
+    ]);
+
+    const claim = (key: string, category: string, reason = "because") =>
+      fixture({
+        key,
+        workerEmailCategories: [{ category, reason }]
+      });
+    const seeded = new Set(Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES));
+
+    expect(
+      findWorkerCategoryProblems(
+        [
+          claim("m_a", "hr.attendance_correction_applied"),
+          claim("m_b", "hr.attendance_correction_applied")
+        ],
+        new Set(["hr.attendance_correction_applied"])
+      ).some((m) => m.includes("both claim"))
+    ).toBe(true);
+    expect(
+      findWorkerCategoryProblems(
+        [claim("m_a", "crm.follow_up_due", "  ")],
+        new Set(["crm.follow_up_due"])
+      ).some((m) => m.includes("without a reason"))
+    ).toBe(true);
+    // Dropping the descriptor claim leaves the seeded row unowned.
+    expect(
+      findWorkerCategoryProblems(
+        listModules().filter((m) => m.key !== "crm_follow_up"),
+        seeded
+      ).filter((m) => m.includes("no module claims"))
+    ).toHaveLength(3);
+  });
+
   test("the real repository passes every probe", () => {
     // Guards the gate against rotting into one that checks nothing: the real
     // migrations seed the three hr categories and re-issue nothing.
@@ -557,5 +793,8 @@ ON CONFLICT (category) DO NOTHING;`
     expect(unparseable).toEqual([]);
     expect(findGuardFunctionReissues(migrations)).toEqual([]);
     expect(findWorkerCategoryProblems(listModules(), seeded)).toEqual([]);
+    expect(
+      findNarrowedWorkerCategories(findPriorGuardCategories(migrations), seeded)
+    ).toEqual([]);
   });
 });

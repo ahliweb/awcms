@@ -5,7 +5,10 @@
 -- `sql/302` made the guard trigger `awcms_email_messages_worker_guard` refuse an
 -- INSERT by a member of `awcms_worker` unless the category was on a list, and it
 -- wrote that list as a literal inside the function body (the three
--- `hr.attendance_correction_*` categories). Adding a category to the worker's
+-- `hr.attendance_correction_*` categories); `sql/371` (crm_follow_up, #1165)
+-- re-issued the function to add three `crm.follow_up_*` categories and the
+-- recipient / variable-key conditions that go with them. The LATEST body is
+-- sql/371's, and that is the one this migration preserves. Adding a category to the worker's
 -- repertoire therefore meant re-issuing the whole function. A downstream
 -- template that needed one more category did exactly that, in its own
 -- migration, and so silently overrode every later upstream change to the
@@ -34,12 +37,18 @@
 --   sql/109). Adding a category is a migration, reviewed with the module that
 --   needs it, and the descriptor flag `workerInsert` is cross-checked against
 --   the seeded rows by the gate.
--- * The membership test is unchanged from sql/302: checked for BOTH
---   `session_user` and `current_user`, superusers exempt, `search_path` pinned
---   ending in `pg_temp`. The table is read only after the cheap membership
---   test, in a nested IF, so a request-path insert never depends on a row.
+-- * Everything else of the sql/371 body is unchanged: the membership test is
+--   checked for BOTH `session_user` and `current_user`, superusers exempt,
+--   `search_path` pinned ending in `pg_temp`; a worker-queued `crm.follow_up_*`
+--   row still needs `to_address` to be the login e-mail of an ACTIVE user of
+--   its own tenant and `variables` to hold only the four allow-listed keys.
+--   The table is read only after the cheap membership test, so a request-path
+--   insert never depends on a row.
 --
--- Seed: the three categories sql/302 allowed, so behaviour is unchanged.
+-- Seed: the exact union sql/371's body allowed (three hr + three crm), so
+-- behaviour is unchanged. `bun run extension-points:check` reads the literal
+-- list of the latest pre-410 body and fails if the seed does not cover it, and
+-- a descriptor (`workerEmailCategories`) must claim every seeded base row.
 --
 -- Idempotent.
 
@@ -58,7 +67,10 @@ COMMENT ON TABLE awcms_email_worker_categories IS
 INSERT INTO awcms_email_worker_categories (category) VALUES
   ('hr.attendance_correction_applied'),
   ('hr.attendance_correction_rejected'),
-  ('hr.attendance_correction_cancelled')
+  ('hr.attendance_correction_cancelled'),
+  ('crm.follow_up_assigned'),
+  ('crm.follow_up_due'),
+  ('crm.follow_up_escalated')
 ON CONFLICT (category) DO NOTHING;
 
 -- The default privileges of sql/019 grant `awcms_app` every verb on a new
@@ -74,18 +86,53 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
+DECLARE
+  by_worker boolean;
 BEGIN
+  by_worker :=
+    NOT EXISTS (
+      SELECT 1 FROM pg_roles r
+       WHERE r.rolname IN (session_user, current_user) AND r.rolsuper
+    )
+    AND (pg_has_role(session_user, 'awcms_worker', 'MEMBER')
+         OR pg_has_role(current_user, 'awcms_worker', 'MEMBER'));
+
+  IF NOT by_worker THEN
+    RETURN NEW;
+  END IF;
+
   IF NOT EXISTS (
-       SELECT 1 FROM pg_roles r
-        WHERE r.rolname IN (session_user, current_user) AND r.rolsuper
-     )
-     AND (pg_has_role(session_user, 'awcms_worker', 'MEMBER')
-          OR pg_has_role(current_user, 'awcms_worker', 'MEMBER')) THEN
+       SELECT 1 FROM awcms_email_worker_categories c
+        WHERE c.category = NEW.category
+     ) THEN
+    RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_CATEGORY_NOT_ALLOWED'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.category IN ('crm.follow_up_assigned',
+                      'crm.follow_up_due',
+                      'crm.follow_up_escalated') THEN
     IF NOT EXISTS (
-         SELECT 1 FROM awcms_email_worker_categories c
-          WHERE c.category = NEW.category
-       ) THEN
-      RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_CATEGORY_NOT_ALLOWED'
+      SELECT 1
+        FROM awcms_tenant_users tu
+        JOIN awcms_identities i
+          ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
+       WHERE tu.tenant_id = NEW.tenant_id
+         AND tu.status = 'active'
+         AND lower(btrim(i.login_identifier)) = NEW.to_address
+    ) THEN
+      RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_RECIPIENT_NOT_STAFF'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.variables IS NOT NULL
+       AND (jsonb_typeof(NEW.variables) <> 'object'
+            OR EXISTS (
+              SELECT 1 FROM jsonb_object_keys(NEW.variables) AS k(key)
+               WHERE k.key NOT IN ('userName', 'taskTitle', 'dueAt',
+                                   'taskReference')
+            )) THEN
+      RAISE EXCEPTION 'awcms_email: EMAIL_WORKER_VARIABLE_NOT_ALLOWED'
         USING ERRCODE = '42501';
     END IF;
   END IF;

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0164-descriptor-declared-email-categories-whatsapp-templates-and-a-data-driven-worker-category-allow-list.md)
 
-<!-- i18n-source-hash: sha256:3c53a05787470ebd4f4a0aed494a9ab0448b07d83da86c41c6ff0710950bb46e -->
+<!-- i18n-source-hash: sha256:1a4effa858d342e88da7a6f70c6d72bfdc861501960fcea4e5cdf8d4d785b74b -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -40,11 +40,11 @@ Fail-closed terjaga: kategori `derived.*` yang tak dideklarasikan tetap tak dike
 
 ### 3. Allow-list worker adalah baris `awcms_email_worker_categories` (`sql/410`)
 
-Tabel global, satu `category` per baris, di-seed `sql/410` dengan tepat ketiga kategori `hr.attendance_correction_*` yang diizinkan `sql/302`, sehingga perilaku tak berubah. `sql/410` mengganti fungsi guard **sekali**, agar membaca tabel; selebihnya guard adalah fungsi `sql/302` (keanggotaan `awcms_worker` diperiksa untuk `session_user` dan `current_user`, superuser dikecualikan, `search_path` dipatok berakhir `pg_temp`).
+Tabel global, satu `category` per baris, di-seed `sql/410` dengan gabungan persis kategori yang diizinkan badan guard TERBARU (`sql/371`, bukan `sql/302`): tiga `hr.attendance_correction_*` dan tiga `crm.follow_up_*`, sehingga perilaku tak berubah. `sql/410` mengganti fungsi guard **sekali**, agar membaca tabel; selebihnya guard adalah badan `sql/371` (kondisi penerima staf dan kunci variabel untuk `crm.follow_up_*` tetap; keanggotaan `awcms_worker` diperiksa untuk `session_user` dan `current_user`, superuser dikecualikan, `search_path` dipatok berakhir `pg_temp`).
 
 - **Fail-closed:** ujinya `NOT EXISTS` atas tabel, jadi tabel kosong menolak setiap insert worker, dan ketiadaan baris yang menolak.
 - **Read-only saat runtime:** `awcms_app` dan `awcms_worker` hanya memegang `SELECT` (guard berjalan sebagai role yang meng-insert). Jalur runtime yang bisa meng-insert di sini dapat memperlebar repertoarnya sendiri dan tak ada kebijakan RLS yang keberatan, sebab tak ada kolom tenant; tabel ini karena itu masuk `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` (tanpa INSERT/UPDATE/DELETE) dan berkunci `SELECT` di `WORKER_ROLE_GRANTS`, persis seperti katalog entitlement `sql/109`.
-- **Cara modul menambah kategori:** `emailTemplateCategories: [{ ..., workerInsert: true }]` ditambah `INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.x') ON CONFLICT DO NOTHING` di migrasi modul itu sendiri. Gate memeriksa silang flag terhadap baris yang di-seed di kedua arah (kategori berflag harus di-seed; **setiap** baris seed harus diklaim: oleh deklarasi berflag, atau oleh daftar base `BASE_WORKER_CATEGORY_ALLOWANCES` di gate dengan satu alasan per entri, dua arah persis, sehingga baris untuk kategori base yang tak diperlukan job worker mana pun tetap gagal), sehingga izin tanpa pemilik tak dapat melebarkan worker secara senyap. Migrasi setelah `sql/410` yang menerbitkan ulang fungsi guard menggagalkan gate.
+- **Cara modul menambah kategori:** `emailTemplateCategories: [{ ..., workerInsert: true }]` ditambah `INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.x') ON CONFLICT DO NOTHING` di migrasi modul itu sendiri. Gate memeriksa silang flag terhadap baris yang di-seed di kedua arah (kategori berflag harus di-seed; **setiap** baris seed harus diklaim: oleh deklarasi berflag, atau oleh klaim `workerEmailCategories` pada descriptor modul pemilik, dengan satu alasan per entri, dua arah persis dan satu pemilik per kategori; gate juga membaca daftar literal badan guard terakhir sebelum `sql/410` dan gagal bila seed lebih sempit darinya), sehingga izin tanpa pemilik tak dapat melebarkan worker secara senyap. Migrasi setelah `sql/410` yang menerbitkan ulang fungsi guard menggagalkan gate.
 
 ### 4. Satu gate, `bun run extension-points:check` (dalam `check`)
 
