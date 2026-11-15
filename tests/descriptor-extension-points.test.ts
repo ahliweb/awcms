@@ -12,7 +12,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
+  BASE_WORKER_CATEGORY_ALLOWANCES,
+  COMPOSITION_ROOTS,
   collectSeededWorkerCategories,
+  findCompositionProblems,
   findGuardFunctionReissues,
   findManualRegistrations,
   findWorkerCategoryProblems
@@ -24,11 +27,15 @@ import {
 import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../src/modules/email/domain/email-template-categories";
 import { listModules } from "../src/modules";
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
 import { loadMigrations } from "../scripts/lib/migrations";
 import { bookingModule } from "../src/modules/booking/module";
 import { newsletterModule } from "../src/modules/newsletter/module";
 
 const ROOT = new URL("..", import.meta.url).pathname;
+
+// This test file is a composition root for the in-process tests below.
+installExtensionPointSource(listModules);
 
 function runFresh(script: string): string {
   const result = Bun.spawnSync(["bun", "-e", script], {
@@ -41,6 +48,18 @@ function runFresh(script: string): string {
   }
 
   return result.stdout.toString().trim();
+}
+
+function loadMigrationText(prefix: string): string {
+  const migration = loadMigrations().find((m) =>
+    m.name.startsWith(`${prefix}_`)
+  );
+
+  if (!migration) {
+    throw new Error(`no migration ${prefix}`);
+  }
+
+  return migration.sql;
 }
 
 function fixture(overrides: Partial<ModuleDescriptor>): ModuleDescriptor {
@@ -57,7 +76,7 @@ function fixture(overrides: Partial<ModuleDescriptor>): ModuleDescriptor {
 describe("the dispatcher processes load declarations with no import of the owner", () => {
   test("email:dispatch's own code knows a derived category declared by newsletter (the empty-code defect)", () => {
     const out = runFresh(`
-      import "./src/modules/email/application/email-dispatch";
+      import "./scripts/email-dispatch";
       import { renderEmailTemplate } from "./src/modules/email/domain/email-template-render";
       const rendered = renderEmailTemplate(
         { subjectTemplate: { en: "s" }, textBodyTemplate: { en: "open {{confirmUrl}}" }, htmlBodyTemplate: null },
@@ -72,6 +91,7 @@ describe("the dispatcher processes load declarations with no import of the owner
 
   test("an undeclared derived category still renders no variable (fail-closed)", () => {
     const out = runFresh(`
+      import "./scripts/email-dispatch";
       import { renderEmailTemplate } from "./src/modules/email/domain/email-template-render";
       const rendered = renderEmailTemplate(
         { subjectTemplate: { en: "s" }, textBodyTemplate: { en: "[{{confirmUrl}}]" }, htmlBodyTemplate: null },
@@ -84,9 +104,69 @@ describe("the dispatcher processes load declarations with no import of the owner
     expect(out).toBe("[]");
   });
 
+  test("a process that installed no source THROWS on a derived category and an unknown template, and still serves base ones", () => {
+    const out = runFresh(`
+      import { renderEmailTemplate, } from "./src/modules/email/domain/email-template-render";
+      import { getWhatsappTemplate } from "./src/modules/whatsapp-delivery/domain/whatsapp-templates";
+      import { getAllowedVariablesForCategory } from "./src/modules/email/domain/email-template-categories";
+      const results = [];
+      for (const f of [
+        () => getAllowedVariablesForCategory("derived.newsletter_confirmation"),
+        () => renderEmailTemplate({ subjectTemplate: { en: "s" }, textBodyTemplate: { en: "[{{x}}]" }, htmlBodyTemplate: null }, { x: "1" }, "derived.never_declared"),
+        () => getWhatsappTemplate("booking.reminder")
+      ]) {
+        try { f(); results.push("ok"); } catch (e) { results.push(e.name); }
+      }
+      results.push(getAllowedVariablesForCategory("auth.password_reset") !== null ? "base" : "nobase");
+      results.push(getWhatsappTemplate("system.notice") ? "builtin" : "nobuiltin");
+      console.log(results.join(","));
+    `);
+
+    expect(out).toBe(
+      "ExtensionPointSourceNotInstalledError,ExtensionPointSourceNotInstalledError,ExtensionPointSourceNotInstalledError,base,builtin"
+    );
+  });
+
+  test("the registries import no module list and every composition root installs the source", () => {
+    const files = [
+      ...COMPOSITION_ROOTS,
+      "src/modules/email/domain/email-template-categories.ts",
+      "src/modules/whatsapp-delivery/domain/whatsapp-templates.ts"
+    ].map((path) => ({ path, text: readFileSync(`${ROOT}${path}`, "utf8") }));
+
+    expect(findCompositionProblems(files)).toEqual([]);
+    expect(
+      findCompositionProblems(
+        files.map((file) =>
+          file.path === "scripts/email-dispatch.ts"
+            ? { ...file, text: "// installExtensionPointSource(listModules)" }
+            : file.path.endsWith("whatsapp-templates.ts")
+              ? {
+                  ...file,
+                  text: `import { listModules } from "../../index";\n${file.text}`
+                }
+              : file
+        )
+      )
+    ).toHaveLength(2);
+  });
+
+  test("omnichannel-inbox:sla keeps the runner's WORKER_DATABASE_URL withholding (least privilege not regressed by the registries)", () => {
+    const runner = readFileSync(`${ROOT}ops/run-job.sh`, "utf8");
+    const block = runner.slice(
+      runner.indexOf(
+        "BEGIN GENERATED: app-role jobs that never open the worker connection"
+      )
+    );
+
+    expect(
+      block.slice(0, block.indexOf("WITHHOLD_WORKER_DATABASE_URL=1"))
+    ).toContain("omnichannel-inbox:sla");
+  });
+
   test("whatsapp:dispatch's own code resolves booking's templates without importing booking", () => {
     const out = runFresh(`
-      import "./src/modules/whatsapp-delivery/application/whatsapp-dispatch";
+      import "./scripts/whatsapp-dispatch";
       import { getWhatsappTemplate } from "./src/modules/whatsapp-delivery/domain/whatsapp-templates";
       const t = getWhatsappTemplate("booking.reminder");
       console.log(t ? t.purpose + ":" + t.variables.join(",") : "unknown");
@@ -275,24 +355,54 @@ describe("the gate's probes go red when the protection is removed", () => {
         }
       ]
     });
+    const hr = new Set(Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES));
 
-    expect(findWorkerCategoryProblems([owner], new Set())).toHaveLength(1);
     expect(
-      findWorkerCategoryProblems([owner], new Set(["derived.otp_mail"]))
+      findWorkerCategoryProblems([owner], hr).filter((m) =>
+        m.includes("no migration seeds")
+      )
+    ).toHaveLength(1);
+    expect(
+      findWorkerCategoryProblems([owner], new Set([...hr, "derived.otp_mail"]))
     ).toEqual([]);
     expect(
       findWorkerCategoryProblems(
         [fixture({})],
-        new Set(["derived.orphan", "hr.attendance_correction_applied"])
+        new Set([...hr, "derived.orphan"])
       )
     ).toHaveLength(1);
   });
 
+  test("a seeded BASE category that no worker job legitimately needs is flagged, and a stale allowance entry too", () => {
+    const hr = Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES);
+
+    // `auth.password_reset` is a base category, and used to be waved through.
+    const problems = findWorkerCategoryProblems(
+      [fixture({})],
+      new Set([...hr, "auth.password_reset"])
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("base category with no entry");
+    // An allowance entry no migration seeds is a stale reason.
+    expect(
+      findWorkerCategoryProblems([fixture({})], new Set(hr.slice(1)))
+    ).toHaveLength(1);
+    // And an allowance entry must name a base category.
+    expect(
+      findWorkerCategoryProblems([fixture({})], new Set([...hr, "derived.x"]), {
+        ...BASE_WORKER_CATEGORY_ALLOWANCES,
+        "derived.x": "not base"
+      })
+    ).toHaveLength(1);
+  });
+
   test("seed rows are read from migration INSERTs and not from comments", () => {
-    const seeded = collectSeededWorkerCategories([
+    const { seeded, unparseable } = collectSeededWorkerCategories([
       {
         name: "410_awcms_x.sql",
         sql: `-- INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.commented');
+/* INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.block'); */
 INSERT INTO awcms_email_worker_categories (category) VALUES
   ('hr.a'), ('derived.b')
 ON CONFLICT (category) DO NOTHING;`
@@ -300,20 +410,140 @@ ON CONFLICT (category) DO NOTHING;`
     ]);
 
     expect([...seeded].sort()).toEqual(["derived.b", "hr.a"]);
+    expect(unparseable).toEqual([]);
   });
 
-  test("a later migration re-issuing the guard function is flagged; sql/410 and unrelated ones are not", () => {
+  test.each([
+    [
+      "schema-qualified",
+      `INSERT INTO public.awcms_email_worker_categories (category) VALUES ('derived.q')`
+    ],
+    [
+      "quoted identifiers",
+      `INSERT INTO "public"."awcms_email_worker_categories" ("category") VALUES ('derived.q')`
+    ],
+    [
+      "spaced qualification",
+      `insert\n into  public .awcms_email_worker_categories(category)values('derived.q')`
+    ],
+    [
+      "multi-row",
+      `INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.q'),\n ('derived.r') ON CONFLICT DO NOTHING`
+    ]
+  ])("a %s INSERT is understood", (_name, sql) => {
+    const { seeded, unparseable } = collectSeededWorkerCategories([
+      { name: "411_awcms_y.sql", sql }
+    ]);
+
+    expect(unparseable).toEqual([]);
+    expect(seeded.has("derived.q")).toBe(true);
+  });
+
+  test.each([
+    [
+      "INSERT ... SELECT",
+      `INSERT INTO awcms_email_worker_categories (category) SELECT 'derived.q'`
+    ],
+    [
+      "INSERT of an expression",
+      `INSERT INTO public.awcms_email_worker_categories (category) VALUES ('derived.' || 'q')`
+    ],
+    [
+      "INSERT without a column list",
+      `INSERT INTO awcms_email_worker_categories VALUES ('derived.q')`
+    ],
+    [
+      "DEFAULT VALUES",
+      `INSERT INTO awcms_email_worker_categories DEFAULT VALUES`
+    ],
+    [
+      "UPDATE",
+      `UPDATE "awcms_email_worker_categories" SET category = 'derived.z'`
+    ],
+    ["DELETE", `DELETE FROM public.awcms_email_worker_categories`],
+    ["TRUNCATE", `TRUNCATE awcms_email_worker_categories`],
+    ["COPY", `COPY awcms_email_worker_categories FROM STDIN`],
+    [
+      "a DO block",
+      `DO $$ BEGIN INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.q'); END $$`
+    ],
+    [
+      "a function that writes it",
+      `CREATE FUNCTION f() RETURNS void LANGUAGE sql AS $$ INSERT INTO awcms_email_worker_categories (category) VALUES ('derived.q') $$`
+    ]
+  ])("%s is reported, not silently skipped", (_name, sql) => {
+    const { unparseable } = collectSeededWorkerCategories([
+      { name: "411_awcms_y.sql", sql }
+    ]);
+
+    expect(unparseable).toHaveLength(1);
+  });
+
+  test("describing or reading the table is not a seed and is not reported", () => {
+    const { seeded, unparseable } = collectSeededWorkerCategories([
+      { name: "410_awcms_x.sql", sql: loadMigrationText("410") }
+    ]);
+
+    expect(unparseable).toEqual([]);
+    expect([...seeded].sort()).toEqual(
+      Object.keys(BASE_WORKER_CATEGORY_ALLOWANCES).sort()
+    );
+  });
+
+  test.each([
+    ["plain", "CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert()"],
+    ["no OR REPLACE", "CREATE FUNCTION awcms_email_guard_worker_insert()"],
+    [
+      "schema-qualified",
+      "CREATE OR REPLACE FUNCTION public.awcms_email_guard_worker_insert()"
+    ],
+    [
+      "quoted",
+      `CREATE OR REPLACE FUNCTION "public"."awcms_email_guard_worker_insert"()`
+    ],
+    [
+      "odd whitespace and case",
+      "create\n  or\treplace   function\n public .AWCMS_EMAIL_GUARD_WORKER_INSERT ()"
+    ],
+    [
+      "drop",
+      "DROP FUNCTION IF EXISTS public.awcms_email_guard_worker_insert()"
+    ],
+    [
+      "alter",
+      "ALTER FUNCTION awcms_email_guard_worker_insert() SECURITY DEFINER"
+    ],
+    [
+      "trigger re-create",
+      "CREATE OR REPLACE TRIGGER awcms_email_messages_worker_guard BEFORE INSERT ON awcms_email_messages EXECUTE FUNCTION f()"
+    ],
+    [
+      "trigger drop, qualified",
+      `DROP TRIGGER awcms_email_messages_worker_guard ON public.awcms_email_messages`
+    ]
+  ])("a later migration touching the guard (%s) is flagged", (_name, sql) => {
+    expect(
+      findGuardFunctionReissues([
+        { name: "302_awcms_a.sql", sql },
+        { name: "410_awcms_b.sql", sql },
+        { name: "411_awcms_c.sql", sql }
+      ])
+    ).toEqual(["411_awcms_c.sql"]);
+  });
+
+  test("a comment, a string and an unrelated migration are not a re-issue", () => {
     const create =
       "CREATE OR REPLACE FUNCTION awcms_email_guard_worker_insert()";
 
     expect(
       findGuardFunctionReissues([
-        { name: "302_awcms_a.sql", sql: create },
-        { name: "410_awcms_b.sql", sql: create },
-        { name: "411_awcms_c.sql", sql: create },
-        { name: "412_awcms_d.sql", sql: `-- ${create}\nSELECT 1;` }
+        {
+          name: "412_awcms_d.sql",
+          sql: `-- ${create}\n/* ${create} */\nSELECT 'awcms_email_guard_worker_insert';`
+        },
+        { name: "413_awcms_e.sql", sql: "CREATE TABLE t (id int);" }
       ])
-    ).toEqual(["411_awcms_c.sql"]);
+    ).toEqual([]);
   });
 
   test("the real repository passes every probe", () => {
@@ -321,15 +551,11 @@ ON CONFLICT (category) DO NOTHING;`
     // migrations seed the three hr categories and re-issue nothing.
     const migrations = loadMigrations();
 
-    expect(
-      collectSeededWorkerCategories(migrations).size
-    ).toBeGreaterThanOrEqual(3);
+    const { seeded, unparseable } = collectSeededWorkerCategories(migrations);
+
+    expect(seeded.size).toBeGreaterThanOrEqual(3);
+    expect(unparseable).toEqual([]);
     expect(findGuardFunctionReissues(migrations)).toEqual([]);
-    expect(
-      findWorkerCategoryProblems(
-        listModules(),
-        collectSeededWorkerCategories(migrations)
-      )
-    ).toEqual([]);
+    expect(findWorkerCategoryProblems(listModules(), seeded)).toEqual([]);
   });
 });

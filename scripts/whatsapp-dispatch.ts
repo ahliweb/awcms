@@ -26,6 +26,8 @@
  * decrypt count is printed in the summary line (telemetry only: it lives in
  * this process, so it bounds nothing against a compromised one; Issue #1233).
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
@@ -39,6 +41,10 @@ import {
 const MAX_PASSES_PER_TENANT = 20;
 
 type TenantRow = { id: string };
+
+// Composition root (ADR-0164): this process renders or sends declared
+// categories/templates, so it installs the descriptor source itself.
+installExtensionPointSource(listModules);
 
 async function main() {
   const sql = getWorkerDatabaseClient();

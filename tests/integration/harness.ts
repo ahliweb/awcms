@@ -114,6 +114,11 @@ import {
 import { resetDatabaseCircuitBreakerForTests } from "../../src/lib/database/circuit-breaker";
 import { resetWorkClassGatesForTests } from "../../src/lib/database/work-class";
 import { resetRateLimitForTests } from "../../src/lib/security/rate-limit";
+import { installExtensionPointSource } from "../../src/modules/_shared/extension-point-source";
+import { listModules } from "../../src/modules";
+
+// Every harness-based suite is a composition root of its own process (ADR-0164).
+installExtensionPointSource(listModules);
 
 /**
  * Captured at module load. The privileged/admin connection string the CI

@@ -17,6 +17,7 @@
  * - the module descriptor: delegated retention that names TERMINAL statuses,
  *   nine permissions mirrored by the seed, and a navigation entry.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -67,6 +68,9 @@ import { createMetaCloudWhatsappProvider } from "../src/modules/whatsapp-deliver
 import { resolveWhatsappProvider } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-provider-resolver";
 import type { WhatsappHttpClient } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-http-client";
 import type { WhatsappSendRequest } from "../src/modules/whatsapp-delivery/domain/whatsapp-provider-contract";
+
+// Composition root for this test process (ADR-0164).
+installExtensionPointSource(listModules);
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const NUMBER = "+6281234567890";

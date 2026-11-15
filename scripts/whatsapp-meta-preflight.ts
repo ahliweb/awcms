@@ -24,12 +24,18 @@
  * could not be read). A consumer's templates are declared in its module
  * descriptor and loaded on first lookup (ADR-0164).
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { runMetaEnablementPreflight } from "../src/modules/whatsapp-delivery/application/whatsapp-meta-preflight";
 
 type TenantRow = { id: string; tenant_code: string };
+
+// Composition root (ADR-0164): this process renders or sends declared
+// categories/templates, so it installs the descriptor source itself.
+installExtensionPointSource(listModules);
 
 async function main(): Promise<void> {
   const sql = getWorkerDatabaseClient();

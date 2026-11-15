@@ -19,6 +19,8 @@
  *
  * `--dry-run` counts the intents due now and mutates nothing.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {
   applyJobExitCode,
@@ -32,6 +34,10 @@ import {
 import { runBookingReminderDispatch } from "../src/modules/booking/application/booking-reminder-job";
 import { getBookingReminderRecipients } from "../src/modules/booking/application/booking-reminder-recipients";
 import { whatsappDeliveryPortAdapter } from "../src/modules/whatsapp-delivery/application/whatsapp-enqueue";
+
+// Composition root (ADR-0164): this process renders or sends declared
+// categories/templates, so it installs the descriptor source itself.
+installExtensionPointSource(listModules);
 
 async function main() {
   const sql = getWorkerDatabaseClient();

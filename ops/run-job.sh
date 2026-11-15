@@ -346,7 +346,7 @@ esac
 # Source: appRoleTargetsWithoutWorkerClient() in scripts/jobs-env-allowlist.ts, derived
 # from each app-role exception's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  email:senders:verify)
+  email:senders:verify | omnichannel-inbox:sla)
     WITHHOLD_WORKER_DATABASE_URL=1
     ;;
   *)

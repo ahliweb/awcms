@@ -2,6 +2,8 @@ import type { APIContext } from "astro";
 import { defineMiddleware } from "astro:middleware";
 import type { MiddlewareHandler } from "astro";
 
+import { installExtensionPointSource } from "./modules/_shared/extension-point-source";
+import { listModules } from "./modules";
 import { refuseUnauthenticatedApiBody } from "./lib/auth/api-body-authentication";
 import { resolveSsrContext } from "./lib/auth/ssr-session";
 import { getDatabaseClient } from "./lib/database/client";
@@ -37,6 +39,10 @@ import {
   recordPublicNotFound,
   resolvePublicRedirectForRequest
 } from "./modules/seo-distribution/presentation/redirect-middleware";
+
+// Web composition root (ADR-0164): declared e-mail categories and WhatsApp
+// templates resolve from the descriptors installed here.
+installExtensionPointSource(listModules);
 
 const PROTECTED_PREFIX = "/admin";
 const API_PREFIX = "/api/";

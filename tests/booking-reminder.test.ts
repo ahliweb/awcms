@@ -3,6 +3,8 @@
  * ADR-0131, ADR-0133 sections 3 and 8). The behaviour against PostgreSQL is
  * `tests/integration/booking-reminder.integration.test.ts`.
  */
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -28,6 +30,9 @@ import {
   getWhatsappTemplate,
   renderWhatsappTemplate
 } from "../src/modules/whatsapp-delivery/domain/whatsapp-templates";
+
+// Composition root for this test process (ADR-0164).
+installExtensionPointSource(listModules);
 
 const root = join(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");

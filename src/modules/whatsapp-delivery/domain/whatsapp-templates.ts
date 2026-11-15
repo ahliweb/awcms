@@ -1,4 +1,4 @@
-import { listModules } from "../../index";
+import { requireExtensionPointModules } from "../../_shared/extension-point-source";
 import type { ModuleDescriptor } from "../../_shared/module-contract";
 
 /**
@@ -147,7 +147,9 @@ let loadedDescriptors = new WeakSet<ModuleDescriptor>();
  * (a test, a composition) is still picked up by the next lookup.
  */
 export function loadDescriptorWhatsappTemplates(): void {
-  for (const module of listModules()) {
+  for (const module of requireExtensionPointModules(
+    "The WhatsApp template registry"
+  )) {
     if (loadedDescriptors.has(module)) {
       continue;
     }
@@ -163,6 +165,14 @@ export function loadDescriptorWhatsappTemplates(): void {
 export function getWhatsappTemplate(
   key: string
 ): WhatsappTemplateDefinition | undefined {
+  // A built-in (or already loaded) key needs no descriptor; anything else can
+  // only come from one, so a process without a source fails loudly here.
+  const known = registry.get(key);
+
+  if (known) {
+    return known;
+  }
+
   loadDescriptorWhatsappTemplates();
 
   return registry.get(key);
