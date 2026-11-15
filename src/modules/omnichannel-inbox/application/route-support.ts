@@ -137,7 +137,8 @@ export function customerUnreachable(): Response {
  */
 export async function visibilityFor(
   context: InboxAccessContext,
-  guard: InboxGuard
+  guard: InboxGuard,
+  options: { recordDecision?: boolean } = {}
 ): Promise<ConversationVisibility> {
   const access = await loadInboxScopeAccess();
 
@@ -155,7 +156,7 @@ export async function visibilityFor(
     return { unconfined: true };
   }
 
-  const covered = await access.coveredScopes(context, guard);
+  const covered = await access.coveredScopes(context, guard, options);
 
   return { unconfined: false, scopeKeys: covered.map(scopeKey) };
 }

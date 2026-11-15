@@ -622,8 +622,193 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/progress:
+    get:
+      operationId: getOmnichannelInboxProgress
+      tags:
+        - Omnichannel Inbox
+      summary: Snapshot of the inbox's live work counts (the stream's REST snapshot and polling fallback)
+      description: >-
+        Issue #1171, ADR-0154. Counts of ACTIVE work (open or pending
+        conversations): `open`, `pending`, `awaitingReply`, `unassigned` and
+        `slaBreached`; the 20 most recently changed conversations (id, status,
+        when; never a source reference, an assignee, a tag, a message body or a
+        customer identifier) and the `cursor` a stream resumes from. It is the
+        page's state with no stream, the polling fallback, and what a client
+        re-fetches on `snapshot-required`. Requires
+        `omnichannel_inbox.status.read`. The counts follow that permission and
+        the business scopes the caller covers for it. The conversation ids in
+        `recent` are limited to what the same caller could list: the
+        intersection with their `omnichannel_inbox.conversations.read` coverage,
+        so a caller without `conversations.read`, or denied it for a brand, gets
+        counts and no ids for those conversations. A scope-confined caller never
+        sees a tenant-wide conversation. `404` while OMNICHANNEL_INBOX_ENABLED
+        is off.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The progress snapshot.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    $ref: "#/components/schemas/OmnichannelInboxProgressSnapshot"
+                  meta: { type: object }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omnichannel-inbox/progress/stream:
+    get:
+      operationId: streamOmnichannelInboxProgress
+      tags:
+        - Omnichannel Inbox
+      summary: Server-Sent Events stream of the inbox's live work counts, re-authorized every tick
+      description: >-
+        Issue #1171, ADR-0154. `text/event-stream` from the existing Bun process;
+        there is no WebSocket. A hint projected from committed conversation rows:
+        a frame never causes a send, an enqueue or a status change, and carries
+        no preview (the page re-fetches the list through the authorized REST
+        read).
+
+
+        **Opening.** A present `Origin` that is not the site's own origin, or
+        `Sec-Fetch-Site: cross-site`, or `Sec-Fetch-Mode: navigate`, is refused
+        with `403 ORIGIN_REFUSED` before any work. The caller needs
+        `omnichannel_inbox.status.read`; otherwise `401`/`403`, and `404` while
+        the inbox is switched off. Counts and conversation ids are limited as in
+        the snapshot (ids only for conversations the caller could also list).
+        Over the
+        per-actor, per-tenant or per-instance cap the answer is `429
+        STREAM_CAPACITY_REACHED` with `Retry-After`, never a queued stream. A
+        client resumes by sending the last event id back as `Last-Event-ID`
+        (`EventSource` does this by itself).
+
+
+        **Events.** Every data event carries `id: <cursor>` (a database keyset
+        position). `progress` carries an `OmnichannelInboxProgressFrame`: the
+        current counts (coalesced, latest value per tick) and the conversations
+        that changed since the previous cursor, at most 50; a tick with nothing
+        new writes a heartbeat comment instead. `snapshot-required` means
+        re-fetch `GET /api/v1/omnichannel-inbox/progress`: the `Last-Event-ID` was
+        malformed, foreign or purged, or more than 50 conversations changed at
+        once. Terminal: `authorization-revoked` (do NOT reconnect; the
+        `omnichannel_inbox.status.read` permission or the session ended;
+        audited). Losing or changing a business scope does NOT end the stream:
+        it only changes which conversations later frames include (swapping to
+        another scope narrows the frames to it; removing the caller's LAST scope
+        ends their confinement, so a caller holding the permission through a
+        tenant-wide role then sees the whole tenant, the same rule as the
+        conversation list; to cut access, revoke the permission or role, which
+        ends the stream), and an assignee change has no effect on
+        visibility. Other terminal events:
+        `stream-error` (the database refused; back off with jitter),
+        `slow-consumer` (the client fell behind and was evicted) and
+        `stream-expired` (the 10-minute lifetime ended; reconnect with the
+        cursor). Re-authorized every 5 s, which is also the revocation latency.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: The cursor of the last event received, sent back on reconnect.
+          schema:
+            type: string
+            maxLength: 256
+      responses:
+        "200":
+          description: The event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: A connection cap is reached; retry after `Retry-After` seconds or use the snapshot.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The database refused the opening transaction; retry later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    OmnichannelInboxProgressCounts:
+      type: object
+      description: Counts of active (open or pending) conversations the caller may see.
+      required: [open, pending, awaitingReply, unassigned, slaBreached]
+      properties:
+        open: { type: integer }
+        pending: { type: integer }
+        awaitingReply: { type: integer }
+        unassigned: { type: integer }
+        slaBreached: { type: integer }
+    OmnichannelInboxProgressChange:
+      type: object
+      required: [id, status, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [open, pending, resolved, closed] }
+        updatedAt: { type: string, format: date-time }
+    OmnichannelInboxProgressSnapshot:
+      type: object
+      required: [v, topic, resourceId, cursor, at, counts, recent]
+      properties:
+        v: { type: integer, enum: [1] }
+        topic: { type: string, enum: [inbox.status.progress] }
+        resourceId: { type: string, enum: [inbox] }
+        cursor:
+          type: string
+          description: Opaque keyset position; send it as `Last-Event-ID` to stream from here.
+        at: { type: string, format: date-time }
+        counts:
+          $ref: "#/components/schemas/OmnichannelInboxProgressCounts"
+        recent:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/OmnichannelInboxProgressChange"
+    OmnichannelInboxProgressFrame:
+      type: object
+      description: >-
+        The `data` of a `progress` event on the inbox progress stream (versioned
+        envelope, ADR-0154 section 8). Documented here because SSE frames have
+        no OpenAPI media-type schema of their own.
+      required: [v, topic, resourceId, cursor, at, counts, changes]
+      properties:
+        v: { type: integer, enum: [1] }
+        topic: { type: string, enum: [inbox.status.progress] }
+        resourceId: { type: string, enum: [inbox] }
+        cursor: { type: string }
+        at: { type: string, format: date-time }
+        counts:
+          $ref: "#/components/schemas/OmnichannelInboxProgressCounts"
+        changes:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/OmnichannelInboxProgressChange"
     OmnichannelInboxConversation:
       type: object
       description: >-

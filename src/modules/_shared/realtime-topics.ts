@@ -17,14 +17,17 @@
  *
  * ## Not admitted yet, on purpose
  *
- * - **Inbox hint** (`inbox.status.read`): the unified inbox (Issue #1164) does
- *   not exist, so there is no durable row to project. It becomes an entry here
- *   in the change that builds the inbox, not before.
  * - **Campaign progress** (`crm_campaigns.progress.read`): there is no campaign
  *   entity in this repository. A campaign module would add its own topic over
  *   its own rows; until then the per-sender lane below is the real, durable
  *   progress there is to show.
  * - **Per-message status** across channels: ADR-0154 task 3, its own change.
+ *   The per-sender lane already streams message status for WhatsApp.
+ *
+ * ## Admitted since
+ *
+ * - **Inbox hint** (`omnichannel_inbox.status.read`): admitted once the inbox
+ *   (Issue #1164, ADR-0160) gave it a durable row to project.
  */
 export type RealtimeTopicEntry = {
   /** Code-defined name carried in the envelope and as the `topic` metric label. */
@@ -38,6 +41,7 @@ export type RealtimeTopicEntry = {
 };
 
 export const WHATSAPP_SENDER_PROGRESS_TOPIC = "whatsapp.sender.progress";
+export const INBOX_STATUS_PROGRESS_TOPIC = "inbox.status.progress";
 
 export const REALTIME_TOPICS: readonly RealtimeTopicEntry[] = [
   {
@@ -46,5 +50,12 @@ export const REALTIME_TOPICS: readonly RealtimeTopicEntry[] = [
     permission: { activityCode: "progress", action: "read" },
     streamPath: "/api/v1/whatsapp/senders/[id]/progress/stream",
     snapshotPath: "/api/v1/whatsapp/senders/[id]/progress"
+  },
+  {
+    topic: INBOX_STATUS_PROGRESS_TOPIC,
+    moduleKey: "omnichannel_inbox",
+    permission: { activityCode: "status", action: "read" },
+    streamPath: "/api/v1/omnichannel-inbox/progress/stream",
+    snapshotPath: "/api/v1/omnichannel-inbox/progress"
   }
 ];

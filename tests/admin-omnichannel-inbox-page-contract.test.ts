@@ -87,7 +87,10 @@ describe("the screens gate on keys that really exist", () => {
           `${module.key}.${permission.activityCode}.${permission.action}`
       )
     );
-    const seed = read("sql/383_awcms_omnichannel_inbox_permissions.sql");
+    // `sql/413` seeds the realtime `status.read` key (Issue #1171).
+    const seed =
+      read("sql/383_awcms_omnichannel_inbox_permissions.sql") +
+      read("sql/413_awcms_inbox_status_progress_stream.sql");
 
     for (const guard of Object.values(G)) {
       expect(
