@@ -8,6 +8,7 @@ export const CONVERSATIONS_ACTIVITY_CODE = "conversations";
 export const TAGS_ACTIVITY_CODE = "tags";
 export const SLA_POLICIES_ACTIVITY_CODE = "sla_policies";
 export const PROJECTION_ACTIVITY_CODE = "projection";
+export const STATUS_ACTIVITY_CODE = "status";
 
 export const OMNICHANNEL_INBOX_GUARDS = {
   readConversations: {
@@ -39,6 +40,12 @@ export const OMNICHANNEL_INBOX_GUARDS = {
     moduleKey: OMNICHANNEL_INBOX_MODULE_KEY,
     activityCode: SLA_POLICIES_ACTIVITY_CODE,
     action: "configure" as const
+  },
+  /** Issue #1171, ADR-0154: the realtime `inbox.status.progress` topic. */
+  readStatus: {
+    moduleKey: OMNICHANNEL_INBOX_MODULE_KEY,
+    activityCode: STATUS_ACTIVITY_CODE,
+    action: "read" as const
   },
   configureProjection: {
     moduleKey: OMNICHANNEL_INBOX_MODULE_KEY,

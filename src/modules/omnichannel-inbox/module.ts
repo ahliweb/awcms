@@ -9,6 +9,7 @@ import {
   CONSUMED_EVENT_TYPES,
   PROJECTED_EVENT_VERSIONS,
   PROJECTION_ACTIVITY_CODE,
+  STATUS_ACTIVITY_CODE,
   PROJECTOR_CONSUMER_NAME,
   SLA_POLICIES_ACTIVITY_CODE,
   TAGS_ACTIVITY_CODE
@@ -167,6 +168,16 @@ export const omnichannelInboxModule = defineModule({
     }
   ],
   permissions: [
+    {
+      // Issue #1171, ADR-0154: the realtime topic `inbox.status.progress`
+      // (REST snapshot + SSE stream), seeded by `sql/413`. Separate from
+      // `conversations.read` so live counts can be granted without the list,
+      // and revoked on its own mid-stream.
+      activityCode: STATUS_ACTIVITY_CODE,
+      action: "read",
+      description:
+        "Watch the inbox's live work counts (open, pending, awaiting a reply, unassigned, SLA breached) and which conversations changed, within the business scopes the caller covers; ids, statuses and times only, never a message body or a customer identifier"
+    },
     {
       activityCode: CONVERSATIONS_ACTIVITY_CODE,
       action: "read",
