@@ -1,10 +1,11 @@
 /**
  * `security:readiness` detection added for Issue #1347 (follow-up of the #1279
- * audit). A view is evaluated with the privileges of its OWNER unless it is
- * `security_invoker`. A view owned by a superuser or a BYPASSRLS role over a
- * FORCE-RLS table is therefore read WITHOUT row level security by whoever holds
- * SELECT on the view: `FORCE` only binds a table's owner, and a superuser /
- * BYPASSRLS role is exempt from it. Materialized views are worse: they have no
+ * audit). A view is evaluated with the privileges and policies of its OWNER
+ * unless it is `security_invoker`. A definer view over a FORCE-RLS table is
+ * therefore read under the OWNER's policies, not the reader's, by whoever holds
+ * SELECT on the view, and WITHOUT row level security when the owner is a
+ * superuser or BYPASSRLS role (`FORCE` only binds a table's owner). The check
+ * fails every such view whatever its owner. Materialized views are worse: they have no
  * RLS and no `security_invoker`, so the rows stored at refresh time are served
  * to every reader whatever tenant they act for.
  *
@@ -147,7 +148,11 @@ export function evaluateViewRlsBypass(
   const present = new Set(views.map((view) => view.relname));
 
   for (const entry of reviewed) {
-    if (present.has(entry.view) && !seen.has(key(entry.view, entry.role))) {
+    if (!present.has(entry.view)) {
+      findings.push(
+        `${entry.view} is in REVIEWED_VIEW_GRANTS but no such view exists (remove it)`
+      );
+    } else if (!seen.has(key(entry.view, entry.role))) {
       findings.push(
         `${entry.view} has a reviewed grant to ${entry.role} that no longer exists (remove it from REVIEWED_VIEW_GRANTS)`
       );

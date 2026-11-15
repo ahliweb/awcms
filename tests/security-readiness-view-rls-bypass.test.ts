@@ -1,8 +1,8 @@
 /**
  * Issue #1347 (follow-up of #1279). `security:readiness` had no check for views:
- * every earlier check read `relkind IN ('r', 'p')`. A view owned by a superuser
- * or BYPASSRLS role over a FORCE-RLS table is read without RLS by whoever holds
- * SELECT on it. These tests mutate a migrated database (restoring it in
+ * every earlier check read `relkind IN ('r', 'p')`. A definer (non-security_invoker)
+ * view over a FORCE-RLS table runs under its owner's policies, or none at all for a
+ * superuser/BYPASSRLS owner, whoever holds SELECT on it. These tests mutate a migrated database (restoring it in
  * `finally`) and prove the check goes RED for the mutation and GREEN on the clean
  * schema.
  *
@@ -118,6 +118,13 @@ describe("evaluateViewRlsBypass (pure)", () => {
         [reviewed("SELECT")]
       )[0]
     ).toContain("no longer exists");
+  });
+
+  test("a reviewed grant whose view was dropped is reported", () => {
+    const out = evaluateViewRlsBypass([], [], [reviewed("SELECT")]);
+
+    expect(out.length).toBe(1);
+    expect(out[0]).toContain("no such view exists");
   });
 });
 

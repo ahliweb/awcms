@@ -8461,7 +8461,7 @@ export async function checkNoViewBypassesRls(): Promise<SecurityCheckResult> {
           name,
           severity,
           status: "fail",
-          evidence: `A view runs as its owner unless it is security_invoker, and FORCE RLS does not bind a superuser or BYPASSRLS owner; a materialized view has no RLS at all. Views also need an entry in the reviewed view grant matrix before a restricted role can touch them: ${findings.join("; ")}.`
+          evidence: `A view runs with its owner's privileges and policies unless it is security_invoker (and FORCE RLS does not bind a superuser or BYPASSRLS owner); a materialized view has no RLS at all. Views also need an entry in the reviewed view grant matrix before a restricted role can touch them: ${findings.join("; ")}.`
         }
       : {
           name,
