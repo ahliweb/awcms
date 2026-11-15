@@ -40,17 +40,21 @@ describe("evaluateViewRlsBypass (pure)", () => {
 
   test("a bypassing owner without security_invoker is a finding, with or without grants", () => {
     expect(evaluateViewRlsBypass([view()], [], [])[0]).toContain(
-      "view awcms_v reads FORCE-RLS table(s) awcms_blog_posts as its owner postgres"
+      "view awcms_v reads FORCE-RLS table(s) awcms_blog_posts as its owner postgres, which is a superuser or BYPASSRLS role"
     );
   });
 
-  test("security_invoker, or an owner that cannot bypass RLS, is clean", () => {
+  test("security_invoker is clean; a definer view is a finding whatever its owner", () => {
     expect(
       evaluateViewRlsBypass([view({ security_invoker: true })], [], [])
     ).toEqual([]);
     expect(
-      evaluateViewRlsBypass([view({ owner_bypasses_rls: false })], [], [])
-    ).toEqual([]);
+      evaluateViewRlsBypass(
+        [view({ owner_bypasses_rls: false, owner: "awcms_principal_reach" })],
+        [],
+        []
+      )[0]
+    ).toContain("as its owner awcms_principal_reach, whose own policies");
   });
 
   test("a view over no FORCE-RLS table is not an RLS finding", () => {
@@ -182,10 +186,10 @@ describeOrSkip("security:readiness — views (database)", () => {
 
         expect(result.status).toBe("fail");
         expect(result.evidence).toContain("awcms_rdy_view");
-        expect(result.evidence).toContain("awcms_blog_posts");
+        expect(result.evidence).toContain("public.awcms_blog_posts");
         expect(result.evidence).toContain("superuser or BYPASSRLS");
         expect(result.evidence).toContain(
-          "awcms_app holds SELECT, INSERT, UPDATE, DELETE on view awcms_rdy_view"
+          "awcms_app holds SELECT, INSERT, UPDATE, DELETE on view public.awcms_rdy_view"
         );
       }
     );
@@ -240,32 +244,96 @@ describeOrSkip("security:readiness — views (database)", () => {
         const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
         const text = findings.join("; ");
 
-        expect(text).toContain("view awcms_rdy_view_chain reads FORCE-RLS");
         expect(text).toContain(
-          "PUBLIC holds SELECT on view awcms_rdy_view_chain"
+          "view public.awcms_rdy_view_chain reads FORCE-RLS"
+        );
+        expect(text).toContain(
+          "PUBLIC holds SELECT on view public.awcms_rdy_view_chain"
         );
       }
     );
   });
 
-  test("an owner that is neither superuser nor BYPASSRLS passes the owner rule", async () => {
+  test("a definer view owned by a NON-bypass role still fails (owner is irrelevant)", async () => {
     await mutated(
       `CREATE ROLE awcms_rdy_owner NOLOGIN;
        GRANT SELECT ON public.awcms_blog_posts TO awcms_rdy_owner;
        CREATE VIEW public.awcms_rdy_view AS SELECT * FROM public.awcms_blog_posts;
        ALTER VIEW public.awcms_rdy_view OWNER TO awcms_rdy_owner;
        ${stripDefaultGrants("awcms_rdy_view")}`,
-      `${undo}`,
+      undo,
       async () => {
         const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
 
-        expect(findings).toEqual([]);
+        expect(findings.length).toBe(1);
+        expect(findings[0]).toContain("as its owner awcms_rdy_owner");
         await withAdmin((sql) =>
-          sql.unsafe("ALTER ROLE awcms_rdy_owner BYPASSRLS")
+          sql.unsafe(
+            "ALTER VIEW public.awcms_rdy_view SET (security_invoker = true)"
+          )
         );
         expect(
-          (await withAdmin((sql) => findViewRlsBypass(sql))).findings[0]
-        ).toContain("superuser or BYPASSRLS");
+          (await withAdmin((sql) => findViewRlsBypass(sql))).findings
+        ).toEqual([]);
+      }
+    );
+  });
+
+  test("a view owned by awcms_principal_reach over awcms_identities with a reviewed grant to awcms_app still fails", async () => {
+    await mutated(
+      `CREATE VIEW public.awcms_rdy_view AS SELECT * FROM public.awcms_identities;
+       ALTER VIEW public.awcms_rdy_view OWNER TO awcms_principal_reach;
+       ${stripDefaultGrants("awcms_rdy_view")}
+       GRANT SELECT ON public.awcms_rdy_view TO awcms_app;`,
+      undo,
+      async () => {
+        const reviewedGrants = [
+          {
+            view: "public.awcms_rdy_view",
+            role: "awcms_app",
+            privileges: ["SELECT"] as const
+          }
+        ];
+        const { findings } = await withAdmin((sql) =>
+          findViewRlsBypass(sql, reviewedGrants)
+        );
+
+        expect(findings.length).toBe(1);
+        expect(findings[0]).toContain(
+          "view public.awcms_rdy_view reads FORCE-RLS table(s) public.awcms_identities as its owner awcms_principal_reach"
+        );
+      }
+    );
+  });
+
+  test('a public view named "rep.v" does not collide with schema rep, view v', async () => {
+    await mutated(
+      `CREATE SCHEMA awcms_rdy_schema;
+       CREATE VIEW awcms_rdy_schema.v WITH (security_invoker = true) AS SELECT * FROM public.awcms_blog_posts;
+       CREATE VIEW public."awcms_rdy_schema.v" WITH (security_invoker = true) AS SELECT * FROM public.awcms_blog_posts;
+       REVOKE ALL ON awcms_rdy_schema.v FROM awcms_app, awcms_worker, awcms_setup, PUBLIC;
+       REVOKE ALL ON public."awcms_rdy_schema.v" FROM awcms_app, awcms_worker, awcms_setup, PUBLIC;
+       GRANT SELECT ON awcms_rdy_schema.v TO awcms_app;
+       GRANT SELECT ON public."awcms_rdy_schema.v" TO awcms_app;`,
+      undo.replace(
+        "DROP VIEW IF EXISTS public.awcms_rdy_view_chain;",
+        'DROP VIEW IF EXISTS public."awcms_rdy_schema.v"; DROP VIEW IF EXISTS public.awcms_rdy_view_chain;'
+      ),
+      async () => {
+        const reviewedOne = [
+          {
+            view: "awcms_rdy_schema.v",
+            role: "awcms_app",
+            privileges: ["SELECT"] as const
+          }
+        ];
+        const { findings } = await withAdmin((sql) =>
+          findViewRlsBypass(sql, reviewedOne)
+        );
+
+        // Only the quoted public view is unreviewed; the schema view is pinned.
+        expect(findings.length).toBe(1);
+        expect(findings[0]).toContain('view public."awcms_rdy_schema.v"');
       }
     );
   });
@@ -279,7 +347,7 @@ describeOrSkip("security:readiness — views (database)", () => {
         const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
         const text = findings.join("; ");
 
-        expect(text).toContain("materialized view awcms_rdy_matview");
+        expect(text).toContain("materialized view public.awcms_rdy_matview");
         expect(text).toContain("no row level security of its own");
       }
     );
@@ -358,7 +426,7 @@ describeOrSkip("security:readiness — views (database)", () => {
         const { findings } = await withAdmin((sql) => findViewRlsBypass(sql));
 
         expect(findings.join("; ")).toContain(
-          "view awcms_rdy_schema.inner_view reads FORCE-RLS table(s) awcms_blog_posts as its owner"
+          "view awcms_rdy_schema.inner_view reads FORCE-RLS table(s) public.awcms_blog_posts as its owner"
         );
       }
     );
@@ -377,7 +445,7 @@ describeOrSkip("security:readiness — views (database)", () => {
 
         expect(text).toContain("rdy_runtime can SELECT it");
         expect(text).toContain(
-          "rdy_runtime holds SELECT on view awcms_rdy_matview"
+          "rdy_runtime holds SELECT on view public.awcms_rdy_matview"
         );
       }
     );

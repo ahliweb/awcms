@@ -39,8 +39,10 @@ export type ViewPrivilege = (typeof VIEW_PRIVILEGES)[number];
  * must be declared here with EXACTLY the privileges it may hold; any other
  * privilege is a finding. A privilege counts however it is reached: directly,
  * through membership of another role (even NOINHERIT: the member can SET ROLE),
- * through PUBLIC, or through a column-level grant. A view outside `public` is
- * named `schema.view` here. Empty today: this
+ * through PUBLIC, or through a column-level grant. Every view is named
+ * `schema.view` here, built as `format('%I.%I', nspname, relname)` (always
+ * schema-qualified, quoted only where needed, so `public."rep.v"` and `rep.v`
+ * cannot collide). Empty today: this
  * repository defines no view. Adding one is a migration AND an edit here, on
  * purpose, the same contract as `REVIEWED_PERMISSIVE_POLICIES`.
  */
@@ -89,9 +91,17 @@ export function evaluateViewRlsBypass(
     const label = `${view.relkind === "m" ? "materialized view" : "view"} ${view.relname}`;
     const over = view.forced_tables.join(", ");
 
-    if (view.owner_bypasses_rls && !view.security_invoker) {
+    if (view.relkind === "v" && !view.security_invoker) {
+      // Fail closed whatever the owner is: a definer view owned by a role that
+      // is not BYPASSRLS can still hold a reviewed permissive USING (true)
+      // SELECT policy (REVIEWED_PERMISSIVE_POLICIES, e.g. awcms_principal_reach
+      // on awcms_identities) and then reads every tenant's rows.
       findings.push(
-        `${label} reads FORCE-RLS table(s) ${over} as its owner ${view.owner}, which is a superuser or BYPASSRLS role: every reader sees all tenants' rows (set security_invoker = true, or give it an owner that is neither)`
+        `${label} reads FORCE-RLS table(s) ${over} as its owner ${view.owner}${view.owner_bypasses_rls ? ", which is a superuser or BYPASSRLS role" : ", whose own policies, not the reader's, then apply"}: every reader can see rows of all tenants (set security_invoker = true)`
+      );
+    } else if (view.relkind === "m" && view.owner_bypasses_rls) {
+      findings.push(
+        `${label} reads FORCE-RLS table(s) ${over} as its owner ${view.owner}, which is a superuser or BYPASSRLS role: every reader sees all tenants' rows (a materialized view cannot be security_invoker; give it an owner that is neither)`
       );
     }
 
@@ -158,7 +168,7 @@ export async function findViewRlsBypass(
   reviewed: readonly ReviewedViewGrant[] = REVIEWED_VIEW_GRANTS
 ): Promise<{ checkedViews: number; findings: string[] }> {
   const views = (await sql`
-    SELECT (CASE WHEN n.nspname = 'public' THEN c.relname::text ELSE n.nspname || '.' || c.relname END) AS relname, c.relkind::text AS relkind,
+    SELECT format('%I.%I', n.nspname, c.relname) AS relname, c.relkind::text AS relkind,
            o.rolname::text AS owner,
            (o.rolsuper OR o.rolbypassrls) AS owner_bypasses_rls,
            EXISTS (
@@ -167,7 +177,7 @@ export async function findViewRlsBypass(
                AND lower(opt.option_value) IN ('true', 'on', 'yes', 'y', 't', '1')
            ) AS security_invoker,
            ARRAY(
-             SELECT (CASE WHEN tn.nspname = 'public' THEN t.relname::text ELSE tn.nspname || '.' || t.relname END)
+             SELECT format('%I.%I', tn.nspname, t.relname)
              FROM pg_class t
              JOIN pg_namespace tn ON tn.oid = t.relnamespace
              WHERE t.relkind IN ('r', 'p')
@@ -203,7 +213,7 @@ export async function findViewRlsBypass(
   // NOINHERIT on purpose: a member can SET ROLE), holds it on the table or on
   // a column of it. The owner is NOT excluded: it reads its own relation.
   const grantRows = (await sql`
-    SELECT (CASE WHEN n.nspname = 'public' THEN c.relname::text ELSE n.nspname || '.' || c.relname END) AS relname, g.name AS grantee,
+    SELECT format('%I.%I', n.nspname, c.relname) AS relname, g.name AS grantee,
            (g.oid = c.relowner) AS is_owner,
            ARRAY(
              SELECT p FROM unnest(${sql.array([...VIEW_PRIVILEGES], "text")}::text[]) AS p

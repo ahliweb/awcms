@@ -8467,7 +8467,7 @@ export async function checkNoViewBypassesRls(): Promise<SecurityCheckResult> {
           name,
           severity,
           status: "pass",
-          evidence: `${checkedViews} view(s)/materialized view(s) in schema public: none that reads a FORCE-RLS table is owned by a superuser or BYPASSRLS role without security_invoker, no materialized view over one is readable by a restricted role, and no restricted role holds a privilege on a view outside the reviewed matrix.`
+          evidence: `${checkedViews} view(s)/materialized view(s) in every non-system schema: no view that reaches a FORCE-RLS table lacks security_invoker (whatever its owner), no materialized view over one is owned by a superuser or BYPASSRLS role, no materialized view over one is readable by a restricted role, and no restricted role holds a privilege on a view outside the reviewed matrix.`
         };
   } catch (error) {
     return {
