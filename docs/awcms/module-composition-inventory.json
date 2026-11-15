@@ -419,7 +419,11 @@
       "version": "0.1.0",
       "status": "active",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access"],
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "domain_event_runtime"
+      ],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 18,
