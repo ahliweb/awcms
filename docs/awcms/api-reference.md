@@ -14145,7 +14145,7 @@ Immediate, and wins over everything queued: the recipient's waiting marketing me
 - **operationId**: `getWhatsappDiagnostics`
 - **Security**: bearerAuth + tenantHeader
 
-One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected (a security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`.
+One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected. A caller confined to business scopes sees only the rows (counts, messages and attempts) whose own business scope they hold; unscoped rows are hidden from them and the tenant-wide `suppressions`/`grantedConsents` totals are `null` (Issue #1265). (A security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`.
 
 **Parameters**
 
@@ -14169,7 +14169,7 @@ One endpoint rather than three because the parts are only readable together: the
 - **operationId**: `cancelWhatsappMessage`
 - **Security**: bearerAuth + tenantHeader
 
-Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`.
+Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`. A caller confined to business scopes may cancel only messages whose own business scope they hold; another brand's message and an unscoped one get the same `409` as an unknown id.
 
 **Parameters**
 

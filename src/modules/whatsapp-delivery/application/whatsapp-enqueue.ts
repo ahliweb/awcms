@@ -41,6 +41,7 @@
  * runs again at dispatch.
  */
 import { log } from "../../../lib/logging/logger";
+import { messageScopeFilter } from "./whatsapp-message-scope-filter";
 import type { ChannelAccountPort } from "../../_shared/ports/channel-account-port";
 import type {
   EnqueueWhatsappInput,
@@ -493,8 +494,16 @@ export async function cancelWhatsappByCorrelation(
 export async function cancelWhatsappMessage(
   tx: Bun.SQL,
   tenantId: string,
-  messageId: string
+  messageId: string,
+  /**
+   * Issue #1265: `null` (explicit, REQUIRED choice) may cancel any row of the tenant; a list
+   * restricts the cancel to messages whose own business scope is listed, so a
+   * message of another brand, or an unscoped one, is "not cancelled" exactly
+   * like an unknown id.
+   */
+  scopeKeys: string[] | null
 ): Promise<{ cancelled: boolean }> {
+  const scope = messageScopeFilter(tx, scopeKeys);
   const rows = (await tx`
     UPDATE awcms_whatsapp_messages
     SET status = 'cancelled', next_attempt_at = NULL,
@@ -504,6 +513,8 @@ export async function cancelWhatsappMessage(
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${messageId}
       AND status IN ('queued', 'retry_wait')
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     RETURNING id
   `) as { id: string }[];
 

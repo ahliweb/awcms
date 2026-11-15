@@ -183,6 +183,45 @@ describe("the properties this screen exists to keep", () => {
   });
 });
 
+describe("row confinement (Issue #1265)", () => {
+  test("the page resolves the caller's scope keys once and hands them to all three reads", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain("resolveMessageScopeKeys(");
+    expect(page).toContain(
+      "summarizeWhatsappQueue(tx, ssr.tenantId, scopeKeys)"
+    );
+
+    for (const call of [
+      "listRecentWhatsappMessages(",
+      "listRecentWhatsappAttempts("
+    ]) {
+      const start = page.indexOf(call);
+
+      expect(start).toBeGreaterThan(-1);
+      expect(page.slice(start, page.indexOf(");", start))).toMatch(
+        /scopeKeys\s*\}?$/
+      );
+    }
+  });
+
+  test("scopeKeys is a REQUIRED parameter of every confined read (no fail-open default)", async () => {
+    const diagnostics = await readFile(
+      "src/modules/whatsapp-delivery/application/whatsapp-diagnostics.ts",
+      "utf8"
+    );
+    const enqueue = await readFile(
+      "src/modules/whatsapp-delivery/application/whatsapp-enqueue.ts",
+      "utf8"
+    );
+
+    expect(diagnostics).not.toMatch(/scopeKeys\??: [^;\n]*= null/);
+    expect(diagnostics).not.toContain("scopeKeys?:");
+    expect(diagnostics).not.toContain("options.scopeKeys ?? null");
+    expect(enqueue).not.toMatch(/scopeKeys: string\[\] \| null = null/);
+  });
+});
+
 describe("the admin ledger", () => {
   test("the only `whatsapp_delivery` keys on NOT_YET_SCREENED are the three Meta keys of Issue #1143", async () => {
     const { NOT_YET_SCREENED } =

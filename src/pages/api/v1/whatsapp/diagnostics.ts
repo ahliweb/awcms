@@ -8,6 +8,7 @@ import {
   WHATSAPP_MESSAGE_STATUSES,
   type WhatsappMessageStatusValue
 } from "../../../../modules/whatsapp-delivery/application/whatsapp-diagnostics";
+import { resolveMessageScopeKeys } from "../../../../modules/whatsapp-delivery/application/whatsapp-message-scope";
 import {
   isKnownWhatsappProvider,
   isWhatsappEnabled
@@ -63,15 +64,27 @@ export const GET = defineTenantRoute<{
     activityCode: "messages",
     action: "read"
   },
-  handler: async ({ tx, tenantId, prepared }) => {
+  handler: async (context) => {
+    const { tx, tenantId, prepared } = context;
+    // Rows narrowed to the caller's business scopes (Issue #1265): a confined
+    // caller sees only messages whose own brand they hold; unscoped rows and the
+    // tenant-wide suppression/consent totals are hidden from them.
+    const scopeKeys = await resolveMessageScopeKeys(context, {
+      moduleKey: "whatsapp_delivery",
+      activityCode: "messages",
+      action: "read"
+    });
+
     // Sequential: `tx` is ONE reserved connection.
-    const summary = await summarizeWhatsappQueue(tx, tenantId);
+    const summary = await summarizeWhatsappQueue(tx, tenantId, scopeKeys);
     const list = await listRecentWhatsappMessages(tx, tenantId, {
       ...(prepared.status ? { status: prepared.status } : {}),
-      limit: prepared.limit
+      limit: prepared.limit,
+      scopeKeys
     });
     const attempts = await listRecentWhatsappAttempts(tx, tenantId, {
-      limit: prepared.limit
+      limit: prepared.limit,
+      scopeKeys
     });
 
     return ok({
