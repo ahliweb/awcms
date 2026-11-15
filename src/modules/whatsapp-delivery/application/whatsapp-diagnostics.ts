@@ -83,7 +83,7 @@ export function isWhatsappMessageStatus(
 }
 
 /**
- * `scopeKeys` (Issue #1265): `null` (default) is every row; a list narrows the
+ * `scopeKeys` (Issue #1265): `null` is every row (callers must choose it explicitly); a list narrows the
  * counts to rows whose own business scope is listed (see
  * `whatsapp-message-scope.ts`). A confined caller gets `null` for the two
  * tenant-wide totals (suppressions, granted consents) rather than a number that
@@ -92,7 +92,7 @@ export function isWhatsappMessageStatus(
 export async function summarizeWhatsappQueue(
   tx: Bun.SQL,
   tenantId: string,
-  scopeKeys: MessageScopeKeys = null
+  scopeKeys: MessageScopeKeys
 ): Promise<WhatsappQueueSummary> {
   const scope = messageScopeFilter(tx, scopeKeys);
   const counts = (await tx`
@@ -167,12 +167,12 @@ export async function listRecentWhatsappMessages(
   options: {
     status?: WhatsappMessageStatusValue;
     limit: number;
-    /** Issue #1265: `null`/absent is every row. */
-    scopeKeys?: MessageScopeKeys;
+    /** Issue #1265: REQUIRED; `null` is every row, chosen explicitly. */
+    scopeKeys: MessageScopeKeys;
   }
 ): Promise<{ messages: WhatsappMessageView[]; hasMore: boolean }> {
   const status = options.status ?? null;
-  const scope = messageScopeFilter(tx, options.scopeKeys ?? null);
+  const scope = messageScopeFilter(tx, options.scopeKeys);
   const rows = (await tx`
     SELECT id, template_key, purpose, status, recipient_masked, correlation_id,
            retry_count, failure_code, last_error, provider_name,
@@ -225,9 +225,9 @@ type AttemptRow = {
 export async function listRecentWhatsappAttempts(
   tx: Bun.SQL,
   tenantId: string,
-  options: { limit: number; scopeKeys?: MessageScopeKeys }
+  options: { limit: number; scopeKeys: MessageScopeKeys }
 ): Promise<WhatsappAttemptView[]> {
-  const scope = messageScopeFilter(tx, options.scopeKeys ?? null);
+  const scope = messageScopeFilter(tx, options.scopeKeys);
   const rows = (await tx`
     SELECT id, message_id, attempt_no, outcome, provider_name,
            provider_response_snippet, error_message, created_at

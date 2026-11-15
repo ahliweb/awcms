@@ -496,12 +496,12 @@ export async function cancelWhatsappMessage(
   tenantId: string,
   messageId: string,
   /**
-   * Issue #1265: `null` (default) may cancel any row of the tenant; a list
+   * Issue #1265: `null` (explicit, REQUIRED choice) may cancel any row of the tenant; a list
    * restricts the cancel to messages whose own business scope is listed, so a
    * message of another brand, or an unscoped one, is "not cancelled" exactly
    * like an unknown id.
    */
-  scopeKeys: string[] | null = null
+  scopeKeys: string[] | null
 ): Promise<{ cancelled: boolean }> {
   const scope = messageScopeFilter(tx, scopeKeys);
   const rows = (await tx`

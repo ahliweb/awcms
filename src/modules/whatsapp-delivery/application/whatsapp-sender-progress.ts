@@ -70,6 +70,7 @@ import {
   WHATSAPP_MESSAGE_STATUSES,
   type WhatsappMessageStatusValue
 } from "./whatsapp-diagnostics";
+import { messageScopeFilter } from "./whatsapp-message-scope-filter";
 
 export const WHATSAPP_PROGRESS_GUARD = {
   moduleKey: "whatsapp_delivery",
@@ -187,26 +188,13 @@ export async function resolveVisibleSender(
   };
 }
 
-/**
- * The row filter every read below applies, as two bound values:
- * `unconfined` (every row) or `keys` (rows whose own `type:id` scope is
- * listed). A NULL scope concatenates to NULL and never matches, so an unscoped
- * row is invisible to a confined caller.
- */
-function rowScope(tx: Bun.SQL, resource: WhatsappSenderResource) {
-  return {
-    unconfined: resource.scopeKeys === null,
-    keys: tx.array(resource.scopeKeys ?? [], "text")
-  };
-}
-
 export async function readSenderHead(
   tx: Bun.SQL,
   tenantId: string,
   resource: WhatsappSenderResource
 ): Promise<string> {
   const { accountId } = resource;
-  const scope = rowScope(tx, resource);
+  const scope = messageScopeFilter(tx, resource.scopeKeys);
   const rows = (await tx`
     SELECT ((extract(epoch FROM updated_at) * 1000000)::bigint)::text AS micros,
            id::text AS id
@@ -241,7 +229,7 @@ export async function isSenderCursorHonourable(
   // the caller may see, and not have been stamped earlier than the position
   // claims: a fabricated future position is refused rather than silently
   // skipping changes.
-  const scope = rowScope(tx, resource);
+  const scope = messageScopeFilter(tx, resource.scopeKeys);
   const rows = (await tx`
     SELECT 1 AS present
     FROM awcms_whatsapp_messages
@@ -272,7 +260,7 @@ export async function readSenderChangesSince(
   if (!parsed || parsed.accountId !== accountId)
     return { items: [], more: true };
 
-  const scope = rowScope(tx, resource);
+  const scope = messageScopeFilter(tx, resource.scopeKeys);
   const rows = (await tx`
     SELECT id::text AS id,
            status,
@@ -329,7 +317,7 @@ export async function readSenderCounts(
   tenantId: string,
   resource: WhatsappSenderResource
 ): Promise<WhatsappSenderProgressCounts> {
-  const scope = rowScope(tx, resource);
+  const scope = messageScopeFilter(tx, resource.scopeKeys);
   const rows = (await tx`
     SELECT status, count(*)::int AS n
     FROM awcms_whatsapp_messages
@@ -410,7 +398,7 @@ export async function readSenderProgressSnapshot(
   // counts and again later as a change, never the other way round.
   const cursor = await readSenderHead(tx, tenantId, resource);
   const counts = await readSenderCounts(tx, tenantId, resource);
-  const scope = rowScope(tx, resource);
+  const scope = messageScopeFilter(tx, resource.scopeKeys);
   const rows = (await tx`
     SELECT id::text AS id, status, updated_at
     FROM awcms_whatsapp_messages

@@ -18,6 +18,7 @@
  */
 import {
   loadSenderAccess,
+  type SenderAccess,
   type SenderAccessContext,
   type SenderAccessGuard
 } from "../infrastructure/channel-account-access-loader";
@@ -25,9 +26,11 @@ import type { MessageScopeKeys } from "./whatsapp-message-scope-filter";
 
 export async function resolveMessageScopeKeys(
   context: SenderAccessContext,
-  guard: SenderAccessGuard
+  guard: SenderAccessGuard,
+  /** Seam for the fail-closed test; production always uses the real loader. */
+  load: () => Promise<SenderAccess | null> = loadSenderAccess
 ): Promise<MessageScopeKeys> {
-  const access = await loadSenderAccess();
+  const access = await load();
 
   if (!access) return [];
 
