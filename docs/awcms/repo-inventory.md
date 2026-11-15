@@ -8,13 +8,13 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 286   |
-| `awcms_*` tables                    | 277   |
+| Migrations                          | 287   |
+| `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
-| RLS-free tables (global, by design) | 18    |
-| Test files                          | 881   |
+| RLS-free tables (global, by design) | 19    |
+| Test files                          | 883   |
 | Route files                         | 697   |
-| ADR                                 | 328   |
+| ADR                                 | 330   |
 
 ### Modules
 
@@ -350,7 +350,8 @@
 | 283 | `sql/399_awcms_channel_accounts_last_owner_guard.sql`                  |
 | 284 | `sql/408_awcms_audit_events_append_only_for_app_role.sql`              |
 | 285 | `sql/409_awcms_append_only_ledgers_for_app_role.sql`                   |
-| 286 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
+| 286 | `sql/410_awcms_email_worker_categories_allow_list.sql`                 |
+| 287 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
 
 ### Tables & Row-Level Security
 
@@ -639,9 +640,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 649        |
+| `(root)`      | 650        |
 | `e2e`         | 30         |
-| `integration` | 200        |
+| `integration` | 201        |
 | `unit`        | 2          |
 
 ### Routes
