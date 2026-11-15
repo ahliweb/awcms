@@ -109,6 +109,13 @@ export type BlogPostView = {
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. */
   autoInternalTagLinksDisabled: boolean;
   /**
+   * Issue #1312 — the region dimension of `sql/131`, projected for the first
+   * time. `null` is the normal state ("no region set"), not "not fetched":
+   * every function in this file that returns a `BlogPostView` selects this
+   * column, so there is no reader that would need to tell the two apart.
+   */
+  regionCode: string | null;
+  /**
    * Groups the locale variants of one logical post.
    *
    * Writable since the column existed and returned by nothing until now, even
@@ -179,6 +186,7 @@ type BlogPostRow = {
   restored_by: string | null;
   version: number;
   auto_internal_tag_links_disabled: boolean;
+  region_code: string | null;
   translation_group_id: string | null;
 };
 
@@ -213,6 +221,7 @@ function toView(row: BlogPostRow): BlogPostView {
     restoredBy: row.restored_by,
     version: row.version,
     autoInternalTagLinksDisabled: row.auto_internal_tag_links_disabled,
+    regionCode: row.region_code,
     translationGroupId: row.translation_group_id
   };
 }
@@ -229,7 +238,7 @@ export async function createBlogPost(
        content_text, body_portable_text, status, visibility, featured_media_id,
        seo_image_media_id,
        seo_title, meta_description, canonical_url, locale,
-       auto_internal_tag_links_disabled)
+       auto_internal_tag_links_disabled, region_code)
     VALUES (
       ${tenantId}, ${authorTenantUserId}, ${input.title}, ${input.slug},
       ${input.excerpt},
@@ -238,13 +247,13 @@ export async function createBlogPost(
       ${input.bodyPortableText}::jsonb, 'draft',
       ${input.visibility}, ${input.featuredMediaId}, ${input.seoImageMediaId},
       ${input.seoTitle}, ${input.metaDescription}, ${input.canonicalUrl}, ${input.locale},
-      ${input.autoInternalTagLinksDisabled}
+      ${input.autoInternalTagLinksDisabled}, ${input.regionCode}
     )
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
   `) as BlogPostRow[];
 
@@ -269,7 +278,7 @@ export async function fetchBlogPostById(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND id = ${postId}
@@ -279,7 +288,7 @@ export async function fetchBlogPostById(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND id = ${postId} AND deleted_at IS NULL
@@ -455,7 +464,7 @@ export async function listBlogPostsFullPage(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id,
       ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_blog_posts
@@ -646,6 +655,14 @@ export async function updateBlogPost(
           ${input.autoInternalTagLinksDisabled ?? null},
           auto_internal_tag_links_disabled
         ),
+        -- Issue #1312 — same "absent leaves it alone, explicit null clears
+        -- it" CASE shape as excerpt/seoTitle/metaDescription above, not
+        -- COALESCE: COALESCE cannot express "write NULL", which is exactly
+        -- what clearing a region requires.
+        region_code = CASE
+          WHEN ${input.regionCode === undefined} THEN region_code
+          ELSE ${input.regionCode ?? null}
+        END,
         version = version + 1,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
@@ -653,7 +670,7 @@ export async function updateBlogPost(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
   `) as BlogPostRow[];
 
@@ -726,7 +743,7 @@ export async function transitionBlogPostStatus(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
   `) as BlogPostRow[];
 
@@ -748,7 +765,7 @@ export async function restoreBlogPost(
       content_text, body_portable_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled, region_code,
       translation_group_id
   `) as BlogPostRow[];
 

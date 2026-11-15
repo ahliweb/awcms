@@ -42,16 +42,21 @@ function stamps(input: {
  *
  * ## Status
  *
- * `experimental`: ADR-0021 criterion 1 asks every ACTIVE module for an admin
- * screen, and the operator screen is a follow-up. The module therefore declares
- * no `navigation` entry (a nav entry without a page is a permanent 404); the API
- * is complete and every admin route is default-deny.
+ * `active`: the operator screens (`/admin/website-engagement`, its `/{id}`
+ * detail and `/sources`) land with the `navigation` entries in this same change
+ * (ADR-0021 criterion 1; a nav entry without a page is a permanent 404). The
+ * screens read through the API's own directory functions and show MASKED
+ * contact details only; the audited reveal, source creation, host editing and
+ * token rotation stay API-only (the token is shown once, which needs its own
+ * screen contract). The module has no deployment on/off switch: it is off for a
+ * tenant until a source exists, and with the key rings refused the intake
+ * answers 503 and the screens say so.
  */
 export const websiteEngagementModule = defineModule({
   key: WEBSITE_ENGAGEMENT_MODULE_KEY,
   name: "Website Engagement",
   version: "0.1.0",
-  status: "experimental",
+  status: "active",
   description:
     "Tenant-scoped website lead/contact capture and inbound website interaction events (Issue #1153, ADR-0155). A website posts a contact request, a lead or an interaction to ONE public, unauthenticated endpoint that is authenticated by an opaque per-source token (stored only as a keyed hash, shown once, rotatable, revocable; the tenant is opened FROM the token and a tenant id in the body or query is never believed) and by the request's verified Origin host against the domains registered for that source; rate-limited per address and per source, behind an optional Turnstile challenge that falls back visibly to token, Origin, honeypot, fill-time and rate limit on offline/LAN, validated against a closed versioned field set (no HTML, no upload, no URL fetch), idempotent on (source, eventId), and stored with explicit consent provenance (a separate, never-implied marketing purpose against the exact consent copy version shown) and source attribution. A visitor's contact details are one AES-256-GCM envelope plus keyed hashes and masked projections, never an IP, fingerprint or cookie. The only outward surface is an outbox event carrying an opaque submission reference; a CRM adapter reads details through the audited reveal endpoint under its own permission. Withdrawal by the controller emits a withdrawal event downstream must honour; retention is declared on day one through data_lifecycle. It creates, matches and merges no person.",
   dependencies: [
@@ -111,6 +116,20 @@ export const websiteEngagementModule = defineModule({
       action: "withdraw",
       description:
         "Withdraw a submission at the data subject's request or on a consent withdrawal, and announce the withdrawal to downstream consumers (audited at warning)"
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_website_engagement",
+      path: "/admin/website-engagement",
+      order: 86,
+      requiredPermission: "website_engagement.submissions.read"
+    },
+    {
+      labelKey: "admin.layout.nav_website_engagement_sources",
+      path: "/admin/website-engagement/sources",
+      order: 87,
+      requiredPermission: "website_engagement.sources.read"
     }
   ],
   dataLifecycle: [

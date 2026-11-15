@@ -26,7 +26,11 @@ import path from "node:path";
 
 import {
   DECLARED_CONTRACT,
+  DECLARED_PRODUCER_COMPAT,
+  DECLARED_WORKER_EVIDENCE,
   DECLARED_WORKER_RANGE,
+  OMES_WORKER_CONTRACT_FILES,
+  omesWorkerContractDigest,
   SUPPORTED_WORKER_CAPABILITIES,
   aggregateContractDigest,
   evaluateWorkerCompatibility,
@@ -45,6 +49,8 @@ import {
 } from "../src/modules/omes-control/domain/worker-identity";
 import {
   REQUIRED_WORKER_PATHS,
+  VENDORED_PRODUCER_COMPAT_DIR,
+  checkProducerCompatPin,
   runOmesContractPreflight
 } from "../scripts/omes-contract-preflight";
 import { VENDORED_CONTRACTS_DIR } from "../scripts/sync-omes-contracts";
@@ -101,9 +107,62 @@ describe("pinned contract identity", () => {
 });
 
 describe("worker version range (fail closed)", () => {
-  test("the declared range has no tagged-release evidence recorded", () => {
-    // Flip this only together with a link to the real tagged OMES release.
-    expect(DECLARED_WORKER_RANGE.evidence).toBeNull();
+  test("the declared range records tagged-release evidence, honestly labelled unverified at runtime", () => {
+    expect(DECLARED_WORKER_RANGE.evidence).toContain(
+      DECLARED_WORKER_EVIDENCE.releaseTag
+    );
+    expect(DECLARED_WORKER_RANGE.evidence).toContain("runtime-unverified");
+    expect(DECLARED_WORKER_EVIDENCE.status).toBe(
+      "schema-identical, runtime-unverified"
+    );
+    // No release publishes a manifest, so no build may be claimed verified.
+    expect(DECLARED_WORKER_EVIDENCE.verifiedBuilds).toEqual([]);
+    expect(DECLARED_WORKER_EVIDENCE.requestSigning).toBe("unsigned-by-worker");
+  });
+
+  test("the recorded v0.6.0 worker digest is recomputed from the vendored PIN with the producer's formula", () => {
+    expect(omesWorkerContractDigest(pin.files)).toBe(
+      DECLARED_WORKER_EVIDENCE.workerContractDigest
+    );
+    // A different byte in any one of the nine files changes it; a missing file refuses.
+    for (const name of OMES_WORKER_CONTRACT_FILES) {
+      const key = `${name}.schema.json`;
+      expect(
+        omesWorkerContractDigest({ ...pin.files, [key]: "0".repeat(64) })
+      ).not.toBe(DECLARED_WORKER_EVIDENCE.workerContractDigest);
+      const { [key]: _omitted, ...rest } = pin.files;
+      expect(omesWorkerContractDigest(rest)).toBeNull();
+    }
+  });
+
+  test("the vendored producer fixtures agree with the vendored worker contract (cross-check, not copied)", () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        path.join(
+          ROOT,
+          VENDORED_PRODUCER_COMPAT_DIR,
+          "fixtures/worker-compatibility-manifest/valid-stable.json"
+        ),
+        "utf8"
+      )
+    ) as {
+      control_contract: {
+        digest: string;
+        files: Array<{ path: string; sha256: string }>;
+      };
+      integrity: { signature_status: string };
+      awcms_omes_control: { verified_builds: unknown[] };
+    };
+    expect(manifest.control_contract.digest).toBe(
+      DECLARED_WORKER_EVIDENCE.workerContractDigest
+    );
+    for (const f of manifest.control_contract.files) {
+      const name = path.basename(f.path);
+      expect(pin.files[name]).toBe(f.sha256);
+    }
+    // The fixture is itself unsigned with no verified build: the gate must never read it as proof.
+    expect(manifest.integrity.signature_status).toBe("unsigned");
+    expect(manifest.awcms_omes_control.verified_builds).toEqual([]);
   });
 
   test("a worker inside the range with the declared digest is compatible", () => {
@@ -285,6 +344,11 @@ describe("deploy preflight (scripts/omes-contract-preflight.ts)", () => {
       path.join(root, VENDORED_CONTRACTS_DIR),
       { recursive: true }
     );
+    cpSync(
+      path.join(ROOT, VENDORED_PRODUCER_COMPAT_DIR),
+      path.join(root, VENDORED_PRODUCER_COMPAT_DIR),
+      { recursive: true }
+    );
     mutate?.(root);
     return root;
   }
@@ -306,7 +370,8 @@ describe("deploy preflight (scripts/omes-contract-preflight.ts)", () => {
         workerDescriptor: GOOD_WORKER
       });
       expect(ok.failures).toEqual([]);
-      expect(ok.notes.join(" ")).toContain("no tagged-release evidence");
+      expect(ok.notes.join(" ")).toContain("build unverified");
+      expect(ok.notes.join(" ")).toContain(DECLARED_WORKER_EVIDENCE.releaseTag);
       const bad = runOmesContractPreflight(root, {
         openApiText,
         workerDescriptor: { ...GOOD_WORKER, contract_version: "v2" }
@@ -317,6 +382,53 @@ describe("deploy preflight (scripts/omes-contract-preflight.ts)", () => {
         workerDescriptor: { ...GOOD_WORKER, capabilities: ["wipe"] }
       });
       expect(cap.failures.join(" ")).toContain("unsupported_capability");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the producer-compatibility check is wired into the standalone preflight (drift fails runOmesContractPreflight)", () => {
+    const root = scratchRoot((r) =>
+      writeFileSync(
+        path.join(
+          r,
+          VENDORED_PRODUCER_COMPAT_DIR,
+          "fixtures/worker-compatibility-manifest/valid-stable.json"
+        ),
+        "{}\n"
+      )
+    );
+    try {
+      const r = runOmesContractPreflight(root, { openApiText });
+      expect(r.failures.join("\n")).toContain("producer compatibility");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a worker elsewhere in the range does not inherit the v0.6.0 evidence line", () => {
+    const at = evaluateWorkerCompatibility({
+      ...GOOD_WORKER,
+      omes_version: DECLARED_WORKER_EVIDENCE.releaseTag.replace(/^v/, "")
+    });
+    expect(at).toEqual({
+      status: "compatible",
+      evidence: DECLARED_WORKER_RANGE.evidence
+    });
+    const later = evaluateWorkerCompatibility({
+      ...GOOD_WORKER,
+      omes_version: "0.6.3"
+    });
+    expect(later).toEqual({ status: "compatible", evidence: null });
+    const root = scratchRoot();
+    try {
+      const r = runOmesContractPreflight(root, {
+        openApiText,
+        workerDescriptor: { ...GOOD_WORKER, omes_version: "0.6.3" }
+      });
+      expect(r.failures).toEqual([]);
+      expect(r.notes.join(" ")).toContain("no release evidence");
+      expect(r.notes.join(" ")).not.toContain("equals the vendored copy");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -379,5 +491,124 @@ describe("deploy preflight (scripts/omes-contract-preflight.ts)", () => {
     }
     const r = runOmesContractPreflight(ROOT, { openApiText: "paths:\n" });
     expect(r.failures.length).toBe(REQUIRED_WORKER_PATHS.length);
+  });
+});
+
+describe("vendored producer compatibility artifacts (mutation-proof)", () => {
+  function scratch(mutate: (dir: string) => void) {
+    const root = mkdtempSync(path.join(tmpdir(), "omes-producer-compat-"));
+    cpSync(
+      path.join(ROOT, VENDORED_PRODUCER_COMPAT_DIR),
+      path.join(root, VENDORED_PRODUCER_COMPAT_DIR),
+      { recursive: true }
+    );
+    mutate(path.join(root, VENDORED_PRODUCER_COMPAT_DIR));
+    return root;
+  }
+
+  test("the real checkout is clean and anchored to the declared commit and digest", () => {
+    expect(checkProducerCompatPin(ROOT)).toEqual([]);
+    const p = JSON.parse(
+      readFileSync(
+        path.join(ROOT, VENDORED_PRODUCER_COMPAT_DIR, "PIN.json"),
+        "utf8"
+      )
+    ) as { sourceCommit: string; files: Record<string, string> };
+    expect(p.sourceCommit).toBe(DECLARED_PRODUCER_COMPAT.sourceCommit);
+    expect(aggregateContractDigest(p.files)).toBe(
+      DECLARED_PRODUCER_COMPAT.aggregateDigest
+    );
+  });
+
+  test("a hand-edited vendored fixture is refused", () => {
+    const root = scratch((d) =>
+      writeFileSync(
+        path.join(
+          d,
+          "fixtures/worker-compatibility-manifest/valid-stable.json"
+        ),
+        "{}\n"
+      )
+    );
+    try {
+      expect(checkProducerCompatPin(root).join(" ")).toContain("drift");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an unpinned extra file and a missing pinned file are refused", () => {
+    const extra = scratch((d) =>
+      writeFileSync(path.join(d, "stray.json"), "{}")
+    );
+    const missing = scratch((d) =>
+      rmSync(path.join(d, "consumer-scenarios.json"))
+    );
+    try {
+      expect(checkProducerCompatPin(extra).join(" ")).toContain(
+        "not listed in the PIN"
+      );
+      expect(checkProducerCompatPin(missing).join(" ")).toContain("is missing");
+    } finally {
+      rmSync(extra, { recursive: true, force: true });
+      rmSync(missing, { recursive: true, force: true });
+    }
+  });
+
+  test("a re-synced PIN (new commit, rehashed file) is refused until compatibility.ts is edited", () => {
+    const root = scratch((d) => {
+      const file = path.join(d, "consumer-scenarios.json");
+      const text = `${readFileSync(file, "utf8")} `;
+      writeFileSync(file, text);
+      const pinPath = path.join(d, "PIN.json");
+      const p = JSON.parse(readFileSync(pinPath, "utf8"));
+      p.sourceCommit = "b".repeat(40);
+      p.files["consumer-scenarios.json"] = new Bun.CryptoHasher("sha256")
+        .update(text)
+        .digest("hex");
+      writeFileSync(pinPath, JSON.stringify(p, null, 2));
+    });
+    try {
+      const joined = checkProducerCompatPin(root).join("\n");
+      expect(joined).toContain("sourceCommit");
+      expect(joined).toContain("aggregate digest");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a vendored worker contract re-synced without re-deriving the evidence is refused", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "omes-evidence-"));
+    try {
+      cpSync(
+        path.join(ROOT, VENDORED_CONTRACTS_DIR),
+        path.join(root, VENDORED_CONTRACTS_DIR),
+        { recursive: true }
+      );
+      cpSync(
+        path.join(ROOT, VENDORED_PRODUCER_COMPAT_DIR),
+        path.join(root, VENDORED_PRODUCER_COMPAT_DIR),
+        { recursive: true }
+      );
+      const schemaPath = path.join(
+        root,
+        VENDORED_CONTRACTS_DIR,
+        "operation-request.schema.json"
+      );
+      const text = `${readFileSync(schemaPath, "utf8")}\n`;
+      writeFileSync(schemaPath, text);
+      const pinPath = path.join(root, VENDORED_CONTRACTS_DIR, "PIN.json");
+      const p = JSON.parse(readFileSync(pinPath, "utf8"));
+      p.files["operation-request.schema.json"] = new Bun.CryptoHasher("sha256")
+        .update(text)
+        .digest("hex");
+      writeFileSync(pinPath, JSON.stringify(p, null, 2));
+      const r = runOmesContractPreflight(root, {
+        openApiText: REQUIRED_WORKER_PATHS.map((x) => `  ${x}:\n`).join("")
+      });
+      expect(r.failures.join("\n")).toContain("OMES formula");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

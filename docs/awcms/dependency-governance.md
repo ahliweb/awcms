@@ -46,14 +46,15 @@
 | GitHub Actions (pinned by SHA)                                                                      | Dependabot `github-actions`                                                                                                     | weekly (Mon 09:30 Asia/Jakarta) |
 | npm dependencies, PR proposals                                                                      | Dependabot `bun` (limit 5 open PRs)                                                                                             | weekly (Mon 09:00 Asia/Jakarta) |
 | Static analysis                                                                                     | CodeQL (required check)                                                                                                         | every PR                        |
+| Licenses and SBOM of the dependency tree                                                            | `bun run deps:license:check` (in every `bun run check`; writes a CycloneDX SBOM with `--out-sbom`)                              | every PR; weekly                |
+| Provider API changelogs                                                                             | `bun run deps:provider-changelog:check` (in every `bun run check`) against `scripts/provider-api-register.ts`                   | every PR; weekly                |
 | SBOM of the release image                                                                           | `release.yml` (`anchore/sbom-action`)                                                                                           | per release                     |
 | Held-back versions                                                                                  | `scripts/dependency-held-back.ts` + `tests/dependency-held-back.test.ts`                                                        | continuous (test)               |
 
-Not covered yet, and said so rather than implied: a license report across the
-dependency tree, third-party provider API changelogs (WhatsApp, Telegram, push
-and email providers, the OMES Control Center API types) and automatic issue
-creation for a validated gap. Until they exist, an upgrade PR checks licenses
-and provider changelogs by hand (see the checklist below).
+Not covered yet, and said so rather than implied: the OMES Control Center API
+types (tracked with that work). Provider API changelogs for WhatsApp, Telegram,
+Meta Graph, Mailketing and Google FCM are covered by the provider register below;
+an upgrade PR still reads the changelog of a provider-facing SDK by hand.
 
 **Not ours.** The OMES / Hermes Python and operating-system runtime on the host
 is not owned by AWCMS. It is audited in the host repository, separately.
@@ -158,6 +159,110 @@ red run means "look at this report", not that something was changed.
   with an in-range update (`astro 7.4.0 -> 7.4.2`) can be taken without touching
   `package.json`; one whose latest is outside the range is a range change and, for
   a major, an ADR.
+
+## Licenses and SBOM
+
+`bun run deps:license:check` reads `bun.lock` (parsed by the script, Bun-only),
+reads each package's license from the installed `node_modules/<pkg>/package.json`,
+and fails when a license is outside `ALLOWED_LICENSES` in
+`scripts/dependency-license-policy.ts`. `--out-sbom <file>` writes a CycloneDX 1.6
+SBOM of the same tree (purl, SHA-512 from the lock's integrity, license, and the
+dependency edges resolved with the lock's nesting).
+
+- **Expressions are evaluated, not matched as text.** `A OR B` passes when either
+  side is allowed, `A AND B` needs both, `X WITH Y` is one license that must be
+  listed as written, and an expression it cannot parse is refused.
+- **An exception is a reasoned, expiring entry** in `LICENSE_EXCEPTIONS`: package
+  (or `family-*`), the license it declares, why it is acceptable, owner, review
+  date. It admits that package at that license only: a package that changes
+  license is a violation again. An exception that matches nothing is stale and
+  fails; one past its review date fails, and so does one whose date is not a
+  real `YYYY-MM-DD` within 400 days (a `"never"` would otherwise never expire).
+- **No copyleft is allowed globally.** `MPL-2.0` and `LGPL` packages are each a
+  dated exception, so a new one stops the gate instead of passing on a list
+  written for another package. What redistribution means is recorded in the
+  policy file: `Dockerfile.production` copies the `--production` `node_modules`
+  into the runtime image, so runtime-reachable packages (`lightningcss`, reached
+  through `astro` -> `vite`, and the `sharp` libvips binaries) ARE shipped, each
+  with its own license file and unmodified; the test-only `axe-core` packages are
+  not. Modifying or bundling any of them needs an ADR before a new date.
+- **Unreadable is not clean.** A package whose license cannot be read (not on
+  disk, no field) is reported `UNKNOWN` and fails; run `bun install` first.
+  Optional packages that a plain install does not put on disk (platform
+  binaries, wasm fallbacks) are counted and listed as not installed here: their
+  license is marked unverified in the SBOM, not invented.
+- **Reuse in a downstream workspace.** The gate assumes no layout of this
+  repository: `--root <dir>` points at the workspace root that holds `bun.lock`,
+  `package.json` and `node_modules`, and `--policy <file>` swaps in the
+  workspace's own `ALLOWED_LICENSES` / `LICENSE_EXCEPTIONS`. The embedding
+  workspace keeps its own policy file; it does not edit this one
+  (ahliweb/awcms-one#471 is the consumer this was shaped for).
+
+## Provider API changelogs
+
+`scripts/provider-api-register.ts` records, per provider surface the code talks
+to (Meta Graph for Facebook Pages, Meta WhatsApp Cloud, Fonnte, StarSender,
+Telegram Bot API, Mailketing, Google FCM HTTP v1, Cloudflare API, Cloudflare
+Turnstile, the GitHub REST API, and TikTok as `planned`), the version or surface in
+use, the changelog URL, the owner, and the date a maintainer last read that
+changelog. `bun run deps:provider-changelog:check` enforces:
+
+1. **Register -> code.** Each `pins` literal must appear **exactly once** in its
+   file, so a literal repeated (or quoted in a comment) cannot let one copy be
+   bumped unnoticed; pin a single exported constant. Change a version in code
+   without the register and the gate fails. The pin sees the code default, not a
+   deployment's environment override (for example `WHATSAPP_META_API_VERSION`):
+   ask what is deployed at review time.
+2. **Code -> register.** Every non-test source file that names a provider host
+   must be listed by an active entry. A new connector nobody registered fails.
+   That rule can only see hosts already in `PROVIDER_HOSTS`, so
+   `tests/provider-changelog-check.test.ts` also extracts every `https://` host
+   in non-test source and requires it to be a provider host or listed in that
+   test's `NOT_A_PROVIDER` map with a reason: a new outbound integration cannot
+   slip in without someone choosing.
+   A `planned` entry owns no file; its host appearing in source fails until the
+   entry is flipped to `active` with a first review.
+3. **The clock.** `lastReview` (or `recordedOn` while it is `null`) plus
+   `maxAgeDays` is the deadline; past it the gate is red. Within 14 days it is a
+   warning and the weekly workflow files an issue. `--skip-age` runs rules 1 and 2
+   only. The clock has no other lever: `recordedOn` and `lastReview` may not be in
+   the future and `maxAgeDays` is capped at 180. Entries carry different
+   intervals (90 to 150 days) so they do not all fall due on one day and turn
+   every open PR red together; that the age check is part of `bun run check` at
+   all is a deliberate trade-off, and its warning arrives through the weekly
+   issue, which fails the job (not silently) if it cannot be filed.
+
+`lastReview` is set by a person who read the changelog, never by a script and
+never carried forward to turn the gate green; `null` means "recorded from the
+code, not yet reviewed" and the report says so. The gate does not fetch the
+changelog URLs: a PR check must not depend on a third party being up. For a
+downstream workspace: `--register <file>` (exporting `PROVIDER_REGISTER` and
+`PROVIDER_HOSTS`), `--src <dir>` and `--root <dir>`.
+
+## Issues from the weekly run
+
+The `file-issues` job of the scheduled workflow runs `bun run deps:issues:sync`
+over the freshness manifest and the findings of the two gates above. It is the
+only write the workflow has (`issues: write`, on that job alone).
+
+- **One open issue per finding.** Every finding has a stable key (never a day
+  count or a digest); its fingerprint is a hidden marker in the issue body. A run
+  lists the open issues labelled `dependency-finding` and files only findings
+  without an open marker.
+- **Closing is not hiding.** A closed issue whose finding is still true is filed
+  again on the next run.
+- **No spam.** At most 10 per run (`--max-create`); the rest are deferred, and
+  filed on later runs. It never edits, comments on or closes an issue. If the
+  open-issue listing fails or may be truncated, nothing is filed. The workflow
+  step runs under `shell: bash` (`-eo pipefail`) so that failure, or a failed
+  create, turns the job red instead of vanishing behind `| tee`.
+- **Third-party text is not trusted.** The marker is only honoured as the first
+  line of a body, and finding text (a dependency's `license` field, an advisory
+  title) has comment delimiters defanged and `@` neutralised outside code spans
+  before it goes into a public issue.
+- Dry run by default (`bun run deps:issues:sync --findings f.json --freshness m.json`);
+  `--create` writes. A manual `workflow_dispatch` files issues only with the
+  `create_issues` input.
 
 ## The held-back register
 

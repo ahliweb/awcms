@@ -195,25 +195,31 @@ async function holdScope(tenantUserId: string, officeId: string) {
 }
 
 /** A connected WhatsApp number that is approved for every capability. */
-async function seedSender(officeId: string | null): Promise<string> {
+async function seedSender(
+  officeId: string | null,
+  // #1215 M-c: the number is open to the tenant unless a test is about
+  // ASSIGNMENT, which only restricts an `assigned` account.
+  accessMode: "assigned" | "tenant_wide" = "tenant_wide"
+): Promise<string> {
   phone += 1;
   // Issue #1143: a Meta number sends only as part of a live WABA container.
   const waba = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name,
-       auth_mode, status)
+       auth_mode, status, access_mode)
     VALUES (${tenantId}, 'whatsapp_cloud', 'waba', ${`waba-${phone}`},
-            'waba', 'api_token', 'connected')
+            'waba', 'api_token', 'connected', 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
        account_kind, external_id, display_name, auth_mode, status,
-       parent_account_id)
+       parent_account_id, access_mode)
     VALUES (${tenantId}, ${officeId ? "office" : null}, ${officeId},
             'whatsapp_cloud', 'waba_phone_number', ${String(phone)},
-            ${`n-${phone}`}, 'api_token', 'connected', ${waba[0]!.id})
+            ${`n-${phone}`}, 'api_token', 'connected', ${waba[0]!.id},
+            ${accessMode})
     RETURNING id
   `) as { id: string }[];
 
@@ -340,7 +346,7 @@ suite(
       const senderA = await seedSender(officeA);
       const senderB = await seedSender(officeB);
       const tenantWide = await seedSender(null);
-      const assignedAway = await seedSender(null);
+      const assignedAway = await seedSender(null, "assigned");
 
       await admin()`
       INSERT INTO awcms_channel_account_assignments
@@ -434,7 +440,7 @@ suite(
       await holdScope(viewer.tenantUserId, officeA);
       await holdScope(operator.tenantUserId, officeA);
 
-      const sender = await seedSender(officeA);
+      const sender = await seedSender(officeA, "assigned");
 
       for (const [who, kind] of [
         [viewer, "viewer"],
@@ -466,7 +472,7 @@ suite(
 
       const senderA = await seedSender(officeA);
       const senderB = await seedSender(officeB);
-      const assignedAway = await seedSender(null);
+      const assignedAway = await seedSender(null, "assigned");
 
       await admin()`
       INSERT INTO awcms_channel_account_assignments

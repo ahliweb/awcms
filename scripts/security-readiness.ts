@@ -45,6 +45,16 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
+import {
+  findRestrictedCreatePrivileges,
+  findTenantIsolationPolicyDrift,
+  probeTenantIsolationUnderDefinerRead
+} from "./lib/schema-create-and-tenant-policy-readiness";
+import { findViewRlsBypass } from "./lib/view-rls-bypass-readiness";
+import {
+  pinChannelAccountsAccessGuards,
+  probeChannelAccountsAccessGuards
+} from "./lib/channel-accounts-access-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
@@ -704,6 +714,22 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // an investigator can still answer "who held what in March"; every write is
   // revoked, because a row that can be added or edited is not history, and a row
   // that cannot be revoked must not be one the runtime can create.
+  // Issue #1341 / `sql/408`. NOT retired -- the audit trail, actively written on
+  // every sensitive action. Narrowed to SELECT + INSERT: a row the runtime can
+  // UPDATE or DELETE is not evidence, and a compromised web process must not be
+  // able to rewrite or erase the record of what it did. Retention is the one
+  // legitimate DELETE and it belongs to `awcms_worker` (`WORKER_ROLE_GRANTS`).
+  // `sql/019` granted all four verbs schema-wide, so only the REVOKE achieves it.
+  awcms_audit_events: ["SELECT", "INSERT"],
+  // Issue #1346 / `sql/409`. The remaining append-only ledgers, narrowed the same
+  // way and for the same reason. Each was audited by call site: the runtime only
+  // INSERTs and SELECTs them. The decision-log retention DELETE belongs to
+  // `awcms_worker` (`WORKER_ROLE_GRANTS`); `awcms_domain_events` is an outbox
+  // whose processing state lives in `awcms_domain_event_deliveries`, not here.
+  awcms_abac_decision_logs: ["SELECT", "INSERT"],
+  awcms_access_policy_events: ["SELECT", "INSERT"],
+  awcms_business_scope_assignment_events: ["SELECT", "INSERT"],
+  awcms_domain_events: ["SELECT", "INSERT"],
   awcms_access_assignments: ["SELECT"],
   // ADR-0087 / `sql/114`. The tenant-scoped MFA factor and its recovery codes,
   // superseded by the principal-scoped pair. Retained populated as history (the
@@ -1192,6 +1218,19 @@ type RoleGrantRow = {
   ins: boolean;
   upd: boolean;
   del: boolean;
+  /**
+   * Privileges the four-verb columns above cannot see (Issue #1341 audit M1).
+   * `has_table_privilege(..., 'UPDATE')` is false for a COLUMN-level grant, so
+   * `GRANT UPDATE (message) ON awcms_audit_events` left the gate green while
+   * the role could rewrite the column; TRUNCATE ignores RLS, so a table-wide
+   * TRUNCATE grant lets one tenant's context empty every tenant's rows.
+   */
+  trunc: boolean;
+  trig: boolean;
+  refs: boolean;
+  col_ins: boolean;
+  col_upd: boolean;
+  col_refs: boolean;
 };
 
 /**
@@ -1292,7 +1331,13 @@ export async function checkRuntimeRoleGrants(
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'SELECT') AS sel,
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS ins,
         has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS upd,
-        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'TRUNCATE') AS trunc,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'TRIGGER') AS trig,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'REFERENCES') AS refs,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS col_ins,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS col_upd,
+        has_any_column_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'REFERENCES') AS col_refs
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
@@ -1366,9 +1411,23 @@ export async function checkRuntimeRoleGrants(
           );
         }
 
+        // Beyond the four verbs: a narrowed table must also hold NO TRUNCATE,
+        // TRIGGER or REFERENCES, and no COLUMN-level INSERT/UPDATE/REFERENCES
+        // that its declaration does not already grant table-wide. Column
+        // grants are the sneaky one: `has_table_privilege` stays false for
+        // them (audit M1).
+        if (row.trunc) excess.push("TRUNCATE");
+        if (row.trig) excess.push("TRIGGER");
+        if (row.refs) excess.push("REFERENCES");
+        if (row.col_refs && !row.refs) excess.push("column-level REFERENCES");
+        if (row.col_ins && !privileges.INSERT)
+          excess.push("column-level INSERT");
+        if (row.col_upd && !privileges.UPDATE)
+          excess.push("column-level UPDATE");
+
         if (excess.length > 0) {
           overGranted.push(
-            `${row.relname} (retired read-only table still has ${excess.join(", ")})`
+            `${row.relname} (narrowed table holds privileges beyond its declaration: ${excess.join(", ")})`
           );
         }
 
@@ -1389,7 +1448,7 @@ export async function checkRuntimeRoleGrants(
 
       if (overGranted.length > 0) {
         parts.push(
-          `over-granted on global RLS-free or retired read-only table(s): ${overGranted.join("; ")}`
+          `over-granted on global RLS-free or narrowed table(s): ${overGranted.join("; ")}`
         );
       }
 
@@ -1419,7 +1478,7 @@ export async function checkRuntimeRoleGrants(
     const retiredTables = Object.keys(retiredTablePrivileges).join(", ");
     const retiredNote =
       retiredTables.length > 0
-        ? ` Retired read-only table(s) hold exactly their declared privileges (${retiredTables}).`
+        ? ` Narrowed table(s) hold exactly their declared privileges (${retiredTables}).`
         : "";
 
     return {
@@ -1617,6 +1676,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_blog_posts: ["SELECT", "UPDATE"],
   awcms_blog_post_terms: ["SELECT"],
   awcms_blog_settings: ["SELECT"],
+  // blog_content — the same sweep records a revision per post it publishes
+  // (sql/397): INSERT the append-only snapshot, SELECT the post's latest
+  // revision number. No UPDATE/DELETE: history is never rewritten.
+  awcms_blog_revisions: ["INSERT", "SELECT"],
   // blog_content — site-search:reconcile (sql/136, Issue #625). SELECT-only:
   // the index engine reads each registered search source and writes exclusively
   // to its own awcms_site_search_* tables, so an UPDATE here would be a
@@ -4876,6 +4939,134 @@ export async function checkWorkerSetupRoleGrants(
 }
 
 // ---------------------------------------------------------------------------
+// 7c-bis. Worker jobs are reachable when the web connection IS `awcms_app`
+//         (critical) — Issue #1341 audit M2
+// ---------------------------------------------------------------------------
+
+/**
+ * `getWorkerDatabaseClient` falls back to `DATABASE_URL` when
+ * `WORKER_DATABASE_URL` is empty (`src/lib/database/client.ts`). That is a
+ * supported default while the web connection is the schema owner, which holds
+ * everything. Once `DATABASE_URL` is the NARROWED `awcms_app` login, though, the
+ * fallback means every unattended job runs as `awcms_app` and hits `permission
+ * denied` on each verb that only `awcms_worker` is meant to hold (for instance
+ * the audit retention DELETE on `awcms_audit_events`, since `sql/408`): the
+ * jobs fail, retention stops, and the readiness gate used to stay green.
+ *
+ * Reports every table where the declared worker matrix grants a verb the
+ * connected `awcms_app` does not, but ONLY in that exact configuration. Any
+ * other connection (the owner, a dedicated worker URL) is out of scope here;
+ * `checkWorkerSetupRoleGrants` covers the worker role itself.
+ */
+export async function checkWorkerJobsReachableWithoutWorkerUrl(options?: {
+  workerGrants?: Record<string, string[]>;
+  workerDatabaseUrl?: string | undefined;
+  /** Injectable for tests that must connect AS `awcms_app`. */
+  client?: Bun.SQL;
+}): Promise<SecurityCheckResult> {
+  const name =
+    "Worker jobs are reachable when the web connection is the narrowed app role";
+  const severity: CheckSeverity = "critical";
+  const workerGrants = options?.workerGrants ?? WORKER_ROLE_GRANTS;
+  const configured =
+    options && "workerDatabaseUrl" in options
+      ? options.workerDatabaseUrl
+      : process.env.WORKER_DATABASE_URL;
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    if (configured !== undefined && configured.trim().length > 0) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence:
+          "WORKER_DATABASE_URL is set, so unattended jobs do not inherit the web connection."
+      };
+    }
+
+    const sql = options?.client ?? getDatabaseClient();
+    const whoRows = (await sql`SELECT current_user AS who`) as {
+      who: string;
+    }[];
+
+    if (whoRows[0]?.who !== LEAST_PRIVILEGE_APP_ROLE) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `The web connection is not "${LEAST_PRIVILEGE_APP_ROLE}" (it is the schema owner), so the WORKER_DATABASE_URL fallback holds every verb. Nothing to verify.`
+      };
+    }
+
+    const rows = (await sql`
+      SELECT
+        c.relname,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'SELECT') AS sel,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS ins,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS upd,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+        AND n.nspname = current_schema()
+    `) as {
+      relname: string;
+      sel: boolean;
+      ins: boolean;
+      upd: boolean;
+      del: boolean;
+    }[];
+
+    const missing: string[] = [];
+
+    for (const row of rows) {
+      const needed = workerGrants[row.relname];
+
+      if (needed === undefined) continue;
+
+      const held: Record<string, boolean> = {
+        SELECT: row.sel,
+        INSERT: row.ins,
+        UPDATE: row.upd,
+        DELETE: row.del
+      };
+      const lacking = needed.filter((privilege) => !held[privilege]);
+
+      if (lacking.length > 0) {
+        missing.push(`${row.relname} (${lacking.join(", ")})`);
+      }
+    }
+
+    if (missing.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `DATABASE_URL is the narrowed "${LEAST_PRIVILEGE_APP_ROLE}" login and WORKER_DATABASE_URL is empty, so unattended jobs fall back to it and hit "permission denied": ${missing.join("; ")}. Point WORKER_DATABASE_URL at the "${WORKER_ROLE}" login before or together with the migration that narrowed the table.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `DATABASE_URL is "${LEAST_PRIVILEGE_APP_ROLE}" with no WORKER_DATABASE_URL, and it still holds every verb the worker jobs use.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify worker job reachability: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 7d. Worker roles cannot read a credential column (critical) — Issue #1078
 // ---------------------------------------------------------------------------
 
@@ -8034,6 +8225,49 @@ export async function checkTelegramEngagementDispatchRole(options?: {
 }
 
 /**
+ * Channel-account access guards (Issue #1215 M-c, `sql/398` and `sql/399`): an
+ * account is `assigned` by default, an assigned account cannot lose its last
+ * owner by a demotion, an erasure that orphans one leaves an audit row, and an
+ * account's business scope and identity cannot be rewritten. Exact pins on the
+ * column, the CHECK and the four trigger functions, plus a rolled-back
+ * behavioural probe: a pin alone passes a hollowed-out function that keeps its
+ * shape. Runs as whichever role the checking connection is; the guards are
+ * triggers, so they fire for every role.
+ */
+export async function checkChannelAccountsAccessGuards(): Promise<SecurityCheckResult> {
+  const name = "Channel accounts are assigned by default and keep their owner";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings = await pinChannelAccountsAccessGuards(sql);
+    const probe = await probeChannelAccountsAccessGuards(sql);
+
+    if (probe !== null) findings.push(...probe);
+
+    return findings.length === 0
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence: `access_mode defaults to the closed mode behind its CHECK and the four guard triggers (identity and scope, owned switch, last-owner demotion, orphan audit) equal their reviewed bodies${probe === null ? "; the rolled-back behavioural probe was NOT run (this connection cannot seed a throwaway tenant), so only the exact pins stood" : ", and a rolled-back probe confirmed what they refuse and what they allow"}.`
+        }
+      : { name, severity, status: "fail", evidence: findings.join("; ") };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the channel account access guards: ${errorMessage(error)}`
+    };
+  }
+}
+
+/**
  * The #1271 audit, L3: the behavioural probes of the dedicated roles
  * (`awcms_worker`'s secret view, `awcms_social_dispatch`'s secret view and
  * write boundary, `awcms_telegram_engagement_dispatch`) run only when the
@@ -8064,6 +8298,16 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
       ORDER BY r.rolname
     `) as { role: string; can: boolean }[];
     const skipped = rows.filter((row) => !row.can).map((row) => row.role);
+    const superuser = (await sql`
+      SELECT rolsuper FROM pg_roles WHERE rolname = current_user
+    `) as { rolsuper: boolean }[];
+
+    // The tenant-isolation probe (#1279, X4) needs a superuser, not a member.
+    if (!superuser[0]?.rolsuper) {
+      skipped.push(
+        `the tenant-isolation probe (${LEAST_PRIVILEGE_APP_ROLE}, ${SOCIAL_SOURCE_CHECK_ROLE})`
+      );
+    }
 
     return skipped.length === 0
       ? {
@@ -8092,6 +8336,150 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
 }
 
 // ---------------------------------------------------------------------------
+// 7f. No schema/database CREATE for a restricted role (critical) — #1279 (X3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Roles allowed to hold CREATE besides the schema/database owner: a deployment
+ * whose migrator is a LOGIN member of a NOLOGIN owner role lists it in
+ * `SECURITY_READINESS_MIGRATOR_ROLES` (comma separated). Empty by default.
+ */
+function migratorRolesFromEnv(): string[] {
+  return (process.env.SECURITY_READINESS_MIGRATOR_ROLES ?? "")
+    .split(",")
+    .map((role) => role.trim())
+    .filter((role) => role.length > 0);
+}
+
+export async function checkNoRestrictedSchemaCreate(
+  definerOwners?: readonly string[],
+  migrators?: readonly string[]
+): Promise<SecurityCheckResult> {
+  const name = "No restricted role can CREATE in the schema or the database";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const findings = await findRestrictedCreatePrivileges(
+      getDatabaseClient(),
+      definerOwners ?? DEFINER_OWNER_ROLES,
+      migrators ?? migratorRolesFromEnv()
+    );
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `Every SECURITY DEFINER function pins search_path = public, pg_temp, so a role that can CREATE in the schema can plant an object they resolve. Only the schema/database owner and the explicitly allow-listed migrators may hold CREATE, and every SECURITY DEFINER function must pin exactly that search_path: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence:
+            "Only the schema and database owner (and any allow-listed migrator) hold CREATE: PUBLIC, every other LOGIN role, the runtime, worker, setup and dispatch roles and every definer owner do not (ACLs and effective privilege, membership included); every SECURITY DEFINER function pins exactly search_path = public, pg_temp."
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify schema CREATE privileges: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7g. Tenant isolation policies keep their canonical shape (critical) — #1279 (X4)
+// ---------------------------------------------------------------------------
+
+export async function checkTenantIsolationPoliciesCanonical(): Promise<SecurityCheckResult> {
+  const name =
+    "Every FORCE-RLS table keeps its canonical tenant isolation policy";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const { checkedTables, findings } =
+      await findTenantIsolationPolicyDrift(sql);
+    const probe = await probeTenantIsolationUnderDefinerRead(sql, [
+      LEAST_PRIVILEGE_APP_ROLE,
+      SOCIAL_SOURCE_CHECK_ROLE
+    ]);
+
+    findings.push(...probe.findings);
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `A permissive policy is OR-ed with the tenant isolation policy, and a SECURITY DEFINER function reads on the strength of it, so a widened or extra policy exposes other tenants: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${checkedTables} FORCE-RLS table(s): each has the canonical FOR ALL tenant isolation policy and no unreviewed permissive policy; ${probe.ran ? `the rolled-back probe saw only its own tenant's rows as ${probe.probedRoles.join(", ")}${probe.skippedRoles.length > 0 ? ` (not probed: ${probe.skippedRoles.join(", ")}, not provisioned or without a read grant)` : ""}` : "the behavioural probe did not run (the connection is not a superuser), so the exact expression pin is the only guard here"}.`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the tenant isolation policies: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7h. No view or materialized view bypasses RLS (critical) — #1347
+// ---------------------------------------------------------------------------
+
+export async function checkNoViewBypassesRls(): Promise<SecurityCheckResult> {
+  const name = "No view or materialized view bypasses RLS on a FORCE-RLS table";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const { checkedViews, findings } =
+      await findViewRlsBypass(getDatabaseClient());
+
+    return findings.length > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `A view runs with its owner's privileges and policies unless it is security_invoker (and FORCE RLS does not bind a superuser or BYPASSRLS owner); a materialized view has no RLS at all. Views also need an entry in the reviewed view grant matrix before a restricted role can touch them: ${findings.join("; ")}.`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${checkedViews} view(s)/materialized view(s) in every non-system schema: no view that reaches a FORCE-RLS table lacks security_invoker (whatever its owner), no materialized view over one is owned by a superuser or BYPASSRLS role, no materialized view over one is readable by a restricted role, and no restricted role holds a privilege on a view outside the reviewed matrix.`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify views: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -8108,10 +8496,15 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkLeastPrivilegeRoleProvisioned(),
     await checkRuntimeRoleGrants(),
     await checkWorkerSetupRoleGrants(),
+    await checkWorkerJobsReachableWithoutWorkerUrl(),
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
+    await checkChannelAccountsAccessGuards(),
     await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
+    await checkNoRestrictedSchemaCreate(),
+    await checkTenantIsolationPoliciesCanonical(),
+    await checkNoViewBypassesRls(),
     checkAbacDefaultDeny(),
     checkDataLifecycleRegistryValid(),
     checkDataLifecycleLegalHoldReleaseSeparate(),

@@ -311,3 +311,118 @@ describe("institutionIds (Issue #595)", () => {
     if (result.valid) expect(result.value.institutionIds).toEqual([]);
   });
 });
+
+describe("regionCode (Issue #1312)", () => {
+  const MINIMAL = {
+    title: "Hello",
+    slug: "hello",
+    contentJson: {},
+    bodyPortableText: [
+      {
+        _type: "block",
+        _key: "b0",
+        style: "normal",
+        children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+        markDefs: []
+      }
+    ]
+  };
+
+  test("defaults to null when absent on create", () => {
+    const result = validateCreateBlogPostInput(MINIMAL);
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.regionCode).toBeNull();
+  });
+
+  test("accepts a dotted regency/city code on create", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      regionCode: "62.71"
+    });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.regionCode).toBe("62.71");
+  });
+
+  test("accepts a bare province code and the deepest village code", () => {
+    for (const code of ["62", "62.71.01", "62.71.01.2001"]) {
+      const result = validateCreateBlogPostInput({
+        ...MINIMAL,
+        regionCode: code
+      });
+
+      expect(result.valid).toBe(true);
+      if (result.valid) expect(result.value.regionCode).toBe(code);
+    }
+  });
+
+  test("rejects a non-dotted, non-numeric code, naming the field", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      regionCode: "abc"
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.map((e) => e.field)).toContain("regionCode");
+    }
+  });
+
+  test("rejects a trailing dot with nothing after it", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      regionCode: "62."
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.map((e) => e.field)).toContain("regionCode");
+    }
+  });
+
+  test("an explicit null on create is the same as absent", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      regionCode: null
+    });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.regionCode).toBeNull();
+  });
+
+  test("update: absent leaves it out of the patch entirely — unchanged", () => {
+    const result = validateUpdateBlogPostInput({ title: "New" });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect("regionCode" in result.value).toBe(false);
+    }
+  });
+
+  test("update: an explicit null clears it", () => {
+    const result = validateUpdateBlogPostInput({ regionCode: null });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect("regionCode" in result.value).toBe(true);
+      expect(result.value.regionCode).toBeNull();
+    }
+  });
+
+  test("update: a valid dotted code sets it", () => {
+    const result = validateUpdateBlogPostInput({ regionCode: "62.71.01" });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.regionCode).toBe("62.71.01");
+  });
+
+  test("update: an invalid code is rejected, naming the field", () => {
+    const result = validateUpdateBlogPostInput({ regionCode: "banjarbaru" });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.map((e) => e.field)).toContain("regionCode");
+    }
+  });
+});

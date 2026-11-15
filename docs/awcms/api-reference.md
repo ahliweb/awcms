@@ -8763,7 +8763,7 @@ High-risk: hands the payload to a domain action, so an Idempotency-Key is requir
 
 ## Site Search
 
-Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns.
+Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. The query is tokenized into Unicode letters/digits (the last word of 3 or more characters also matches as a prefix) and bound as one parameter into to_tsquery (no SQL or tsquery-operator injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns.
 
 ### `GET /api/v1/site-search/index/failures` — Read the search index failed-item diagnostics
 
@@ -8862,7 +8862,7 @@ Gated by `site_search.index.read`. Bounded: document counts by resource type, th
 - **operationId**: `siteSearchQuery`
 - **Security**: none (public endpoint)
 
-PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers.
+PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query is tokenized into Unicode letters/digits (operator characters are dropped, all words are ANDed, and the last word of 3 or more characters also matches as a prefix) and bound as one parameter into `to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers.
 
 **Parameters**
 
@@ -14145,7 +14145,7 @@ Immediate, and wins over everything queued: the recipient's waiting marketing me
 - **operationId**: `getWhatsappDiagnostics`
 - **Security**: bearerAuth + tenantHeader
 
-One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected (a security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`.
+One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected. A caller confined to business scopes sees only the rows (counts, messages and attempts) whose own business scope they hold; unscoped rows are hidden from them and the tenant-wide `suppressions`/`grantedConsents` totals are `null` (Issue #1265). (A security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`.
 
 **Parameters**
 
@@ -14169,7 +14169,7 @@ One endpoint rather than three because the parts are only readable together: the
 - **operationId**: `cancelWhatsappMessage`
 - **Security**: bearerAuth + tenantHeader
 
-Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`.
+Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`. A caller confined to business scopes may cancel only messages whose own business scope they hold; another brand's message and an unscoped one get the same `409` as an unknown id.
 
 **Parameters**
 
@@ -15208,7 +15208,7 @@ Account and credential CONTROL PLANE of the omnichannel foundation (channel_acco
 - **operationId**: `listChannelAccounts`
 - **Security**: bearerAuth + tenantHeader
 
-An account with assignees is listed only to its assignees and to holders of `channel_accounts.assignments.assign`. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
+An `assigned` account (the default) is listed only to its assignees and to holders of `channel_accounts.assignments.assign`; a `tenant_wide` account to every holder of the read permission. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
 
 **Parameters**
 
@@ -15325,6 +15325,34 @@ Refused while the account is `connected` or `degraded` (disconnect it first) and
 | 409    | `ACCOUNT_STATE_INVALID`, `HAS_CHILD_ACCOUNTS` or `IDEMPOTENCY_CONFLICT`.               | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
+### `PUT /api/v1/channel-accounts/accounts/{id}/access-mode` — Choose who may see and operate the account.
+
+- **operationId**: `setChannelAccountAccessMode`
+- **Security**: bearerAuth + tenantHeader
+
+`assigned` (the default, fail-closed) restricts the account to its assignees and the holders of `channel_accounts.assignments.assign`; `tenant_wide` lets the permission alone decide. Switching to `assigned` needs an owner to exist (`422 OWNER_REQUIRED`). Audited at `warning` when the mode changes; the same mode again changes nothing. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                            | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The mode now in force.                                                                 | object                                 |
+| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
+| 422    | `OWNER_REQUIRED` (switching to `assigned` needs an owner).                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/channel-accounts/accounts/{id}/assignments` — Who may operate this account.
 
 - **operationId**: `listChannelAccountAssignments`
@@ -15348,7 +15376,7 @@ Requires `channel_accounts.accounts.read`.
 - **operationId**: `setChannelAccountAssignment`
 - **Security**: bearerAuth + tenantHeader
 
-An upsert per person. From the first assignment on, the account is visible and operable only to its assignees and holders of `channel_accounts.assignments.assign`. Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+An upsert per person. On an `assigned` account (the default) only its assignees and holders of `channel_accounts.assignments.assign` can see and operate it. Demoting the last owner of an `assigned` account is refused (`409 LAST_OWNER`). Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
 
 **Parameters**
 
@@ -15360,23 +15388,23 @@ An upsert per person. From the first assignment on, the account is visible and o
 
 **Responses**
 
-| Status | Description                                                                            | Schema                                 |
-| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The assignment.                                                                        | object                                 |
-| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
-| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
-| 422    | `USER_NOT_FOUND` (the person is not in this tenant).                                   | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                      | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The assignment.                                                                                  | object                                 |
+| 400    | Validation error.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the person is the only owner of an `assigned` account). | [`ApiError`](#standard-error-envelope) |
+| 422    | `USER_NOT_FOUND` (the person is not in this tenant).                                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.           | [`ApiError`](#standard-error-envelope) |
 
 ### `DELETE /api/v1/channel-accounts/accounts/{id}/assignments/{assignmentId}` — Remove one assignee.
 
 - **operationId**: `removeChannelAccountAssignment`
 - **Security**: bearerAuth + tenantHeader
 
-Removing the LAST assignee returns the account to tenant-wide visibility, which is intended and is why this is audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+Removing the LAST OWNER of an `assigned` account is refused (`409 LAST_OWNER`): an account is never left without somebody who answers for it and never falls open by losing its assignees. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
 
 **Parameters**
 
@@ -15386,15 +15414,15 @@ Removing the LAST assignee returns the account to tenant-wide visibility, which 
 
 **Responses**
 
-| Status | Description                                                                            | Schema                                 |
-| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Removed.                                                                               | object                                 |
-| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
-| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                        | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Removed.                                                                                           | object                                 |
+| 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the assignee is the only owner of an `assigned` account). | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.             | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/channel-accounts/accounts/{id}/attest-device` — Attest that an unofficial-provider device is paired (operator-attested, not verified).
 
@@ -18416,24 +18444,25 @@ Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all 
 
 Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1/blog/posts/{id} (all fields optional, only present fields change).
 
-| Field                          | Type                                           | Required | Nullable | Description                                                                                                                                                                                                                                                                                                               |
-| ------------------------------ | ---------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`                        | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `slug`                         | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `excerpt`                      | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `contentJson`                  | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       | ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved.                                                                                                                                                            |
-| `bodyPortableText`             | [`PortableTextBody`](#schema-portabletextbody) | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `locale`                       | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `visibility`                   | enum(`public`, `private`, `unlisted`)          | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `featuredMediaId`              | string (uuid)                                  | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `seoImageMediaId`              | string (uuid)                                  | no       | yes      | Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId.                                                                                                                                                                                                                          |
-| `seoTitle`                     | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `metaDescription`              | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `canonicalUrl`                 | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `termIds`                      | array of string (uuid)                         | no       | no       |                                                                                                                                                                                                                                                                                                                           |
-| `institutionIds`               | array of string (uuid)                         | no       | no       | Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them. |
-| `translationGroupId`           | string (uuid)                                  | no       | yes      |                                                                                                                                                                                                                                                                                                                           |
-| `autoInternalTagLinksDisabled` | boolean                                        | no       | no       | Per-post opt-out of automatic internal tag linking.                                                                                                                                                                                                                                                                       |
+| Field                          | Type                                           | Required | Nullable | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------ | ---------------------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                        | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `slug`                         | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `excerpt`                      | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `contentJson`                  | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       | ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved.                                                                                                                                                                                                                                                                                                                                                                            |
+| `bodyPortableText`             | [`PortableTextBody`](#schema-portabletextbody) | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `locale`                       | string                                         | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `visibility`                   | enum(`public`, `private`, `unlisted`)          | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `featuredMediaId`              | string (uuid)                                  | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `seoImageMediaId`              | string (uuid)                                  | no       | yes      | Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `seoTitle`                     | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `metaDescription`              | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `canonicalUrl`                 | string                                         | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `termIds`                      | array of string (uuid)                         | no       | no       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `institutionIds`               | array of string (uuid)                         | no       | no       | Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them.                                                                                                                                                                                                                 |
+| `translationGroupId`           | string (uuid)                                  | no       | yes      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `autoInternalTagLinksDisabled` | boolean                                        | no       | no       | Per-post opt-out of automatic internal tag linking.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `regionCode`                   | string                                         | no       | yes      | Issue #1312 — the region dimension of sql/131 (awcms_blog_posts.region_code). A dotted idn_admin_regions code (62, 62.71, 62.71.01, 62.71.01.2001), the same shape as BlogInstitution.regionCode. A plain column, not a relation like termIds/institutionIds — no existence check against another table, because the column is deliberately not a foreign key (the region dataset is versioned; the code is the only identifier stable across generations). null clears it on update; absent on update leaves the stored value unchanged. |
 
 **Example**
 
@@ -18474,7 +18503,8 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
   "termIds": ["00000000-0000-0000-0000-000000000000"],
   "institutionIds": ["00000000-0000-0000-0000-000000000000"],
   "translationGroupId": "00000000-0000-0000-0000-000000000000",
-  "autoInternalTagLinksDisabled": false
+  "autoInternalTagLinksDisabled": false,
+  "regionCode": "string"
 }
 ```
 

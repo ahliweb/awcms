@@ -65,6 +65,8 @@ import {
 } from "../lib/security/turnstile";
 import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
+import { getTranslatorFor } from "../lib/i18n";
+import { resolveAuthPageLocale } from "../lib/i18n/auth-page-locale";
 
 const turnstileActive = isTurnstileRequired();
 const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
@@ -76,19 +78,48 @@ const picker = await loadTenantPickerModel();
 const tenantOptions = picker.options;
 const tenantPickerMode = picker.mode;
 const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
+
+// Language (ADR-0095): cookie -> tenant default -> Accept-Language -> en. The
+// tenant default is consulted ONLY for the single-tenant deployment, whose
+// name this page already prints — never for a tenant the visitor picked or
+// typed, which would turn the page language into a tenant-existence oracle
+// (`src/lib/i18n/auth-page-locale.ts`).
+const locale = await resolveAuthPageLocale({
+  cookies: Astro.cookies,
+  request: Astro.request,
+  tenantId: singleTenant?.id ?? null
+});
+const { tx } = getTranslatorFor(locale);
+
+// The client script cannot translate (the catalogue is a server module), so
+// every message it may show arrives as a `data-msg-*` attribute. The two
+// failure messages are fixed sentences: neither varies with whether the
+// account exists, in any language.
+const formMessages = {
+  "data-msg-failed": tx(
+    "login",
+    "Sign in failed. Check your details and try again."
+  ),
+  "data-msg-network": tx("login", "Network error. Please try again."),
+  "data-msg-busy": tx("login", "Please wait…"),
+  "data-msg-show": tx("login", "Show"),
+  "data-msg-hide": tx("login", "Hide"),
+  "data-msg-show-password": tx("login", "Show password"),
+  "data-msg-hide-password": tx("login", "Hide password")
+};
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={locale}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Sign in · AWCMS</title>
+    <title>{tx("login", "Sign in")} · AWCMS</title>
   </head>
   <body class="auth-body">
     <main class="auth">
-      <AuthBrandPanel />
+      <AuthBrandPanel locale={locale} />
       <div class="auth-form-panel">
         <div class="auth-card">
           <div class="auth-head">
@@ -98,18 +129,20 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
               </span>
               <span class="auth-wordmark">AWCMS</span>
             </div>
-            <h1 class="auth-title">Sign in</h1>
+            <h1 class="auth-title">{tx("login", "Sign in")}</h1>
             <p class="auth-subtitle">
-              Welcome back. Sign in to your workspace.
+              {tx("login", "Welcome back. Sign in to your workspace.")}
             </p>
           </div>
 
-          <form id="login-form" class="auth-form" novalidate>
+          <form id="login-form" class="auth-form" novalidate {...formMessages}>
             <p id="login-error" class="auth-error" role="alert" hidden></p>
 
             {singleTenant && (
               <div class="auth-tenant-context">
-                <span class="auth-tenant-context-label">Signing in to</span>
+                <span class="auth-tenant-context-label">
+                  {tx("login", "Signing in to")}
+                </span>
                 <span class="auth-tenant-context-name">
                   {singleTenant.name}
                 </span>
@@ -124,7 +157,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
 
             {tenantPickerMode === "select" && (
               <div class="auth-field">
-                <label for="tenant-id">Organization</label>
+                <label for="tenant-id">{tx("login", "Organization")}</label>
                 <div class="auth-select">
                   <select
                     id="tenant-id"
@@ -133,7 +166,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
                     autocomplete="organization"
                   >
                     <option value="" disabled selected>
-                      Choose your organization
+                      {tx("login", "Choose your organization")}
                     </option>
                     {tenantOptions.map((tenant) => (
                       <option value={tenant.id}>{tenant.name}</option>
@@ -145,7 +178,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
 
             {tenantPickerMode === "manual" && (
               <div class="auth-field">
-                <label for="tenant-id">Tenant ID</label>
+                <label for="tenant-id">{tx("login", "Tenant ID")}</label>
                 <input
                   id="tenant-id"
                   name="tenantId"
@@ -158,7 +191,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             )}
 
             <div class="auth-field">
-              <label for="login-identifier">Login identifier</label>
+              <label for="login-identifier">
+                {tx("login", "Login identifier")}
+              </label>
               <input
                 id="login-identifier"
                 name="loginIdentifier"
@@ -170,7 +205,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             </div>
 
             <div class="auth-field">
-              <label for="password">Password</label>
+              <label for="password">{tx("login", "Password")}</label>
               <div class="auth-password">
                 <input
                   id="password"
@@ -184,9 +219,11 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
                   id="password-toggle"
                   class="auth-password-toggle"
                   aria-pressed="false"
-                  aria-label="Show password"
+                  aria-label={tx("login", "Show password")}
                 >
-                  <span class="auth-password-toggle-label">Show</span>
+                  <span class="auth-password-toggle-label">
+                    {tx("login", "Show")}
+                  </span>
                 </button>
               </div>
             </div>
@@ -200,15 +237,19 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             )}
 
             <button type="submit" id="login-submit" class="auth-submit">
-              Sign in
+              {tx("login", "Sign in")}
             </button>
           </form>
 
-          <nav class="auth-links" aria-label="Account recovery">
-            <a href="/forgot-password">Forgot your password?</a>
+          <nav class="auth-links" aria-label={tx("login", "Account recovery")}>
+            <a href="/forgot-password">
+              {tx("login", "Forgot your password?")}
+            </a>
           </nav>
 
-          <p class="auth-foot">Secured workspace access · AWCMS</p>
+          <p class="auth-foot">
+            {tx("login", "Secured workspace access")} · AWCMS
+          </p>
         </div>
       </div>
     </main>
@@ -233,6 +274,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       } from "../lib/ui/admin-form-client";
 
       const errorBox = document.getElementById("login-error");
+      // Server-translated messages (ADR-0095), rendered as data-msg-* on the
+      // form. No English literals here: they would only add client weight.
+      const messages = document.getElementById("login-form")?.dataset ?? {};
 
       // Password visibility toggle — pure enhancement, wired here (no inline
       // handler) so the strict CSP is respected. Absent-safe if the elements
@@ -254,10 +298,11 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         passwordToggle.setAttribute("aria-pressed", String(reveal));
         passwordToggle.setAttribute(
           "aria-label",
-          reveal ? "Hide password" : "Show password"
+          (reveal ? messages.msgHidePassword : messages.msgShowPassword) ?? ""
         );
         if (passwordToggleLabel) {
-          passwordToggleLabel.textContent = reveal ? "Hide" : "Show";
+          passwordToggleLabel.textContent =
+            (reveal ? messages.msgHide : messages.msgShow) ?? "";
         }
       });
 
@@ -272,7 +317,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       // and it is released on ANY settled outcome, so a refused or expired
       // Turnstile challenge still lets the person retry.
       onSubmit("login-form", async ({ data: formData, submit }) => {
-        const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
+        const unlock = submit
+          ? lockElement(submit, messages.msgBusy ?? "")
+          : () => {};
 
         if (errorBox) errorBox.hidden = true;
 
@@ -308,7 +355,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             // Generic message only — the server deliberately collapses every
             // deny reason so the UI must not reconstruct a specific one, and it
             // must never surface internal detail (Issue #540).
-            showError("Sign in failed. Check your details and try again.");
+            showError(messages.msgFailed ?? "");
             unlock();
             return;
           }
@@ -318,7 +365,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
           holdForNavigation();
           window.location.href = "/admin";
         } catch {
-          showError("Network error. Please try again.");
+          showError(messages.msgNetwork ?? "");
           unlock();
         }
       });

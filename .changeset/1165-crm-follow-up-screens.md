@@ -1,0 +1,9 @@
+---
+"awcms": minor
+---
+
+feat(crm_follow_up): admin screens for the follow-up worklist, task detail and rules (Issue #1165, ADR-0159, ADR-0149). `crm_follow_up` becomes `active` and gains a sidebar entry and a second one for the rules. **Nothing changes for a deployment that does not set `CRM_FOLLOW_UP_ENABLED=true`:** the screens answer "switched off on this deployment" after authorization (an unauthorised caller learns nothing about the switch), never an error.
+
+**Screens** (server-rendered, keyset-paged, shared data-page primitives, English and Indonesian, 360 px, bundled page scripts under the existing CSP): `/admin/crm-follow-up` is the worklist (default view is the live work, open and escalated merged in due order; filters for status, "assigned to me" resolved from the session, and overdue); `/admin/crm-follow-up/{id}` is one task with its append-only history, staff notices, the lead's stop signals, complete with a closed outcome, cancel and "stop follow-up for this lead"; `/admin/crm-follow-up/rules` is the rule catalogue with one rule's revision history and the tenant switch. Every screen reads through `application/screen-loaders.ts`, which calls the same directory functions the API routes call, and every control is shown only when the chokepoint allows the permission its endpoint enforces. Writes carry an `Idempotency-Key` and, for tasks, `expectedVersion`. A staff member is "You" or "Another staff member"; nothing about the prospect is rendered.
+
+**Not on the screens yet:** creating a rule, publishing a revision, archiving and the simulation have API endpoints but no form (the screen is read-only for rules and says so); "reassign" is shown disabled because no endpoint moves a task by hand. No new endpoint, migration, permission or event: the five existing permissions leave `NOT_YET_SCREENED`.

@@ -12,6 +12,7 @@ import {
   userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import { log } from "../../../../../../lib/logging/logger";
+import { createBlogRevision } from "../../../../../../modules/blog-content/application/blog-revision-directory";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import {
   fetchBlogPageById,
@@ -177,6 +178,31 @@ export const POST = defineTenantRoute<Prepared>({
     if (!updated) {
       return fail(404, "RESOURCE_NOT_FOUND", "Blog page not found.");
     }
+
+    // Snapshot the content AS PUBLISHED, in the same transaction as the
+    // transition: without it the sequence create -> publish -> edit leaves only
+    // the post-edit text in history and the version readers saw is lost. A
+    // `published -> published` republish of unchanged content writes one too.
+    await createBlogRevision(
+      tx,
+      tenantId,
+      "page",
+      pageId,
+      auth.context.tenantUserId,
+      {
+        title: updated.title,
+        contentJson: updated.contentJson,
+        contentText: updated.contentText,
+        bodyPortableText: updated.bodyPortableText,
+        excerpt: updated.excerpt,
+        seoTitle: updated.seoTitle,
+        metaDescription: updated.metaDescription,
+        canonicalUrl: updated.canonicalUrl,
+        status: updated.status
+      },
+      "Published.",
+      correlationId
+    );
 
     await recordAuditEvent(tx, {
       tenantId,

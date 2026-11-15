@@ -23,3 +23,6 @@ src/lib/i18n/catalogs/*.generated.ts
 # bytes for no reason and make `contracts:omes:sync:check` report drift
 # against its own pin on every run.
 src/modules/omes-control/contracts/v1/
+# Producer compatibility artifacts, vendored byte-for-byte with their own PIN.json
+# (preflight hashes them), so prettier must not rewrite them either.
+src/modules/omes-control/contracts/compatibility/v1/

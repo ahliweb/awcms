@@ -1,0 +1,44 @@
+-- Issue #1341 (area:security, area:database) — `awcms_audit_events` becomes
+-- append-only for the runtime role.
+--
+-- The threat model (doc 20, A.8.15 and the Tampering row) and the header of
+-- `sql/224` both describe the audit trail as append-only to the application
+-- role. It was not. `sql/019` granted `awcms_app` SELECT, INSERT, UPDATE and
+-- DELETE on every table in the schema, `sql/021` narrowed only the global
+-- tables, and nothing revoked anything on this one — verified with
+-- `has_table_privilege('awcms_app', 'awcms_audit_events', ...)` on a fully
+-- migrated database: UPDATE and DELETE were both true. `security:readiness`
+-- made it worse by REQUIRING all four verbs on it, so the gate certified the
+-- gap instead of catching it.
+--
+-- Why it matters: a compromised web process (or an injection in any handler)
+-- could rewrite or erase the evidence of what it did. Row-level security does
+-- not help, because the policy is a tenant filter, not a verb filter.
+--
+-- What the runtime role legitimately needs here is INSERT (every audit write)
+-- and SELECT (the audit screens, and `INSERT ... RETURNING`). No production
+-- code path UPDATEs the table, and the only DELETE is the retention purge
+-- (`purgeExpiredAuditEvents`, `bun run logs:audit:purge`), which runs as
+-- `awcms_worker`; `sql/022` gave that role SELECT, INSERT, DELETE and it keeps
+-- them. Data-subject erasure (ADR-0094) leaves audit rows in place
+-- (`severed_with_subject_row`) and never touches them.
+--
+-- REVOKE is the operative statement, not an omission from a GRANT: `sql/019`
+-- already handed these verbs out, so a GRANT that does not mention them
+-- withholds nothing (the lesson recorded in `sql/125`). TRUNCATE is revoked too:
+-- `awcms_app` does not hold it today, so that part is a no-op that pins the
+-- intent against a future broadening of the schema-wide default.
+--
+-- Scope: this binds `awcms_app` only. A deployment that has not activated the
+-- role still connects as the schema owner, and the owner is not narrowed here
+-- (`sql/019` header: the dedicated role is opt-in). Other tables are NOT touched
+-- here: each needs its own write-path audit first.
+--
+-- Operator note: where `DATABASE_URL` is the `awcms_app` login, unattended jobs
+-- inherit it unless `WORKER_DATABASE_URL` points at `awcms_worker`, and the
+-- retention purge would then fail. `security:readiness` reports that
+-- configuration.
+--
+-- Forward-only and idempotent: REVOKE of an absent privilege is a no-op.
+
+REVOKE UPDATE, DELETE, TRUNCATE ON awcms_audit_events FROM awcms_app;

@@ -66,7 +66,7 @@ tags:
   - name: Form Drafts
     description: Generic, domain-agnostic server-side draft store for multi-step forms (form_drafts module) — tenant-scoped, RLS-protected create/read/update/submit/delete of an opaque JSONB payload plus the wizard coordinates needed to resume it. The payload is size-bounded and rejected outright (never silently redacted) when any key at any nesting depth resembles a secret — password/token/secret/credential/apiKey/privateKey — so a caller can never mistake a stripped field for a saved one. What a payload MEANS is owned by the module that created it (moduleKey/wizardKey), never by this one. submit is high-risk (it hands the payload to a domain action), idempotency-keyed, and audited; create deliberately is not, since a retry costs one deletable scratch row.
   - name: Site Search
-    description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
+    description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. The query is tokenized into Unicode letters/digits (the last word of 3 or more characters also matches as a prefix) and bound as one parameter into to_tsquery (no SQL or tsquery-operator injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
   - name: Newsletter
     description: "Per-tenant newsletter subscriber list (newsletter module, Issue #598, ADR-0103, PRD §22/§30). The email module could already SEND mail; there was no list a reader could JOIN. All three operations are anonymous — a reader has no account, and PRD §30 forbids making them get one to stop receiving mail — with the tenant resolved from the request HOST rather than a header, so a caller cannot choose whose list they are writing to. Every one answers the SAME neutral body for every outcome, because a distinguishing response turns a public endpoint into a way to ask whether a named person subscribes to a particular newsroom. Double opt-in: consent is recorded when the confirmation link is FOLLOWED, never at submission. Both tokens are stored hashed because both are bearer credentials, and the unsubscribe token is stable for the row's lifetime because it appears in the footer of every message the subscriber receives."
   - name: Tax
@@ -9341,7 +9341,7 @@ paths:
       tags:
         - Channel Accounts
       summary: The tenant's connected accounts, newest first (keyset).
-      description: An account with assignees is listed only to its assignees and to holders of `channel_accounts.assignments.assign`. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
+      description: An `assigned` account (the default) is listed only to its assignees and to holders of `channel_accounts.assignments.assign`; a `tenant_wide` account to every holder of the read permission. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
       parameters:
         - name: provider
           in: query
@@ -9609,6 +9609,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/access-mode:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: setChannelAccountAccessMode
+      tags:
+        - Channel Accounts
+      summary: Choose who may see and operate the account.
+      description: "`assigned` (the default, fail-closed) restricts the account to its assignees and the holders of `channel_accounts.assignments.assign`; `tenant_wide` lets the permission alone decide. Switching to `assigned` needs an owner to exist (`422 OWNER_REQUIRED`). Audited at `warning` when the mode changes; the same mode again changes nothing. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              additionalProperties: false
+              properties:
+                mode:
+                  $ref: "#/components/schemas/ChannelAccountAccessMode"
+      responses:
+        "200":
+          description: The mode now in force.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accountId:
+                        type: string
+                        format: uuid
+                      accessMode:
+                        $ref: "#/components/schemas/ChannelAccountAccessMode"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`OWNER_REQUIRED` (switching to `assigned` needs an owner)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/channel-accounts/accounts/{id}/assignments:
     parameters:
       - name: id
@@ -9660,7 +9736,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Make a person of this tenant an owner, operator or viewer of the account.
-      description: An upsert per person. From the first assignment on, the account is visible and operable only to its assignees and holders of `channel_accounts.assignments.assign`. Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+      description: An upsert per person. On an `assigned` account (the default) only its assignees and holders of `channel_accounts.assignments.assign` can see and operate it. Demoting the last owner of an `assigned` account is refused (`409 LAST_OWNER`). Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -9704,7 +9780,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: "`IDEMPOTENCY_CONFLICT`."
+          description: "`IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the person is the only owner of an `assigned` account)."
           content:
             application/json:
               schema:
@@ -9740,7 +9816,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Remove one assignee.
-      description: Removing the LAST assignee returns the account to tenant-wide visibility, which is intended and is why this is audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+      description: "Removing the LAST OWNER of an `assigned` account is refused (`409 LAST_OWNER`): an account is never left without somebody who answers for it and never falls open by losing its assignees. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -9774,7 +9850,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: "`IDEMPOTENCY_CONFLICT`."
+          description: "`IDEMPOTENCY_CONFLICT`, or `LAST_OWNER` (the assignee is the only owner of an `assigned` account)."
           content:
             application/json:
               schema:
@@ -29613,7 +29689,7 @@ paths:
         - Site Search
       security: []
       summary: Public full-text search over this site's published content (anonymous)
-      description: "PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers."
+      description: "PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query is tokenized into Unicode letters/digits (operator characters are dropped, all words are ANDed, and the last word of 3 or more characters also matches as a prefix) and bound as one parameter into `to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers."
       parameters:
         - name: q
           in: query
@@ -35306,7 +35382,7 @@ paths:
       tags:
         - WhatsApp Delivery
       summary: The tenant's WhatsApp queue - counts, recent messages, attempts.
-      description: "One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected (a security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`."
+      description: "One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected. A caller confined to business scopes sees only the rows (counts, messages and attempts) whose own business scope they hold; unscoped rows are hidden from them and the tenant-wide `suppressions`/`grantedConsents` totals are `null` (Issue #1265). (A security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`."
       parameters:
         - name: status
           in: query
@@ -35356,7 +35432,7 @@ paths:
       tags:
         - WhatsApp Delivery
       summary: Cancel a WhatsApp message that has not been sent yet.
-      description: "Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`."
+      description: "Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`. A caller confined to business scopes may cancel only messages whose own business scope they hold; another brand's message and an unscoped one get the same `409` as an unknown id."
       parameters:
         - name: id
           in: path
@@ -38235,6 +38311,10 @@ components:
           items:
             type: string
             format: uuid
+        regionCode:
+          type: string
+          nullable: true
+          description: 'Issue #1312 — the region dimension of sql/131 (`awcms_blog_posts.region_code`), returned by `GET`/`PATCH`/`POST` on this path and — since this same issue — by the `?view=full` traversal a static site is built from. `null` is the normal state ("no region set"), never a missing key.'
         authorByline:
           description: |-
             ADR-0109 — the author's OPT-IN public byline, returned by the `?view=full` traversal a static site is built from.
@@ -38385,6 +38465,11 @@ components:
         autoInternalTagLinksDisabled:
           type: boolean
           description: Per-post opt-out of automatic internal tag linking.
+        regionCode:
+          type: string
+          nullable: true
+          pattern: ^[0-9]{2}(\.[0-9]{2}){0,2}(\.[0-9]{4})?$
+          description: "Issue #1312 — the region dimension of sql/131 (awcms_blog_posts.region_code). A dotted idn_admin_regions code (62, 62.71, 62.71.01, 62.71.01.2001), the same shape as BlogInstitution.regionCode. A plain column, not a relation like termIds/institutionIds — no existence check against another table, because the column is deliberately not a foreign key (the region dataset is versioned; the code is the only identifier stable across generations). null clears it on update; absent on update leaves the stored value unchanged."
     BlogRevision:
       type: object
       required:
@@ -40322,6 +40407,14 @@ components:
           format: date-time
         version:
           type: integer
+        accessMode:
+          $ref: "#/components/schemas/ChannelAccountAccessMode"
+    ChannelAccountAccessMode:
+      type: string
+      enum:
+        - assigned
+        - tenant_wide
+      description: "Who may see and operate the account. `assigned` (the default) is closed: its assignees and the holders of `channel_accounts.assignments.assign` only, so an assigned account with no assignee is administrators-only. `tenant_wide` is an explicit, audited choice."
     ChannelAccountAssignment:
       type: object
       properties:
@@ -51991,8 +52084,12 @@ components:
           nullable: true
         suppressions:
           type: integer
+          nullable: true
+          description: Tenant-wide total; `null` for a caller confined to business scopes.
         grantedConsents:
           type: integer
+          nullable: true
+          description: Tenant-wide total; `null` for a caller confined to business scopes.
     WhatsappSenderDiagnostics:
       type: object
       properties:

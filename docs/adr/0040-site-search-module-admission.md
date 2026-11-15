@@ -69,15 +69,15 @@ So the seam is a **descriptor list** — the existing `dataLifecycle`/`sodRules`
 
 ### 5. The public query + suggestion contract
 
-| Aspect                  | Invariant                                                                                                                                           |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tenant/locale scope** | Every query is constrained by `tenant_id` (RLS FORCE + predicate) AND `locale`.                                                                     |
-| **Publication state**   | Filtered at the source→index boundary; the index query is **not** an authorization source. No drafts/previews/private/deleted in results.           |
-| **Query normalisation** | Trim, min/max length bounds, whitespace collapse, control-character stripping, then into `websearch_to_tsquery('simple', $1)` as a bound param.     |
-| **Snippet/highlight**   | `ts_headline` with a non-HTML sentinel → HTML-escape the whole thing → replace the sentinel with `<mark>` — markup from content never gets through. |
-| **Pagination**          | Keyset cursor `(rank, id)`, bounded `LIMIT`.                                                                                                        |
-| **Anonymous**           | Per-IP rate limit, query length bounds, result caps.                                                                                                |
-| **Cache key**           | `buildSearchCacheKey` refuses to assemble a key without `tenant_id`+`locale`+`query`-hash.                                                          |
+| Aspect                  | Invariant                                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tenant/locale scope** | Every query is constrained by `tenant_id` (RLS FORCE + predicate) AND `locale`.                                                                                                  |
+| **Publication state**   | Filtered at the source→index boundary; the index query is **not** an authorization source. No drafts/previews/private/deleted in results.                                        |
+| **Query normalisation** | Trim, min/max length bounds, whitespace collapse, control-character stripping, then tokenized and into `to_tsquery('simple', $1)` as ONE bound param (see Amendment 2026-11-14). |
+| **Snippet/highlight**   | `ts_headline` with a non-HTML sentinel → HTML-escape the whole thing → replace the sentinel with `<mark>` — markup from content never gets through.                              |
+| **Pagination**          | Keyset cursor `(rank, id)`, bounded `LIMIT`.                                                                                                                                     |
+| **Anonymous**           | Per-IP rate limit, query length bounds, result caps.                                                                                                                             |
+| **Cache key**           | `buildSearchCacheKey` refuses to assemble a key without `tenant_id`+`locale`+`query`-hash.                                                                                       |
 
 ### 6. Tenant configuration, admin, retention/audit
 
@@ -128,3 +128,14 @@ SaaS search services/Elasticsearch/OpenSearch, vector/semantic AI ranking, cross
 - **Folding search into the existing `blog_content`.** Rejected: cross-content search does not belong to one content module; a neutral aggregator is the right place.
 - **An external search service (Elastic/OpenSearch/vector).** Rejected: there is no evidence PostgreSQL FTS is insufficient for the website scope.
 - **Storing relative URLs without `:tenantCode` and adding the prefix at query time.** Rejected: the URL would be correct only for callers that remember to add it, and the document checksum would not catch a `tenant_code` change — storing the final URL makes a tenant rename automatically update the documents on the next reconcile.
+
+## Amendment 2026-11-14: prefix matching on the last query token
+
+The query-normalisation row of §5 originally handed the normalised string to `websearch_to_tsquery('simple', $1)`. That function matches whole lexemes only, so a half-typed word ("Kapu") found nothing, which defeats search-as-you-type. The query is now tokenized into runs of Unicode letters/digits (`[\p{L}\p{N}]+` after NFC normalisation) and assembled by `buildPrefixTsQuery`: every token is an exact lexeme, all ANDed, and the LAST token becomes a prefix (`token:*`) once it has at least 3 characters. The result is still bound as ONE parameter into `to_tsquery('simple', $1)`, and the same text is shared by the result list, the facet counts and the snippet, so a facet never counts a document the list cannot reach.
+
+- **Injection.** Parameter binding already excludes SQL injection. Tokenization additionally excludes tsquery-OPERATOR injection: none of `& | ! : * ( ) < - >`, quotes or backslashes is a letter or digit, so no token can carry one. The separators and the `:*` suffix are written by the builder alone.
+- **Accepted trade-off.** The `websearch_to_tsquery` syntax is gone: quoted phrases and `or` are no longer interpreted (their punctuation is dropped and the remaining words are ANDed). A `-word` exclusion is dropped WHOLE, so it neither excludes nor becomes a required word: `politik -korupsi` now means `politik`, and consumers or bookmarked URLs that relied on exclusion lose that filter (it is NOT inverted).
+- **Empty token set.** A query with no word tokens (pure punctuation or symbols) returns the neutral empty result without touching the database.
+- **Out of scope.** The `blog_content` per-module search keeps `websearch_to_tsquery`. The suggest endpoint is unchanged (its trigram `ILIKE` is already a substring match). Response shapes are unchanged (ADR-0065).
+- **Empty-query guard.** The early exit for a query with no word tokens is an optimization, not a control: a tsquery that is empty on the database side matches nothing, and integration tests pin that through the database path.
+- **Index.** No migration: the GIN `tsvector` index supports `:*` prefix operands, which is what a superuser plan shows. It is NOT what the runtime role gets: under `FORCE ROW LEVEL SECURITY` the tenant policy is a security barrier and `ts_match_vq` (the `@@` function) is not LEAKPROOF, so the planner cannot use it as an index condition and the plan is a tenant-bounded sequential scan with `ts_rank` per candidate. This already held for `websearch_to_tsquery`; a 3-character prefix widens the candidate set. Impact is bounded by the public rate limit and `statement_timeout`. Marking `ts_match_vq` LEAKPROOF is NOT done here and requires its own ADR; an explicit tenant-filtered read path is the alternative. Tracked in #1321; a test pins the current runtime plan so a real fix turns it red on purpose.

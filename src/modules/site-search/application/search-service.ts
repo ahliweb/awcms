@@ -3,11 +3,15 @@
  * awcms-micro Issue #270). Every query is tenant + locale scoped (RLS FORCE plus
  * explicit predicates), so tenant A / locale A can never return tenant B /
  * another locale. The query text is ALWAYS a bound parameter into
- * `websearch_to_tsquery('simple', $1)` (SQL injection is impossible); snippets
+ * `to_tsquery('simple', $1)` (SQL injection is impossible), built by
+ * `buildPrefixTsQuery` (the LAST token is prefix-matched: "Kapu" finds
+ * "Kapuas"; tokens are Unicode letters/digits only, so no tsquery operator can
+ * be smuggled in); snippets
  * are built with `ts_headline` sentinels and escaped in `renderSafeSnippet` (XSS
  * impossible). The index is a PROJECTION of public content only — it is never an
  * authorization source.
  */
+import { buildPrefixTsQuery } from "../domain/search-query";
 import {
   renderSafeSnippet,
   SNIPPET_HEADLINE_OPTIONS
@@ -128,7 +132,7 @@ type SearchRow = {
 
 /**
  * Full-text search over the tenant's public index. Keyset-paginated on
- * `(rank DESC, id ASC)`. The inner query's `search_vector @@ websearch_to_tsquery`
+ * `(rank DESC, id ASC)`. The inner query's `search_vector @@ to_tsquery`
  * predicate is GIN-index-backed; the outer keyset filter walks the bounded ranked
  * page.
  */
@@ -145,6 +149,14 @@ export async function searchSiteContent(
   const cursorRank = options.cursor?.rank ?? null;
   const cursorId = options.cursor?.id ?? null;
   const termFilter = buildTermFilterOperand(options.termFilters);
+  const tsQueryText = buildPrefixTsQuery(options.query);
+  // No word tokens (pure punctuation/symbols survived length-only
+  // normalization): skip the database. This is an OPTIMIZATION, not a security
+  // control: a tsquery that is empty on the database side matches nothing
+  // anyway (pinned through the DB path in the integration tests).
+  if (tsQueryText === null) {
+    return { items: [], nextCursor: null };
+  }
 
   const rows = (await tx`
     SELECT ranked.resource_type, ranked.resource_id, ranked.url, ranked.title,
@@ -152,18 +164,18 @@ export async function searchSiteContent(
     FROM (
       SELECT d.resource_type, d.resource_id, d.url, d.title, d.locale,
              d.id::text AS id_text,
-             ts_rank(d.search_vector, websearch_to_tsquery('simple', ${options.query}))
+             ts_rank(d.search_vector, to_tsquery('simple', ${tsQueryText}))
                * d.weight AS rank,
              ts_headline(
                'simple',
                coalesce(nullif(d.body_text, ''), d.summary, d.title),
-               websearch_to_tsquery('simple', ${options.query}),
+               to_tsquery('simple', ${tsQueryText}),
                ${SNIPPET_HEADLINE_OPTIONS}
              ) AS snippet
       FROM awcms_site_search_documents d
       WHERE d.tenant_id = ${tenantId}
         AND d.locale = ${options.locale}
-        AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
+        AND d.search_vector @@ to_tsquery('simple', ${tsQueryText})
         AND (${typeFilter}::text IS NULL OR d.resource_type = ${typeFilter})
         AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
         AND (${termFilter}::jsonb IS NULL OR d.term_facets @> ${termFilter}::jsonb)
@@ -257,7 +269,8 @@ async function countTermFacetRows(
   tenantId: string,
   options: FacetCountOptions,
   allowedTypesParam: unknown,
-  exclude: string | null
+  exclude: string | null,
+  tsQueryText: string
 ): Promise<TermFacetRow[]> {
   const typeFilter = options.resourceType ?? null;
   const termFilter = buildTermFilterOperand(
@@ -274,7 +287,7 @@ async function countTermFacetRows(
     CROSS JOIN LATERAL jsonb_array_elements(d.term_facets) AS f(value)
     WHERE d.tenant_id = ${tenantId}
       AND d.locale = ${options.locale}
-      AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
+      AND d.search_vector @@ to_tsquery('simple', ${tsQueryText})
       AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
       AND (${typeFilter}::text IS NULL OR d.resource_type = ${typeFilter})
       AND (${termFilter}::jsonb IS NULL OR d.term_facets @> ${termFilter}::jsonb)
@@ -307,7 +320,7 @@ async function countTermFacetRows(
  *     filter, and no way to fold them into the first.
  *
  * Every other predicate is shared with `searchSiteContent`, character for
- * character: same tenant, same locale, same `websearch_to_tsquery`, same
+ * character: same tenant, same locale, same `buildPrefixTsQuery`-built `to_tsquery`, same
  * admitted-type allow-list. A facet count derived from a wider predicate than
  * the results would advertise documents the reader cannot reach.
  *
@@ -331,13 +344,19 @@ export async function countSearchFacets(
   const allowedTypesParam =
     allowedTypes === null ? null : tx.array(allowedTypes, "text");
   const typeFacetTermFilter = buildTermFilterOperand(options.termFilters);
+  const tsQueryText = buildPrefixTsQuery(options.query);
+  // Same early exit as `searchSiteContent` (an optimization, not a control):
+  // the facets must describe EXACTLY the result set the query returns.
+  if (tsQueryText === null) {
+    return { resourceTypes: [], terms: {} };
+  }
 
   const rows = (await tx`
     SELECT d.resource_type AS value, count(*)::int AS count
     FROM awcms_site_search_documents d
     WHERE d.tenant_id = ${tenantId}
       AND d.locale = ${options.locale}
-      AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
+      AND d.search_vector @@ to_tsquery('simple', ${tsQueryText})
       AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
       AND (${typeFacetTermFilter}::jsonb IS NULL OR d.term_facets @> ${typeFacetTermFilter}::jsonb)
     GROUP BY d.resource_type
@@ -377,7 +396,8 @@ export async function countSearchFacets(
     tenantId,
     options,
     allowedTypesParam,
-    null
+    null,
+    tsQueryText
   );
   collect(
     baseRows.filter((row) => !activeTermFacets.includes(row.facet)),
@@ -386,7 +406,14 @@ export async function countSearchFacets(
 
   for (const facet of activeTermFacets) {
     collect(
-      await countTermFacetRows(tx, tenantId, options, allowedTypesParam, facet),
+      await countTermFacetRows(
+        tx,
+        tenantId,
+        options,
+        allowedTypesParam,
+        facet,
+        tsQueryText
+      ),
       facet
     );
   }

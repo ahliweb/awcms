@@ -2,6 +2,7 @@ import { fail, ok } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import { cancelWhatsappMessage } from "../../../../../../modules/whatsapp-delivery/application/whatsapp-enqueue";
+import { resolveMessageScopeKeys } from "../../../../../../modules/whatsapp-delivery/application/whatsapp-message-scope";
 import { isWhatsappRecordId } from "../../../../../../modules/whatsapp-delivery/domain/whatsapp-record-id";
 
 /**
@@ -23,7 +24,8 @@ export const POST = defineTenantRoute({
     activityCode: "messages",
     action: "cancel"
   },
-  handler: async ({ tx, tenantId, auth, params, locals }) => {
+  handler: async (context) => {
+    const { tx, tenantId, auth, params, locals } = context;
     const messageId = params.id;
 
     if (!isWhatsappRecordId(messageId)) {
@@ -34,7 +36,20 @@ export const POST = defineTenantRoute({
       );
     }
 
-    const result = await cancelWhatsappMessage(tx, tenantId, messageId);
+    // Business-scope confinement of the ROW (Issue #1265): a caller confined to
+    // brand A cancels only messages whose own scope they hold; another brand's
+    // and an unscoped message fall through to the same refusal as an unknown id.
+    const scopeKeys = await resolveMessageScopeKeys(context, {
+      moduleKey: "whatsapp_delivery",
+      activityCode: "messages",
+      action: "cancel"
+    });
+    const result = await cancelWhatsappMessage(
+      tx,
+      tenantId,
+      messageId,
+      scopeKeys
+    );
 
     if (!result.cancelled) {
       // One answer for "no such message", "already sent/failed/cancelled" and

@@ -46,8 +46,8 @@ const EMPTY_FACETS = { resourceTypes: [], terms: {} };
 /**
  * `GET /api/v1/site-search/query` (ADR-0040 §5) — the PUBLIC, anonymous JSON
  * search endpoint. Tenant is resolved from the request host (never a
- * session/header), the query text is a bound parameter into
- * `websearch_to_tsquery` (no SQL injection), snippets are escaped before any HTML
+ * session/header), the query is tokenized and bound as ONE parameter into
+ * `to_tsquery` (no SQL or tsquery-operator injection; last token prefix-matched), snippets are escaped before any HTML
  * is emitted (no XSS), and the endpoint is per-IP rate-limited,
  * query-length-bounded, and result-capped. Every non-resolving/disabled/short
  * outcome returns the same neutral empty payload — never leak WHY.

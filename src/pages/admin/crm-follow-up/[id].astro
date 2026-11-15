@@ -1,0 +1,662 @@
+---
+/**
+ * One follow-up task — state, history, staff notices and the actions a staff
+ * member needs (Issue #1165, ADR-0159).
+ *
+ * ## What it shows
+ *
+ * Only what the module holds: a tenant-authored title, closed codes, instants,
+ * the opaque lead id, the append-only action history, the staff notices and
+ * their closed settlement, and the lead's stop signals. A staff member is
+ * "You" or "Another staff member", never resolved to a name. Nothing about the
+ * prospect is stored, so nothing about the prospect can be shown.
+ *
+ * ## The actions, and why each one is there
+ *
+ * Every control calls an endpoint that already audits, and is rendered only
+ * when the caller holds that endpoint's permission (the endpoint stays the
+ * authority):
+ *
+ *   - complete (with a closed outcome) and cancel need `tasks.update`;
+ *   - "stop follow-up for this lead" needs `stop_signals.create` (high-risk).
+ *
+ * Every write carries an `Idempotency-Key`; the task writes also carry
+ * `expectedVersion`, so two staff acting on one task get exactly one winner and
+ * a "someone else changed it" message for the other. While the tenant's own
+ * switch is off the endpoints answer `409`, so the controls are shown DISABLED
+ * with the reason. "Reassign" is shown disabled too: no endpoint moves a task
+ * by hand (a lead-owner task follows the lead's owner).
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  actionKindLabel,
+  assigneeModeLabel,
+  noticeKindLabel,
+  noticeSettleLabel,
+  noticeStatusLabel,
+  reasonLabel,
+  stopKindLabel,
+  taskOutcomeLabel,
+  taskStatusLabel,
+  taskStatusTone,
+  triggerKindLabel
+} from "../../../lib/i18n/labels/crm-follow-up";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { asUuid } from "../../../modules/crm-follow-up/application/route-support";
+import { loadTaskDetail } from "../../../modules/crm-follow-up/application/screen-loaders";
+import {
+  LIVE_TASK_STATUSES,
+  STAFF_STOP_KINDS,
+  TASK_OUTCOMES
+} from "../../../modules/crm-follow-up/domain/crm-follow-up-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-follow-up";
+const taskId = asUuid(Astro.params.id);
+
+/**
+ * The three guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to
+ * `CRM_FOLLOW_UP_GUARDS` and to the endpoint that enforces it.
+ */
+const READ_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "tasks",
+  action: "read"
+} as const;
+const UPDATE_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "tasks",
+  action: "update"
+} as const;
+const STOP_GUARD = {
+  moduleKey: "crm_follow_up",
+  activityCode: "stop_signals",
+  action: "create"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    // The lookup chain is the module's loader (see `screen-loaders.ts`): the
+    // behavioural integration test runs it as a limited viewer.
+    loadTaskDetail({
+      context: { tx, tenantId: ssr.tenantId, auth, now: new Date() },
+      taskId,
+      updateGuard: UPDATE_GUARD,
+      stopGuard: STOP_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-follow-up/[id].astro: failed to load a task",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const detail = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const task = detail?.task ?? null;
+const live =
+  task !== null &&
+  (LIVE_TASK_STATUSES as readonly string[]).includes(task.status);
+const writable = live && detail?.tenantEnabled === true;
+
+function actorText(id: string | null): string {
+  if (id === null) return t("System");
+
+  return id === detail?.me ? t("You") : t("Another staff member");
+}
+
+const assigneeText =
+  task === null || task.assigneeTenantUserId === null
+    ? t("Unassigned")
+    : task.assigneeTenantUserId === detail?.me
+      ? t("You")
+      : t("Another staff member");
+---
+
+<AdminLayout
+  title={t("Follow-up task")}
+  description={t(
+    "State, history and actions of one follow-up task. Nothing about the prospect is shown."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the worklist")}</a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-task-denied">
+      {t("You do not have permission to view follow-up tasks.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-task-error">
+      {t("The task could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-task-disabled">
+      {t("Follow-up tasks are switched off on this deployment.")}
+    </p>
+  )}
+
+  {canRead && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="crm-follow-up-task-not-found">
+      {t("That task was not found.")}
+    </p>
+  )}
+
+  {detail && task && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-task-title"
+        id="crm-follow-up-task"
+        data-task-id={task.id}
+        data-lead-id={task.leadId}
+        data-version={task.version}
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-task-title">
+          {task.title}
+        </h2>
+
+        <p
+          id="crm-follow-up-task-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <dl class="admin-detail-list" id="crm-follow-up-task-summary">
+          <dt>{t("Status")}</dt>
+          <dd data-status={task.status}>
+            <span
+              class="admin-status-pill"
+              data-tone={taskStatusTone(task.status)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {taskStatusLabel(t, task.status)}
+            </span>
+            {task.overdue && (
+              <span class="admin-status-pill" data-tone="danger">
+                <span class="admin-status-pill-dot" aria-hidden="true" />
+                {t("Overdue")}
+              </span>
+            )}
+          </dd>
+          <dt>{t("Assignee")}</dt>
+          <dd>
+            {assigneeText}
+            <span class="cell-muted">
+              {" "}
+              ({assigneeModeLabel(t, task.assigneeMode)})
+            </span>
+          </dd>
+          <dt>{t("Due")}</dt>
+          <dd>{formatUtcMinute(task.dueAt)}</dd>
+          <dt>{t("Escalates")}</dt>
+          <dd>
+            {task.escalatedAt !== null
+              ? t("Escalated at {time}", {
+                  time: formatUtcMinute(task.escalatedAt)
+                })
+              : formatUtcMinute(task.escalateAt)}
+          </dd>
+          <dt>{t("Started by")}</dt>
+          <dd>{triggerKindLabel(t, task.triggerKind)}</dd>
+          <dt>{t("Lead")}</dt>
+          <dd>
+            <span class="cell-muted">{task.leadId}</span>
+          </dd>
+          {task.outcome !== null && (
+            <>
+              <dt>{t("Outcome")}</dt>
+              <dd>{taskOutcomeLabel(t, task.outcome)}</dd>
+            </>
+          )}
+          {task.cancelReason !== null && (
+            <>
+              <dt>{t("Cancelled because")}</dt>
+              <dd>{reasonLabel(t, task.cancelReason)}</dd>
+            </>
+          )}
+          {task.closedAt !== null && (
+            <>
+              <dt>{t("Closed")}</dt>
+              <dd>
+                {formatUtcMinute(task.closedAt)}
+                {task.closedBy !== null && (
+                  <span class="cell-muted"> {actorText(task.closedBy)}</span>
+                )}
+              </dd>
+            </>
+          )}
+          <dt>{t("Created")}</dt>
+          <dd>{formatUtcMinute(task.createdAt)}</dd>
+        </dl>
+      </section>
+
+      {(detail.canUpdate || detail.canStop) && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-follow-up-actions-title"
+        >
+          <h2 class="admin-section-title" id="crm-follow-up-actions-title">
+            {t("Actions")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "This module sends nothing to the lead. Staff notices go out by e-mail; contact the lead through your own channel, then record the result here."
+            )}
+          </p>
+
+          {!detail.tenantEnabled && (
+            <p class="state-notice" id="crm-follow-up-task-tenant-off">
+              {t(
+                "Follow-up is switched off for this organisation, so tasks cannot be completed or cancelled and stops cannot be recorded."
+              )}
+            </p>
+          )}
+
+          {detail.canUpdate && (
+            <>
+              {!live && (
+                <p class="cell-muted" id="crm-follow-up-task-closed">
+                  {t("This task is closed and cannot be changed.")}
+                </p>
+              )}
+              <form
+                id="crm-follow-up-complete-form"
+                class="admin-form"
+                data-follow-up-form="complete"
+              >
+                <label class="field-label" for="crm-follow-up-outcome">
+                  {t("Outcome")}
+                </label>
+                <select
+                  class="field-input"
+                  id="crm-follow-up-outcome"
+                  name="outcome"
+                  disabled={!writable}
+                >
+                  {TASK_OUTCOMES.map((outcome) => (
+                    <option value={outcome}>
+                      {taskOutcomeLabel(t, outcome)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  class="btn btn-primary"
+                  type="submit"
+                  disabled={!writable}
+                >
+                  {t("Complete task")}
+                </button>
+              </form>
+              <p>
+                <button
+                  class="btn btn-secondary js-follow-up-cancel"
+                  type="button"
+                  disabled={!writable}
+                >
+                  {t("Cancel task")}
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  disabled
+                  aria-describedby="crm-follow-up-reassign-why"
+                >
+                  {t("Reassign")}
+                </button>
+              </p>
+              <p class="cell-muted" id="crm-follow-up-reassign-why">
+                {t(
+                  "Not available: a task follows the lead's owner (or the rule's fixed person). Change the lead's owner to move it."
+                )}
+              </p>
+            </>
+          )}
+
+          {detail.canStop && (
+            <form
+              id="crm-follow-up-stop-form"
+              class="admin-form"
+              data-follow-up-form="stop"
+            >
+              <label class="field-label" for="crm-follow-up-stop-kind">
+                {t("Stop follow-up for this lead")}
+              </label>
+              <select
+                class="field-input"
+                id="crm-follow-up-stop-kind"
+                name="kind"
+                disabled={!detail.tenantEnabled}
+              >
+                {STAFF_STOP_KINDS.map((kind) => (
+                  <option value={kind}>{stopKindLabel(t, kind)}</option>
+                ))}
+              </select>
+              <p class="cell-muted">
+                {t(
+                  "A stop is permanent. It cancels every open task of this lead and its waiting notices, and no new task is created for the lead."
+                )}
+              </p>
+              <button
+                class="btn btn-secondary"
+                type="submit"
+                disabled={!detail.tenantEnabled}
+              >
+                {t("Record stop")}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-history-title"
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-history-title">
+          {t("History")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-follow-up-history-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-follow-up-history-table"
+          >
+            <caption id="crm-follow-up-history-caption">
+              {tn(
+                "{count} history entry (oldest first)",
+                "{count} history entries (oldest first)",
+                detail.actions.length,
+                { count: detail.actions.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("What")}</th>
+                <th scope="col">{t("By")}</th>
+                <th scope="col">{t("Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.actions.length === 0 ? (
+                <tr>
+                  <td colspan={4}>
+                    <span class="cell-muted">{t("No history yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                detail.actions.map((entry) => (
+                  <tr data-action-kind={entry.action}>
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(entry.occurredAt)}
+                    </td>
+                    <td data-label={t("What")}>
+                      {actionKindLabel(t, entry.action)}
+                    </td>
+                    <td data-label={t("By")}>
+                      {actorText(entry.actorTenantUserId)}
+                    </td>
+                    <td data-label={t("Detail")}>
+                      {reasonLabel(t, entry.reason) || "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-notices-title"
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-notices-title">
+          {t("Staff notices")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-follow-up-notices-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-follow-up-notices-table"
+          >
+            <caption id="crm-follow-up-notices-caption">
+              {tn(
+                "{count} staff notice",
+                "{count} staff notices",
+                detail.notifications.length,
+                { count: detail.notifications.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Notice")}</th>
+                <th scope="col">{t("Recipient")}</th>
+                <th scope="col">{t("Scheduled")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.notifications.length === 0 ? (
+                <tr>
+                  <td colspan={5}>
+                    <span class="cell-muted">
+                      {t("No staff notice was scheduled for this task.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                detail.notifications.map((notice) => (
+                  <tr data-notice-status={notice.status}>
+                    <td data-label={t("Notice")}>
+                      {noticeKindLabel(t, notice.kind)}
+                    </td>
+                    <td data-label={t("Recipient")}>
+                      {actorText(notice.recipientTenantUserId)}
+                    </td>
+                    <td data-label={t("Scheduled")}>
+                      {formatUtcMinute(notice.scheduledAt)}
+                    </td>
+                    <td data-label={t("Status")}>
+                      {noticeStatusLabel(t, notice.status)}
+                    </td>
+                    <td data-label={t("Detail")}>
+                      {noticeSettleLabel(t, notice.settleReason) || "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-stops-title"
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-stops-title">
+          {t("Stop signals for this lead")}
+        </h2>
+        {detail.stopSignals.length === 0 ? (
+          <p class="cell-muted" id="crm-follow-up-stops-none">
+            {t("Follow-up for this lead has not been stopped.")}
+          </p>
+        ) : (
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="crm-follow-up-stops-title"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="crm-follow-up-stops-table"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">{t("Stopped because")}</th>
+                  <th scope="col">{t("Recorded")}</th>
+                  <th scope="col">{t("By")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.stopSignals.map((signal) => (
+                  <tr data-stop-kind={signal.kind}>
+                    <td data-label={t("Stopped because")}>
+                      {stopKindLabel(t, signal.kind)}
+                    </td>
+                    <td data-label={t("Recorded")}>
+                      {formatUtcMinute(signal.recordedAt)}
+                    </td>
+                    <td data-label={t("By")}>
+                      {signal.recordedBy === null
+                        ? t("Lead event")
+                        : actorText(signal.recordedBy)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+
+  const actionError = messageBox("crm-follow-up-task-error-box");
+  const root = document.getElementById("crm-follow-up-task");
+  const taskId = root?.dataset.taskId ?? "";
+  const leadId = root?.dataset.leadId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  const BASE = "/api/v1/crm-follow-up";
+
+  // Every write here requires the header. One key per distinct (url, body): a
+  // retry replays, a different request gets a new key.
+  const keyFor = createIdempotencyKeySource();
+
+  function failure(errorCode: string | null): string {
+    switch (errorCode) {
+      case "VERSION_CONFLICT":
+        return "Someone else changed this task. Reload the page and try again.";
+      case "TASK_CLOSED":
+        return "This task is already closed.";
+      case "CRM_FOLLOW_UP_TENANT_DISABLED":
+        return "Follow-up is switched off for this organisation.";
+      case "RESOURCE_NOT_FOUND":
+        return "That task or lead is no longer available.";
+      case "INTERACTIVE_SESSION_REQUIRED":
+        return "This needs a signed-in person.";
+      default:
+        return "Could not save the change. Please try again.";
+    }
+  }
+
+  function post(url: string, body: Record<string, unknown>) {
+    return sendJson("POST", url, body, {
+      "Idempotency-Key": keyFor({ url, body })
+    });
+  }
+
+  onSubmit("crm-follow-up-complete-form", async ({ data, submit }) => {
+    const url = `${BASE}/tasks/${taskId}/complete`;
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        post(url, {
+          outcome: String(data.get("outcome") ?? ""),
+          expectedVersion: version
+        }),
+      failure
+    );
+  });
+
+  onAction(".js-follow-up-cancel", async (button) => {
+    const url = `${BASE}/tasks/${taskId}/cancel`;
+
+    if (
+      !(await confirmAction(
+        "Cancel this task? It is closed for good and its waiting notices are cancelled."
+      ))
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => post(url, { expectedVersion: version }),
+      failure
+    );
+  });
+
+  onSubmit("crm-follow-up-stop-form", async ({ data, submit }) => {
+    const url = `${BASE}/leads/${leadId}/stop-signals`;
+
+    if (
+      !(await confirmAction(
+        "Stop follow-up for this lead? A stop is permanent: it cancels every open task and waiting notice of the lead."
+      ))
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () => post(url, { kind: String(data.get("kind") ?? "") }),
+      failure
+    );
+  });
+</script>

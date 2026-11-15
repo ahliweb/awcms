@@ -1,0 +1,27 @@
+{
+  "sourceRepo": "ahliweb/omes",
+  "area": "compatibility",
+  "version": "v1",
+  "sourceCommit": "c9940822523996ee184a25e063f36143389669e2",
+  "files": {
+    "consumer-scenarios.json": "15bbe6a5fcad26d2e0bb51c88771e3de21e2cfeb9dd149a1fec4d82313f30566",
+    "fixtures/worker-compatibility-manifest/invalid-additional-property.json": "fdd4d879305f700a6c079b3619e1332b09c3d555329a60b8f1102442fb5ad93b",
+    "fixtures/worker-compatibility-manifest/invalid-additional-property.reason.txt": "65110ea3b8b62b0c09742c368bf1527f0978b06dff7a1371ef7b4c98e244d91a",
+    "fixtures/worker-compatibility-manifest/invalid-claims-signature.json": "e4e6ef889606f66364a6fcb3c1fb40385d11444b05c510fa746891736c791828",
+    "fixtures/worker-compatibility-manifest/invalid-claims-signature.reason.txt": "df6537e6d9c11f639237946113697a7a51deed6fc4dfe46765c308340acfedfa",
+    "fixtures/worker-compatibility-manifest/invalid-digest-shape.json": "0f6198ab0a6a105e009c9b1773e6617175ec5a7d6b500c898c436919417199be",
+    "fixtures/worker-compatibility-manifest/invalid-digest-shape.reason.txt": "fdd33d7bf8cc80f223e30b4aa6c2ad705ffc7cf1a77697f37ed7232bc74484b0",
+    "fixtures/worker-compatibility-manifest/invalid-fetch-at-boot.json": "f0773fce945a34914b02f3b932101c69279708842188f31e78cbe19cd82e864a",
+    "fixtures/worker-compatibility-manifest/invalid-fetch-at-boot.reason.txt": "9afd096fba1a0df6319527cbfb5b75b6df79049fdfbf41029dd9370548860be4",
+    "fixtures/worker-compatibility-manifest/invalid-missing-control-contract.json": "4f2ca36e89a8e2976858334893926d62604111e0cfb62d33dada369cb2dd05b0",
+    "fixtures/worker-compatibility-manifest/invalid-missing-control-contract.reason.txt": "12b59fb43ead612116e4f664285154ad1ef4a4801340b9cf6cf389099783cbfb",
+    "fixtures/worker-compatibility-manifest/invalid-secret-field.json": "8e8ba52802b3b200ac8420e42c0a5ca9ea0ddc1e17ae8114745338a56d4f4ff3",
+    "fixtures/worker-compatibility-manifest/invalid-secret-field.reason.txt": "890e8cf8b4947b569a49b9c77491209defea87a32330a50c5407e1386a2a890c",
+    "fixtures/worker-compatibility-manifest/invalid-unknown-schema-version.json": "29741c29116a294ed7c2493505c4ed6a31f53cb723dd71665252591513a4056d",
+    "fixtures/worker-compatibility-manifest/invalid-unknown-schema-version.reason.txt": "ca5544f1866df4bf5eeaa3d76676aae575ffe1431704915dbe9b78323383dc59",
+    "fixtures/worker-compatibility-manifest/valid-stable-installer-and-verified-build.json": "8fbf0d99336f450e0f6b81651a7a3f53d5894bdc1ff67d17df5eb9728c11bafb",
+    "fixtures/worker-compatibility-manifest/valid-stable.json": "13be4252eb864347c03de0c30447c7d7c695021eed6b49825ec9db523bfb3fef",
+    "fixtures/worker-compatibility-manifest/valid-unreleased.json": "71defc9419748feafd150b0eff270716504bcfef23a34da5060db54212a1c823",
+    "worker-compatibility-manifest.schema.json": "351f3e4622e38c5c2d2866da44500f963c81c1e91181e65c1e629b896cb047ab"
+  }
+}

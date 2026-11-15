@@ -79,6 +79,16 @@ export const emailModule = defineModule({
       path: "/admin/email-suppression",
       order: 33,
       requiredPermission: "email.suppression.read"
+    },
+    // Issue #1162. The operations view of the Mailketing accounts and sender
+    // identities (verification, credit, freshness, queue, default sender); it
+    // reuses the screens beside it rather than duplicating them. 34 follows 33
+    // so the sidebar keeps a stable order within the email group.
+    {
+      labelKey: "admin.layout.nav_email_senders",
+      path: "/admin/email-senders",
+      order: 34,
+      requiredPermission: "email.senders.read"
     }
   ],
   /**

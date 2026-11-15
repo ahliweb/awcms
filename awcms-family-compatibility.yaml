@@ -265,10 +265,10 @@ stack:
       declared: "1.3.0"
       source: .github/workflows/ci.yml minimum-supported job setup-bun (== engines floor)
   astro:
-    declared: "^7.4.7"
+    declared: "^7.4.12"
     source: package.json dependencies.astro
   astroNode:
-    declared: "^11.1.11"
+    declared: "^11.1.13"
     source: package.json dependencies["@astrojs/node"]
   typescript:
     declared: "^7.0.2"

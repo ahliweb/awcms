@@ -276,19 +276,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // which claims BOTH keys (`sender_policy.configure` for the action,
   // `senders.read` for the "is this the default" readout and queue impact) and
   // so they leave this ledger. `/admin/whatsapp` stays gated on `messages.read`.
-  // website_engagement (5) — ADR-0155 / Issue #1153. API-first and
-  // `experimental`: the operator screen (sources and their hosts, a one-time
-  // token display, the masked submission list with its consent provenance, the
-  // audited reveal and the withdrawal) is the recorded follow-up that flips the
-  // module to `active` and adds its navigation entry in the same change (a nav
-  // entry without a page is a permanent 404). The WCAG contract of that screen
-  // (the source token is shown ONCE; the `none` challenge must be visible) is in
-  // docs/awcms/website-engagement.md.
-  "website_engagement.sources.manage",
-  "website_engagement.sources.read",
-  "website_engagement.submissions.read",
+  // website_engagement (1) — ADR-0155 / Issue #1153. `/admin/website-engagement`
+  // (and its `/{id}` and `/sources`) claim `sources.read`, `sources.manage`
+  // (revoke), `submissions.read` and `submissions.withdraw`, so those four left
+  // this ledger. What remains is the audited REVEAL of a submission's decrypted
+  // contact details: it needs its own screen contract (a deliberate, per-row,
+  // audited POST that renders personal data once), and is API-only until then.
   "website_engagement.submissions.reveal",
-  "website_engagement.submissions.withdraw",
   // social_publishing (9) — ADR-0157 / Issue #1145. API-first and
   // `experimental`: the operator screen (the publication list with its derived
   // status, the per-account job table where a partial failure is read, the
@@ -307,32 +301,28 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "social_publishing.rules.configure",
   "social_publishing.rules.read",
   "social_publishing.settings.configure",
-  // crm_leads (11) — ADR-0153 / Issue #1166. API-first and `experimental`: the
-  // operator screen (pipeline and revision editor with stage categories and
-  // edge guards, the lead list with masked contact points, the lead detail with
-  // its transition history, candidates, merge review with undo, conversions and
-  // the tenant switch) is the recorded follow-up that flips the module to
-  // `active` and adds its navigation entry in the same change (a nav entry
-  // without a page is a permanent 404). SYSTEM admin, built here.
+  // crm_leads (7) — ADR-0153 / Issue #1166. The lead list, the lead detail
+  // (move, assign) and the settings (tenant switch, catalogue view) are
+  // screened and claim `leads.read`, `leads.assign`, `stages.update` and
+  // `pipelines.configure`. The seven below have an endpoint and NO control yet:
+  // creating or editing a lead (contact points), merge review with undo,
+  // recording or reversing a conversion, soft delete and restore. Each is a
+  // form or a review flow of its own; the follow-up that screens one removes
+  // its key here in the same change. SYSTEM admin, built here.
   "crm_leads.conversions.approve",
-  "crm_leads.leads.assign",
   "crm_leads.leads.create",
   "crm_leads.leads.delete",
-  "crm_leads.leads.read",
   "crm_leads.leads.restore",
   "crm_leads.leads.update",
   "crm_leads.manual_conversions.create",
   "crm_leads.merges.manage",
-  "crm_leads.pipelines.configure",
-  "crm_leads.stages.update",
 
-  // email sender routing (3) — Issue #1160, ADR-0151 section 2. API-first:
-  // the operator screen (accounts with the v2 badge, verified senders, credit,
-  // queue status, last sync, the default-sender policy and the migration
-  // warning, ADR-0151 section 7) is Issue #1162, which claims these keys and
-  // removes them from this ledger in the same change.
-  "email.sender_policy.configure",
-  "email.senders.read",
+  // email sender routing — Issue #1160, ADR-0151 section 2. The operator
+  // screen is `/admin/email-senders` (Issue #1162), which claims
+  // `email.senders.read` and `email.sender_policy.configure`. Only
+  // `email.senders.use` stays: it is the permission to SEND as a tenant sender,
+  // exercised by the announcement route and enqueue paths, not a control a page
+  // drives.
   "email.senders.use",
   // telegram_engagement (5) — ADR-0152 / Issue #1156. API-first and
   // `experimental`: the operator screen (the bot list with webhook state and
@@ -346,17 +336,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "telegram_engagement.contacts.delete",
   "telegram_engagement.contacts.read",
   "telegram_engagement.messages.create",
-  // crm_follow_up (5) — ADR-0159 (Proposed) / Issue #1165. API-first and
-  // `experimental`: the operator screens (the worklist and overdue queue with
-  // complete/cancel, the rule editor with its revision history and simulation,
-  // a lead's stop signals, the tenant switch) are the recorded follow-up that
-  // flips the module to `active` and adds its navigation entry in the same
-  // change. SYSTEM admin, built here.
-  "crm_follow_up.rules.configure",
-  "crm_follow_up.rules.read",
-  "crm_follow_up.stop_signals.create",
-  "crm_follow_up.tasks.read",
-  "crm_follow_up.tasks.update",
 
   // email Mailketing webhook (3) — Issue #1161, ADR-0151 section 5. API-first:
   // the callback URL management and the quarantine review queue ("provider-

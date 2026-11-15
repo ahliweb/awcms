@@ -1,0 +1,313 @@
+---
+/**
+ * Website engagement — the registered websites ("sources") (Issue #1153,
+ * ADR-0155 sections 2, 3 and 8).
+ *
+ * ## What it shows
+ *
+ * Each source a tenant registered: its code and name, status, the hosts it
+ * accepts submissions from (the provenance check is the request's verified
+ * Origin host against these), the kinds it accepts, the consent copy version it
+ * currently shows, and its access token as a six-character PREFIX plus when it
+ * was last rotated. The challenge column says what the source is configured for
+ * AND what it actually gets on this deployment: a source set to Turnstile on a
+ * deployment that does not run it relies on the other controls alone, and an
+ * administrator must be able to see that rather than assume a challenge ran.
+ *
+ * ## What it never shows
+ *
+ * The token or its hash. Only the prefix exists in the view the loader reads
+ * (`SourceView` has no such field), and the token itself is shown exactly once
+ * by the create and rotate endpoints.
+ *
+ * ## Actions
+ *
+ * Revoke only: one-way, no body, audited by the endpoint, behind
+ * `sources.manage` and an explicit confirmation. Creating a source, editing its
+ * hosts, pausing it and rotating its token need a one-time token display and
+ * are API-only for now (recorded in the module README).
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  challengeModeLabel,
+  sourceStatusLabel,
+  sourceStatusTone,
+  submissionKindLabel
+} from "../../../lib/i18n/labels/website-engagement";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { loadSourceList } from "../../../modules/website-engagement/application/screen-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/** Literal guards for `admin:screen-coverage:check`; held equal to the module's own by the page-contract test. */
+const READ_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "sources",
+  action: "read"
+} as const;
+const MANAGE_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "sources",
+  action: "manage"
+} as const;
+
+const PATH = "/admin/website-engagement";
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, can }) =>
+    loadSourceList({
+      tx,
+      tenantId: ssr.tenantId,
+      manageGuard: MANAGE_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/website-engagement/sources.astro: failed to load the sources",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const sources = data?.sources ?? [];
+---
+
+<AdminLayout
+  title={t("Website sources")}
+  description={t(
+    "The websites registered to post submissions, the hosts they may post from and how each is protected."
+  )}
+>
+  <p class="page-description">
+    <a href={PATH} id="website-engagement-back">
+      {t("Back to submissions")}
+    </a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="website-engagement-denied">
+      {t("You do not have permission to view website sources.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="website-engagement-error">
+      {t("The sources could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="website-engagement-sources-title"
+    >
+      <h2 class="admin-section-title" id="website-engagement-sources-title">
+        {t("Sources")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "A submission is accepted only with the source's access token and from one of its hosts. The token itself is never shown again after it was created or rotated: only its first characters are listed so you can tell which token a website uses."
+        )}
+      </p>
+
+      {!data.intakeAvailable && (
+        <p class="state-notice" id="website-engagement-intake-unavailable">
+          {t(
+            "The key configuration for website engagement is not valid on this deployment, so new submissions are being refused."
+          )}
+        </p>
+      )}
+
+      <p
+        id="website-engagement-action-error"
+        class="admin-create-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      ></p>
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="website-engagement-sources-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="website-engagement-sources-table"
+          data-busy={t("Please wait…")}
+          data-confirm={t(
+            "Revoke the source {name}? Its website stops being able to post submissions, and this cannot be undone."
+          )}
+          data-failed={t("Could not revoke the source. Please try again.")}
+          data-forbidden={t("You do not have permission to do that.")}
+          data-not-found={t(
+            "That source no longer exists, or you cannot act on it."
+          )}
+          data-person-only={t(
+            "Revoking needs a signed-in person; a machine credential cannot do it."
+          )}
+        >
+          <caption id="website-engagement-sources-caption">
+            {tn("{count} source", "{count} sources", sources.length, {
+              count: sources.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Accepted hosts")}</th>
+              <th scope="col">{t("Accepts")}</th>
+              <th scope="col">{t("Consent copy version")}</th>
+              <th scope="col">{t("Anti-abuse challenge")}</th>
+              <th scope="col">{t("Access token")}</th>
+              {data.canManage && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {sources.length === 0 ? (
+              <tr>
+                <td colspan={data.canManage ? 8 : 7}>
+                  {t(
+                    "No website is registered yet. Sources are created through the API."
+                  )}
+                </td>
+              </tr>
+            ) : (
+              sources.map((source) => (
+                <tr data-source-id={source.id}>
+                  <td data-label={t("Source")}>
+                    <span class="cell-code">{source.code}</span>
+                    <span class="cell-muted"> {source.name}</span>
+                  </td>
+                  <td data-label={t("Status")} data-status={source.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={sourceStatusTone(source.status)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {sourceStatusLabel(t, source.status)}
+                    </span>
+                  </td>
+                  <td data-label={t("Accepted hosts")}>
+                    {source.domains.length === 0
+                      ? t("None: every request is refused")
+                      : source.domains
+                          .map((domain) => domain.hostname)
+                          .join(", ")}
+                  </td>
+                  <td data-label={t("Accepts")}>
+                    {source.acceptedKinds
+                      .map((kind) => submissionKindLabel(t, kind))
+                      .join(", ")}
+                  </td>
+                  <td data-label={t("Consent copy version")}>
+                    {source.consentCopyVersion}
+                  </td>
+                  <td
+                    data-label={t("Anti-abuse challenge")}
+                    data-challenge={source.challengeEffective}
+                  >
+                    {challengeModeLabel(t, source.challengeMode)}
+                    {source.challengeMode !== source.challengeEffective && (
+                      <span class="cell-muted">
+                        {" "}
+                        {t(
+                          "Not run on this deployment: the other controls apply alone."
+                        )}
+                      </span>
+                    )}
+                  </td>
+                  <td data-label={t("Access token")}>
+                    <span class="cell-code">{source.tokenPrefix}…</span>
+                    <span class="cell-muted">
+                      {" "}
+                      {t("rotated {time}", {
+                        time: formatUtcMinute(source.tokenRotatedAt)
+                      })}
+                    </span>
+                  </td>
+                  {data.canManage && (
+                    <td data-label={t("Actions")}>
+                      {source.status === "revoked" ? (
+                        <span class="cell-muted">{t("Revoked")}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          class="btn btn-danger source-revoke-btn"
+                          data-source-id={source.id}
+                          data-source-name={source.code}
+                        >
+                          {t("Revoke")}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+
+  const error = messageBox("website-engagement-action-error");
+
+  onAction(".source-revoke-btn", async (button) => {
+    const table = button.closest<HTMLElement>(
+      "#website-engagement-sources-table"
+    );
+    const say = (name: string): string => table?.dataset[name] ?? "";
+    const id = button.dataset.sourceId;
+
+    if (!id) return;
+
+    const name = button.dataset.sourceName ?? "";
+
+    if (!(await confirmAction(say("confirm").replace("{name}", name)))) return;
+
+    await mutateAndReload(
+      button,
+      error,
+      // Revoke is idempotent by state and takes no body: no key is needed.
+      () => sendJson("POST", `/api/v1/website-engagement/sources/${id}/revoke`),
+      (code) =>
+        code === "ACCESS_DENIED"
+          ? say("forbidden")
+          : code === "RESOURCE_NOT_FOUND"
+            ? say("notFound")
+            : code === "INTERACTIVE_SESSION_REQUIRED"
+              ? say("personOnly")
+              : say("failed"),
+      say("busy")
+    );
+  });
+</script>

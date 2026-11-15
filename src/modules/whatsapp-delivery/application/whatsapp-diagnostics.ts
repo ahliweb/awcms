@@ -11,6 +11,11 @@
  * template, masked recipient and the error code, which is what is returned.
  */
 
+import {
+  messageScopeFilter,
+  type MessageScopeKeys
+} from "./whatsapp-message-scope-filter";
+
 /** Every value `awcms_whatsapp_messages_status_check` allows, in lifecycle order. */
 export const WHATSAPP_MESSAGE_STATUSES = [
   "queued",
@@ -28,8 +33,10 @@ export type WhatsappMessageStatusValue =
 export type WhatsappQueueSummary = {
   countsByStatus: Record<WhatsappMessageStatusValue, number>;
   oldestPendingAt: string | null;
-  suppressions: number;
-  grantedConsents: number;
+  /** `null` for a caller confined to business scopes: tenant-wide totals are not theirs (Issue #1265). */
+  suppressions: number | null;
+  /** `null` for a caller confined to business scopes (Issue #1265). */
+  grantedConsents: number | null;
 };
 
 export type WhatsappMessageView = {
@@ -75,13 +82,25 @@ export function isWhatsappMessageStatus(
   return (WHATSAPP_MESSAGE_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * `scopeKeys` (Issue #1265): `null` is every row (callers must choose it explicitly); a list narrows the
+ * counts to rows whose own business scope is listed (see
+ * `whatsapp-message-scope.ts`). A confined caller gets `null` for the two
+ * tenant-wide totals (suppressions, granted consents) rather than a number that
+ * counts other brands.
+ */
 export async function summarizeWhatsappQueue(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  scopeKeys: MessageScopeKeys
 ): Promise<WhatsappQueueSummary> {
+  const scope = messageScopeFilter(tx, scopeKeys);
   const counts = (await tx`
     SELECT status, count(*) AS count
-    FROM awcms_whatsapp_messages WHERE tenant_id = ${tenantId}
+    FROM awcms_whatsapp_messages
+    WHERE tenant_id = ${tenantId}
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     GROUP BY status
   `) as { status: string; count: string | number }[];
 
@@ -99,7 +118,9 @@ export async function summarizeWhatsappQueue(
     SELECT
       (SELECT min(created_at) FROM awcms_whatsapp_messages
         WHERE tenant_id = ${tenantId}
-          AND status IN ('queued', 'retry_wait')) AS oldest_pending_at,
+          AND status IN ('queued', 'retry_wait')
+          AND (${scope.unconfined}::boolean
+               OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))) AS oldest_pending_at,
       (SELECT count(*) FROM awcms_whatsapp_suppressions
         WHERE tenant_id = ${tenantId}) AS suppressions,
       (SELECT count(*) FROM awcms_whatsapp_consents
@@ -113,8 +134,10 @@ export async function summarizeWhatsappQueue(
   return {
     countsByStatus,
     oldestPendingAt: isoOrNull(other[0]?.oldest_pending_at ?? null),
-    suppressions: Number(other[0]?.suppressions ?? 0),
-    grantedConsents: Number(other[0]?.granted_consents ?? 0)
+    suppressions:
+      scopeKeys === null ? Number(other[0]?.suppressions ?? 0) : null,
+    grantedConsents:
+      scopeKeys === null ? Number(other[0]?.granted_consents ?? 0) : null
   };
 }
 
@@ -141,9 +164,15 @@ type MessageRow = {
 export async function listRecentWhatsappMessages(
   tx: Bun.SQL,
   tenantId: string,
-  options: { status?: WhatsappMessageStatusValue; limit: number }
+  options: {
+    status?: WhatsappMessageStatusValue;
+    limit: number;
+    /** Issue #1265: REQUIRED; `null` is every row, chosen explicitly. */
+    scopeKeys: MessageScopeKeys;
+  }
 ): Promise<{ messages: WhatsappMessageView[]; hasMore: boolean }> {
   const status = options.status ?? null;
+  const scope = messageScopeFilter(tx, options.scopeKeys);
   const rows = (await tx`
     SELECT id, template_key, purpose, status, recipient_masked, correlation_id,
            retry_count, failure_code, last_error, provider_name,
@@ -152,6 +181,8 @@ export async function listRecentWhatsappMessages(
     FROM awcms_whatsapp_messages
     WHERE tenant_id = ${tenantId}
       AND (${status}::text IS NULL OR status = ${status})
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     ORDER BY created_at DESC, id
     LIMIT ${options.limit + 1}
   `) as MessageRow[];
@@ -194,13 +225,19 @@ type AttemptRow = {
 export async function listRecentWhatsappAttempts(
   tx: Bun.SQL,
   tenantId: string,
-  options: { limit: number }
+  options: { limit: number; scopeKeys: MessageScopeKeys }
 ): Promise<WhatsappAttemptView[]> {
+  const scope = messageScopeFilter(tx, options.scopeKeys);
   const rows = (await tx`
     SELECT id, message_id, attempt_no, outcome, provider_name,
            provider_response_snippet, error_message, created_at
-    FROM awcms_whatsapp_delivery_attempts
-    WHERE tenant_id = ${tenantId}
+    FROM awcms_whatsapp_delivery_attempts a
+    WHERE a.tenant_id = ${tenantId}
+      AND (${scope.unconfined}::boolean
+           OR EXISTS (
+             SELECT 1 FROM awcms_whatsapp_messages m
+             WHERE m.tenant_id = a.tenant_id AND m.id = a.message_id
+               AND (m.business_scope_type || ':' || m.business_scope_id::text) = ANY(${scope.keys})))
     ORDER BY created_at DESC, id
     LIMIT ${options.limit}
   `) as AttemptRow[];

@@ -2,10 +2,9 @@ import { ok } from "../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../modules/_shared/tenant-route";
 import {
   listEmailSenderPolicies,
-  summarizeEmailSenders,
-  type EmailSenderDiagnostics,
-  type EmailSenderPolicyView
+  summarizeEmailSenders
 } from "../../../../modules/email/application/email-sender-directory";
+import { filterVisibleEmailSenders } from "../../../../modules/email/application/email-sender-visibility";
 import { isEmailSenderRoutingEnabled } from "../../../../modules/email/domain/email-sender-config";
 import {
   loadEmailSenderAccess,
@@ -47,50 +46,18 @@ export const GET = defineTenantRoute({
     // Sequential: `tx` is ONE reserved connection.
     const policies = await listEmailSenderPolicies(tx, tenantId);
     const diagnostics = await summarizeEmailSenders(tx, tenantId, senders);
-    const confined = access ? await access.isConfined(context) : true;
-    const seen = new Map<string, boolean>();
-    const canSee = async (accountId: string): Promise<boolean> => {
-      if (!access) return false;
-
-      let known = seen.get(accountId);
-
-      if (known === undefined) {
-        known = await access.canUseAccount(context, GUARD, accountId, "viewer");
-        seen.set(accountId, known);
-      }
-
-      return known;
-    };
-    const visibleSenders: EmailSenderDiagnostics[] = [];
-
-    for (const entry of diagnostics) {
-      const allowed =
-        entry.senderAccountId === null
-          ? !confined
-          : await canSee(entry.senderAccountId);
-
-      if (allowed) visibleSenders.push(entry);
-    }
-
-    const visiblePolicies: EmailSenderPolicyView[] = [];
-
-    for (const policy of policies) {
-      const scopeOk =
-        policy.businessScope === null
-          ? !confined
-          : access !== null &&
-            (await access.scopeCovered(context, GUARD, policy.businessScope));
-      const senderOk =
-        policy.defaultSenderAccountId === null ||
-        (await canSee(policy.defaultSenderAccountId));
-
-      if (scopeOk && senderOk) visiblePolicies.push(policy);
-    }
+    const visible = await filterVisibleEmailSenders(
+      context,
+      GUARD,
+      access,
+      diagnostics,
+      policies
+    );
 
     return ok({
       routingEnabled: isEmailSenderRoutingEnabled(),
-      senders: visibleSenders,
-      policies: visiblePolicies
+      senders: visible.senders,
+      policies: visible.policies
     });
   }
 });
