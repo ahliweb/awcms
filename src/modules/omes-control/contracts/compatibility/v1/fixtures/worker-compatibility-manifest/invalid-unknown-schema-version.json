@@ -1,0 +1,116 @@
+{
+  "awcms_omes_control": {
+    "max_contract_version_exclusive": "2.0.0",
+    "min_contract_version": "1.0.0",
+    "verified_builds": []
+  },
+  "capability_posture": {
+    "capability_registry_digest": "sha256:0123456789abcdef",
+    "hermes_baseline": "v2026.9.24",
+    "worker_capabilities": [
+      "status",
+      "preflight",
+      "backup",
+      "restore",
+      "rollback"
+    ]
+  },
+  "channel": "stable",
+  "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "consumer_policy": {
+    "accepted_channels": [
+      "stable"
+    ],
+    "fail_closed_when_unverifiable": true,
+    "fetch_at_host_boot": false
+  },
+  "control_contract": {
+    "area": "control-center",
+    "contract_version": "1.0.0",
+    "digest": "sha256:8188160e69074d87eb658dc64a69004b0e23a8a80e97033996e5c1668ce3d3f9",
+    "files": [
+      {
+        "path": "contracts/control-center/v1/operation-request.schema.json",
+        "sha256": "2b3e682f7146d6896cac7e1e60389bbba7f1efe86e7b1442dd7ab13dffb4f18c"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-enrollment.request.schema.json",
+        "sha256": "b233de2182ecdb7655db9beda3fc132de23a1de5da4d42636bd370407daac733"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-enrollment.response.schema.json",
+        "sha256": "ee7d0ac0828505d10d5f18f07738a94de5753a2a571bf39d33cb292e9f1c7758"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-heartbeat.request.schema.json",
+        "sha256": "e52884b887d2a5c2baf1cbbde2cadde3bad9836ee94a5d65b98107d0c5779310"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-heartbeat.response.schema.json",
+        "sha256": "9ce7d7e43638681f57b0914f82674f45941f619f7543ca09a3241591e8c9eea3"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-poll.request.schema.json",
+        "sha256": "6f9c79ed63a9a2b7415a3742911ffdbd5846f7b16af02c9d84422b9322249b30"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-poll.response.schema.json",
+        "sha256": "589422f0ad179b26f9063303aa809ed768754b0ca5970cac6442c3d806d015da"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-result.request.schema.json",
+        "sha256": "a6f85dda44fb4c6cee5307504033850fccb1c05e2eb85a758cd7b3a9402ce547"
+      },
+      {
+        "path": "contracts/control-center/v1/worker-result.response.schema.json",
+        "sha256": "0789b71152acffa8a49fb8d4289d92b8240a1e7a4728dd5214c0b25e02c7943a"
+      }
+    ],
+    "major": "v1"
+  },
+  "installer": {
+    "status": "not_published"
+  },
+  "integrity": {
+    "canonicalization": "json-sorted-keys-2space-lf",
+    "signature_status": "unsigned"
+  },
+  "platform_support": {
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "os": [
+      {
+        "id": "ubuntu",
+        "versions": [
+          "22.04",
+          "24.04",
+          "26.04"
+        ]
+      },
+      {
+        "id": "linuxmint",
+        "versions": [
+          "22"
+        ]
+      }
+    ]
+  },
+  "product_version": "0.6.0-fixture",
+  "release_tag": "v0.6.0-fixture",
+  "release_time": "2026-01-01T00:00:00Z",
+  "schema_version": "2.0.0",
+  "worker_protocol": {
+    "name": "omes-pull-worker",
+    "operations": [
+      "enroll",
+      "poll",
+      "result",
+      "heartbeat"
+    ],
+    "request_signing": "not_implemented",
+    "transport": "outbound_https_pull",
+    "version": "1.0.0"
+  }
+}

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1bd1ba443d361b5895f10c1de4e593d694d4b1a0324d8a2e29a830862a36ab71 -->
+<!-- i18n-source-hash: sha256:985aab8811b76e75871d150e7e6f6bee7b4612d017a1838ffd634b462fdc5e3c -->
 
 # Identity & Access
 
@@ -489,12 +489,15 @@ permission dan cerita auditnya sendiri.
   aktif → `delivery: "unavailable"` di respons (pemanggilnya admin
   terautentikasi; menyembunyikannya hanya membuatnya menunggu tautan yang tak
   akan pernah tiba).
-- **Belum ada layar admin** untuk undangan — keempat permission-nya duduk di
-  ledger `NOT_YET_SCREENED`, urutan yang sama dengan ADR-0056 (`media_library`
-  mendapat permukaan API lebih dulu, layarnya menyusul). Path-nya sengaja tidak
-  ditulis di sini: `skills:check` menuntut tiap URL `/admin/…` berbacktick
-  resolve ke halaman nyata, dan menyebutnya sekarang akan menjadi persis
-  kebohongan percaya diri yang gerbang itu ada untuk mencegah.
+- **Layar admin** — `/admin/invitations` menampilkan, membuat, mengirim ulang, dan
+  mencabut (Issue #541); setiap keberhasilan memuat ulang halaman dan
+  mengabarkannya lewat primitif flash bersama di
+  `src/lib/ui/admin-form-client.ts`, yang hanya membawa kunci katalog melewati
+  muat-ulang dan menampilkan kalimat terjemahan milik halaman itu sendiri.
+  `/admin/users` menawarkan tautan "Undang pengguna" ke sana, hanya untuk
+  pemanggil yang memegang KEDUA `invitations.create` dan `invitations.read`
+  (tujuannya tak merender apa pun tanpa `read`). Hanya UX: endpoint yang
+  memutuskan tiap permintaan.
 
 ## Belum tersedia (Sprint 3+)
 

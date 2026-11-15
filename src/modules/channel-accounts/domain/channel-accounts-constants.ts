@@ -139,6 +139,16 @@ export const ASSIGNMENT_KINDS = ["owner", "operator", "viewer"] as const;
 
 export type ChannelAssignmentKind = (typeof ASSIGNMENT_KINDS)[number];
 
+/**
+ * Who may see and operate an account (Issue #1215 M-c). `assigned` is the
+ * default and the closed one: assignees and the tenant administrators only, and
+ * an assigned account with no assignee is administrators-only, never open.
+ * `tenant_wide` is an explicit, audited choice: the permission alone decides.
+ */
+export const ACCESS_MODES = ["assigned", "tenant_wide"] as const;
+
+export type ChannelAccessMode = (typeof ACCESS_MODES)[number];
+
 export const HEALTH_STATES = ["ok", "degraded", "failing", "unknown"] as const;
 
 export type ChannelHealthState = (typeof HEALTH_STATES)[number];

@@ -23,8 +23,9 @@
  * ## It shows exactly what the API shows
  *
  * The list runs through the SAME visibility rules as `GET /accounts` and
- * `GET /connections`: the assignment gate (an account with assignees is listed
- * to its assignees and to a tenant-wide holder of `assignments.assign`) and the
+ * `GET /connections`: the assignment gate (an `assigned` account is listed
+ * to its assignees and to a tenant-wide holder of `assignments.assign`; a
+ * `tenant_wide` one to every reader) and the
  * business-scope decision per row, taken through the access chokepoint. A
  * credential or its reference is never selected: the account view only carries
  * `hasCredential`, and a provider identity (a number, a device id) is masked.

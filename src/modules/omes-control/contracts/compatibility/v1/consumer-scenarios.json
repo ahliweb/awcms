@@ -1,0 +1,68 @@
+{
+  "description": "Synthetic consumer decision table for the OMES worker compatibility manifest (issue #352). Each scenario names a manifest fixture under fixtures/worker-compatibility-manifest/, the consumer's pinned view, and the expected reference decision. AWCMS (issue 1185) and OMES-Web deploy preflight (OMES-Web issue 20) replay this table against their own implementation. The token $FIXTURE_DIGEST stands for the control_contract.digest of the named manifest. No scenario contains a credential or a real host.",
+  "scenarios": [
+    {
+      "name": "stable release inside the declared range with matching pinned digest",
+      "manifest": "valid-stable.json",
+      "consumer": { "contract_version": "1.0.0", "contract_digest": "$FIXTURE_DIGEST" },
+      "expected": { "compatible": true, "reason_codes": [] }
+    },
+    {
+      "name": "unreleased main manifest is never accepted",
+      "manifest": "valid-unreleased.json",
+      "consumer": { "contract_version": "1.0.0", "contract_digest": "$FIXTURE_DIGEST" },
+      "expected": { "compatible": false, "reason_codes": ["unsupported_channel"] }
+    },
+    {
+      "name": "consumer vendored a different contract digest (drift)",
+      "manifest": "valid-stable.json",
+      "consumer": {
+        "contract_version": "1.0.0",
+        "contract_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": { "compatible": false, "reason_codes": ["contract_digest_mismatch"] }
+    },
+    {
+      "name": "consumer speaks a newer major contract than the host supports",
+      "manifest": "valid-stable.json",
+      "consumer": { "contract_version": "2.0.0" },
+      "expected": { "compatible": false, "reason_codes": ["contract_version_out_of_range"] }
+    },
+    {
+      "name": "consumer older than the minimum contract version",
+      "manifest": "valid-stable.json",
+      "consumer": { "contract_version": "0.9.0" },
+      "expected": { "compatible": false, "reason_codes": ["contract_version_out_of_range"] }
+    },
+    {
+      "name": "installer required but the release publishes none",
+      "manifest": "valid-stable.json",
+      "consumer": { "contract_version": "1.0.0", "require_installer": true },
+      "expected": { "compatible": false, "reason_codes": ["installer_not_published"] }
+    },
+    {
+      "name": "installer required and published with uri and sha256",
+      "manifest": "valid-stable-installer-and-verified-build.json",
+      "consumer": { "contract_version": "1.0.0", "require_installer": true },
+      "expected": { "compatible": true, "reason_codes": [] }
+    },
+    {
+      "name": "schema break: unknown manifest schema_version",
+      "manifest": "invalid-unknown-schema-version.json",
+      "consumer": { "contract_version": "1.0.0" },
+      "expected": { "compatible": false, "reason_codes": ["unknown_schema_version"] }
+    },
+    {
+      "name": "schema break: required section missing",
+      "manifest": "invalid-missing-control-contract.json",
+      "consumer": { "contract_version": "1.0.0" },
+      "expected": { "compatible": false, "reason_codes": ["manifest_invalid"] }
+    },
+    {
+      "name": "manifest carrying a credential field is unverifiable",
+      "manifest": "invalid-secret-field.json",
+      "consumer": { "contract_version": "1.0.0" },
+      "expected": { "compatible": false, "reason_codes": ["manifest_invalid"] }
+    }
+  ]
+}

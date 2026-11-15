@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/compatibility/v1/worker-compatibility-manifest.schema.json",
+  "title": "worker-compatibility-manifest",
+  "description": "Non-secret OMES worker compatibility manifest consumed by AWCMS (omes_control) and OMES-Web deploy preflight (issue #352, ADR-0036 section 4). Describes one OMES release: product version, worker protocol, pinned control-center contract digest, supported platforms and capability posture. Evidence, not authority: it grants nothing, carries no credential, and an unverifiable or unreleased manifest must be rejected by consumers (fail closed).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "channel",
+    "product_version",
+    "worker_protocol",
+    "control_contract",
+    "awcms_omes_control",
+    "installer",
+    "platform_support",
+    "capability_posture",
+    "integrity",
+    "consumer_policy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["1.0.0"] },
+    "channel": {
+      "type": "string",
+      "enum": ["stable", "unreleased"],
+      "description": "stable = built from an official published tag. unreleased = generated from a branch such as main; consumers must never accept it for deployment."
+    },
+    "product_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$"
+    },
+    "release_tag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$",
+      "description": "Required when channel is stable; absent otherwise."
+    },
+    "release_time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "Release publication time. Required when channel is stable; absent otherwise."
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Required when channel is stable; absent otherwise."
+    },
+    "worker_protocol": {
+      "type": "object",
+      "required": ["name", "version", "transport", "operations", "request_signing"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "enum": ["omes-pull-worker"] },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "transport": { "type": "string", "enum": ["outbound_https_pull"] },
+        "operations": {
+          "type": "array",
+          "minItems": 4,
+          "items": { "type": "string", "enum": ["enroll", "poll", "result", "heartbeat"] }
+        },
+        "request_signing": {
+          "type": "string",
+          "enum": ["not_implemented", "implemented"],
+          "description": "Honest status of per-request signing in the shipped worker (ADR-0027 target). Consumers must not assume signing when this is not_implemented."
+        }
+      }
+    },
+    "control_contract": {
+      "type": "object",
+      "required": ["area", "major", "contract_version", "digest", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "area": { "type": "string", "enum": ["control-center"] },
+        "major": { "type": "string", "pattern": "^v[0-9]+$" },
+        "contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "sha256 over the sorted 'path:sha256' lines of the files below, each line terminated by a newline."
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "pattern": "^contracts/control-center/v1/[a-z0-9.-]+\\.schema\\.json$" },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        }
+      }
+    },
+    "awcms_omes_control": {
+      "type": "object",
+      "required": ["min_contract_version", "max_contract_version_exclusive", "verified_builds"],
+      "additionalProperties": false,
+      "properties": {
+        "min_contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "max_contract_version_exclusive": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "verified_builds": {
+          "type": "array",
+          "description": "AWCMS builds proven against this release by tested fixtures. Empty means the range is declared but no AWCMS build is verified yet; consumers must say so rather than assume.",
+          "items": {
+            "type": "object",
+            "required": ["awcms_ref", "contract_digest", "evidence_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "awcms_ref": { "type": "string", "pattern": "^[A-Za-z0-9._/-]{1,128}$" },
+              "contract_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+              "evidence_ref": { "type": "string", "pattern": "^[A-Za-z0-9._:/#-]{1,256}$" }
+            }
+          }
+        }
+      }
+    },
+    "installer": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_published", "published"],
+          "description": "not_published = the release has no reviewed installer asset; do not invent a URI or digest."
+        },
+        "uri": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "platform_support": {
+      "type": "object",
+      "required": ["os", "arch"],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "versions"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "enum": ["ubuntu", "linuxmint"] },
+              "versions": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+            }
+          }
+        },
+        "arch": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "enum": ["amd64", "arm64"] }
+        }
+      }
+    },
+    "capability_posture": {
+      "type": "object",
+      "required": ["capability_registry_digest", "worker_capabilities", "hermes_baseline"],
+      "additionalProperties": false,
+      "properties": {
+        "capability_registry_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{16}$",
+          "description": "Same value the worker reports in worker-heartbeat.request.capability_registry_digest."
+        },
+        "worker_capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "hermes_baseline": { "type": "string" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["canonicalization", "signature_status"],
+      "additionalProperties": false,
+      "properties": {
+        "canonicalization": { "type": "string", "enum": ["json-sorted-keys-2space-lf"] },
+        "signature_status": {
+          "type": "string",
+          "enum": ["unsigned"],
+          "description": "Signing and publishing as a release asset are Not implemented yet (tracked in #352)."
+        }
+      }
+    },
+    "consumer_policy": {
+      "type": "object",
+      "required": ["accepted_channels", "fail_closed_when_unverifiable", "fetch_at_host_boot"],
+      "additionalProperties": false,
+      "properties": {
+        "accepted_channels": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["stable"] } },
+        "fail_closed_when_unverifiable": { "type": "boolean", "enum": [true] },
+        "fetch_at_host_boot": { "type": "boolean", "enum": [false] }
+      }
+    }
+  }
+}

@@ -249,14 +249,22 @@ or purge. Four permissions — `media.read`, `.delete`, `.restore`, `.purge`.
 Every mutation posts to the guarded endpoint with a fresh `Idempotency-Key`
 (unlike `/admin/sync`, where no endpoint wants one, all three here require it).
 
-Three deliberate absences (the upload form is NOT one of them any more — Issue
+The uploader needs THREE permissions together — `media.create` (open the
+session), `media.verify` (finalize) and `media.cancel` (clean up after a
+failure). They are separate keys behind separate endpoints, so a custom role can
+hold `create` alone, and every upload it starts would 403 at finalize and again
+at cancel and leave a `pending_upload` row. The page therefore renders the
+uploader only for a caller holding all three, and shows a notice naming the
+missing keys to a caller holding some but not all. UX only: the endpoints still
+decide. The seeded side is pinned by `tests/media-upload-permission-seed.test.ts`
+(no migration grants `create` without the other two).
+
+Two deliberate absences (the upload form is NOT one of them any more — Issue
 #595 added it, and Issue #1221 added browser-side compression to it; see
 §Upload size cap above), each pinned by
 `tests/admin-media-page-contract.test.ts` so they stay decisions rather than
 becoming gaps:
 
-- **`media.verify`/`media.cancel` as page gates** — `cancel` is driven by the
-  uploader's own failure handling, and nothing on this screen verifies.
 - **`enforcement.*`** — a tenant-wide ONE-WAY policy switch, not an object
   action. It lives on `/admin/security` with the other policy controls.
 - **No `<img>` preview.** A row can be `pending_upload` or `failed`: the bytes

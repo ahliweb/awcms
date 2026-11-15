@@ -51,7 +51,9 @@ import {
   isAccountVisibleTo,
   listAccounts,
   recordAccountHealth,
+  setAccountAccessMode,
   toPublicAccount,
+  unassignAccount,
   updateAccount,
   writeAccountCredential
 } from "../../src/modules/channel-accounts/application/account-directory";
@@ -1633,14 +1635,29 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
   });
 
   describe("assignments", () => {
-    test("an account with assignees is visible only to them and to the bypass holder", async () => {
+    test("an assigned account is visible only to its assignees and to the bypass holder; tenant_wide opens it on purpose", async () => {
       const id = await created(T1, U1, "assigned-dev");
 
-      // Tenant-wide until the first assignment.
+      // #1215 M-c: a new account is `assigned` and its creator is its owner,
+      // so a colleague who is not an assignee does not see it...
+      expect(
+        await inTenant(T1, (tx) => isAccountVisibleTo(tx, T1, id, U1B, false))
+      ).toBe(false);
+
+      // ...until an administrator opens it, and not after it is closed again.
+      expect(
+        await inTenant(T1, (tx) =>
+          setAccountAccessMode(tx, T1, U1, id, { mode: "tenant_wide" })
+        )
+      ).toMatchObject({ outcome: "set", changed: true });
       expect(
         await inTenant(T1, (tx) => isAccountVisibleTo(tx, T1, id, U1B, false))
       ).toBe(true);
-
+      expect(
+        await inTenant(T1, (tx) =>
+          setAccountAccessMode(tx, T1, U1, id, { mode: "assigned" })
+        )
+      ).toMatchObject({ outcome: "set", changed: true });
       expect(
         await inTenant(T1, (tx) =>
           assignAccount(tx, T1, U1, id, { tenantUserId: U1, kind: "owner" })
@@ -1667,6 +1684,50 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
 
       expect(hidden.ok && hidden.items).toHaveLength(0);
       expect(shown.ok && shown.items).toHaveLength(1);
+    });
+
+    test("two owners removed at the same moment: exactly one goes, the other is the last owner (#1215 M-c, row-lock serialisation)", async () => {
+      // Ten rounds: the race is a matter of timing, and without the row lock a
+      // round loses an owner more often than not.
+      for (let round = 0; round < 10; round += 1) {
+        const id = await created(T1, U1, `race-owners-${round}`);
+
+        await inTenant(T1, (tx) =>
+          assignAccount(tx, T1, U1, id, { tenantUserId: U1B, kind: "owner" })
+        );
+
+        const rows = await inTenant(
+          T1,
+          (tx) =>
+            tx`
+            SELECT id FROM awcms_channel_account_assignments
+            WHERE tenant_id = ${T1} AND account_id = ${id}
+            ORDER BY id
+          `
+        );
+        const [first, second] = rows as { id: string }[];
+
+        // Each removal runs in its own transaction on its own connection, started
+        // together. Without the account row lock both would count "the other owner
+        // remains" and both would delete.
+        const outcomes = await Promise.all([
+          inTenant(T1, (tx) => unassignAccount(tx, T1, id, first!.id)),
+          inTenant(T1, (tx) => unassignAccount(tx, T1, id, second!.id))
+        ]);
+
+        expect([...outcomes].sort()).toEqual(["last_owner", "removed"]);
+
+        const left = await inTenant(
+          T1,
+          (tx) =>
+            tx`
+            SELECT count(*)::int AS n FROM awcms_channel_account_assignments
+            WHERE tenant_id = ${T1} AND account_id = ${id} AND kind = 'owner'
+          `
+        );
+
+        expect((left as { n: number }[])[0]!.n).toBe(1);
+      }
     });
 
     test("a viewer sees but cannot operate; only an owner passes an owner gate", async () => {

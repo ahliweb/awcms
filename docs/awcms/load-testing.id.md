@@ -1,13 +1,14 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](load-testing.md)
 
-<!-- i18n-source-hash: sha256:b16be2acb1468b75874acd62d61341c63b44b62f328de4719531ab44b2487d16 -->
+<!-- i18n-source-hash: sha256:4e1993dd26dab87ad471b74e39e2395e993d7cff67f78ebf0029bd56df06ff94 -->
 
 # Uji beban terdistribusi (Issue #1283, ADR-0161)
 
 > Sebuah **prosedur**, bukan hasil. Repo ini menyertakan harness-nya. **Tidak
-> ada angka baseline yang dicatat di sini**, karena belum ada uji beban yang
-> dijalankan. Tabel baseline di bagian akhir tetap kosong sampai sebuah run
-> nyata terjadi dan hasilnya diterima oleh pemeriksaan saturasi (§Membaca
+> ada baseline yang diterima di sini**: satu-satunya run sejauh ini adalah uji
+> coba lokal di workstation bersama, semuanya ditolak pemeriksaan saturasi dan
+> jelas bukan pengukuran NFR (§Baseline terukur). Baseline memerlukan run di
+> environment yang disetujui yang diterima pemeriksaan saturasi (§Membaca
 > hasil).
 
 ## Untuk apa
@@ -170,10 +171,48 @@ itu keputusan tersendiri di bawah ADR-0083.
 
 ## Baseline terukur
 
-**Belum dicatat.** Belum ada run yang dilakukan. Saat ada, tambahkan tabelnya di
+**Belum ada baseline yang diterima.** Baseline di environment yang disetujui
+(isu #1283 langkah 3 dan 4) belum dijalankan.
+
+### Uji coba lokal, 15 November 2026 (BUKAN pengukuran NFR)
+
+Dicatat hanya untuk menunjukkan harness berjalan ujung ke ujung dan apa yang
+ditolaknya. Environment-nya adalah environment sementara di atas, pada
+workstation developer (20 CPU logis) yang **dipakai bersama build dan tes lain
+yang tak terkait**: load average berkisar 22 sampai 143 selama run. Tiga
+generator k6 (`--k6-docker`) berjalan di host yang sama dengan aplikasi dan
+database, sehingga generator dan sistem yang diuji berebut CPU. Tenant sintetis
+dengan 50 post, tanpa CDN, tanpa edge cache, PostgreSQL di tmpfs. Profil
+`baseline` dengan `--hold 60s`.
+
+| Skenario                    | Target rps | Rata-rata rps | p95 ms | p99 ms | 5xx   | Terlewat | Diterima |
+| --------------------------- | ---------- | ------------- | ------ | ------ | ----- | -------- | -------- |
+| `public-page` (smoke)       | 150        | 243           | 429    | 699    | 12,9% | 5,6%     | tidak    |
+| `public-page`               | 40         | 33            | 13     | 41.735 | 2,4%  | 39,3%    | tidak    |
+| `admin-read`                | 40         | 27            | 10     | 23     | 0%    | 0%       | tidak    |
+| `api-write` (post sintetis) | 20         | 14            | 25     | 36     | 0%    | 0%       | tidak    |
+
+**Tidak satu pun diterima**: pemeriksaan saturasi melaporkan puncak CPU
+generator 78% sampai 93% (batas 70%). Sampler itu membaca CPU seluruh host,
+sehingga di workstation bersama ini ia tak bisa membedakan generator dari
+tetangganya; pemeriksaan itu bekerja sebagaimana mestinya dan menolak angkanya.
+Perlakukan semua angka di atas sebagai petunjuk tentang harness saja. Jangan
+dibandingkan dengan ADR-0161.
+
+Satu pengamatan layak ditindaklanjuti, tanpa menarik kesimpulan kapasitas: pada
+150 rps di halaman blog publik, aplikasi mencatat `database.pool.rejected`
+untuk work-class `interactive` (8 aktif, antrean 32 penuh) dan menjawab 5xx.
+Render publik tanpa cache memakai satu koneksi pool per permintaan, sehingga
+dengan `EDGE_CACHE_MODE=off` batas origin ditentukan pool dan antreannya itu.
+Apakah itu berlaku di environment yang disetujui, dan apakah batas work-class
+perlu ditinjau, menjadi urusan run di environment yang disetujui. p99 yang
+panjang pada baris kedua bertepatan dengan beban host terberat dan tidak muncul
+pada skenario lain.
+
+Bila run di environment yang disetujui sudah dilakukan, tambahkan tabelnya di
 sini (tanggal, environment, metode, run id, diterima ya/tidak, angka per
 skenario, dan vonis bertahan/revisi per nilai ADR-0161) dalam pull request yang
-sama dengan angkanya, dalam kedua bahasa.
+sama, dalam dua bahasa.
 
 ## Terkait
 

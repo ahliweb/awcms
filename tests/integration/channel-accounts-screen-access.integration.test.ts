@@ -240,17 +240,22 @@ async function holdScope(tenantUserId: string, officeId: string) {
 }
 
 async function seedDevice(
-  options: { status?: string; officeId?: string } = {}
+  options: {
+    status?: string;
+    officeId?: string;
+    accessMode?: "assigned" | "tenant_wide";
+  } = {}
 ): Promise<string> {
   accountCounter += 1;
   const rows = (await admin()`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name, auth_mode,
-       status, business_scope_type, business_scope_id)
+       status, business_scope_type, business_scope_id, access_mode)
     VALUES (${env.tenantId}, 'starsender', 'device', ${`DEV-${accountCounter}`},
             ${`Device ${accountCounter}`}, 'device_key',
             ${options.status ?? "pending"},
-            ${options.officeId ? "office" : null}, ${options.officeId ?? null})
+            ${options.officeId ? "office" : null}, ${options.officeId ?? null},
+            ${options.accessMode ?? "tenant_wide"})
     RETURNING id
   `) as { id: string }[];
 
@@ -262,18 +267,18 @@ async function seedWhatsappNumber(status: string): Promise<string> {
   const sql = admin();
   const waba = (await sql`
     INSERT INTO awcms_channel_accounts
-      (tenant_id, provider, account_kind, external_id, display_name, auth_mode, status)
+      (tenant_id, provider, account_kind, external_id, display_name, auth_mode, status, access_mode)
     VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba', ${`9${accountCounter}00`},
-            ${`WABA ${accountCounter}`}, 'api_token', 'connected')
+            ${`WABA ${accountCounter}`}, 'api_token', 'connected', 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
   const phone = (await sql`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name, auth_mode,
-       parent_account_id, status)
+       parent_account_id, status, access_mode)
     VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba_phone_number',
             ${`62811${accountCounter}000`}, ${`Number ${accountCounter}`},
-            'api_token', ${waba[0]!.id}, ${status})
+            'api_token', ${waba[0]!.id}, ${status}, 'tenant_wide')
     RETURNING id
   `) as { id: string }[];
 
@@ -396,7 +401,8 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
   test("another tenant's id, an unknown id and an unassigned account are ONE answer", async () => {
     if (!handlerReady) return;
 
-    const id = await seedDevice();
+    // `assigned` is the default (#1215 M-c); this fixture spells it out.
+    const id = await seedDevice({ accessMode: "assigned" });
     const tenant2 = crypto.randomUUID();
 
     await admin()`
@@ -413,18 +419,24 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     expect(unknown).toEqual({ visible: false });
     expect(crossTenant).toEqual(unknown);
 
-    // Tenant-wide until the first assignment: a reader sees it...
-    expect(await detailFor(colleague.sessionHash, id)).toMatchObject({
-      visible: true
-    });
-
-    // ...then only its assignee, and the tenant administrator, do.
-    await assign(id, env.ownerTenantUserId, "owner");
-
+    // An `assigned` account nobody is assigned to is administrators-only: a
+    // reader who is not an assignee gets the ONE answer...
     expect(await detailFor(colleague.sessionHash, id)).toEqual(unknown);
     expect(await detailFor(env.ownerSessionHash, id)).toMatchObject({
       visible: true
     });
+
+    // ...until she is assigned, and the others still do not see it.
+    await assign(id, env.ownerTenantUserId, "owner");
+    await assign(id, colleague.tenantUserId, "viewer");
+
+    expect(await detailFor(colleague.sessionHash, id)).toMatchObject({
+      visible: true
+    });
+
+    const stranger = await seedUser(env.tenantId, "stranger", [READ]);
+
+    expect(await detailFor(stranger.sessionHash, id)).toEqual(unknown);
   });
 
   test("credentials.manage without accounts.revoke keeps the credential form, and the reverse", async () => {
@@ -497,7 +509,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
   test("assignment kind matters: a viewer sees the account and may do neither action", async () => {
     if (!handlerReady) return;
 
-    const id = await seedDevice();
+    const id = await seedDevice({ accessMode: "assigned" });
     const person = await seedUser(
       env.tenantId,
       "assigned",

@@ -13,7 +13,7 @@
  *
  * The consumer in `module.ts` (`omes_control.workflow_verdict_settler`) calls
  * these functions from the domain-event dispatcher, inside a tenant-scoped
- * transaction on the least-privilege `awcms_worker` connection (`sql/387`).
+ * transaction on the least-privilege `awcms_worker` connection (`sql/414`).
  *
  * ## What it does and does not do
  *

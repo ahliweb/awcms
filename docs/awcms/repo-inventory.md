@@ -8,13 +8,13 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 281   |
+| Migrations                          | 286   |
 | `awcms_*` tables                    | 277   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 841   |
-| Route files                         | 684   |
-| ADR                                 | 326   |
+| Test files                          | 878   |
+| Route files                         | 695   |
+| ADR                                 | 328   |
 
 ### Modules
 
@@ -54,11 +54,11 @@
 | `hr_commission`        | 0.5.0   | active       | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                                         |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
-| `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
+| `website_engagement`   | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
-| `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
+| `crm_leads`            | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 | `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
-| `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
+| `crm_follow_up`        | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
 | `omnichannel_inbox`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
 
 ### Migrations
@@ -341,11 +341,16 @@
 | 274 | `sql/383_awcms_omnichannel_inbox_permissions.sql`                      |
 | 275 | `sql/384_awcms_omnichannel_inbox_integrity_guards.sql`                 |
 | 276 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
-| 277 | `sql/387_awcms_omes_workflow_verdict_worker_grants.sql`                |
-| 278 | `sql/388_awcms_booking_worker_transitions.sql`                         |
-| 279 | `sql/392_awcms_whatsapp_worker_queue_column_grants.sql`                |
-| 280 | `sql/393_awcms_whatsapp_meta_webhook_clock_and_replay.sql`             |
-| 281 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
+| 277 | `sql/388_awcms_booking_worker_transitions.sql`                         |
+| 278 | `sql/392_awcms_whatsapp_worker_queue_column_grants.sql`                |
+| 279 | `sql/393_awcms_whatsapp_meta_webhook_clock_and_replay.sql`             |
+| 280 | `sql/394_awcms_whatsapp_worker_queue_insert_and_delete_floor.sql`      |
+| 281 | `sql/397_awcms_blog_revisions_worker_grant.sql`                        |
+| 282 | `sql/398_awcms_channel_accounts_access_mode.sql`                       |
+| 283 | `sql/399_awcms_channel_accounts_last_owner_guard.sql`                  |
+| 284 | `sql/408_awcms_audit_events_append_only_for_app_role.sql`              |
+| 285 | `sql/409_awcms_append_only_ledgers_for_app_role.sql`                   |
+| 286 | `sql/414_awcms_omes_workflow_verdict_worker_grants.sql`                |
 
 ### Tables & Row-Level Security
 
@@ -633,17 +638,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 625        |
+| `(root)`      | 647        |
 | `e2e`         | 30         |
-| `integration` | 185        |
-| `unit`        | 1          |
+| `integration` | 199        |
+| `unit`        | 2          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 567   |
-| `/admin/**`     | 86    |
+| `/api/v1/**`    | 568   |
+| `/admin/**`     | 96    |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->

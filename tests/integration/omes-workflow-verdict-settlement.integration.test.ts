@@ -483,7 +483,7 @@ suite("omes_control workflow verdict settlement (#1335)", () => {
     expect(audit[0]!.metadata).not.toContain("SENTINEL");
   });
 
-  describe("what the worker may NOT do (sql/387)", () => {
+  describe("what the worker may NOT do (sql/414)", () => {
     test("its column UPDATE grants are exactly the settlement's, and it cannot insert or edit the request itself", async () => {
       if (!workerRoleActivated) return;
       const worker = getWorkerRoleSql();

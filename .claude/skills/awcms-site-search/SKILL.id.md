@@ -5,7 +5,7 @@ description: Modul site_search SUDAH di-port ke repo ini (dari awcms-micro Issue
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:51faaf18d00200de315e7f8a8a010902e790ef664d35571ec14a9f97791e1869 -->
+<!-- i18n-source-hash: sha256:713d8767ffd392700d0e61df34481e1b4d70c7272e40eea65f41100177bd6577 -->
 
 # AWCMS — Cross-Content Site Search
 
@@ -107,8 +107,9 @@ menggagalkan seluruh run, tercatat di tabel diagnostics.
   meng-escape SELURUH string DULU baru mengganti sentinel jadi `<mark>`.
   Membalik urutan itu = XSS. Jangan pernah mengoper `<b>`/`<mark>` sebagai
   `StartSel` ke `ts_headline`.
-- **SQL injection**: teks query selalu bound param ke
-  `websearch_to_tsquery('simple', $1)`.
+- **SQL injection**: query ditokenisasi (`[\p{L}\p{N}]+`) oleh `buildPrefixTsQuery` dan selalu
+  SATU bound param ke `to_tsquery('simple', $1)`; token terakhir 3+ karakter
+  menjadi prefiks (`tok:*`).
 - **Cache**: `buildSearchCacheKey` MENOLAK key tanpa tenant+locale+query-hash.
 - **RLS**: kelima tabel `ENABLE` **dan** `FORCE`. `ENABLE` saja inert untuk
   owner tabel.

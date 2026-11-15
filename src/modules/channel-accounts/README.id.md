@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2e43411b2f5d8783241932675059e0b66b479b6cd8db048f0c298fb619e33b03 -->
+<!-- i18n-source-hash: sha256:48c2dab3b15c7d2d262666deb03543f0cdd5f3a44e2fdad715c700af4360a9ac -->
 
 # `channel_accounts`
 
@@ -46,6 +46,7 @@ Sembilan baris **berfase-gerbang** (Issue #1152, paket §3.1): X, LINE Official 
 | `POST accounts/{id}/disconnect`                                   | `accounts.revoke`                                  | `revoked`, kredensial milik akun dihapus permanen, webhook dicabut. `warning`                                              |
 | `GET accounts/{id}/health`                                        | `accounts.read`                                    | Dilaporkan konektor, tidak pernah diklaim oleh manusia                                                                     |
 | `GET accounts/{id}/capabilities`, `PUT .../{capability}`          | `accounts.read` / `capabilities.configure`         | Sembilan kapabilitas dengan sel matriks dan putusan efektif. Ditolak saat penulisan bila matriks tak pernah mengizinkan    |
+| `PUT accounts/{id}/access-mode`                                   | `assignments.assign`                               | `assigned` (default) atau `tenant_wide`; ke `assigned` butuh owner; audit `warning` hanya saat benar-benar berubah         |
 | `GET/POST accounts/{id}/assignments`, `DELETE .../{assignmentId}` | `accounts.read` / `assignments.assign`             | Owner / operator / viewer; tambahan atas pemeriksaan izin                                                                  |
 | `GET connections`, `POST connections/{id}/revoke`                 | `accounts.read` / `accounts.revoke`                | Revoke membersihkan dan menghapus semua kredensial dan mencabut akun terikat. Final (trigger)                              |
 | `POST connections/oauth/start`, `GET .../callback`                | `accounts.create`                                  | Lihat di bawah                                                                                                             |
@@ -58,7 +59,7 @@ Setiap mutasi kecuali start dan callback OAuth mewajibkan `Idempotency-Key` (has
 
 ## Akses per akun
 
-Tiga lapis, semuanya default-deny: izin tingkat tenant; gerbang **assignment** (akun yang punya assignee hanya terlihat dan dapat dioperasikan oleh mereka pada jenis yang dibutuhkan, ditambah pemegang `assignments.assign`); dan **ABAC business scope** (akun yang terikat pada scope mensyaratkan pemanggil memegang scope itu, dievaluasi ulang lewat chokepoint yang sama sehingga kebijakan deny dan decision log tetap berlaku). Break-glass connection dipegang pemegang scope connection itu dan administrator tenant (`assignments.assign` sebagaimana diputuskan chokepoint, bukan diturunkan dari memegang scope; amendemen ADR-0148, #1215).
+Tiga lapis, semuanya default-deny: izin tingkat tenant; gerbang **assignment** (menurut `access_mode` eksplisit akun, di bawah: akun `assigned` hanya terlihat dan dapat dioperasikan oleh assignee-nya pada jenis yang dibutuhkan, ditambah pemegang `assignments.assign`); dan **ABAC business scope** (akun yang terikat pada scope mensyaratkan pemanggil memegang scope itu, dievaluasi ulang lewat chokepoint yang sama sehingga kebijakan deny dan decision log tetap berlaku). Break-glass connection dipegang pemegang scope connection itu dan administrator tenant (`assignments.assign` sebagaimana diputuskan chokepoint, bukan diturunkan dari memegang scope; amendemen ADR-0148, #1215).
 
 ## OAuth
 
@@ -126,13 +127,27 @@ Break-glass connection menanyakan pertanyaan tingkat tenant lebih dulu (satu kep
 
 `APP_URL` wajib saat modul aktif dan satu-satunya sumber origin callback OAuth: `resolveChannelOAuthRedirectUri` mengembalikan `null` (start menjawab `PROVIDER_ADAPTER_UNAVAILABLE`, callback `STATE_INVALID`) alih-alih jatuh ke host bawaan, dan `config:validate` menolak boot deployment-nya (#1215 L7).
 
+## Mode akses dan owner terakhir (#1215 M-c, keputusan pemilik 11 November 2026)
+
+Visibilitas dulu disimpulkan dari **ketiadaan** baris (tanpa assignee berarti terbuka bagi seluruh tenant), sehingga menghapus assignee terakhir, atau menghapus data orang yang menjadi assignee itu, diam-diam membuka sebuah identitas pengirim. Kini ia kolom, `awcms_channel_accounts.access_mode` (`sql/398`), dan defaultnya yang tertutup:
+
+| `access_mode`        | Siapa yang melihat dan mengoperasikan akun                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `assigned` (default) | assignee-nya (pada jenis yang dibutuhkan aksi) dan pemegang `assignments.assign`; tanpa assignee sama sekali: hanya administrator |
+| `tenant_wide`        | izin saja yang memutuskan (perilaku lama "tanpa assignee"), dipilih dengan sengaja dan diaudit                                    |
+
+- Akun baru berstatus `assigned` dan **pembuatnya menjadi owner pertama** (`createAccount`), sehingga mendaftarkan akun tidak menyerahkannya kepada administrator saja. Setiap baris yang sudah ada saat `sql/398` berjalan menjadi `assigned` (fail-closed; modul dikirim mati).
+- `PUT /accounts/{id}/access-mode` (`assignments.assign`, `Idempotency-Key`) mengganti mode; baris audit (`channel_accounts.account.access_mode_set`, `warning`) hanya ditulis bila mode berubah. Berpindah ke `assigned` butuh owner yang sudah ada (`422 OWNER_REQUIRED`).
+- **Owner terakhir akun `assigned` tidak dapat dihapus atau diturunkan** lewat API (`409 LAST_OWNER`). Penulisnya mengambil kunci baris akun lebih dulu, sehingga dua penghapusan bersamaan atas dua owner tidak dapat masing-masing melihat yang lain masih ada. Database adalah dinding kedua (`sql/398` menolak perpindahan ke `assigned` tanpa owner; `sql/399` menolak penurunan owner terakhir dan pemindahan sebuah assignment).
+- **Erasure harus selalu selesai**, sehingga menghapus owner terakhir TIDAK ditolak di database: `sql/399` justru meninggalkan satu baris audit `warning`, `channel_accounts.account.owner_orphaned`, yang hanya memuat id akun (tidak pernah orangnya). Akun tetap fail-closed: ia hanya terjangkau oleh assignee yang tersisa (viewer dan operator yang masih ada) dan administrator tenant, yang dapat menunjuk owner baru. (Kedua guard penghitung owner mengunci baris owner dengan SHARE, sehingga erasure yang berpacu dengan penurunan atau pergantian mode menunggunya dan selalu meninggalkan jejak ini bila ia meng-orphan akun `assigned`.)
+- `awcms_channel_accounts.business_scope_*` kini immutable untuk setiap role (`sql/398`, guard identitas yang sama dengan identitas akun).
+- Modul lain yang bertanya "bolehkah pemanggil memakai akun ini?" (`whatsapp_delivery`, `email`, `social_publishing`, `telegram_engagement`) lewat `isAccountVisibleTo`, sehingga mewarisi aturannya; tidak ada yang mengimplementasikannya ulang. `omnichannel_inbox` **tidak**: ia tidak mengirim apa pun, jadi hanya menerapkan aturan business scope, dan pemegang izin inbox dalam scope yang sama tetap melihat percakapan akun `assigned`. Membuat percakapan mengikuti assignment adalah keputusan pemilik yang terpisah.
+
 ## Sisa pekerjaan dan pertanyaan terbuka (#1215, keputusan pemilik)
 
 Tidak dikerjakan di sini; masing-masing butuh keputusan desain pemilik dan, sebagian besar, migrasi:
 
-- **M-c**, model assignment fail-open: menghapus assignee terakhir membuka akun ke seluruh tenant (usul: kolom `access_mode` eksplisit dan menolak menghapus owner terakhir). Erasure juga belum punya baris audit modul.
-- **Squatting id eksternal** (M4 review pertama): baris `pending` sudah memegang klaim global `(provider, external_id)`. Butuh klaim terverifikasi atau kedaluwarsa klaim, yaitu job ber-scope platform.
+- **Squatting id eksternal** (M4 review pertama): baris `pending` sudah memegang klaim global `(provider, external_id)`. Butuh klaim terverifikasi atau kedaluwarsa klaim, yaitu job ber-scope platform. Sengaja TIDAK dibangun: opsinya ditulis di #1215 agar pemilik yang memilih.
 - **N2** (sweep state OAuth hanya saat start berikutnya), **N3** (daftar `LIMIT 200` tanpa cursor), dan L5/L6 sebagaimana di issue (inkonsistensi kecil, oracle lintas-tenant yang terdokumentasi).
-- **`awcms_channel_accounts.business_scope_*` tidak punya trigger immutability** (connection dan state OAuth yang sudah dikonsumsi punya, `sql/320`). Tidak ada jalur API yang mengubahnya, tetapi aturan cakupan di atas hanya sekuat kolom itu; menjaganya butuh migrasi.
 - **Cakupan hierarkis**: bolehkah scope anak (office di bawah region) mengikat connection milik scope induk? Dipilih kesamaan persis; melonggarkannya adalah keputusan pemilik.
 - `sql/318` membawa komentar usang (N10) yang tidak boleh diedit pada migrasi terapan; pernyataan yang akurat ada di README ini dan ADR-0148.

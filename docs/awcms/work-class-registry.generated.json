@@ -572,6 +572,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/channel-accounts/accounts/[id]/access-mode.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/channel-accounts/accounts/[id]/assignments/[assignmentId].ts",
       "workClass": "interactive",
       "source": "factory"

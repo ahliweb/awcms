@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:6639042c98c5faf498dbbc45639ed2674a649011c1868e546e6cf19566ad3e9e -->
+<!-- i18n-source-hash: sha256:3464c7807eacefd8c71773e79a4a89d41b6989341a70774e5cbe5acddce5eb59 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-164 target menjalankan berkas di `scripts/`; 65 di antaranya
+167 target menjalankan berkas di `scripts/`; 67 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -97,6 +97,9 @@ terjadwal, atau oleh workflow CI tertentu.
 | `db:work-class:generate`                  | `work-class-registry-generate.ts`              | —    |
 | `deps:audit:check`                        | `dependency-audit-check.ts`                    | ✅   |
 | `deps:freshness`                          | `dependency-freshness.ts`                      | —    |
+| `deps:issues:sync`                        | `dependency-issue-sync.ts`                     | —    |
+| `deps:license:check`                      | `dependency-license-check.ts`                  | ✅   |
+| `deps:provider-changelog:check`           | `provider-changelog-check.ts`                  | ✅   |
 | `design:token-contrast:check`             | `design-token-contrast-check.ts`               | ✅   |
 | `docs:i18n:stamp`                         | `docs-i18n-stamp.mjs`                          | —    |
 | `docs:i18n:stamp:check`                   | `docs-i18n-stamp.mjs`                          | ✅   |

@@ -1170,6 +1170,17 @@ export const READER_BUDGET_BYTES = 24_000;
  * this screen's own behaviour: no other screen replaces a secret or confirms a
  * terminal action by typing.
  *
+ * **Raised for Issue #1328** (flash message after a reloading mutation): +500 B
+ * (365,600 -> 366,100), measured 366,022 locally with this change (+422 B over
+ * `main`, which sat under its budget), with 78 B of margin for the local/CI
+ * build difference. It is two small functions, `flashAndReload` and
+ * `showFlash`, in the SHARED `admin-form-client.ts` (so they are imported, not
+ * copied, by every screen that adopts them), plus the three call sites and the
+ * sentence attributes on `/admin/invitations` and the one link on
+ * `/admin/users`. Nothing is duplicated per screen. The audit follow-up scoped
+ * the stored flash to its page and a 10 s window (a JSON record plus a parse
+ * guard, +383 B), so the budget is 366,600 B (measured 366,405 B).
+ *
  * **Raised for Issue #1238** (the over-cap refusal said "2 MiB over the 2 MiB
  * limit"): +320 B (362,560 -> 362,880), of which 316 B measured locally (362,533
  * on `main`, 362,849 with this change; `main` sat 27 B under its budget) and 4 B
@@ -1207,8 +1218,109 @@ export const READER_BUDGET_BYTES = 24_000;
  * measured 370,615 locally (+92 B). The rebuild button now continues from where
  * the previous click stopped (state across clicks plus a pure resume-point
  * helper) instead of replaying the first batches forever on a large tenant.
+ *
+ * **Raised for Issue #1162** (`/admin/email-senders`), stacked on the #1164
+ * budget above: +1,130 B (370,720 -> 371,850), measured 371,708 locally with
+ * both changes (370,615 for #1164 alone, so the growth is the page's own 1,093 B
+ * script): the one "make default sender" action (`PUT
+ * /api/v1/email/sender-policy` with an idempotency key and the endpoint's own
+ * error codes mapped to server-rendered sentences). It duplicates no shared
+ * code: it imports `admin-form-client` and `admin-idempotency-key`, which the
+ * account screens already ship, and it is the one control of the screen on
+ * purpose (rotation and disconnect are links to the connection manager, not a
+ * second copy of their forms). 142 B of margin for the local/CI build
+ * difference.
+ *
+ * Rebase note: `main` had moved to 371,850 B, so this branch's own raise
+ * (+500 B, written against 365,600 B) is stacked on it, giving
+ * 372,350 B; the gate re-measures the combined bundle.
+ *
+ * Rebase note: `main` had moved to 372,350 B, so this branch's own raise
+ * (+500 B, written against 366,100 B) is stacked on it, giving
+ * 372,850 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1316** (TOTP enrolment QR): +6,500 B (365,600 -> 372,100),
+ * measured 372,060 locally with this change, with about 40 B of margin for the
+ * local/CI build difference. It is ONE module, `src/lib/qr/qr-code.ts`, a
+ * dependency-free byte-mode/ECC-M encoder (versions 1-15) imported by
+ * `/admin/account` only. Encoding locally is the point: the otpauth URI carries
+ * the shared TOTP secret, so a third-party QR service or an image URL is not an
+ * option, and a library would cost more than this and add a dependency. No other
+ * screen consumes it.
+ *
+ * Rebase note: `main` had moved to 372,850 B, so this branch's own raise
+ * (+6,500 B, written against 365,600 B) is stacked on it, giving
+ * 379,350 B; the gate re-measures the combined bundle.
+ *
+ * screen consumes it. The audit follow-up (page-cache restore + the DOM half in
+ * `enrolment-qr.ts`) raised it again to 372,600 B, measured 372,327 locally.
+ *
+ * Rebase note: `main` had moved to 379,350 B, so this branch's own raise
+ * (+500 B, written against 372,100 B) is stacked on it, giving
+ * 379,850 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1153** (the website engagement screens): +1,500 B
+ * (365,600 -> 367,100), measured 366,974 locally with this change (`main` sat
+ * about 40 B under its budget), with 126 B of margin for the local/CI build
+ * difference. Two page scripts, each on its own screen only:
+ * `/admin/website-engagement/[id]` (the confirmed, idempotent withdrawal with
+ * its translated error sentences) and `/admin/website-engagement/sources` (the
+ * confirmed revoke). The list screen ships no script. The lifecycle is the
+ * shared `admin-form-client.ts`, the key source is the shared
+ * `admin-idempotency-key.ts` and the confirmation is the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * Rebase note: `main` had moved to 379,850 B, so this branch's own raise
+ * (+1,500 B, written against 365,600 B) is stacked on it, giving
+ * 381,350 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1166** (the lead pipeline screens): +1,600 B of its
+ * own. Two page scripts, each on its own screen only:
+ * the lead detail (`/admin/crm-leads/[id]`: move and assign, each sentence
+ * translated on the server and carried in a `data-messages` attribute) and the
+ * settings (`/admin/crm-leads/settings`: the tenant switch). The list screen
+ * ships no script. The lifecycle is the shared `admin-form-client.ts` and the
+ * key source the shared `admin-idempotency-key.ts`, so there is no per-screen
+ * duplication to recover.
+ *
+ * **Raised again for the #1166 audit follow-up (M-1)**: +300 B of its own. The settings form now
+ * sends only the fields the viewer changed (a stale tab must not re-assert a tenant switch
+ * another admin turned off), which is a small diff helper plus the page's
+ * initial values: ~200 B on that one screen.
+ *
+ * Rebase note (#1166): `main` had moved to 379,850 B; with both #1166 changes
+ * on top, the rebased build measures 380,829 B locally, so the budget is set to
+ * 380,970 B (measured + 141 B margin for the local/CI build difference).
+ *
+ * Rebase note: `main` had moved to 381,350 B, so this branch's own raise
+ * (+1,120 B, written against 379,850 B) is stacked on it, giving
+ * 382,470 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1165** (the follow-up screens): +2,500 B (365,600 ->
+ * 368,100), measured 368,053 locally with this change (`main` sat about 40 B
+ * under its budget), with 47 B of margin for the local/CI build difference.
+ * Two page scripts, each on its own screen only: the task detail
+ * (`/admin/crm-follow-up/[id]`: complete, cancel and the stop signal, each with
+ * an `Idempotency-Key`, a confirmation and one mapped error sentence) and the
+ * rules screen (the tenant switch), plus a three-function pure helper
+ * (`crm-follow-up-screen.ts`) the switch script imports. The worklist ships no
+ * script. The lifecycle is the shared `admin-form-client.ts`, the key source
+ * the shared `admin-idempotency-key.ts` and the confirmation the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ *
+ * Rebase note: `main` had moved to 379,850 B, so this branch's own raise (the
+ * +2,500 B above, written against 365,600 B) is stacked on it. Re-measured on
+ * the rebased bundle: 381,571 B locally (`main` alone sat about 40 B under
+ * 379,850, so the follow-up screens cost about 1,720 B), budget set to 381,710
+ * B (measured + 139 B for the local/CI build difference).
+ *
+ * Rebase note: `main` had moved to 382,470 B, so this branch's own raise
+ * (+1,860 B, written against 379,850 B) stacked on it would give 384,330 B,
+ * but the combined bundle measures 384,730 B (shared chunks do not add up
+ * linearly), so the budget is 384,870 B: measured + 140 B, the same tight
+ * margin as the raises above.
  */
-export const APP_BUDGET_BYTES = 370_720;
+export const APP_BUDGET_BYTES = 384_870;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

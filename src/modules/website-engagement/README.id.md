@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ff093c3f81637fbc57de1af7626b4b6452e4cb471cb01f8c5c510ae66944542b -->
+<!-- i18n-source-hash: sha256:345dc3bc3d21259351a0acbb27cb261e3cbd1b21f6d2128c3c9d2fc9b9ff5add -->
 
 # `website_engagement`
 
@@ -12,7 +12,8 @@ Situs web milik tenant mengirim permintaan kontak, lead, atau interaksi ke SATU 
 
 - **Tabel** (`sql/325`): `awcms_engagement_sources`, `awcms_engagement_source_domains`, `awcms_engagement_submissions`; RLS `FORCE`, `WITH CHECK`; penjaga integritas di `sql/327`; izin di `sql/326`.
 - **Event**: `awcms.website_engagement.submission.received` dan `...submission.withdrawn` (AsyncAPI), membawa referensi buram, tidak pernah detail pengunjung.
-- **API admin**: source (buat, ubah, rotasi, cabut, hapus), pembacaan kiriman tersamar, **reveal** teraudit, dan **penarikan** oleh pengendali; setiap rute default-deny dan `experimental` tanpa entri navigasi sampai layarnya hadir.
+- **API admin**: source (buat, ubah, rotasi, cabut, hapus), pembacaan kiriman tersamar, **reveal** teraudit, dan **penarikan** oleh pengendali; setiap rute default-deny.
+- **Layar admin** (Issue #1153, `active`): `/admin/website-engagement` (daftar kiriman: halaman keyset, filter sumber, jenis, dan status, hanya kontak tersamar), `/admin/website-engagement/{id}` (catatan persetujuan, atribusi, asal-usul, dan **penarikan** yang dikonfirmasi dan idempoten) dan `/admin/website-engagement/sources` (situs web terdaftar, host yang diterima, tantangan efektif, hanya **awalan** token, **pencabutan** yang dikonfirmasi). Layar membaca lewat fungsi direktori API sendiri (`application/screen-loaders.ts`), tidak pernah mendekripsi dan tidak pernah memilih token atau hash-nya. Buat, ubah, jeda, putar, dan **reveal** yang diaudit tetap hanya API: token ditampilkan sekali dan reveal merender data pribadi, sehingga masing-masing butuh kontrak layar sendiri (`submissions.reveal` masih di ledger `NOT_YET_SCREENED`).
 - **Retensi**: dideklarasikan di `module.ts` lewat `data_lifecycle` (bawaan 180 hari).
 - **Konfigurasi**: DUA cincin kunci, `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS` (detail kontak) dan `WEBSITE_ENGAGEMENT_HASH_KEYS` (hash token source dan identifier), keduanya wajib untuk menyimpan apa pun (gagal tertutup) dan tidak berbagi kunci (ADR-0137 bagian 3, Issue #1262): satu sama lain, ditegakkan saat runtime dan oleh `config:validate`; dengan cincin modul lain atau secret kunci-tunggal, ditegakkan oleh `config:validate`; `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS` yang opsional dan sementara; serta variabel rate limit di `.env.example`.
 
@@ -60,4 +61,4 @@ Hash identifier (`email_hash`, `phone_hash`) yang ditulis sebelum transisi tetap
 - Field atribusi memakai set karakter tertutup tetapi tidak dapat membuktikan sebuah nilai bukan data pribadi.
 - Klik ganda pada formulir bertantangan dapat gagal di tantangan kedua (sekali pakai).
 - Temuan audit L3, L5, dan informasional diterima sebagaimana tercatat di laporan audit dan tidak ditangani pada irisan ini.
-- Tidak ada kanal penarikan publik, mode server-ke-server, masa tenggang rotasi, atau layar admin.
+- Tidak ada kanal penarikan publik, mode server-ke-server, atau masa tenggang rotasi; tidak ada layar untuk membuat, mengubah, atau memutar sumber maupun untuk reveal (hanya API); tidak ada filter rentang tanggal (API daftar tidak punya; layar memfilter menurut sumber, jenis, dan status). Daftar sumber adalah daftar API yang dibatasi 200.

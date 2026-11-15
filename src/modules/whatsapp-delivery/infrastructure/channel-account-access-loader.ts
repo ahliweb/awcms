@@ -21,7 +21,8 @@ export type SenderAccessGuard = {
   moduleKey: string;
   activityCode: string;
   /** `create`/`restore`: the consent grant route (Issue #1231 M4) names a brand too. */
-  action: "read" | "configure" | "create" | "restore";
+  /** `cancel`: the message cancel route (Issue #1265) confines the ROW by its own scope. */
+  action: "read" | "configure" | "create" | "restore" | "cancel";
 };
 
 export type SenderAccess = {

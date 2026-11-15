@@ -1,0 +1,838 @@
+---
+/**
+ * Email senders — the operator's view of the tenant's Mailketing accounts and
+ * sender identities (Issue #1162, ADR-0151 sections 2, 6 and 7, ADR-0149 data
+ * page).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the operations view of the email surface that already exists, not a
+ * second mail console. Templates stay on `/admin/email-templates`,
+ * suppression on `/admin/email-suppression`, subscriptions on
+ * `/admin/newsletter`, and connecting, replacing a credential or disconnecting
+ * an account on `/admin/channel-accounts/{id}`. What this adds is the one
+ * question none of those answer: "can this tenant send mail right now, as whom,
+ * and if not, why not?"
+ *
+ * - each Mailketing account (login) with its connection state, the credit the
+ *   provider last reported and when it was last checked;
+ * - each sender identity with the verification the provider last reported, the
+ *   dispatcher's own hold reason, its queue (waiting, sending, failed, oldest)
+ *   and whether it is the default for its brand;
+ * - the Mailketing API version, and the v1 to v2 migration warning of the
+ *   deployment sender (ADR-0151 section 7).
+ *
+ * ## Stale is not unknown
+ *
+ * A check older than `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` is "out of date", a
+ * check that never happened is "never checked". They are different
+ * instructions ("the verification stopped running" versus "it has not run
+ * yet") and neither is shown as verified: the page reads the same freshness
+ * gate the dispatcher holds mail by.
+ *
+ * ## What it never shows
+ *
+ * No token, no credential reference, no webhook secret, no recipient. The
+ * sender address is masked to its first letter and its domain.
+ *
+ * ## Actions
+ *
+ * Only "make default" is a control here, because only it has an audited,
+ * idempotent endpoint with its own permission (`PUT /email/sender-policy`).
+ * Rotating or disconnecting a Mailketing account has endpoints too, under
+ * `channel_accounts`, so this page LINKS to the connection manager instead of
+ * duplicating a destructive control. A test send, and any remote list or
+ * campaign management, are shown as not available yet, disabled and explained:
+ * the Mailketing API has no documented generic campaign API, and a button for it
+ * would promise a capability this deployment does not have.
+ *
+ * Mailketing is an OUTBOUND provider: there is no inbound mailbox behind these
+ * senders, and the page says so.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  accountConnectionLabel,
+  accountConnectionTone,
+  creditLabel,
+  creditToneFor,
+  defaultWithheldLabel,
+  freshnessLabel,
+  senderHoldLabel,
+  senderUnusableLabel,
+  senderVerificationLabel,
+  senderVerificationTone
+} from "../../lib/i18n/labels/email-senders";
+import {
+  channelAccountStatusLabel,
+  channelAccountStatusTone
+} from "../../lib/i18n/labels/channel-accounts";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  resolveEmailSendersScreen,
+  type EmailSenderLane
+} from "../../modules/email/application/email-senders-screen";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard and the one affordance guard, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * this screen claims. Held equal to the module's own constants by
+ * `tests/admin-email-senders-page-contract.test.ts`.
+ */
+const READ_GUARD = {
+  moduleKey: "email",
+  activityCode: "senders",
+  action: "read"
+} as const;
+const POLICY_GUARD = {
+  moduleKey: "email",
+  activityCode: "sender_policy",
+  action: "configure"
+} as const;
+
+const PATH = "/admin/email-senders";
+const CONNECTIONS_PATH = "/admin/channel-accounts";
+
+/** The `?notice=` values the client sets after a successful action: an allow-list, never echoed text. */
+const NOTICES: Record<string, string> = {
+  "default-set": t(
+    "The default sender was changed. It applies to messages queued from now on."
+  )
+};
+const noticeKey = Astro.url.searchParams.get("notice") ?? "";
+const notice = Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, auth, can }) =>
+    resolveEmailSendersScreen(
+      {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      (guard) => can({ ...guard }),
+      { policyGuard: POLICY_GUARD }
+    ),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/email-senders.astro: failed to load the email senders",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "no senders" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+
+const migrationKind = data?.migration.kind ?? "not_mailketing";
+const windowMinutes = data?.freshnessWindowMinutes ?? 0;
+
+function scopeText(scope: { type: string; id: string } | null): string {
+  return scope === null
+    ? t("Whole tenant")
+    : t("Brand or scope: {type} {id}", {
+        type: scope.type.replaceAll("_", " "),
+        id: scope.id.slice(0, 8)
+      });
+}
+
+function laneText(lane: EmailSenderLane | null): string {
+  if (lane === null) return t("No messages in the last 35 days");
+
+  return t("{waiting} waiting, {sending} sending, {failed} failed today", {
+    waiting: lane.waiting,
+    sending: lane.sending,
+    failed: lane.failedLastDay
+  });
+}
+---
+
+<AdminLayout
+  title={t("Email senders")}
+  description={t(
+    "The Mailketing accounts and sender identities of this tenant: whether each may send right now, its credit, when it was last checked and its queue. Credentials are never shown."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="email-senders-denied">
+      {t("You do not have permission to view email senders.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="email-senders-error">
+      {t(
+        "Email senders could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && data && data.unavailable && (
+    <p class="state-notice fade-in-up" id="email-senders-unavailable">
+      {t(
+        "The channel account registry could not be loaded, so sender status is not known. This is not the same as having no senders."
+      )}
+    </p>
+  )}
+
+  {canRead &&
+    !loadError &&
+    data &&
+    !data.unavailable &&
+    !data.channelAccountsEnabled && (
+      <p class="state-notice fade-in-up" id="email-senders-disabled">
+        {t(
+          "Channel accounts are switched off on this deployment, so tenant email senders cannot be connected or listed."
+        )}
+      </p>
+    )}
+
+  {canRead &&
+    !loadError &&
+    data &&
+    !data.unavailable &&
+    data.channelAccountsEnabled && (
+      <>
+        {notice !== null && (
+          <p
+            class="state-notice"
+            id="email-senders-notice"
+            role="status"
+            tabindex="-1"
+          >
+            {notice}
+          </p>
+        )}
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-senders-migration-title"
+          id="email-senders-migration"
+          data-migration={migrationKind}
+        >
+          <h2 class="admin-section-title" id="email-senders-migration-title">
+            {t("Mailketing API version")}
+          </h2>
+          <p class="page-description">
+            <span class="admin-status-pill" data-tone="success">
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {t("Tenant senders: API v2")}
+            </span>
+            {data.migration.deploymentApiVersion !== null && (
+              <span
+                class="admin-status-pill"
+                data-tone={
+                  migrationKind === "v2_verified" ? "success" : "warning"
+                }
+              >
+                <span class="admin-status-pill-dot" aria-hidden="true" />
+                {t("Deployment sender: API {version}", {
+                  version: data.migration.deploymentApiVersion
+                })}
+              </span>
+            )}
+          </p>
+          {migrationKind === "v1_active" && (
+            <p class="state-notice" id="email-senders-migration-v1">
+              {t(
+                "The deployment sender still uses Mailketing API v1. v2 is the target; v1 is a limited rollback path only. Switch after the sandbox check and confirm it with a real send. Tenant-owned senders already use v2."
+              )}
+            </p>
+          )}
+          {migrationKind === "v2_unverified" && (
+            <p class="state-notice" id="email-senders-migration-unverified">
+              {t(
+                "The deployment sender uses Mailketing API v2, but the live check has not been acknowledged (EMAIL_MAILKETING_V2_VERIFIED). v2 is not approved for production until it is."
+              )}
+            </p>
+          )}
+          {migrationKind === "invalid_version" && (
+            <p class="state-notice" id="email-senders-migration-invalid">
+              {t(
+                "The deployment's Mailketing API version setting is not v1 or v2, so the deployment sender does not send until it is fixed."
+              )}
+            </p>
+          )}
+          {migrationKind === "v2_verified" && (
+            <p class="page-description" id="email-senders-migration-ok">
+              {t("The deployment sender uses the verified Mailketing API v2.")}
+            </p>
+          )}
+          {migrationKind === "not_mailketing" && (
+            <p class="page-description" id="email-senders-migration-none">
+              {t(
+                "The deployment sender is not Mailketing, so there is no API version to migrate."
+              )}
+            </p>
+          )}
+          {!data.routingEnabled && (
+            <p class="state-notice" id="email-senders-routing-off">
+              {t(
+                "Tenant senders are switched off on this deployment: mail goes out from the deployment sender only, and the default cannot be changed."
+              )}
+            </p>
+          )}
+          <p class="page-description">
+            {t(
+              "A check older than {minutes} minutes is out of date and holds sending, exactly as the queue does. Credit below {floor} holds every sender of that account.",
+              { minutes: windowMinutes, floor: data.creditFloor }
+            )}
+          </p>
+          <p class="page-description">
+            {t(
+              "Mailketing sends outbound mail only. These senders have no inbox: replies are not received here."
+            )}
+          </p>
+        </section>
+
+        {data.truncated && (
+          <p class="state-notice" id="email-senders-truncated">
+            {t(
+              "This tenant has more Mailketing accounts than this screen loads. The newest are shown; the API lists the rest."
+            )}
+          </p>
+        )}
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-accounts-title"
+        >
+          <h2 class="admin-section-title" id="email-accounts-title">
+            {t("Mailketing accounts")}
+          </h2>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="email-accounts-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="email-accounts-table"
+            >
+              <caption id="email-accounts-caption">
+                {tn(
+                  "{count} account",
+                  "{count} accounts",
+                  data.accounts.length,
+                  {
+                    count: data.accounts.length
+                  }
+                )}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Account")}</th>
+                  <th scope="col">{t("API")}</th>
+                  <th scope="col">{t("Connection")}</th>
+                  <th scope="col">{t("Credit")}</th>
+                  <th scope="col">{t("Last checked")}</th>
+                  <th scope="col">{t("Senders")}</th>
+                  <th scope="col">{t("Bound to")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.accounts.length === 0 ? (
+                  <tr>
+                    <td colspan={7}>
+                      <span class="cell-muted" id="email-accounts-empty">
+                        {t(
+                          "No Mailketing account is connected for this tenant yet."
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                  data.accounts.map((account) => (
+                    <tr data-account-id={account.id}>
+                      <th scope="row" data-label={t("Account")}>
+                        <a
+                          href={`${CONNECTIONS_PATH}/${account.id}`}
+                          class="channel-account-link"
+                        >
+                          {account.displayName}
+                        </a>
+                        <span class="cell-muted">
+                          {" "}
+                          {channelAccountStatusLabel(t, account.status)}
+                        </span>
+                      </th>
+                      <td data-label={t("API")}>v2</td>
+                      <td
+                        data-label={t("Connection")}
+                        data-connection={account.connection}
+                      >
+                        <span
+                          class="admin-status-pill"
+                          data-tone={accountConnectionTone(account.connection)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {accountConnectionLabel(t, account.connection)}
+                        </span>
+                      </td>
+                      <td
+                        data-label={t("Credit")}
+                        data-credit={account.credit.kind}
+                      >
+                        <span
+                          class="admin-status-pill"
+                          data-tone={creditToneFor(account.credit.kind)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {creditLabel(t, account.credit, data.creditFloor)}
+                        </span>
+                      </td>
+                      <td
+                        data-label={t("Last checked")}
+                        data-freshness={account.freshness}
+                      >
+                        {formatUtcMinute(account.checkedAt)}
+                        <span class="cell-muted">
+                          {" "}
+                          {freshnessLabel(t, account.freshness, windowMinutes)}
+                        </span>
+                      </td>
+                      <td data-label={t("Senders")}>{account.senderCount}</td>
+                      <td data-label={t("Bound to")}>
+                        {scopeText(account.businessScope)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-senders-list-title"
+        >
+          <h2 class="admin-section-title" id="email-senders-list-title">
+            {t("Sender identities")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "A sender is usable only when the provider reported it verified, recently, and its account has credit. The default is chosen per brand; messages already queued keep the sender they were given and are never moved to another."
+            )}
+          </p>
+          <p
+            id="email-senders-error-default"
+            class="admin-create-error"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="email-senders-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="email-senders-table"
+            >
+              <caption id="email-senders-caption">
+                {tn("{count} sender", "{count} senders", data.senders.length, {
+                  count: data.senders.length
+                })}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Sender")}</th>
+                  <th scope="col">{t("Verification")}</th>
+                  <th scope="col">{t("Can send now")}</th>
+                  <th scope="col">{t("Last checked")}</th>
+                  <th scope="col">{t("Queue")}</th>
+                  <th scope="col">{t("Default")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.senders.length === 0 ? (
+                  <tr>
+                    <td colspan={6}>
+                      <span class="cell-muted" id="email-senders-empty">
+                        {t("No sender identity is registered for this tenant.")}
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                  data.senders.map((sender) => (
+                    <tr
+                      data-sender-id={sender.id}
+                      data-verification={sender.verification}
+                    >
+                      <th scope="row" data-label={t("Sender")}>
+                        <a
+                          href={`${CONNECTIONS_PATH}/${sender.id}`}
+                          class="channel-account-link"
+                        >
+                          {sender.displayName}
+                        </a>
+                        <span class="cell-muted"> {sender.addressMasked}</span>
+                        <span class="cell-muted">
+                          {" "}
+                          {sender.parentName !== null
+                            ? t("via {account}", { account: sender.parentName })
+                            : ""}
+                        </span>
+                        <span class="cell-muted">
+                          {" "}
+                          {scopeText(sender.businessScope)}
+                        </span>
+                      </th>
+                      <td data-label={t("Verification")}>
+                        <span
+                          class="admin-status-pill"
+                          data-tone={senderVerificationTone(
+                            sender.verification
+                          )}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {senderVerificationLabel(t, sender.verification)}
+                        </span>
+                      </td>
+                      <td
+                        data-label={t("Can send now")}
+                        data-ready={sender.readyToSend ? "yes" : "no"}
+                      >
+                        {sender.readyToSend ? (
+                          <span class="admin-status-pill" data-tone="success">
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {t("Ready")}
+                          </span>
+                        ) : (
+                          <span class="admin-status-pill" data-tone="warning">
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {sender.unusableReason !== null
+                              ? senderUnusableLabel(t, sender.unusableReason)
+                              : sender.hold !== null
+                                ? senderHoldLabel(t, sender.hold)
+                                : t("Cannot send right now")}
+                          </span>
+                        )}
+                      </td>
+                      <td
+                        data-label={t("Last checked")}
+                        data-freshness={sender.freshness}
+                      >
+                        {formatUtcMinute(sender.checkedAt)}
+                        <span class="cell-muted">
+                          {" "}
+                          {freshnessLabel(t, sender.freshness, windowMinutes)}
+                        </span>
+                      </td>
+                      <td data-label={t("Queue")}>
+                        {laneText(sender.lane)}
+                        {sender.lane !== null &&
+                          sender.lane.oldestPendingAt !== null && (
+                            <span class="cell-muted">
+                              {" "}
+                              {t("oldest waiting since {time}", {
+                                time: formatUtcMinute(
+                                  sender.lane.oldestPendingAt
+                                )
+                              })}
+                            </span>
+                          )}
+                        {sender.lane !== null && sender.lane.throttled && (
+                          <span class="cell-muted">
+                            {" "}
+                            {t("hourly limit of {limit} reached", {
+                              limit: sender.lane.hourlyLimit
+                            })}
+                          </span>
+                        )}
+                      </td>
+                      <td data-label={t("Default")}>
+                        {sender.isDefault === true && (
+                          <span class="admin-status-pill" data-tone="info">
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {t("Default for its scope")}
+                          </span>
+                        )}
+                        {sender.isDefault !== true && (
+                          <>
+                            <button
+                              type="button"
+                              class="btn btn-secondary js-email-default-sender"
+                              data-account-id={sender.id}
+                              data-scope-type={sender.businessScope?.type ?? ""}
+                              data-scope-id={sender.businessScope?.id ?? ""}
+                              disabled={sender.defaultWithheld !== null}
+                              aria-describedby={
+                                sender.defaultWithheld !== null
+                                  ? `email-default-why-${sender.id}`
+                                  : undefined
+                              }
+                            >
+                              {t("Make default sender")}
+                            </button>
+                            {sender.defaultWithheld !== null && (
+                              <span
+                                class="cell-muted"
+                                id={`email-default-why-${sender.id}`}
+                              >
+                                {" "}
+                                {defaultWithheldLabel(
+                                  t,
+                                  sender.defaultWithheld
+                                )}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {data.deploymentLane !== null && (
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="email-deployment-title"
+            id="email-deployment-lane"
+          >
+            <h2 class="admin-section-title" id="email-deployment-title">
+              {t("Deployment sender")}
+            </h2>
+            <p class="page-description">
+              {data.deploymentIsDefault === true
+                ? t(
+                    "Mail with no sender named goes out from the deployment sender."
+                  )
+                : data.deploymentIsDefault === false
+                  ? t(
+                      "A tenant sender is the default; the deployment sender is used only where a message asks for it."
+                    )
+                  : t(
+                      "The default sender is not shown to you; the deployment sender is used where a message asks for it."
+                    )}
+            </p>
+            <p class="page-description">{laneText(data.deploymentLane)}</p>
+          </section>
+        )}
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-related-title"
+          id="email-related"
+        >
+          <h2 class="admin-section-title" id="email-related-title">
+            {t("Related email screens")}
+          </h2>
+          <ul>
+            <li>
+              <a href="/admin/email-templates">{t("Email templates")}</a>
+            </li>
+            <li>
+              <a href="/admin/email-suppression">
+                {t("Email suppression list")}
+              </a>
+            </li>
+            <li>
+              <a href="/admin/newsletter">{t("Newsletter")}</a>
+            </li>
+            <li>
+              <a href={CONNECTIONS_PATH}>
+                {t(
+                  "Channel accounts (connect, replace credential, disconnect)"
+                )}
+              </a>
+            </li>
+          </ul>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-unavailable-title"
+          id="email-not-available"
+        >
+          <h2 class="admin-section-title" id="email-unavailable-title">
+            {t("Not available yet")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "These are not offered because nothing safe stands behind them yet. They are shown so you know they are missing, not forgotten."
+            )}
+          </p>
+          <ul>
+            <li>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                disabled
+                aria-describedby="email-test-send-why"
+              >
+                {t("Send a test email")}
+              </button>
+              <span class="cell-muted" id="email-test-send-why">
+                {" "}
+                {t(
+                  "A test send needs an allow-listed address and a confirmation step that do not exist yet."
+                )}
+              </span>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                disabled
+                aria-describedby="email-lists-why"
+              >
+                {t("Manage Mailketing lists and campaigns")}
+              </button>
+              <span class="cell-muted" id="email-lists-why">
+                {" "}
+                {t(
+                  "Mailketing offers no documented API for creating lists or campaigns, so it is not shown as working. Use the provider's own dashboard."
+                )}
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <div
+          id="email-senders-i18n"
+          hidden
+          data-busy={t("Please wait…")}
+          data-default-failed={t(
+            "Could not change the default sender. Please try again."
+          )}
+          data-sender-unavailable={t(
+            "That sender cannot be the default: it must be a connected, verified sender of this tenant that may send now, within its brand."
+          )}
+          data-routing-disabled={t(
+            "Tenant senders are switched off on this deployment."
+          )}
+          data-forbidden={t("You do not have permission to do that.")}
+          data-conflict={t(
+            "That was already done, or the request conflicts with an earlier one. Reload the page."
+          )}
+          data-rate-limited={t("Too many attempts. Try again later.")}
+        ></div>
+      </>
+    )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
+
+  const host = document.getElementById("email-senders-i18n");
+
+  /** A string the server rendered for us, never a fallback invented here. */
+  function say(key: string): string {
+    return host?.dataset[key] ?? "";
+  }
+
+  const defaultError = messageBox("email-senders-error-default");
+
+  document.getElementById("email-senders-notice")?.focus();
+
+  /** One key per distinct (method, url, body): a retry of the same request replays. */
+  const keyFor = createIdempotencyKeySource();
+
+  /**
+   * Every code below is one `PUT /api/v1/email/sender-policy` really emits
+   * (`tests/admin-email-senders-page-contract.test.ts` holds each case to the
+   * route's source).
+   */
+  function messageFor(errorCode: string | null): string {
+    switch (errorCode) {
+      case "SENDER_UNAVAILABLE":
+        return say("senderUnavailable");
+      case "SENDER_ROUTING_DISABLED":
+        return say("routingDisabled");
+      case "ACCESS_DENIED":
+        return say("forbidden");
+      case "IDEMPOTENCY_CONFLICT":
+        return say("conflict");
+      case "RATE_LIMITED":
+        return say("rateLimited");
+      default:
+        return say("defaultFailed");
+    }
+  }
+
+  onAction(".js-email-default-sender", async (button) => {
+    defaultError.clear();
+
+    const accountId = button.dataset.accountId;
+    const scopeType = button.dataset.scopeType ?? "";
+    const scopeId = button.dataset.scopeId ?? "";
+
+    if (!accountId) return;
+
+    const body = {
+      businessScope:
+        scopeType !== "" && scopeId !== ""
+          ? { type: scopeType, id: scopeId }
+          : null,
+      defaultSenderAccountId: accountId
+    };
+    const url = "/api/v1/email/sender-policy";
+    const unlock = lockElement(button, say("busy"));
+    const result = await sendJson("PUT", url, body, {
+      "Idempotency-Key": keyFor({ method: "PUT", url, body })
+    });
+
+    if (result.ok) {
+      holdForNavigation();
+      window.location.assign(`${window.location.pathname}?notice=default-set`);
+      return;
+    }
+
+    defaultError.show(messageFor(result.errorCode));
+    unlock();
+  });
+</script>
