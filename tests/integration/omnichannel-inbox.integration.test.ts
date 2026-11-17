@@ -1067,12 +1067,16 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
       tag.body.data!.tag.id
     ]);
 
-    // A NEW inbound after the response starts the next-response clock.
+    // A NEW inbound after the response starts the next-response clock. The
+    // response above is stamped with the real clock, so this inbound must be
+    // later than the real "now" too. A fixed date (it was 2026-11-17T04:00Z)
+    // only worked while that date was still in the future and turned this
+    // test red for every PR once the wall clock passed it.
     await telegramInbound(
       tenantId,
       bot,
       contact,
-      new Date("2026-11-17T04:00:00Z")
+      new Date(Date.now() + 60_000)
     );
     await dispatch(tenantId);
     expect((await conversationRow(contact))!.response_due_kind).toBe("next");
