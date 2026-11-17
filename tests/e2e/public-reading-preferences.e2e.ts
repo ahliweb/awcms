@@ -24,32 +24,42 @@ import type { Page } from "./support/e2e-read-wave";
 const URL = "/en/blog/e2e";
 const KEY = "awcms-a11y";
 
+/*
+ * Locale-neutral selectors on purpose. The panel speaks the page's `locale`,
+ * which on the blog index is the TENANT's default locale, not the URL's — so a
+ * spec that finds the controls by their English name passes on a tenant whose
+ * default is `en` and silently finds nothing on one whose default is `id`.
+ * Names are asserted once, in `tests/reading-preferences.test.ts`.
+ */
+const sw = (page: Page, key: string) =>
+  page.locator(`input[data-a11y-switch="${key}"]`);
+/** The label covers the whole row and sits above the input, so click the label. */
+const flip = (page: Page, key: string) =>
+  page.locator(`label[for="a11y-sw-${key}"]`).click();
+const radio = (page: Page, value: string) =>
+  page.locator(`input[name="a11y-text"][value="${value}"]`);
+
 const SWITCHES = [
-  { name: "contrast", attribute: "data-a11y-contrast", label: "High contrast" },
-  { name: "mono", attribute: "data-a11y-mono", label: "Monochrome" },
+  { name: "contrast", attribute: "data-a11y-contrast" },
+  { name: "mono", attribute: "data-a11y-mono" },
   {
     name: "dyslexia",
-    attribute: "data-a11y-dyslexia",
-    label: "Dyslexia-friendly text"
+    attribute: "data-a11y-dyslexia"
   },
   {
     name: "underline",
-    attribute: "data-a11y-underline",
-    label: "Underline all links"
+    attribute: "data-a11y-underline"
   },
   {
     name: "highlight",
-    attribute: "data-a11y-highlight",
-    label: "Highlight links"
+    attribute: "data-a11y-highlight"
   },
-  { name: "motion", attribute: "data-a11y-motion", label: "Reduce motion" }
+  { name: "motion", attribute: "data-a11y-motion" }
 ] as const;
 
 async function openPanel(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Accessibility settings" }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Accessibility settings" })
-  ).toBeVisible();
+  await page.locator("#a11y-fab").click();
+  await expect(page.locator("#a11y-panel")).toBeVisible();
 }
 
 function stored(page: Page): Promise<unknown> {
@@ -98,12 +108,12 @@ test.describe("reading preferences — the panel", () => {
     page
   }) => {
     await page.goto(URL);
-    const fab = page.getByRole("button", { name: "Accessibility settings" });
+    const fab = page.locator("#a11y-fab");
 
     await expect(fab).toHaveAttribute("aria-expanded", "false");
     await fab.click();
 
-    const dialog = page.getByRole("dialog", { name: "Accessibility settings" });
+    const dialog = page.locator("#a11y-panel");
 
     await expect(dialog).toBeVisible();
     await expect(fab).toHaveAttribute("aria-expanded", "true");
@@ -133,7 +143,7 @@ test.describe("reading preferences — the panel", () => {
   }) => {
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("button", { name: "Close settings" }).click();
+    await page.locator("#a11y-close").click();
 
     await expect(page.locator("#a11y-panel")).toBeHidden();
     await expect(page.locator("#a11y-fab")).toBeFocused();
@@ -159,24 +169,18 @@ test.describe("reading preferences — the panel", () => {
     // Tab: close button, three text sizes (one stop for the radio group), six
     // switches, reset. Then a switch is flipped with Space.
     await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("button", { name: "Close settings" })
-    ).toBeFocused();
+    await expect(page.locator("#a11y-close")).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("radio", { name: "Normal" })).toBeFocused();
+    await expect(radio(page, "normal")).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(
-      page.getByRole("radio", { name: "Large", exact: true })
-    ).toBeChecked();
+    await expect(radio(page, "large")).toBeChecked();
     await expect(page.locator("html")).toHaveAttribute(
       "data-a11y-text",
       "large"
     );
 
     await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("switch", { name: "High contrast" })
-    ).toBeFocused();
+    await expect(sw(page, "contrast")).toBeFocused();
     await page.keyboard.press("Space");
     await expect(page.locator("html")).toHaveAttribute(
       "data-a11y-contrast",
@@ -186,14 +190,14 @@ test.describe("reading preferences — the panel", () => {
 });
 
 test.describe("reading preferences — each preference", () => {
-  for (const { name, attribute, label } of SWITCHES) {
+  for (const { name, attribute } of SWITCHES) {
     test(`${name}: sets ${attribute}, persists across reload, and switches back off`, async ({
       page
     }) => {
       await page.goto(URL);
       await openPanel(page);
 
-      const control = page.getByRole("switch", { name: label });
+      const control = sw(page, name);
 
       await expect(control).not.toBeChecked();
       await control.click();
@@ -212,18 +216,15 @@ test.describe("reading preferences — each preference", () => {
         name === "motion" ? "reduce" : ""
       );
       await openPanel(page);
-      await expect(page.getByRole("switch", { name: label })).toBeChecked();
+      await expect(sw(page, name)).toBeChecked();
 
-      await page.getByRole("switch", { name: label }).click();
+      await flip(page, name);
       await expect(page.locator("html")).not.toHaveAttribute(attribute, /.*/);
       expect(await stored(page)).toMatchObject({ v: 1, [name]: false });
     });
   }
 
-  for (const [option, value] of [
-    ["Large", "large"],
-    ["Extra large", "x-large"]
-  ] as const) {
+  for (const value of ["large", "x-large"] as const) {
     test(`text size ${value}: scales the root and persists`, async ({
       page
     }) => {
@@ -233,9 +234,7 @@ test.describe("reading preferences — each preference", () => {
       );
 
       await openPanel(page);
-      await page
-        .getByRole("radio", { name: option, exact: true })
-        .check({ force: true });
+      await radio(page, value).check({ force: true });
 
       await expect(page.locator("html")).toHaveAttribute(
         "data-a11y-text",
@@ -269,21 +268,19 @@ test.describe("reading preferences — each preference", () => {
     await page.goto(URL);
     await openPanel(page);
 
-    for (const { label } of SWITCHES) {
-      await page.getByRole("switch", { name: label }).click();
+    for (const { name } of SWITCHES) {
+      await flip(page, name);
     }
-    await page
-      .getByRole("radio", { name: "Large", exact: true })
-      .check({ force: true });
+    await radio(page, "large").check({ force: true });
     expect((await preferenceAttributes(page)).length).toBe(7);
 
-    await page.getByRole("button", { name: "Reset to defaults" }).click();
+    await page.locator("#a11y-reset").click();
 
     expect(await stored(page)).toBeNull();
     expect(await preferenceAttributes(page)).toEqual([]);
-    await expect(page.getByRole("radio", { name: "Normal" })).toBeChecked();
-    for (const { label } of SWITCHES) {
-      await expect(page.getByRole("switch", { name: label })).not.toBeChecked();
+    await expect(radio(page, "normal")).toBeChecked();
+    for (const { name } of SWITCHES) {
+      await expect(sw(page, name)).not.toBeChecked();
     }
   });
 
@@ -300,7 +297,7 @@ test.describe("reading preferences — each preference", () => {
       );
     });
     await openPanel(page);
-    await page.getByRole("switch", { name: "Reduce motion" }).click();
+    await flip(page, "motion");
 
     const seen = await page.evaluate(
       () => (window as unknown as { __seen: unknown[] }).__seen
@@ -321,7 +318,7 @@ test.describe("reading preferences — each preference", () => {
 
     expect(await preferenceAttributes(page)).toEqual([]);
     await openPanel(page);
-    await expect(page.getByRole("radio", { name: "Normal" })).toBeChecked();
+    await expect(radio(page, "normal")).toBeChecked();
   });
 });
 
@@ -342,12 +339,8 @@ test.describe("reading preferences — what the CSS really does", () => {
     );
     expect(await stored(page)).toBeNull();
     await openPanel(page);
-    await expect(
-      page.getByRole("switch", { name: "Reduce motion" })
-    ).toBeChecked();
-    await expect(
-      page.getByRole("switch", { name: "High contrast" })
-    ).toBeChecked();
+    await expect(sw(page, "motion")).toBeChecked();
+    await expect(sw(page, "contrast")).toBeChecked();
   });
 
   test("high contrast reaches 7:1 for body text, light and dark", async ({
@@ -357,7 +350,7 @@ test.describe("reading preferences — what the CSS really does", () => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(URL);
       await openPanel(page);
-      await page.getByRole("switch", { name: "High contrast" }).click();
+      await flip(page, "contrast");
 
       const [text, bg] = await page.evaluate(() => {
         const cs = getComputedStyle(document.body);
@@ -376,7 +369,7 @@ test.describe("reading preferences — what the CSS really does", () => {
     await page.emulateMedia({ forcedColors: "active" });
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("switch", { name: "High contrast" }).click();
+    await flip(page, "contrast");
 
     await expect(page.locator("html")).toHaveAttribute(
       "data-a11y-contrast",
@@ -397,7 +390,7 @@ test.describe("reading preferences — what the CSS really does", () => {
     await page.setViewportSize({ width: 360, height: 400 });
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("switch", { name: "Monochrome" }).click();
+    await flip(page, "mono");
     await page.keyboard.press("Escape");
 
     expect(
@@ -426,7 +419,7 @@ test.describe("reading preferences — what the CSS really does", () => {
   }) => {
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("switch", { name: "Dyslexia-friendly text" }).click();
+    await flip(page, "dyslexia");
 
     const metrics = await page.locator("h1").evaluate((el) => {
       const cs = getComputedStyle(el);
@@ -464,12 +457,12 @@ test.describe("reading preferences — what the CSS really does", () => {
     ).toBe("none");
 
     await openPanel(page);
-    await page.getByRole("switch", { name: "Underline all links" }).click();
+    await flip(page, "underline");
     expect(
       await probe.evaluate((el) => getComputedStyle(el).textDecorationLine)
     ).toContain("underline");
 
-    await page.getByRole("switch", { name: "Highlight links" }).click();
+    await flip(page, "highlight");
     expect(
       await probe.evaluate((el) => getComputedStyle(el).backgroundColor)
     ).toBe("rgb(255, 235, 59)");
@@ -482,7 +475,7 @@ test.describe("reading preferences — what the CSS really does", () => {
   }) => {
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("switch", { name: "Reduce motion" }).click();
+    await flip(page, "motion");
 
     const offenders = await page.evaluate(() =>
       Array.from(document.querySelectorAll("*"))
@@ -520,14 +513,12 @@ test.describe("reading preferences — the panel is itself accessible", () => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(URL);
       await openPanel(page);
-      for (const { label } of SWITCHES) {
-        const control = page.getByRole("switch", { name: label });
+      for (const { name } of SWITCHES) {
+        const control = sw(page, name);
 
         if (!(await control.isChecked())) await control.click();
       }
-      await page
-        .getByRole("radio", { name: "Extra large" })
-        .check({ force: true });
+      await radio(page, "x-large").check({ force: true });
 
       expect(await serious(page), scheme).toEqual([]);
       await page.evaluate((key) => window.localStorage.removeItem(key), KEY);
@@ -539,7 +530,7 @@ test.describe("reading preferences — the panel is itself accessible", () => {
   }) => {
     await page.goto(URL);
     await openPanel(page);
-    await page.getByRole("switch", { name: "High contrast" }).click();
+    await flip(page, "contrast");
     await page.keyboard.press("Escape");
 
     expect(await serious(page)).toEqual([]);
@@ -552,9 +543,9 @@ test.describe("reading preferences — the panel is itself accessible", () => {
     expect(Math.min(fab.width, fab.height)).toBeGreaterThanOrEqual(44);
     await openPanel(page);
     for (const locator of [
-      page.getByRole("button", { name: "Close settings" }),
-      page.getByRole("button", { name: "Reset to defaults" }),
-      ...SWITCHES.map((s) => page.getByRole("switch", { name: s.label }))
+      page.locator("#a11y-close"),
+      page.locator("#a11y-reset"),
+      ...SWITCHES.map((s) => sw(page, s.name))
     ]) {
       const box = (await locator.boundingBox())!;
 
@@ -575,12 +566,8 @@ test.describe("reading preferences — reflow (WCAG 1.4.10)", () => {
       await page.setViewportSize({ width, height });
       await page.goto(URL);
       await openPanel(page);
-      await page
-        .getByRole("radio", { name: "Extra large" })
-        .check({ force: true });
-      await page
-        .getByRole("switch", { name: "Dyslexia-friendly text" })
-        .click();
+      await radio(page, "x-large").check({ force: true });
+      await flip(page, "dyslexia");
 
       const overflow = await page.evaluate(() => ({
         page:
