@@ -151,15 +151,15 @@ describe("parseAuditOutput", () => {
 });
 
 describe("the shipped exception list", () => {
-  test("is empty", () => {
+  test("holds exactly the picomatch entry mitigated by a local patch", () => {
     // Not style: pinning the exact set makes the next exception a visible edit
     // here, so it cannot be added without a reviewer seeing it. Same reasoning
     // ADR-0058 settled for the permission-enforcement gate. The last entry
     // (http-cache-semantics GHSA-ch52-4w7c-c8xp) was removed once astro@7.4.0
     // brought the patched http-cache-semantics@4.3.0.
-    expect(EXCEPTIONS.map((e) => `${e.packageName} ${e.advisoryUrl}`)).toEqual(
-      []
-    );
+    expect(EXCEPTIONS.map((e) => `${e.packageName} ${e.advisoryUrl}`)).toEqual([
+      "picomatch https://github.com/advisories/GHSA-fc5q-39xc-vjpf"
+    ]);
   });
 
   test("any future entry must carry reason, owner, and reviewDate", () => {

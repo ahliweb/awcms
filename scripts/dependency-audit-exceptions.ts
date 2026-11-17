@@ -1,7 +1,10 @@
 /**
  * Exceptions for `bun run deps:audit:check` — advisories knowingly accepted.
  *
- * **Empty is the target state, and the list is empty.** Its last entry,
+ * **Empty is the target state.** One entry is open today: `picomatch`
+ * GHSA-fc5q-39xc-vjpf (2026-11-18), mitigated by a local patch because no
+ * upstream release fixes it — see the entry. Before that the list was empty: its
+ * previous entry,
  * `http-cache-semantics` GHSA-ch52-4w7c-c8xp (accepted 2026-10-03 because no
  * patched release existed), was removed when `astro@7.4.0` brought in the
  * patched `http-cache-semantics@4.3.0` — `deps:audit:check` reported the entry
@@ -51,4 +54,13 @@ export type AuditException = {
   reviewDate: string;
 };
 
-export const EXCEPTIONS: readonly AuditException[] = [];
+export const EXCEPTIONS: readonly AuditException[] = [
+  {
+    packageName: "picomatch",
+    advisoryUrl: "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+    reason:
+      "ReDoS through single-branch repeated extglobs (<=4.0.7) with no patched release (first_patched_version null on 2026-11-18; upstream fixes are still unmerged PRs). Mitigated, not merely accepted: patches/picomatch@4.0.7.patch and patches/picomatch@2.3.2.patch (package.json patchedDependencies) force opts.noextglob = true in lib/parse.js, so extglob syntax is matched literally and the vulnerable parser path is unreachable; the advisory proof-of-concept patterns run in milliseconds after the patch. Exposure was already low: every picomatch pattern here comes from repo or dependency configuration (astro/vite/tinyglobby filters, changesets, unstorage watch globs), never from a visitor. bun audit matches by version, so it still reports 4.0.7. Remove this entry and both patches once picomatch publishes a fixed release.",
+    owner: "unggul (owner decision via dialog, 2026-11-18)",
+    reviewDate: "2026-12-18"
+  }
+];
