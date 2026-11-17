@@ -86,6 +86,28 @@ type EnvOptions = {
 
 const KEY = "awcms-a11y";
 
+/**
+ * Every opening tag named `name`, found by scanning rather than by a tag-shaped
+ * regular expression (CodeQL's js/bad-tag-filter flags those, rightly: they are
+ * the wrong tool for HTML). Good enough here because the input is our own
+ * server-rendered output, not arbitrary markup.
+ */
+function openingTags(html: string, name: string): string[] {
+  const lower = html.toLowerCase();
+  const needle = `<${name}`;
+  const found: string[] = [];
+  let at = lower.indexOf(needle);
+
+  while (at !== -1) {
+    const end = html.indexOf(">", at);
+
+    found.push(html.slice(at, end + 1));
+    at = lower.indexOf(needle, end);
+  }
+
+  return found;
+}
+
 /** Runs the shipped early-apply script against a stand-in browser. */
 function load(options: EnvOptions = {}): Env {
   const attrs = new Map<string, string>();
@@ -491,8 +513,12 @@ describe("panel markup", () => {
   ] as const) {
     describe(`structure (${name})`, () => {
       test("the button and the dialog start hidden (progressive enhancement)", () => {
-        expect(html).toMatch(/<button[^>]*id="a11y-fab"[^>]*\bhidden\b/);
-        expect(html).toMatch(/<div[^>]*id="a11y-panel"[^>]*\bhidden\b/);
+        expect(
+          openingTags(html, "button").find((t) => t.includes('id="a11y-fab"'))
+        ).toContain(" hidden");
+        expect(
+          openingTags(html, "div").find((t) => t.includes('id="a11y-panel"'))
+        ).toContain(" hidden");
       });
 
       test("the button is wired to a NON-modal dialog", () => {
@@ -554,8 +580,8 @@ describe("panel markup", () => {
       });
 
       test("no inline script, no inline style, no event-handler attribute", () => {
-        expect(html).not.toMatch(/<script/i);
-        expect(html).not.toMatch(/<style/i);
+        expect(html.toLowerCase()).not.toContain("<script");
+        expect(html.toLowerCase()).not.toContain("<style");
         expect(html).not.toMatch(/\sstyle=/i);
         expect(html).not.toMatch(/\son[a-z]+=/i);
       });
@@ -591,10 +617,10 @@ describe("head tags and CSP", () => {
     }
     // Every <script> has a src (no inline body) — which is what keeps the CSP's
     // `script-src 'self' <one hash>` untouched.
-    for (const script of head.match(/<script[^>]*>/g) ?? []) {
+    for (const script of openingTags(head, "script")) {
       expect(script).toContain(" src=");
     }
-    expect(head).not.toMatch(/<style/i);
+    expect(head.toLowerCase()).not.toContain("<style");
   });
 
   test("every asset exists under public/ and is declared as reader weight", () => {
@@ -665,7 +691,7 @@ describe("surfaces that carry the panel", () => {
 
   test("the blog shell still has no inline script of its own", () => {
     // The only <script> elements are the two same-origin files.
-    const scripts = shell.match(/<script[^>]*>/g) ?? [];
+    const scripts = openingTags(shell, "script");
 
     expect(scripts).toHaveLength(2);
     for (const script of scripts) expect(script).toContain(" src=");
@@ -687,9 +713,9 @@ describe("surfaces that carry the panel", () => {
     expect(html.indexOf('id="a11y-fab"')).toBeGreaterThan(
       html.indexOf("</main>")
     );
-    expect(
-      (html.match(/<script[^>]*>/g) ?? []).every((s) => s.includes(" src="))
-    ).toBe(true);
+    expect(openingTags(html, "script").every((s) => s.includes(" src="))).toBe(
+      true
+    );
   });
 
   test("the theme preview layout renders the same head and the same panel", () => {
