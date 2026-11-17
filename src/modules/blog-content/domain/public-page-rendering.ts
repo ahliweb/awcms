@@ -1,4 +1,8 @@
 import { escapeHtml } from "../../../lib/html/escape";
+import {
+  renderReadingPreferencesHead,
+  renderReadingPreferencesPanel
+} from "../../../lib/ui/reading-preferences-panel";
 import { renderJsonLdScriptTag } from "./structured-data-rendering";
 import { resolveOgLocale } from "./seo-rendering";
 
@@ -225,6 +229,7 @@ export function renderPublicPageShell(options: PublicPageShellOptions): string {
 <title>${escapeHtml(options.title)}</title>
 <meta name="description" content="${escapeHtml(options.description)}" />
 <link rel="stylesheet" href="${PUBLIC_CONTENT_STYLESHEET_HREF}" />
+${renderReadingPreferencesHead()}
 ${canonicalTag}
 ${hreflangTags}
 ${robotsTag}
@@ -236,6 +241,7 @@ ${jsonLdTag}
 <main id="pc-main" class="${pageClass}">
 ${options.bodyHtml}
 </main>
+${renderReadingPreferencesPanel(options.locale, options.siteName)}
 </body>
 </html>`;
 }

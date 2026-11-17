@@ -24,6 +24,10 @@
  * theme's token defaults meet WCAG AA contrast (asserted by the a11y test).
  */
 import type { PreviewViewModel } from "../modules/theming/application/theme-preview-render";
+import {
+  renderReadingPreferencesHead,
+  renderReadingPreferencesPanel
+} from "../lib/ui/reading-preferences-panel";
 
 interface Props {
   title: string;
@@ -51,6 +55,7 @@ const {
     <title>{title}</title>
     {noindex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="stylesheet" href={tokenCssHref} />
+    <Fragment set:html={renderReadingPreferencesHead()} />
   </head>
   <body
     data-header={model.headerVariant}
@@ -94,6 +99,8 @@ const {
       </footer>
     </div>
 
+    <Fragment set:html={renderReadingPreferencesPanel(lang, model.themeName)} />
+
     <style>
       :root {
         --_bg: var(--awcms-theme-color_background, #ffffff);
@@ -121,6 +128,34 @@ const {
           --awcms-theme-motion_ease,
           cubic-bezier(0.16, 1, 0.3, 1)
         );
+      }
+
+      /* Reading preferences (Issue #1369, ADR-0166). The panel and the high-contrast
+         palette speak the site's `--color-*` tokens (public-a11y.css); this
+         layout speaks `--_*`, so map each way. `:root` is exempt from Astro's
+         scoping, which is why these are not written as `html`. */
+      :root {
+        --color-bg: var(--_bg);
+        --color-surface: var(--_surface);
+        --color-text: var(--_text);
+        --color-text-muted: var(--_muted);
+        --color-primary: var(--_primary);
+        --color-border: var(--_border);
+        --color-focus: var(--_accent);
+      }
+      /* Not under forced colours: public-a11y.css sets no palette there, so the
+         two mappings would point at each other. */
+      @media (forced-colors: none) {
+        :root[data-a11y-contrast] {
+          --_bg: var(--color-bg);
+          --_surface: var(--color-surface);
+          --_text: var(--color-text);
+          --_muted: var(--color-text-muted);
+          --_primary: var(--color-primary);
+          --_on-primary: var(--color-bg);
+          --_border: var(--color-border);
+          --_accent: var(--color-focus);
+        }
       }
 
       /* Subtle, tasteful entrance for the public shell (guarded below). */

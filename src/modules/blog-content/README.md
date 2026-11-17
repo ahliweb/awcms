@@ -341,6 +341,19 @@ inline, so it adds zero CSP surface.
 `og:image:alt` are unchanged since Issue #636 (still gated on a verified R2 media
 object).
 
+`renderPublicPageShell` also renders the **reading-preferences panel** (Issue #1369,
+ADR-0166) and links its same-origin assets (`public/css/public-a11y.css`,
+`public/js/a11y-early.js`, `public/js/a11y-panel.js`) — a floating button and a
+non-modal dialog through which a reader chooses text size, high contrast,
+monochrome, dyslexia-friendly spacing, link emphasis and reduced motion. The
+choice lives only in the reader's `localStorage` (`awcms-a11y`) and is applied as
+`data-a11y-*` attributes on `<html>`; nothing is sent to the server. The markup
+comes from `src/lib/ui/reading-preferences-panel.ts` in the page's `locale`
+(Indonesian by default, English for `en`), and `siteName`, when given, labels the
+panel's eyebrow. It adds no inline script or style, so the CSP is unchanged. Any
+page that sets its own font size must use `rem`, or the text-size choice cannot
+reach it. See `docs/awcms/14_ui_ux_design_system.md`.
+
 ## Public route settings
 
 `application/public-route-settings.ts`'s `fetchEffectivePublicRouteSettings(tx, tenantId)`
