@@ -109,6 +109,14 @@ export const PUBLIC_ASSET_AUDIENCE: Readonly<
   // Linked by `src/pages/blog/[tenantCode]/[slug].ts`
   // (`NEWS_SHARE_CLIENT_SCRIPT_SRC`) — the share annotator on article pages.
   "js/news-share.js": "reader",
+  // Linked by `src/lib/ui/reading-preferences-panel.ts`
+  // (`renderReadingPreferencesHead`) from every public surface — the blog
+  // shell, `/search` and the theme preview (Issue #1369, ADR-0166): the
+  // reader's own display preferences. Early-apply script (blocking, in
+  // <head>), panel script (deferred) and their stylesheet.
+  "js/a11y-early.js": "reader",
+  "js/a11y-panel.js": "reader",
+  "css/public-a11y.css": "reader",
   // Registered by `src/lib/ui/push-subscription-client.ts`, reached from the
   // `/admin/push-notifications` console. A reader never fetches it.
   "push-sw.js": "app",
@@ -160,8 +168,37 @@ export const PUBLIC_ASSET_AUDIENCE: Readonly<
  * Deliberately tight. This is the number the original budget's premise — "the
  * public pages feel slow" — was always about, and 2,585 B of headroom is about
  * one more small script. It should be hard to grow this without saying why.
+ *
+ * **Raised to 39,000 for the reading-preferences panel (Issue #1369,
+ * ADR-0166), and the gate's own question — which reader-visible feature bought
+ * the weight, and was it re-measured — has a direct answer.** Measured on a
+ * clean build:
+ *
+ * ```
+ * main                         21,415 B
+ * + js/a11y-early.js            3,246 B   (blocking, <head>: storage contract + apply)
+ * + js/a11y-panel.js            2,394 B   (deferred: wires the dialog)
+ * + css/public-a11y.css        10,840 B   (preferences + panel; 3,054 B gzipped)
+ * + public-content.css            ~+0 B   (px font tokens became rem)
+ * after                        38,388 B   (delta 16,973 B; ~5.2 kB gzipped)
+ * ```
+ *
+ * The three files are the whole feature: no dependency, no framework, no font
+ * (a "dyslexia font" was rejected, ADR-0166). The panel's HTML is rendered into
+ * the page by the server and is not counted here. 39,000 is measured + ~1.6%,
+ * deliberately tight for the reason above. Later minification of these three
+ * files is the known way to win some of it back and is recorded as a follow-up
+ * rather than done here, because a generated, version-pinned bundle is a
+ * separate decision (ADR-0166 §Alternatives).
+ *
+ * This is above `PER_FILE_BUDGET_BYTES` (27,000), which ADR-0101 had kept above
+ * the reader budget so the surface budget always fired first. The per-file rule
+ * is therefore now reachable on the reader surface as well: one file over 27,000
+ * B fails on its own, before the surface total is reached. That is the stricter
+ * direction, so the ordering test was replaced by one asserting the two rules
+ * are independent and both positive.
  */
-export const READER_BUDGET_BYTES = 24_000;
+export const READER_BUDGET_BYTES = 39_000;
 
 /**
  * What the APP surface downloads (admin, auth, landing, theming preview):
@@ -1319,8 +1356,17 @@ export const READER_BUDGET_BYTES = 24_000;
  * but the combined bundle measures 384,730 B (shared chunks do not add up
  * linearly), so the budget is 384,870 B: measured + 140 B, the same tight
  * margin as the raises above.
+ *
+ * **Raised for Issue #1369** (reading-preferences panel on the theme preview):
+ * +590 B (384,870 -> 385,460), measured 385,319 B with this change on a clean
+ * build (`main` sat at 384,826 B). The cost is one scoped-style block in
+ * `PublicThemeLayout.astro` — two `:root` mappings between the layout's `--_*`
+ * tokens and the `--color-*` tokens the panel and its high-contrast palette use
+ * — and the panel markup itself. The layout is the only app-surface page that
+ * renders the panel; every other public page is a reader-surface route, whose
+ * weight is in `READER_BUDGET_BYTES`. Margin 141 B, as above.
  */
-export const APP_BUDGET_BYTES = 384_870;
+export const APP_BUDGET_BYTES = 385_460;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

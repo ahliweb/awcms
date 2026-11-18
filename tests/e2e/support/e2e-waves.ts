@@ -99,6 +99,10 @@ export const READ_WAVE: readonly string[] = [
   // it never logs in and never touches tenant state, and it needs no content
   // fixture because an empty blog index is itself a `200`.
   "public-blog-locale-prefix.e2e.ts",
+  // Issue #1369 — the public reading-preferences panel: opens it, flips each
+  // preference, reloads, runs axe. Everything it stores is in the browser's own
+  // `localStorage`; it sends no request that changes tenant state.
+  "public-reading-preferences.e2e.ts",
   "responsive-360.e2e.ts"
 ];
 

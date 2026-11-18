@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:5997dc225528d0f754fc1f69bed812ce645e3193e7f81f7dda9d8621286374b2 -->
+<!-- i18n-source-hash: sha256:a65d2d4a8727d9576f63bbaceda09de78ed76d55fa4cb7e3c9fb31190f142716 -->
 
 # Blog Content
 
@@ -342,6 +342,20 @@ pernah inline, sehingga menambah nol permukaan CSP.
 `twitter:title`/`twitter:description`/`twitter:card`. `og:image`/`twitter:image`/
 `og:image:alt` tidak berubah sejak Issue #636 (tetap digerbangi objek media R2
 terverifikasi).
+
+`renderPublicPageShell` juga merender **panel preferensi baca** (Issue #1369,
+ADR-0166) dan menautkan aset satu origin-nya (`public/css/public-a11y.css`,
+`public/js/a11y-early.js`, `public/js/a11y-panel.js`) — tombol mengambang dan
+dialog non-modal tempat pembaca memilih ukuran teks, kontras tinggi, monokrom,
+spasi ramah disleksia, penekanan tautan, dan pengurangan gerakan. Pilihan hanya
+tinggal di `localStorage` pembaca (`awcms-a11y`) dan diterapkan sebagai atribut
+`data-a11y-*` pada `<html>`; tidak ada yang dikirim ke server. Markupnya berasal
+dari `src/lib/ui/reading-preferences-panel.ts` dalam `locale` halaman (Indonesia
+secara bawaan, Inggris untuk `en`), dan `siteName`, bila diberikan, melabeli
+eyebrow panel. Ia tidak menambah skrip atau gaya inline, sehingga CSP tidak
+berubah. Halaman mana pun yang menetapkan ukuran font sendiri harus memakai
+`rem`, atau pilihan ukuran teks tidak dapat menjangkaunya. Lihat
+`docs/awcms/14_ui_ux_design_system.id.md`.
 
 ## Public route settings
 

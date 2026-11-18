@@ -332,15 +332,27 @@ describe("the real budget constants and registry", () => {
     expect(APP_BUDGET_BYTES).toBeGreaterThan(PER_FILE_BUDGET_BYTES);
   });
 
-  test("the reader budget binds TIGHTER than the per-file cap, by design", () => {
-    // Deliberately inverted against the app surface: the reader budget
-    // (24,000) is below the per-file cap (27,000), so a single reader-facing
-    // file large enough to trip the per-file rule has already broken the
-    // reader budget. The tighter of the two is the one that should fire, and
-    // for the reader surface that is the surface budget — this asserts the
-    // ordering is the intended one rather than an accident nobody noticed.
+  test("the reader surface budget and the per-file cap are independent rules", () => {
+    // ADR-0101 kept the reader budget BELOW the per-file cap so the surface
+    // budget always fired first. Issue #1369 (ADR-0166) raised the reader budget
+    // above it, on purpose: the per-file rule is now reachable on the reader
+    // surface too, which is the stricter direction (one file over the cap fails
+    // by itself). What is asserted is that both rules exist and are positive,
+    // not an ordering nobody has a reason to keep.
     expect(READER_BUDGET_BYTES).toBeGreaterThan(0);
-    expect(READER_BUDGET_BYTES).toBeLessThan(PER_FILE_BUDGET_BYTES);
+    expect(PER_FILE_BUDGET_BYTES).toBeGreaterThan(0);
+  });
+
+  test("the reading-preferences assets are declared, and as reader weight", () => {
+    // They load on every public page, so they are reader weight whatever the
+    // feature's size; declaring them anywhere else would hide the cost.
+    for (const file of [
+      "js/a11y-early.js",
+      "js/a11y-panel.js",
+      "css/public-a11y.css"
+    ]) {
+      expect(PUBLIC_ASSET_AUDIENCE[file]).toBe("reader");
+    }
   });
 
   test("every declared audience is one of the three known values", () => {

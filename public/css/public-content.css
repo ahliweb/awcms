@@ -30,6 +30,15 @@
  * overrides are kept too so an operator who later injects a theme attribute
  * still wins.
  *
+ * READING PREFERENCES
+ * -------------------
+ * The visitor's own display choices (text size, contrast, ...) are a separate
+ * same-origin stylesheet, `/css/public-a11y.css` (Issue #1369, ADR-0166), so
+ * a page that never uses them does not pay for these rules twice. Text size
+ * works by scaling the root font size, which is why every `--fs-*` token below
+ * is in `rem`: a `px` token would ignore the choice. At the default root size
+ * (16px) every value is unchanged.
+ *
  * MOTION / A11Y
  * -------------
  * Every entrance animation (and its initial hidden state) lives inside
@@ -57,13 +66,13 @@
   --font-sans: system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
 
-  --fs-sm: 14px;
-  --fs-base: 16px;
-  --fs-md: 18px;
-  --fs-lg: 20px;
-  --fs-xl: 24px;
-  --fs-2xl: 32px;
-  --fs-3xl: 40px;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --fs-3xl: 2.5rem;
 
   --fw-normal: 400;
   --fw-medium: 500;

@@ -25,6 +25,10 @@
  *    Keeping them a parameter is what makes adding one later a caller change.
  */
 import { escapeHtml } from "../../../lib/html/escape";
+import {
+  renderReadingPreferencesHead,
+  renderReadingPreferencesPanel
+} from "../../../lib/ui/reading-preferences-panel";
 import type { SearchResultItem } from "../application/search-service";
 
 export type SearchPageLabels = {
@@ -123,7 +127,13 @@ ${view.items.map(renderResultItem).join("\n")}
 </main>`;
 }
 
-/** The full standalone document for the public search page — `noindex` because a search-results page must never be indexed. */
+/**
+ * The full standalone document for the public search page — `noindex` because a search-results page must never be indexed.
+ *
+ * Carries the reading-preferences panel (Issue #1369, ADR-0166) like every public
+ * surface: the panel adds same-origin scripts only, so this page's "no inline
+ * script" property above is unchanged.
+ */
 export function renderSearchPageDocument(view: SearchPageView): string {
   return `<!doctype html>
 <html lang="${escapeHtml(view.locale)}">
@@ -132,7 +142,9 @@ export function renderSearchPageDocument(view: SearchPageView): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, follow" />
   <title>${escapeHtml(`${view.labels.title} — ${view.siteName}`)}</title>
+  ${renderReadingPreferencesHead()}
 </head>
-<body>${renderSearchPageBody(view)}</body>
+<body>${renderSearchPageBody(view)}
+${renderReadingPreferencesPanel(view.locale, view.siteName)}</body>
 </html>`;
 }
