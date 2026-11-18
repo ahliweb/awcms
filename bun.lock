@@ -20,10 +20,6 @@
       },
     },
   },
-  "patchedDependencies": {
-    "picomatch@4.0.7": "patches/picomatch@4.0.7.patch",
-    "picomatch@2.3.2": "patches/picomatch@2.3.2.patch",
-  },
   "overrides": {
     "devalue": "^5.9.4",
     "js-yaml": "^4.3.2",
