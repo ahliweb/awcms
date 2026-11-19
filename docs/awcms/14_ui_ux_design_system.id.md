@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:2a2cefbdc4e9e69b0dd38fec6ead86458972edb38fc9901515035609d84354bc -->
+<!-- i18n-source-hash: sha256:aeea6df0c51e85b1d29ba766d8601f0ea4e7c7227056bb95a1cf0ae09c055033 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -466,7 +466,7 @@ Setiap permukaan HTML publik — cangkang blog (`/blog/**`, `/{locale}/blog/**`)
 - **Warna berasal dari token situs sendiri** (`--color-*`, dengan fallback literal), sehingga panel mengikuti tiap tema dan skema gelap; layout pratinjau tema memetakan token `--_*`-nya ke token itu.
 - **Halaman yang menambahkan ukuran font dalam `px` menggagalkan pilihan ukuran teks.** Pakai `rem` (atau token yang berbasis `rem`).
 - **Tes:** `tests/reading-preferences.test.ts` (kontrak penyimpanan dijalankan terhadap skrip yang dikirim, markup, kesesuaian CSS/skrip) dan `tests/e2e/public-reading-preferences.e2e.ts` (fokus, persistensi, tiap efek, axe dengan panel terbuka dan dengan semua preferensi menyala, tanpa overflow horizontal pada 360 dan 320 px dengan teks sangat besar).
-- **Belum dikerjakan:** uji kegunaan dengan pembaca nyata (ditunda ke UAT sebelum gerbang kesiapan rilis).
+- **Tidak dikerjakan di sini, by design:** uji kegunaan dengan pembaca nyata tidak dijalankan di repo upstream ini (tidak ada UAT di sini; keputusan pemilik 2026-11-19, amandemen ADR-0166). Tiap repo implementasi yang mengadopsi panel menjalankannya dalam UAT-nya sendiri.
 
 ## Internationalization (i18n)
 
