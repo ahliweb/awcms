@@ -85,3 +85,9 @@ The Definition-of-Ready gate for this slice was passed by the owner on **2026-11
 - The public shell's other strings ("Skip to content", "Previous") are still literal English; moving them and this panel to the gettext catalogue is a separate change.
 - No live reaction to an OS preference changing while the page is open; a reload applies it.
 - Adoption in `awcms-astro` is that repo's decision.
+
+## Amendment (2026-11-19: usability testing moves to implementing repos)
+
+Owner decision of **2026-11-19**: the upstream repos (`awcms`, `awcms-astro`, `awcms-one`) do not run UAT; UAT (step 14 of the development flow) is run in the implementing or derived project repos. This is consistent with [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.md) §14 and `docs/PROJECT_STATE.md` (steps 13-14 NOT APPLICABLE to this repo, owner decision of 13 August 2026).
+
+The statements above that defer usability testing with real readers to UAT before the release-readiness gate (the "Gate note" and the first "Follow-up" bullet) are **replaced** by this: usability testing of the reading-preferences panel with real readers, including assistive-technology users, is **not a prerequisite of the release-readiness gate of this repo**. It is the responsibility of each implementing repo that adopts this feature, in its own UAT. Automated coverage here is still not a substitute for it. The decision itself (native panel, no overlay) is unchanged.

@@ -459,7 +459,7 @@ Every public HTML surface — the blog shell (`/blog/**`, `/{locale}/blog/**`), 
 - **Colours come from the site's own tokens** (`--color-*`, with literal fallbacks), so the panel follows each theme and the dark scheme; the theme preview layout maps its `--_*` tokens to them.
 - **A page that adds a font size in `px` defeats the text-size choice.** Use `rem` (or a token that is).
 - **Tests:** `tests/reading-preferences.test.ts` (storage contract run against the shipped script, markup, CSS/script agreement) and `tests/e2e/public-reading-preferences.e2e.ts` (focus, persistence, each effect, axe with the panel open and with every preference on, no horizontal overflow at 360 and 320 px with extra-large text).
-- **Not yet done:** usability testing with real readers (deferred to UAT before the release-readiness gate).
+- **Not done here, by design:** usability testing with real readers is not run in this upstream repo (no UAT here; owner decision 2026-11-19, ADR-0166 amendment). Each implementing repo that adopts the panel runs it in its own UAT.
 
 ## Internationalization (i18n)
 

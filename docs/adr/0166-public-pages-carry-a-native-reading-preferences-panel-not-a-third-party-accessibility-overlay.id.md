@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0166-public-pages-carry-a-native-reading-preferences-panel-not-a-third-party-accessibility-overlay.md)
 
-<!-- i18n-source-hash: sha256:596798f50e59b627078481881770bca5a6d0e5720adf3628a7cc1e70213f7f4c -->
+<!-- i18n-source-hash: sha256:739f8cf754145c6a5ec9369119d6404e6efcce6323c5e2332ef7334301eefee3 -->
 
 # ADR-0166 — Halaman publik memuat panel preferensi baca bawaan, bukan overlay aksesibilitas pihak ketiga
 
@@ -87,3 +87,9 @@ Gerbang Definition of Ready untuk irisan ini diloloskan pemilik pada **2026-11-1
 - String lain pada cangkang publik ("Skip to content", "Previous") masih berupa bahasa Inggris literal; memindahkannya dan panel ini ke katalog gettext adalah perubahan terpisah.
 - Tidak ada reaksi langsung bila preferensi OS berubah saat halaman terbuka; muat ulang menerapkannya.
 - Adopsi di `awcms-astro` adalah keputusan repo itu.
+
+## Amandemen (2026-11-19: uji kegunaan pindah ke repo implementasi)
+
+Keputusan pemilik **2026-11-19**: repo upstream (`awcms`, `awcms-astro`, `awcms-one`) tidak menjalankan UAT; UAT (langkah 14 alur pengembangan) dijalankan di repo implementasi atau proyek turunan. Ini selaras dengan [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.md) §14 dan `docs/PROJECT_STATE.md` (langkah 13-14 TIDAK BERLAKU untuk repo ini, keputusan pemilik 13 Agustus 2026).
+
+Pernyataan di atas yang menunda uji kegunaan dengan pembaca nyata ke UAT sebelum gerbang kesiapan rilis ("Catatan gerbang" dan butir "Tindak lanjut" pertama) **diganti** oleh ini: uji kegunaan panel preferensi baca dengan pembaca nyata, termasuk pengguna teknologi bantu, **bukan prasyarat gerbang kesiapan rilis repo ini**. Itu tanggung jawab tiap repo implementasi yang mengadopsi fitur ini, dalam UAT-nya sendiri. Cakupan otomatis di sini tetap bukan penggantinya. Keputusan intinya (panel bawaan, bukan overlay) tidak berubah.
