@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:b2c7fd6c67b6f031bb3949a2c51506aab4c4ce1e9e2794677fd6e64460804961 -->
+<!-- i18n-source-hash: sha256:54a7d4ffee6ef5f5f66c7c8983d3f8660e8605b70e379ac5c1b5e9185f859301 -->
 
 # Alur pengembangan AWCMS
 
@@ -167,7 +167,7 @@ masukan langsung bagi langkah 5 dan 8.
 
 | Bagian                               | Artefak                                                                                                                | Status                                                                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Aturan desain, token, state          | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | ada; menargetkan **WCAG 2.1 AA** (v2: 2.2 AA) — **celah**                                                                |
+| Aturan desain, token, state          | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | ada; menargetkan **WCAG 2.2 AA** sejak 2026-11-20 (tag axe `wcag22aa` ditambahkan)                                       |
 | Arsitektur frontend                  | [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md)                                   | ada                                                                                                                      |
 | Kontrak layar (contoh nyata)         | [`omnichannel-ui-ux-screen-contracts.md`](omnichannel-ui-ux-screen-contracts.md)                                       | ada, satu area produk, Proposed                                                                                          |
 | Prototipe                            | [`../../design/`](../../design/README.md) (`redesain-ui-ux-2026-10`)                                                   | ada, **hanya rujukan, belum diuji usabilitas**                                                                           |
@@ -607,16 +607,16 @@ Ditambahkan oleh v2 (ADR-0156, 30 Okt 2026). Setiap baris adalah **celah**, buka
 keputusan: masing-masing membutuhkan issue sendiri, dan tidak satu pun ditutup
 oleh ADR yang menyebutnya.
 
-| Langkah | Hal                                                             | Sifat                                                    |
-| ------- | --------------------------------------------------------------- | -------------------------------------------------------- |
-| 2       | Bukti riset pengguna sebagai artefak                            | **celah**                                                |
-| 4       | Laporan uji usabilitas (`UXT-*`) dan prototipe yang sudah diuji | **celah**; `design/` hanya rujukan                       |
-| 4       | Template inventaris data per layar                              | **celah**                                                |
-| 4       | WCAG 2.2 AA (doc 14 menyebut 2.1 AA)                            | **celah** — `14_ui_ux_design_system.md` basi terhadap v2 |
-| 8       | Mock server / klien bertipe yang dihasilkan dari kontrak        | **celah** — tidak ada perkakas terpasang                 |
-| 9       | Pemeriksaan v2 baru di template Definition of Ready             | **ditutup** (issue #1378)                                |
-| 11.1    | Perkakas visual regression; model untuk layar admin SSR         | **celah** / pertanyaan terbuka                           |
-| 11.3    | Uji kontrak dua sisi; baseline kinerja terhadap SLO             | **celah** (hanya snapshot sisi konsumen)                 |
+| Langkah | Hal                                                             | Sifat                                                                                                                                  |
+| ------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 2       | Bukti riset pengguna sebagai artefak                            | **celah**                                                                                                                              |
+| 4       | Laporan uji usabilitas (`UXT-*`) dan prototipe yang sudah diuji | **celah**; `design/` hanya rujukan                                                                                                     |
+| 4       | Template inventaris data per layar                              | **celah**                                                                                                                              |
+| 4       | WCAG 2.2 AA untuk admin                                         | **ditutup** (issue #1387): doc 14 dan tag axe menargetkan 2.2 AA; hanya `target-size` yang otomatis, kriteria 2.2 lain tinjauan manual |
+| 8       | Mock server / klien bertipe yang dihasilkan dari kontrak        | **celah** — tidak ada perkakas terpasang                                                                                               |
+| 9       | Pemeriksaan v2 baru di template Definition of Ready             | **ditutup** (issue #1378)                                                                                                              |
+| 11.1    | Perkakas visual regression; model untuk layar admin SSR         | **celah** / pertanyaan terbuka                                                                                                         |
+| 11.3    | Uji kontrak dua sisi; baseline kinerja terhadap SLO             | **celah** (hanya snapshot sisi konsumen)                                                                                               |
 
 Celah yang tersisa setelah itu **ada di dalam** dokumen yang menutupnya, bukan
 di tabel ini — terutama ketiadaan alur ekspor/penghapusan per subjek data
