@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:d5e04f482b0233b978b54cc527a105816df8133bafb0ceb577d48939d92d8907 -->
+<!-- i18n-source-hash: sha256:246250a936d6abb3b2b13d1b6d6a5830ee01345a7de6129ab2b9e955a0ec4a67 -->
 
 # Alur pengembangan AWCMS
 
@@ -44,7 +44,7 @@ flowchart TD
   S112 --> S113[11.3 Integrasi + E2E]
   S113 --> S12[12 PR + Review + CI]
   S12 --> S13[13 Deploy Staging - TIDAK BERLAKU ADR-0083]
-  S13 --> S14[14 UAT Internal - TIDAK BERLAKU]
+  S13 --> S14[14 UAT Internal - TIDAK BERLAKU di sini, dijalankan di repo konsumen]
   S14 --> S15[15 Release Readiness / Go-No-Go]
   S15 --> S16[16 Deploy Produksi]
   S16 --> S17[17 Validasi Produksi]
@@ -466,13 +466,50 @@ alasan sah untuk meninjau ulang ADR-0083 kelak.
 Menghidupkannya kembali tetap keputusan tingkat ADR, bukan sesuatu yang bisa
 dibalik dokumen proses.
 
+### Cakupan dan prioritas pengecualian ini
+
+Baca langkah ini bersama alur generik, tanpa meregangkan salah satunya:
+
+- **Prioritas.** Alur generik (standar lintas-portofolio internal pemilik) adalah
+  aturan umum. **ADR repo ini yang sudah Accepted** dan memutuskan lain untuk
+  repo ini adalah pengecualiannya, dan ia menang **di sini**. Memberi `awcms`
+  tingkatan staging karena itu membutuhkan **keputusan arsitektur baru** yang
+  men-supersede ADR-0083. Ia tidak pernah dilakukan dengan mengedit dokumen
+  proses, menambah `ModuleDeploymentProfile`, atau mendirikan environment diam-diam.
+- **Yang tidak berlaku:** tingkatan staging untuk **reference deployment repo
+  ini** (satu-satunya deployment produksinya, `awcms.ahlikoding.com`).
+- **Yang TIDAK dilarang:** repo konsumen atau turunan menjalankan environment
+  pra-produksinya sendiri. ADR-0083 §Konsekuensi menyatakan instalasi semacam itu
+  memakai `development`, atau deployment `production` kedua yang terikat kontrak
+  isolasi di [`environments.md`](environments.md); yang dihapus adalah **nama**
+  profil `staging` dari `ModuleDeploymentProfile` template ini, bukan gagasan
+  tingkatannya. Apakah sebuah repo konsumen memilikinya diputuskan di repo itu.
+- **Apa itu bukti lokal dan CI.** Basis data ephemeral CI, suite DB-gated, E2E
+  Playwright, dan `security:readiness` adalah bukti integrasi repo ini. Mereka
+  **bukan** deployment staging dan **bukan** UAT, dan tidak ada dokumen yang boleh
+  menyajikannya sebagai salah satunya.
+
 ## 14. UAT Internal / Pengujian Manusia — **TIDAK BERLAKU untuk repo ini**
 
 **Menjawab:** apakah yang dibangun benar-benar menyelesaikan pekerjaan
 penggunanya.
 
-Ia bergantung pada langkah 13, dan langkah 13 adalah keputusan untuk tidak ada.
-Jadi ini bukan celah yang menunggu diisi; ia konsekuensi yang sudah diputuskan.
+Langkah 14 bukan prasyarat rilis repo ini, dengan **dua alasan yang berdiri
+sendiri**, dan salah satunya sudah cukup:
+
+1. **ADR-0083.** Langkah 14 bergantung pada langkah 13, dan langkah 13 adalah
+   keputusan untuk tidak ada di sini. Ini konsekuensi yang sudah diputuskan, bukan
+   celah.
+2. **Repo upstream tidak menjalankan UAT** (standar lintas-portofolio internal
+   pemilik, DL-059). `awcms` adalah repo template/platform upstream; UAT manusia
+   dijalankan di **repo implementasi atau proyek** yang dibangun darinya, di
+   environment repo itu, dengan penguji dan bukti miliknya sendiri. Andai repo ini
+   punya environment staging pun, UAT tetap tidak dijalankan di sini.
+
+Gerbang 15 (§15) karena itu berjalan untuk `awcms` **tanpa UAT sebagai
+prasyarat**. Dokumen ini tidak mengklaim bukti UAT untuk template, dan UAT yang
+dilakukan di repo konsumen tidak menggantikan bukti CI dan integrasi repo ini
+maupun digantikan olehnya.
 
 Yang paling mendekati perannya adalah verifikasi produksi (langkah 17), dengan
 perbedaan yang harus dibaca jujur: **ia berjalan SESUDAH rilis, bukan
@@ -484,6 +521,11 @@ ADR-0083 untuk perubahan itu, bukan melewatkan langkah 17.
 ## 15. Release Readiness / Go–No-Go
 
 **Menjawab:** apakah ini aman dirilis, dan siapa yang mengatakan ya.
+
+Gerbang 15 di sini dijalankan **tanpa UAT langkah 14 sebagai prasyarat** (lihat
+§14); teks gerbang v2 "temuan usabilitas pada build nyata" hanya dipenuhi oleh
+langkah 17, sebagaimana dicatat
+[ADR-0156](../adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.id.md) §5.
 
 | Artefak                                                              | Peran                                |
 | -------------------------------------------------------------------- | ------------------------------------ |
@@ -551,13 +593,13 @@ Daftar ini ada di sini supaya tidak perlu diturunkan ulang. Perhatikan kolom
 terakhir: **celah dan keputusan bukan hal yang sama**, dan mencampurnya adalah
 bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
 
-| Langkah | Hal                           | Sifat                                      |
-| ------- | ----------------------------- | ------------------------------------------ |
-| 3       | Privacy analysis / DPIA       | **ditutup** 13 Agu 2026                    |
-| 9       | Definition of Ready umum      | **ditutup** 13 Agu 2026                    |
-| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment |
-| 14      | UAT internal                  | **keputusan** — konsekuensi langkah 13     |
-| 18      | Post-release review per rilis | **ditutup** 13 Agu 2026                    |
+| Langkah | Hal                           | Sifat                                                                                   |
+| ------- | ----------------------------- | --------------------------------------------------------------------------------------- |
+| 3       | Privacy analysis / DPIA       | **ditutup** 13 Agu 2026                                                                 |
+| 9       | Definition of Ready umum      | **ditutup** 13 Agu 2026                                                                 |
+| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment                                              |
+| 14      | UAT internal                  | **keputusan** — ADR-0083 (langkah 13), dan repo upstream tidak menjalankan UAT (DL-059) |
+| 18      | Post-release review per rilis | **ditutup** 13 Agu 2026                                                                 |
 
 Ditambahkan oleh v2 (ADR-0156, 30 Okt 2026). Setiap baris adalah **celah**, bukan
 keputusan: masing-masing membutuhkan issue sendiri, dan tidak satu pun ditutup

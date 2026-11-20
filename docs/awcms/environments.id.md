@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:fcf2663d7db97b499c8c502e868229bff1c4d52a734d6a651dfc7f42e7c8e2d2 -->
+<!-- i18n-source-hash: sha256:1779a2b141e28da756526ab70e5fb0ef67a4e459b0b2b8191f0017fba04ae0b9 -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 
@@ -15,6 +15,15 @@
 > (§[Kontrak isolasi environment kedua](#kontrak-isolasi-environment-kedua)).
 > Untuk mekanisme deploy-nya lihat [`deploy-coolify.md`](deploy-coolify.md) dan
 > [`deployment-profiles.md`](deployment-profiles.md).
+
+> **Cakupan keputusan ini.** ADR-0083 adalah keputusan tentang **reference
+> deployment repo ini**. Ia bukan larangan bagi repo konsumen atau turunan untuk
+> menjalankan environment pra-produksinya sendiri: instalasi semacam itu memakai
+> `development` atau deployment `production` kedua di bawah kontrak isolasi di
+> bawah. Menambah tingkatan staging ke `awcms` sendiri membutuhkan ADR baru yang
+> men-supersede ADR-0083. Bagaimana ini dibaca terhadap alur generik (langkah 13
+> dan 14, dan UAT di repo implementasi):
+> [`alur-pengembangan.md`](alur-pengembangan.md) §13–14.
 
 ## Satu environment
 
