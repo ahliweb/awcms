@@ -231,7 +231,7 @@ playwright test`, Bun-only), separate from `bun test`
 > its credentials to the spec via env.
 
 > **Automated accessibility smoke (`@axe-core/playwright`, Issue #877).**
-> `tests/e2e/a11y-axe.e2e.ts` runs `AxeBuilder` (WCAG 2.0/2.1 A+AA tags)
+> `tests/e2e/a11y-axe.e2e.ts` runs `AxeBuilder` (WCAG 2.0/2.1/2.2 A+AA tags, `wcag22aa` included)
 > against representative admin routes — `/admin`, `/admin/comments`,
 > `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
 > `/admin/omes/jobs`, `/admin/site-profile` — in light AND dark theme (the

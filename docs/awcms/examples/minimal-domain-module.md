@@ -391,7 +391,7 @@ synchronisation (e.g. a warehouse/branch that goes offline occasionally).
 
 - [ ] Base design tokens are used (not hardcoded colours/spacing).
 - [ ] 4-state pattern: loading, empty, error, ready.
-- [ ] WCAG 2.1 AA accessibility (labels, focus, contrast).
+- [ ] WCAG 2.2 AA accessibility (labels, focus, contrast).
 - [ ] All strings go through the `.po` catalogue, not hardcoded
       Indonesian/English directly in the component.
 - [ ] High-risk actions (e.g. retiring an expense category still used by active

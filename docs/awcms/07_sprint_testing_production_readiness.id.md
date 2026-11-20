@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:b7355cc5e060f409709b28a7ca219c8432db2e736dc3aee3afac68daf08777b5 -->
+<!-- i18n-source-hash: sha256:9c7571af11e158605ce779995f688ff6d518da6e2b806d2a59be51ad745fe0fd -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -234,8 +234,8 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > kredensialnya ke spec via env.
 
 > **Smoke aksesibilitas otomatis (`@axe-core/playwright`, Issue #877).**
-> `tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1
-> A+AA) terhadap rute admin representatif — `/admin`, `/admin/comments`,
+> `tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1/2.2
+> A+AA, termasuk `wcag22aa`) terhadap rute admin representatif — `/admin`, `/admin/comments`,
 > `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
 > `/admin/omes/jobs`, `/admin/site-profile` — dalam tema terang MAUPUN gelap
 > (mekanisme sungguhan aplikasi `localStorage["awcms_theme"]`, bukan override

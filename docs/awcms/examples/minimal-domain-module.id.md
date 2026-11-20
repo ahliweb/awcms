@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](minimal-domain-module.md)
 
-<!-- i18n-source-hash: sha256:dd9e22cb6aa9f14f497d240c7e5e315952a2cb1c13e5036463790af20a2c3411 -->
+<!-- i18n-source-hash: sha256:8ff0e186be8c012e159d494b34e8db9cad83c9057501e945151e668588620fe4 -->
 
 # Contoh Modul Domain Minimal
 
@@ -390,7 +390,7 @@ offline-first (mis. gudang/cabang yang sesekali offline).
 
 - [ ] Token desain base dipakai (bukan warna/spacing hardcode).
 - [ ] 4-state pattern: loading, empty, error, ready.
-- [ ] Aksesibilitas WCAG 2.1 AA (label, fokus, kontras).
+- [ ] Aksesibilitas WCAG 2.2 AA (label, fokus, kontras).
 - [ ] Semua string lewat katalog `.po`, bukan hardcode Bahasa
       Indonesia/Inggris langsung di komponen.
 - [ ] Aksi high-risk (mis. retire kategori beban yang masih dipakai transaksi

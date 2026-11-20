@@ -204,7 +204,7 @@ flowchart LR
 | **State pattern**        | Loading / empty / error / success, mandatory on every screen.                                                                                   |
 | **Optimistic UI**        | Showing the result before server confirmation, rolling back if rejected.                                                                        |
 | **i18n / locale**        | Internationalisation; min en+id (default **en**). Static UI strings via `.po` gettext; multi-language content data in the DB per active locale. |
-| **WCAG 2.1 AA**          | The accessibility standard AWCMS targets.                                                                                                       |
+| **WCAG 2.2 AA**          | The accessibility standard AWCMS targets.                                                                                                       |
 | **Sync indicator**       | The UI component showing connection status & the sync queue.                                                                                    |
 
 ## Roles (personas)
