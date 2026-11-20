@@ -595,16 +595,16 @@ has not been done acquires the appearance of a judgement.
 Added by v2 (ADR-0156, 30 Oct 2026). Every row is a **gap**, not a decision: each
 needs its own issue, and none of them is closed by the ADR that names it.
 
-| Step | Item                                                                 | Nature                                                                                                                                     |
-| ---- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2    | User-research evidence as an artifact                                | **gap**                                                                                                                                    |
-| 4    | Usability-test report (`UXT-*`) and a prototype that has been tested | **gap**; `design/` is reference-only                                                                                                       |
-| 4    | Per-screen data inventory template                                   | **gap**                                                                                                                                    |
-| 4    | WCAG 2.2 AA for the admin                                            | **closed** (issue #1387): doc 14 and the axe tags target 2.2 AA; only `target-size` is automated, the other 2.2 criteria are manual review |
-| 8    | Mock server / typed client generated from the contract               | **gap** — no tooling installed                                                                                                             |
-| 9    | New v2 checks in the Definition of Ready template                    | **closed** (issue #1378)                                                                                                                   |
-| 11.1 | Visual-regression tooling; model for SSR admin screens               | **gap** / open question                                                                                                                    |
-| 11.3 | Two-sided contract test; performance baseline against the SLOs       | **gap** (consumer-side snapshot only)                                                                                                      |
+| Step | Item                                                                 | Nature                                                    |
+| ---- | -------------------------------------------------------------------- | --------------------------------------------------------- |
+| 2    | User-research evidence as an artifact                                | **gap**                                                   |
+| 4    | Usability-test report (`UXT-*`) and a prototype that has been tested | **gap**; `design/` is reference-only                      |
+| 4    | Per-screen data inventory template                                   | **gap**                                                   |
+| 4    | WCAG 2.2 AA for the admin                                            | **closed** (issue #1387): doc 14 and axe tags target 2.2. |
+| 8    | Mock server / typed client generated from the contract               | **gap** — no tooling installed                            |
+| 9    | New v2 checks in the Definition of Ready template                    | **closed** (issue #1378)                                  |
+| 11.1 | Visual-regression tooling; model for SSR admin screens               | **gap** / open question                                   |
+| 11.3 | Two-sided contract test; performance baseline against the SLOs       | **gap** (consumer-side snapshot only)                     |
 
 The gaps that remain after that are **inside** the documents that closed them,
 not in this table — above all the absence of a per-data-subject export/erasure
