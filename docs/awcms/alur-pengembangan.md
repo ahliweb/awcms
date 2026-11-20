@@ -280,10 +280,11 @@ WCAG 2.2 AA; the mock is generated from the contract and runs its examples; and 
 have a shape. A defect sends the work back to the step that holds it and then
 through this gate again, not forward with a note.
 
-**Gap:** [`templates/definition-of-ready.md`](templates/definition-of-ready.md)
-has not yet been extended with these v2 checks, so the template, not this
-paragraph, is what the person filling it in sees. Updating it (and its mirror) is
-a follow-up change.
+**Closed (issue #1378):** [`templates/definition-of-ready.md`](templates/definition-of-ready.md)
+now carries these v2 checks (§Gate 9 checks added by flow v2), each with the
+evidence a reviewer can open and an N/A rule for a change with no screen. What
+the checks still cannot be satisfied with is recorded there too: no usability
+report, no per-screen inventory template, no mock generator.
 
 | Artifact                                                                                               | Role                               |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
@@ -561,7 +562,7 @@ needs its own issue, and none of them is closed by the ADR that names it.
 | 4    | Per-screen data inventory template                                   | **gap**                                                   |
 | 4    | WCAG 2.2 AA (doc 14 says 2.1 AA)                                     | **gap** — `14_ui_ux_design_system.md` is stale against v2 |
 | 8    | Mock server / typed client generated from the contract               | **gap** — no tooling installed                            |
-| 9    | New v2 checks in the Definition of Ready template                    | **gap**                                                   |
+| 9    | New v2 checks in the Definition of Ready template                    | **closed** (issue #1378)                                  |
 | 11.1 | Visual-regression tooling; model for SSR admin screens               | **gap** / open question                                   |
 | 11.3 | Two-sided contract test; performance baseline against the SLOs       | **gap** (consumer-side snapshot only)                     |
 
