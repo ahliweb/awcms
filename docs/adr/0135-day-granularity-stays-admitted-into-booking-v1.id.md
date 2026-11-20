@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:278da51047d39129fb0d0c998c930e1eaded898e421fdfcdecacb044e8ea3562 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0135 — Menginap berbasis hari (per malam) diterima ke booking v1
 
 - **Status:** Diterima

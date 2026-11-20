@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:8c5a46b87b601370de2421c4b19eeb152a877ee77c5dc4baf9e9536017e3b26f -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # Procurement — pemasok, penerimaan, dan transfer (paket dokumen modul)
 
 > **Status:** diterima lewat [ADR-0128](../adr/0128-generic-procurement-supplier-receiving-transfer-module-admission.id.md)

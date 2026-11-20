@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:f73ab81a7175414620076a933a01d44129802b05b1ca4b1305d7ba0434eb6806 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # ADR-0156 — Mengadopsi alur pengembangan v2: UX/UI tervalidasi sebelum model data, dan frontend → backend → integrasi per slice
 
 - **Status:** Diterima

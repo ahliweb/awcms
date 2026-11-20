@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:da76af4bf98e212fc4d31a77503926acd5809096eaaaeeb706b85b25fdf3cce9 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # Pengirim WhatsApp Meta — runbook pengaktifan (Issue #1298)
 
 Pembaca: operator yang menyalakan jalur Meta Cloud API milik tenant pada deployment yang **sudah memegang nomor Meta**, dan orang yang meninjau perubahan itu. Latar belakang: [README `whatsapp_delivery`](../../src/modules/whatsapp-delivery/README.id.md#pengirim-meta-cloud-api-multi-waba-issue-1143) (Issue #1143) dan temuan L5 audit independen #1267.

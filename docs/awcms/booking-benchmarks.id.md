@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:854785fcefa5e74ba0e202fe753b6aa8cde4feba4556759ed75459609a58288a -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # Benchmark Booking dan Absensi (Issue #967)
 
 Benchmark beban, stres dan konkurensi yang dapat diulang untuk allocator

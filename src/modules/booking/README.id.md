@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:51ec1570943b86c51359f86fd47df1d60daf03ba25091aa1adced926cbae631f -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # `booking`
 
 **Resource, unit kapasitas, jadwal, dan reservasi** generik untuk apa pun yang

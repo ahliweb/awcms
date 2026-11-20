@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:ab00c9c8f28320c17bca8d3fac8a079c8faf770cb368001e84caba2967627e4a -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # `whatsapp_delivery`
 
 Kapabilitas pengiriman WhatsApp generik (Issue #963, [ADR-0133](../../../docs/adr/0133-generic-delivery-capability-whatsapp-promotion.id.md) fase 1).

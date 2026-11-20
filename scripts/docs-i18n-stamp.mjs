@@ -51,7 +51,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  MARKER_REGEX,
+  stripMarkers,
   computeSourceHash,
   deriveSourcePath,
   extractRecordedHash
@@ -138,11 +138,7 @@ function withBanner(content, banner) {
  * @returns {string}
  */
 function withoutMarker(content) {
-  return content
-    .split("\n")
-    .filter((/** @type {string} */ line) => !MARKER_REGEX.test(line))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n");
+  return stripMarkers(content);
 }
 
 /**

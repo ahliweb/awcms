@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:891fbe364cca785e18c8267d922966d75a59b288a476112d1fa46d3bef54612f -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0140 — Adapter pengiriman Telegram yang opsional dan mati secara default diterima hanya untuk peringatan operasional dan staf
 
 - **Status:** Diterima

@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:3220f1b5d86d08f0eadc0f21b3180409e05ad526af282f95a782d99972759261 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # Booking — resource, jadwal, dan reservasi (paket dokumen modul)
 
 > **Status:** diterima lewat [ADR-0131](../adr/0131-generic-booking-module-admission.id.md)

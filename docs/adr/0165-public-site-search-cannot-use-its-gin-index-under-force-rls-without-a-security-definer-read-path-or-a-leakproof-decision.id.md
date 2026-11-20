@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:5fa4800f59dd129f94bd92a1a2bd63b12b0c3c6d5807f7b9c2c6db6f529cc4c2 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # ADR-0165 — Pencarian situs publik tidak bisa memakai indeks GIN-nya di bawah FORCE RLS tanpa jalur baca SECURITY DEFINER atau keputusan LEAKPROOF
 
 - **Status:** Diusulkan (menunggu keputusan pemilik, pertanyaan Q1)

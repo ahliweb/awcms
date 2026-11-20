@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:1a4effa858d342e88da7a6f70c6d72bfdc861501960fcea4e5cdf8d4d785b74b -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0164 — Kategori e-mail dan template WhatsApp dideklarasikan di descriptor modul, dan allow-list kategori worker adalah data
 
 - **Status:** Proposed (menunggu tinjauan maintainer)

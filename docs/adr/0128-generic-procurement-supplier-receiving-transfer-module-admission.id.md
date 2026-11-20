@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:0f76b717f3bc0b6c6f825fc362d75f434a9e4be4ed94db6ffa27be1d2d127789 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0128 — Penerimaan modul procurement generik (`procurement`: pemasok, penerimaan, transfer)
 
 - **Status:** Accepted

@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:8f856d37edf38e7a3b7f92cbe0fd5f4302c1576bf64025cb6f6c1efceafd81bf -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0133 — Pengiriman WhatsApp dipromosikan menjadi kapabilitas upstream generik (`whatsapp_delivery`); Telegram dan orkestrasi ditunda
 
 - **Status:** Accepted

@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:fff24090998e2b947967481de27180dcd7cbc09f7627da208eee50e6ebcbb4e7 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0134 — Konsumen domain-event dideklarasikan di descriptor modul pemiliknya
 
 - **Status:** Accepted

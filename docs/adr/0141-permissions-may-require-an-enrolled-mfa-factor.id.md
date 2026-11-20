@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:a4ae1e40fb18f8366defbdd9009169e7295bb9397316929eea62fd4554af25f3 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0141 — Sebuah izin dapat mewajibkan faktor MFA yang sudah terdaftar untuk dijalankan
 
 - **Status:** Diterima

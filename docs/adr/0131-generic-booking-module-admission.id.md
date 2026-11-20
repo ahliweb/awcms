@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:b99626acd52ce8d5180f30a9f7646a6e6563afbe84ea900678bb7e0826ba58c1 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0131 — Penerimaan modul booking generik (`booking`: resource, jadwal, reservasi)
 
 - **Status:** Accepted

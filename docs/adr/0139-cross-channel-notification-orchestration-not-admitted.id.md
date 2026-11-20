@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:3cac2e3ca838e01eb08890bf2cc02be8d6cb895e20a71b398e95c0f52a51e639 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0139 — Orkestrasi notifikasi lintas-kanal tidak diterima (ditolak untuk saat ini)
 
 - **Status:** Diterima. Keputusan yang dicatatnya adalah **penolakan**: orkestrasi **tidak diterima, untuk saat ini**. (Kosakata status ADR di README ADR tidak memuat `Rejected`; ADR-nya diterima, subjeknya tidak.)
