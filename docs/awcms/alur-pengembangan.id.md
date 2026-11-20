@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:d5e04f482b0233b978b54cc527a105816df8133bafb0ceb577d48939d92d8907 -->
+<!-- i18n-source-hash: sha256:b88663b85afb0abcd443711287f72526ca66f08d9dc4426169d5444366f46f06 -->
 
 # Alur pengembangan AWCMS
 
@@ -286,10 +286,12 @@ pass **kedua** atas keamanan dan privasi langkah 3 dilakukan setelah UI, data, d
 API punya bentuk. Cacat mengembalikan pekerjaan ke langkah yang memuatnya lalu
 melewati gerbang ini lagi, bukan lanjut dengan catatan.
 
-**Celah:** [`templates/definition-of-ready.md`](templates/definition-of-ready.md)
-belum diperluas dengan pemeriksaan v2 ini, sehingga yang dilihat orang yang
-mengisinya adalah template itu, bukan paragraf ini. Memperbaruinya (beserta
-cerminnya) adalah perubahan lanjutan.
+**Ditutup (issue #1378):** [`templates/definition-of-ready.md`](templates/definition-of-ready.md)
+kini memuat pemeriksaan v2 ini (§Pemeriksaan gerbang 9 yang ditambahkan alur v2),
+masing-masing dengan bukti yang bisa dibuka reviewer dan aturan N/A untuk
+perubahan tanpa layar. Yang masih membuat pemeriksaan itu belum bisa dipenuhi
+juga dicatat di sana: belum ada laporan usabilitas, template inventaris data per
+layar, dan generator mock.
 
 | Artefak                                                                                                | Peran                              |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
@@ -570,7 +572,7 @@ oleh ADR yang menyebutnya.
 | 4       | Template inventaris data per layar                              | **celah**                                                |
 | 4       | WCAG 2.2 AA (doc 14 menyebut 2.1 AA)                            | **celah** — `14_ui_ux_design_system.md` basi terhadap v2 |
 | 8       | Mock server / klien bertipe yang dihasilkan dari kontrak        | **celah** — tidak ada perkakas terpasang                 |
-| 9       | Pemeriksaan v2 baru di template Definition of Ready             | **celah**                                                |
+| 9       | Pemeriksaan v2 baru di template Definition of Ready             | **ditutup** (issue #1378)                                |
 | 11.1    | Perkakas visual regression; model untuk layar admin SSR         | **celah** / pertanyaan terbuka                           |
 | 11.3    | Uji kontrak dua sisi; baseline kinerja terhadap SLO             | **celah** (hanya snapshot sisi konsumen)                 |
 
