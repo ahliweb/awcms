@@ -2,13 +2,15 @@
 
 # Research: OpenAPI-derived mocks and two-way contract tests — 20 November 2026
 
+> **Status update (2026-11-20).** The owner chose option **C′** and the contract policy for new operations; both are recorded as [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.md) (Accepted). The analysis below is kept as written when the research was done: wherever it says "proposal", "Recommendation" or "no ADR", read it as decided by ADR-0167. The follow-up candidates became backlog issues #1389 to #1395 under epic #1396 and wait for gate 9 and the Definition of Ready; none is implemented.
+
 > **What this document is.** The research output of issue #1379. It evaluates
 > tooling options for a mock **generated from the OpenAPI contract** and for
 > provider-side and consumer-side contract checks, so that step 8 of the
 > [development flow](alur-pengembangan.md) (a generated mock) and step 11.1
 > (frontend against it) can be carried out. Everything marked **Recommendation**
-> is a **proposal**. The decision is the owner's, through an ADR that does not
-> exist yet; this document files **no** ADR and nothing here is `Accepted`.
+> is a **proposal**. The decision is the owner's, through an ADR; this document itself files **no** ADR and nothing in it is
+> `Accepted` (ADR-0167 is the decision; see the update above).
 >
 > **Scope guard.** No dependency, route, database object or spec change is made
 > by this research. Tools were tried **outside the repo**, in a scratch
@@ -86,7 +88,7 @@ Registry data is as read from the npm registry on 20 November 2026 (latest dist-
 | Maintenance and cost                   | low, regenerate      | medium                       | high                    | high (handlers)                | medium, owns a validator subset | low-medium                    |
 | Compatibility with the Bun-only policy | yes                  | **no**                       | no                      | uncertain                      | yes                             | yes                           |
 
-## 4. Recommendation (a proposal for the owner)
+## 4. Recommendation (adopted by the owner as ADR-0167)
 
 **C′ — an in-repo, Bun-native contract-conformance kit with `ajv` as its single
 new dev dependency — and no mock server.** It is a proposal. The owner decides
@@ -239,6 +241,8 @@ implementation issue before it. None is created here; none duplicates an open
 issue (checked on 20 November 2026 against the open list, including #1185,
 #1186, #1377 to #1380).
 
+> **Update 2026-11-20:** these candidates are now backlog issues under epic #1396: I1 to I5 are #1389 to #1393; publishing the pinned pack is #1394; the new-operation policy check is #1395. I6 to I8 are done in the consumer repositories themselves. All wait for gate 9 and the Definition of Ready.
+
 | Candidate | What                                                                                                                            | Size | Owner repo    | Depends on                                          |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------- | --------------------------------------------------- |
 | I1        | Fix contract hygiene: `BookingPolicy.policy.properties`, the 19 `nullable`-without-`type` locations; decide a `required` policy | S    | `awcms`       | none; a contract change, so step 8 and gate 9 apply |
@@ -268,7 +272,9 @@ flowchart TD
   I4 --> I8[I8 awcms-lynx conformance]
 ```
 
-## 10. Decisions that wait for the owner
+## 10. Decisions that waited for the owner
+
+> **Resolved 2026-11-20 by ADR-0167:** item 1, C′. Item 2, yes, examples are required for new operations. Item 3, yes, the pack is published as a pinned artifact. Item 4, `required` is required and null is written `type: [X, "null"]` for new operations, old ones fixed gradually. Item 5, `429` is required when an endpoint is rate-limited; `5xx` is **not** decided and stays open.
 
 1. C, C′ or neither (a new dev dependency decision under the dependency
    governance rules).
@@ -277,13 +283,12 @@ flowchart TD
 4. A `required` and `nullable` policy for the contract (I1).
 5. Which of 429 and 5xx every operation must declare.
 
-## Appendix A — draft ADR outline (Proposed, not filed)
+## Appendix A — draft ADR outline (filed as ADR-0167, Accepted)
 
-> **Draft only.** Not numbered, not committed to `docs/adr/`, and **not
-> Accepted**. It exists so the owner can file it, change it or discard it.
+> **Filed.** This outline became [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.md), Accepted on 2026-11-20. The outline below is the draft as it stood; the ADR is authoritative and adds the contract policy for new operations.
 
 - **Title:** Contract-derived fixtures and two-sided conformance checks for the public OpenAPI.
-- **Status:** Proposed (draft).
+- **Status:** Proposed (draft); filed as Accepted in ADR-0167.
 - **Context:** step 8 requires a mock generated from the contract; R1 to R9.
 - **Decision (proposed):** an in-repo Bun script generates examples and a fixtures pack from the bundle; `ajv` (single dev dependency) validates schemas, provider responses and consumer fixtures; a contract diff classifies breaking and additive changes; no mock server.
 - **Consequences:** contract defects surface at once (R2, R3) and must be fixed with the gate; example and `required` policies become contract-quality rules; consumers pin a pack instead of keeping a second specification; one more dev dependency to govern.

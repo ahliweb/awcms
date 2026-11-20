@@ -162,7 +162,7 @@ destructive confirmation); **WCAG 2.2 AA** from design time; privacy in design
 
 | Part                              | Artifact                                                                                                               | Status                                                                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Design rules, tokens, states      | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | exists; targets **WCAG 2.1 AA** (v2: 2.2 AA) — **gap**                                                                     |
+| Design rules, tokens, states      | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | exists; targets **WCAG 2.2 AA** since 2026-11-20 (axe tag `wcag22aa` added)                                                |
 | Frontend architecture             | [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md)                                   | exists                                                                                                                     |
 | Screen contracts (worked example) | [`omnichannel-ui-ux-screen-contracts.md`](omnichannel-ui-ux-screen-contracts.md)                                       | exists, one product area, Proposed                                                                                         |
 | Prototypes                        | [`../../design/`](../../design/README.md) (`redesain-ui-ux-2026-10`)                                                   | exists, **reference-only, not usability-tested**                                                                           |
@@ -616,7 +616,7 @@ needs its own issue, and none of them is closed by the ADR that names it.
 | 2    | User-research evidence as an artifact                                | **gap**                                                   |
 | 4    | Usability-test report (`UXT-*`) and a prototype that has been tested | **gap**; `design/` is reference-only                      |
 | 4    | Per-screen data inventory template                                   | **gap**                                                   |
-| 4    | WCAG 2.2 AA (doc 14 says 2.1 AA)                                     | **gap** — `14_ui_ux_design_system.md` is stale against v2 |
+| 4    | WCAG 2.2 AA for the admin                                            | **closed** (issue #1387): doc 14 and axe tags target 2.2. |
 | 8    | Mock server / typed client generated from the contract               | **gap** — no tooling installed                            |
 | 9    | New v2 checks in the Definition of Ready template                    | **closed** (issue #1378)                                  |
 | 11.1 | Visual regression; SSR admin screens against fixtures                | **gap**; SSR rule decided 2026-11-20, tooling pending     |

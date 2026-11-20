@@ -22,7 +22,8 @@
  * `SettingsSaveBar` (`/admin/site-profile`). Each is scanned in light AND
  * dark theme, at 360px (narrowest real phone width, matching
  * `responsive-360.e2e.ts`) and desktop (the `read` project's native
- * 1280x720), against the WCAG 2.0 A/AA and 2.1 A/AA rule sets. A run fails on
+ * 1280x720), against the WCAG 2.0, 2.1 and 2.2 A/AA rule sets (2.2 AA is the admin target since
+ * 2026-11-20; `wcag22aa` adds axe's `target-size` rule). A run fails on
  * any `critical`/`serious` violation; `moderate`/`minor` are informational
  * only (axe itself, not this repo, decides what belongs in which bucket).
  *
@@ -62,8 +63,18 @@ import { test, expect, type Page } from "./support/e2e-read-wave";
 
 import { THEME_STORAGE_KEY } from "../../src/lib/security/theme-init-script";
 
-/** WCAG 2.0 and 2.1, levels A and AA — the tag set the issue asked for. */
-const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] as const;
+/**
+ * WCAG 2.0, 2.1 and 2.2, levels A and AA. `wcag22aa` was added when the admin
+ * target rose from 2.1 AA to 2.2 AA; it brings axe's `target-size` rule. The
+ * other 2.2 criteria are not covered by axe and are reviewed by hand (doc 14).
+ */
+const WCAG_TAGS = [
+  "wcag2a",
+  "wcag2aa",
+  "wcag21a",
+  "wcag21aa",
+  "wcag22aa"
+] as const;
 
 /** axe impact levels that fail the build; `moderate`/`minor` are reported, not blocking. */
 const BLOCKING_IMPACTS = new Set(["critical", "serious"]);
@@ -215,7 +226,7 @@ async function setTheme(page: Page, theme: Theme): Promise<void> {
   }, theme);
 }
 
-test.describe("admin a11y smoke (axe-core, WCAG 2.0/2.1 A+AA)", () => {
+test.describe("admin a11y smoke (axe-core, WCAG 2.0/2.1/2.2 A+AA)", () => {
   test.skip(
     !seeded,
     "requires a seeded tenant — CI e2e-smoke provisions one via POST /api/v1/setup/initialize"

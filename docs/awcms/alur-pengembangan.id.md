@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:4e625d67ca4c7f75c10cb10b7773d7fdbe187c70bdd5f7a2a4f25f719f2e2ebe -->
+<!-- i18n-source-hash: sha256:69a7ada7963f0d7c602222e8ac95e7d5b1d4dfc77aa0aa1a650a14525abf6527 -->
 
 # Alur pengembangan AWCMS
 
@@ -167,7 +167,7 @@ masukan langsung bagi langkah 5 dan 8.
 
 | Bagian                               | Artefak                                                                                                                | Status                                                                                                                   |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Aturan desain, token, state          | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | ada; menargetkan **WCAG 2.1 AA** (v2: 2.2 AA) — **celah**                                                                |
+| Aturan desain, token, state          | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md), [`../../src/styles/tokens.css`](../../src/styles/tokens.css) | ada; menargetkan **WCAG 2.2 AA** sejak 2026-11-20 (tag axe `wcag22aa` ditambahkan)                                       |
 | Arsitektur frontend                  | [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md)                                   | ada                                                                                                                      |
 | Kontrak layar (contoh nyata)         | [`omnichannel-ui-ux-screen-contracts.md`](omnichannel-ui-ux-screen-contracts.md)                                       | ada, satu area produk, Proposed                                                                                          |
 | Prototipe                            | [`../../design/`](../../design/README.md) (`redesain-ui-ux-2026-10`)                                                   | ada, **hanya rujukan, belum diuji usabilitas**                                                                           |
@@ -628,7 +628,7 @@ oleh ADR yang menyebutnya.
 | 2       | Bukti riset pengguna sebagai artefak                            | **celah**                                                |
 | 4       | Laporan uji usabilitas (`UXT-*`) dan prototipe yang sudah diuji | **celah**; `design/` hanya rujukan                       |
 | 4       | Template inventaris data per layar                              | **celah**                                                |
-| 4       | WCAG 2.2 AA (doc 14 menyebut 2.1 AA)                            | **celah** — `14_ui_ux_design_system.md` basi terhadap v2 |
+| 4       | WCAG 2.2 AA untuk admin                                         | **ditutup** (issue #1387): doc 14 dan tag axe ke 2.2 AA. |
 | 8       | Mock server / klien bertipe yang dihasilkan dari kontrak        | **celah** — tidak ada perkakas terpasang                 |
 | 9       | Pemeriksaan v2 baru di template Definition of Ready             | **ditutup** (issue #1378)                                |
 | 11.1    | Visual regression; layar admin SSR terhadap fixture             | **celah**; aturan SSR diputuskan, perkakas menunggu      |

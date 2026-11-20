@@ -1,16 +1,18 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](research-openapi-mock-and-two-way-contract-tests-2026-11-20.md)
 
-<!-- i18n-source-hash: sha256:0b4de4698f217074d232986503d84c49b661bffeb69f404436addd5ff988297d -->
+<!-- i18n-source-hash: sha256:141c34d12a343be99619fdc52ca2203d0e2463f7a7111d5a967eefcf4271e1ce -->
 
 # Riset: mock turunan OpenAPI dan uji kontrak dua arah — 20 November 2026
+
+> **Pembaruan status (2026-11-20).** Pemilik memilih opsi **C′** dan kebijakan kontrak untuk operasi baru; keduanya tercatat sebagai [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.id.md) (Accepted). Analisis di bawah dipertahankan seperti saat riset dikerjakan: di mana tertulis "usulan", "Rekomendasi", atau "belum ada ADR", bacalah sebagai sudah diputuskan oleh ADR-0167. Kandidat tindak lanjut menjadi issue backlog #1389 sampai #1395 di bawah epik #1396 dan menunggu gerbang 9 serta Definition of Ready; tidak ada yang diimplementasikan.
 
 > **Apa dokumen ini.** Keluaran riset issue #1379. Ia mengevaluasi opsi perkakas
 > untuk mock yang **dihasilkan dari kontrak OpenAPI** serta pemeriksaan kontrak
 > sisi provider dan sisi konsumen, supaya langkah 8
 > [alur pengembangan](alur-pengembangan.md) (mock hasil generate) dan langkah 11.1
 > (frontend terhadapnya) bisa dijalankan. Semua yang bertanda **Rekomendasi**
-> adalah **usulan**. Keputusannya milik pemilik, lewat ADR yang belum ada; dokumen
-> ini **tidak** mengajukan ADR dan tidak ada yang di sini berstatus `Accepted`.
+> adalah **usulan**. Keputusannya milik pemilik, lewat ADR; dokumen
+> ini sendiri **tidak** mengajukan ADR dan tidak ada yang di dalamnya berstatus `Accepted` (ADR-0167 adalah keputusannya; lihat pembaruan di atas).
 >
 > **Batas lingkup.** Riset ini tidak menambah dependensi, rute, objek basis data,
 > atau perubahan spec. Perkakas dicoba **di luar repo**, di direktori sementara,
@@ -89,7 +91,7 @@ Data registry sebagaimana dibaca dari registry npm pada 20 November 2026 (dist-t
 | Perawatan dan biaya                      | rendah, regenerasi | sedang                       | tinggi                          | tinggi (handler)              | sedang, memiliki subset validator | rendah-sedang                         |
 | Kompatibilitas dengan kebijakan Bun-only | ya                 | **tidak**                    | tidak                           | belum pasti                   | ya                                | ya                                    |
 
-## 4. Rekomendasi (usulan untuk pemilik)
+## 4. Rekomendasi (diadopsi pemilik sebagai ADR-0167)
 
 **C′ — perangkat kesesuaian kontrak dalam repo, native Bun, dengan `ajv` sebagai
 satu-satunya dependensi dev baru — dan tanpa server mock.** Ini usulan. Pemilik
@@ -244,6 +246,8 @@ mengizinkan issue implementasi baru sebelum itu. Tidak satu pun dibuat di sini;
 tidak satu pun menduplikasi issue terbuka (diperiksa pada 20 November 2026
 terhadap daftar terbuka, termasuk #1185, #1186, #1377 sampai #1380).
 
+> **Pembaruan 2026-11-20:** kandidat ini kini issue backlog di epik #1396: I1 sampai I5 menjadi #1389 sampai #1393; penerbitan paket terpatok #1394; cek kebijakan operasi baru #1395. I6 sampai I8 dikerjakan di repo konsumen masing-masing. Semuanya menunggu gerbang 9 dan Definition of Ready.
+
 | Kandidat | Apa                                                                                                                              | Ukuran | Repo pemilik  | Bergantung pada                                                    |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------- | ------------------------------------------------------------------ |
 | I1       | Perbaiki kebersihan kontrak: `BookingPolicy.policy.properties`, 19 lokasi `nullable`-tanpa-`type`; putuskan kebijakan `required` | S      | `awcms`       | tidak ada; perubahan kontrak, jadi langkah 8 dan gerbang 9 berlaku |
@@ -273,7 +277,9 @@ flowchart TD
   I4 --> I8[I8 kesesuaian awcms-lynx]
 ```
 
-## 10. Keputusan yang menunggu pemilik
+## 10. Keputusan yang menunggu pemilik (sudah dijawab)
+
+> **Terjawab 2026-11-20 oleh ADR-0167:** butir 1, C′. Butir 2, ya, contoh wajib untuk operasi baru. Butir 3, ya, paket diterbitkan sebagai artefak terpatok. Butir 4, `required` wajib dan null ditulis `type: [X, "null"]` untuk operasi baru, yang lama diperbaiki bertahap. Butir 5, `429` wajib bila endpoint ber-rate-limit; `5xx` **belum** diputuskan dan tetap terbuka.
 
 1. C, C′, atau tidak keduanya (keputusan dependensi dev baru di bawah aturan tata
    kelola dependensi).
@@ -282,13 +288,12 @@ flowchart TD
 4. Kebijakan `required` dan `nullable` untuk kontrak (I1).
 5. Mana dari 429 dan 5xx yang wajib dideklarasikan setiap operasi.
 
-## Lampiran A — kerangka draf ADR (Proposed, belum diajukan)
+## Lampiran A — kerangka draf ADR (diajukan sebagai ADR-0167, Accepted)
 
-> **Hanya draf.** Tidak bernomor, tidak di-commit ke `docs/adr/`, dan **tidak
-> Accepted**. Ia ada agar pemilik dapat mengajukan, mengubah, atau membuangnya.
+> **Sudah diajukan.** Kerangka ini menjadi [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.id.md), Accepted pada 2026-11-20. Kerangka di bawah adalah draf seperti adanya; yang berwenang adalah ADR-nya, yang menambahkan kebijakan kontrak untuk operasi baru.
 
 - **Judul:** Fixture turunan kontrak dan pemeriksaan kesesuaian dua sisi untuk OpenAPI publik.
-- **Status:** Proposed (draf).
+- **Status:** Proposed (draf); diajukan sebagai Accepted di ADR-0167.
 - **Konteks:** langkah 8 mewajibkan mock hasil generate dari kontrak; R1 sampai R9.
 - **Keputusan (usulan):** skrip Bun dalam repo menghasilkan contoh dan paket fixture dari bundle; `ajv` (satu dependensi dev) memvalidasi skema, respons provider, dan fixture konsumen; diff kontrak mengklasifikasikan perubahan breaking dan aditif; tanpa server mock.
 - **Konsekuensi:** cacat kontrak muncul seketika (R2, R3) dan harus diperbaiki bersama gerbang; kebijakan contoh dan `required` menjadi aturan mutu kontrak; konsumen mematok paket alih-alih menyimpan spesifikasi kedua; satu dependensi dev lagi untuk ditata kelola.
