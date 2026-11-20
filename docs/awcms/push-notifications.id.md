@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:82b0d648fe31744af9302c81ffd5f9f3d73070cf2558d423a20ee3576e0a2222 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # Notifikasi Push — Rahasia Auth Saat Disimpan dan Runbook Rollout
 
 Cakupan: modul `push_delivery` (ADR-0074), khususnya cara `auth_secret` RFC 8291

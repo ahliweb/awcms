@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:12c5cae901ca895e8306cd36a206a4d9f97bdb93b0cf9c9a0316906ee06d2fc8 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0143 — Engine reporting menjumlah kuantitas, tak pernah mengakhiri halaman di tengah satu milidetik, dan `booking` menyumbang tiga proyeksi
 
 - **Status:** Diterima

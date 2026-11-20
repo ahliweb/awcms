@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:8db56c76cbc596e36dbf7c34849e83eae68e5a848ab70f03393563ca2b46f647 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0142 — Deskriptor data-subjek boleh menjangkau orangnya lewat SATU baris induk
 
 - **Status:** Diterima

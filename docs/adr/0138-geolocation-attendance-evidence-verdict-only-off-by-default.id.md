@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:552da5482657e1b898cd47b2d59e5650feb76b34f7ea0b9e389efc3bc0b5ccc7 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0138 — Bukti absensi geolokasi: hanya putusan, mati secara bawaan, retensi singkat
 
 - **Status:** Diterima; **diimplementasikan oleh Issue #970** (migrasi `sql/306`, modul `hr_workforce`; lihat "Status implementasi")

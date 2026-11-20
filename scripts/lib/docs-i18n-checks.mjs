@@ -39,6 +39,40 @@ export const MARKER_REGEX =
   /<!--\s*i18n-source-hash:\s*(sha256:[0-9a-f]{64})\s*-->/;
 
 /**
+ * Any marker comment, whatever its value. A hand-written line such as
+ * `<!-- i18n-source-hash: sha256:placeholder -->` does not match `MARKER_REGEX`,
+ * so a stamp built on the strict pattern leaves it behind (a double marker) and
+ * a checker built on it never sees it. The stamp strips EVERY line matching
+ * this pattern; the checker reports any that is not a valid marker.
+ */
+export const ANY_MARKER_REGEX = /<!--\s*i18n-source-hash:[^>]*-->/;
+
+const ANY_MARKER_GLOBAL = new RegExp(ANY_MARKER_REGEX.source, "g");
+
+/**
+ * Every marker comment in a mirror, valid or not.
+ * @param {string} mirrorContent
+ * @returns {string[]}
+ */
+export function findAllMarkers(mirrorContent) {
+  return mirrorContent.match(ANY_MARKER_GLOBAL) ?? [];
+}
+
+/**
+ * Remove every line carrying a marker comment, valid or not, and collapse the
+ * blank-line runs the removal leaves behind.
+ * @param {string} content
+ * @returns {string}
+ */
+export function stripMarkers(content) {
+  return content
+    .split("\n")
+    .filter((/** @type {string} */ line) => !ANY_MARKER_REGEX.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+/**
  * Hash of the ENGLISH source content. The mirror records this value.
  * @param {string} sourceContent
  * @returns {string} `sha256:<hex>`
@@ -102,6 +136,24 @@ export function checkTranslationPair(
       file: mirrorPath,
       line: 1,
       message: `Indonesian mirror with no English source (${sourcePath} does not exist). English is the source language (ADR-0097) — either restore the source or delete the orphan mirror.`
+    });
+    return problems;
+  }
+
+  const markers = findAllMarkers(mirrorContent);
+  if (markers.length > 1) {
+    problems.push({
+      file: mirrorPath,
+      line: 1,
+      message: `${markers.length} i18n-source-hash markers — exactly one is allowed. Run \`bun run docs:i18n:stamp\` to remove them all and write a single valid marker.`
+    });
+    return problems;
+  }
+  if (markers.length === 1 && !MARKER_REGEX.test(markers[0] ?? "")) {
+    problems.push({
+      file: mirrorPath,
+      line: 1,
+      message: `invalid i18n-source-hash marker \`${markers[0]}\` — the value must be sha256:<64 hex>. Run \`bun run docs:i18n:stamp\` to replace it with the real hash of ${sourcePath}.`
     });
     return problems;
   }

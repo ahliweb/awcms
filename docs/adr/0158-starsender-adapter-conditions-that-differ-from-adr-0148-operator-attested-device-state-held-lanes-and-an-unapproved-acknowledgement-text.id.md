@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:ea64e2b2650d080f3c5def49bbe739bd2cdf426ca4f116ed80caea4537703b90 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # ADR-0158 — Adapter StarSender: kondisi yang berbeda dari ADR-0148 (status perangkat diatestasi operator, lane ditahan, hasil tak diketahui, teks pernyataan belum disetujui)
 
 - **Status:** Diusulkan

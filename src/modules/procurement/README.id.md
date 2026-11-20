@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:6b1d39e4c412d82d5c2ceaf7408f1fdeb2424dabd114cd7c31c6c71edbfe972f -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # `procurement`
 
 **Pemasok, penerimaan, retur pemasok, permintaan stok, dan transfer antarlokasi**

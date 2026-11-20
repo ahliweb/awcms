@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:73e5f0df76119301e4dc95697f1aea19b05a2f107dc9226152d3a8e846488fc8 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0137 — Enkripsi at-rest rekening pembayaran, hashing berkunci, dan reveal teraudit (diputuskan sebelum tabelnya ada)
 
 - **Status:** Diterima

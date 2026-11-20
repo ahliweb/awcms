@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:9d5f201096fbc554809b318ba3e8ddd29830db9fc0954543958a0fb7f6500600 -->
 
-<!-- i18n-source-hash: sha256:0 -->
-
 # Notifikasi Push — Matriks Uji Operator dan Runbook
 
 Cakupan: Issue #1107. Rencana bukti untuk pengirim Web Push Bun

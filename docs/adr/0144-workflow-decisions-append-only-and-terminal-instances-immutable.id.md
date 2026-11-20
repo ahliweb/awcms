@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:581441fee7f243f707390bc53b06fefd7b84db8accc3042f3b63e2bfc74828f0 -->
 
-<!-- i18n-source-hash: sha256:pending -->
-
 # ADR-0144 — Keputusan workflow bersifat append-only dan instance terminal tak dapat diubah, di database
 
 - **Status:** Diterima

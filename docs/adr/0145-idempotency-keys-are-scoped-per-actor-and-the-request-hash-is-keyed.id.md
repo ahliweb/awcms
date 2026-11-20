@@ -2,8 +2,6 @@
 
 <!-- i18n-source-hash: sha256:5c9ee045085ce94ed17f030b24e53e7608200e5e5d2b7ff27ac41baf7b1d8f98 -->
 
-<!-- i18n-source-hash: sha256:0000 -->
-
 # ADR-0145 — Idempotency key di-scope per aktor, dan request hash memakai kunci
 
 - **Status:** Diterima
