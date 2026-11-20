@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:a96fbb83b7c7749d351af070b9c337774a6426e8507c2987f41fa1e492147448 -->
+<!-- i18n-source-hash: sha256:69a7ada7963f0d7c602222e8ac95e7d5b1d4dfc77aa0aa1a650a14525abf6527 -->
 
 # Alur pengembangan AWCMS
 
@@ -267,7 +267,9 @@ ada dependensi yang terpasang untuknya. v2 mewajibkan mock dihasilkan dari
 kontrak, tidak pernah ditulis tangan, sehingga sebelum perkakasnya dipilih,
 langkah 11.1 terhadap mock kontrak tidak bisa dikerjakan seperti yang v2
 gambarkan. Memilih perkakas adalah keputusan tersendiri (menyentuh toolchain),
-bukan sesuatu yang diselesaikan dokumen ini. Yang paling dekat adalah
+bukan sesuatu yang diselesaikan dokumen ini. **Pilihannya kini sudah dibuat
+(pemilik, 2026-11-20): ADR-0167, opsi C′, generator di dalam repo dengan `ajv`
+dan tanpa server mock; diterima dan belum dibangun.** Yang paling dekat adalah
 `api:consumer-contract:generate|check`, yang membekukan irisan API publik yang
 dipanggil `awcms-astro`; itu snapshot konsumen **satu sisi**, bukan mock dan
 bukan verifikasi provider.
@@ -361,10 +363,24 @@ izin.
   memanggil `listOffices`), dan hanya penulisannya yang menuju `/api/v1` dari
   browser. Model "frontend terhadap mock kontrak" karena itu lebih cocok untuk
   penulisan, island sisi klien, dan konsumen `awcms-astro` (yang repo-nya
-  memiliki 11.1-nya sendiri) daripada untuk pembacaan SSR. Bagaimana model ini
-  berlaku pada layar admin SSR adalah pertanyaan terbuka yang tidak dijawab ADR
-  ini; sebelum dijawab, perlakukan 11.1 di sini sebagai "layar bekerja terhadap
-  data uji di bawah gerbang yang sebenarnya", dan nyatakan itu di issue-nya.
+  memiliki 11.1-nya sendiri) daripada untuk pembacaan SSR.
+- **Aturan untuk layar admin SSR (keputusan pemilik, 2026-11-20; bukan lagi
+  pertanyaan terbuka).** Layar admin SISTEM dirender terhadap **fixture turunan
+  kontrak** (skema respons dan contohnya) **sebelum handler atau fungsi aplikasi
+  yang akan melayaninya ada**, dalam setiap state yang disebut irisan: loading,
+  kosong, galat, sukses, dan tanpa izin. Layar dengan demikian memakai bentuk read
+  model yang dinyatakan kontrak, handler yang menyusul (11.2) harus memenuhi apa
+  yang sudah ditampilkan layar, dan perbedaan kembali ke langkah 8 dan melewati
+  gerbang 9. Penulisan dan island sisi klien memanggil `/api/v1` dan berjalan
+  terhadap fixture yang sama. Merender terhadap fixture menunjukkan tata letak dan
+  state, **bukan otorisasi**: `loadAdminScreen`, pemeriksaan izin backend, dan RLS
+  tetap menegakkan akses dan diuji di 11.2.
+- **Sampai perkakasnya ada (ADR-0167, opsi C′, diterima dan belum dibangun),
+  nyatakan di issue.** Generator dan paket fixture masih backlog; irisan yang
+  mencapai 11.1 sebelum keduanya mendarat menyatakan bahwa 11.1 **tidak**
+  dikerjakan seperti yang v2 gambarkan, menyebut terhadap apa layar dirender
+  sebagai gantinya (misalnya data uji di bawah gerbang yang sebenarnya), dan
+  mencatatnya sebagai celah, bukan 11.1 selesai.
 
 ### 11.2 Backend memenuhi kontrak
 
@@ -615,7 +631,7 @@ oleh ADR yang menyebutnya.
 | 4       | WCAG 2.2 AA untuk admin                                         | **ditutup** (issue #1387): doc 14 dan tag axe ke 2.2 AA. |
 | 8       | Mock server / klien bertipe yang dihasilkan dari kontrak        | **celah** — tidak ada perkakas terpasang                 |
 | 9       | Pemeriksaan v2 baru di template Definition of Ready             | **ditutup** (issue #1378)                                |
-| 11.1    | Perkakas visual regression; model untuk layar admin SSR         | **celah** / pertanyaan terbuka                           |
+| 11.1    | Visual regression; layar admin SSR terhadap fixture             | **celah**; aturan SSR diputuskan, perkakas menunggu      |
 | 11.3    | Uji kontrak dua sisi; baseline kinerja terhadap SLO             | **celah** (hanya snapshot sisi konsumen)                 |
 
 Celah yang tersisa setelah itu **ada di dalam** dokumen yang menutupnya, bukan
