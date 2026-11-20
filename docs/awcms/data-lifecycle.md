@@ -119,6 +119,15 @@ obligations (see the note above), not simply copied from the base's inherited
 outside the safety bounds declared by the table's owner, and **legal hold
 still wins** over any override (see §Legal hold).
 
+### Legacy tables without a descriptor: review order (owner decision, 2026-11-20)
+
+The table-coverage gate (`bun run data-lifecycle:table-coverage:check`) keeps a **shrink-only ledger** of tables that predate the descriptor rule (102 on 2026-11-20 per the audit of that date; recount with the gate before quoting a number). The owner decided the order in which that debt is reviewed:
+
+1. **Tables with columns that hold personal data (PII) first**, because they carry the privacy exposure (Personal Data Protection Law, UU PDP; see §Compliance mapping). The first step is an inventory of which legacy tables hold personal data, taken from the schema and the existing subject-data classification, not guessed from names.
+2. **The rest gradually, module by module**, as each module is next worked on.
+
+Rules that do not change: the ledger can only shrink; no new gate is added for this; a reviewed table gets a descriptor with a written rationale, or a documented bounded-by-design or exclusion entry, in the same PR that removes it from the ledger. A review decides retention and does not delete production data. This note is a priority, not a compliance claim. Tracked by epic #1397.
+
 ## Legal hold
 
 `awcms_data_lifecycle_legal_holds` (RLS FORCE, tenant-scoped).

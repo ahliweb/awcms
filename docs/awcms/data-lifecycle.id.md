@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](data-lifecycle.md)
 
-<!-- i18n-source-hash: sha256:9651ca9757e47440595e2b3c005e4bca53558c682cd12317fb60df9ecf2934a1 -->
+<!-- i18n-source-hash: sha256:d1f7c1dfae4059a2a32b3602e19b79a311a12aa18656997c1b4d9ef7b781836d -->
 
 # Data Lifecycle — panduan operasional dan kepatuhan
 
@@ -118,6 +118,15 @@ disalin dari kelas `audit_security`/`analytics_telemetry` warisan base.
 retentionMaxDays]` descriptor — operator tidak bisa memaksa retensi di
 luar batas aman yang dideklarasikan pemilik tabel, dan **legal hold
 tetap menang** di atas override apa pun (lihat §Legal hold).
+
+### Tabel warisan tanpa descriptor: urutan peninjauan (keputusan pemilik, 2026-11-20)
+
+Gerbang cakupan tabel (`bun run data-lifecycle:table-coverage:check`) menyimpan **ledger yang hanya boleh menyusut** berisi tabel yang mendahului aturan descriptor (102 pada 2026-11-20 menurut audit tanggal itu; hitung ulang dengan gerbang sebelum mengutip angka). Pemilik memutuskan urutan peninjauan utang itu:
+
+1. **Tabel dengan kolom yang menyimpan data pribadi (PII) lebih dulu**, karena membawa paparan privasi (Undang-Undang Pelindungan Data Pribadi, UU PDP; lihat §Pemetaan kepatuhan). Langkah pertama adalah inventaris tabel warisan mana yang menyimpan data pribadi, diambil dari skema dan klasifikasi data subjek yang sudah ada, bukan ditebak dari nama.
+2. **Sisanya bertahap, modul demi modul**, saat tiap modul berikutnya dikerjakan.
+
+Aturan yang tidak berubah: ledger hanya boleh menyusut; tidak ada gerbang baru untuk ini; tabel yang sudah ditinjau mendapat descriptor dengan alasan tertulis, atau entri bounded-by-design atau pengecualian yang terdokumentasi, di PR yang sama yang menghapusnya dari ledger. Peninjauan memutuskan retensi dan tidak menghapus data produksi. Catatan ini prioritas, bukan klaim kepatuhan. Dilacak oleh epik #1397.
 
 ## Legal hold
 

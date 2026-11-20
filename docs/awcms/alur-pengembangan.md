@@ -261,7 +261,9 @@ consumer.
 dependency for it is installed. v2 requires the mock to be generated from the
 contract, never hand-written, so until tooling is chosen, step 11.1 against a
 contract mock cannot be done as v2 describes it. Choosing the tool is its own
-decision (it touches the toolchain), not something this document settles. The
+decision (it touches the toolchain), not something this document settles. **The
+choice has since been made (owner, 2026-11-20): ADR-0167, option C′, an in-repo
+generator with `ajv` and no mock server; it is accepted and not built yet.** The
 nearest thing that exists is `api:consumer-contract:generate|check`, which
 freezes the slice of the public API that `awcms-astro` calls; it is a
 **one-sided** consumer snapshot, not a mock and not a provider verification.
@@ -353,9 +355,23 @@ no-permission states.
   calls `listOffices`), and only their writes go to `/api/v1` from the browser.
   The "frontend against a mock of the contract" model therefore fits the writes,
   the client islands and the `awcms-astro` consumer (whose repo owns its own
-  11.1) better than it fits an SSR read. How the model applies to an SSR admin screen is an open question this
-  ADR does not answer; until it is answered, treat 11.1 here as "the screen
-  works against test data under the real gate", and say so in the issue.
+  11.1) better than it fits an SSR read.
+- **Rule for SSR admin screens (owner decision, 2026-11-20; no longer an open
+  question).** A SYSTEM admin screen is rendered against **fixtures derived from
+  the contract** (its response schemas and examples) **before the handler or
+  application function that will serve it exists**, in every state the slice
+  names: loading, empty, error, success and no-permission. The screen therefore
+  consumes the read-model shape the contract states, the later handler (11.2) has
+  to fulfil what the screen already shows, and a difference goes back to step 8
+  and through gate 9. Writes and client islands call `/api/v1` and run against the
+  same fixtures. Rendering against a fixture shows layout and states, **not
+  authorization**: `loadAdminScreen`, the backend permission checks and RLS still
+  enforce access, and are tested at 11.2.
+- **Until the tooling exists (ADR-0167, option C′, accepted and not built yet),
+  say so in the issue.** The generator and the fixtures pack are backlog; a slice
+  that reaches 11.1 before they land states that 11.1 was **not** carried out as v2
+  describes, names what the screen was rendered against instead (for example test
+  data under the real gate), and records it as a gap rather than as 11.1 done.
 
 ### 11.2 Backend fulfils the contract
 
@@ -603,7 +619,7 @@ needs its own issue, and none of them is closed by the ADR that names it.
 | 4    | WCAG 2.2 AA (doc 14 says 2.1 AA)                                     | **gap** — `14_ui_ux_design_system.md` is stale against v2 |
 | 8    | Mock server / typed client generated from the contract               | **gap** — no tooling installed                            |
 | 9    | New v2 checks in the Definition of Ready template                    | **closed** (issue #1378)                                  |
-| 11.1 | Visual-regression tooling; model for SSR admin screens               | **gap** / open question                                   |
+| 11.1 | Visual regression; SSR admin screens against fixtures                | **gap**; SSR rule decided 2026-11-20, tooling pending     |
 | 11.3 | Two-sided contract test; performance baseline against the SLOs       | **gap** (consumer-side snapshot only)                     |
 
 The gaps that remain after that are **inside** the documents that closed them,
