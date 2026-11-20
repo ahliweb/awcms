@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:4e5a03ff9c9d12131fa8a736a5af1f1c52b0c55c8c6746dcabaa780bb381be2f -->
+<!-- i18n-source-hash: sha256:227646026624170dd8e211cccf2e50168aefaa97363e72fea6497d15b5074056 -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -228,7 +228,7 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
 `@axe-core/playwright` **kini devDependency repo ini**
 (`bun add -d @axe-core/playwright`) — paragraf di bagian ini yang dulu
 menyatakan sebaliknya sudah dikoreksi setelah harness-nya sungguhan dikirim.
-`tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1 A+AA)
+`tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1/2.2 A+AA, termasuk `wcag22aa`)
 terhadap delapan rute admin representatif — `/admin`, `/admin/comments`,
 `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
 `/admin/omes/jobs`, `/admin/site-profile` — dalam tema terang MAUPUN gelap

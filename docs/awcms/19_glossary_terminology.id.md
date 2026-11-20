@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](19_glossary_terminology.md)
 
-<!-- i18n-source-hash: sha256:5b56e35563bb181e4e23d884bed51e2696baeeb33acb4219cb45688cc404a8d9 -->
+<!-- i18n-source-hash: sha256:4dd0270c7750e6e86710f07e8a4bdeed16fdee28e9e0fcd337aeb97ced1685f4 -->
 
 # Bagian 19 — Glossary dan Terminologi
 
@@ -206,7 +206,7 @@ flowchart LR
 | **State pattern**        | Loading / empty / error / success yang wajib di tiap layar.                                                                          |
 | **Optimistic UI**        | Menampilkan hasil sebelum konfirmasi server, rollback bila ditolak.                                                                  |
 | **i18n / locale**        | Internasionalisasi; min en+id (default **en**). String UI statis via `.po` gettext; konten data multi-bahasa di DB per locale aktif. |
-| **WCAG 2.1 AA**          | Standar aksesibilitas target AWCMS.                                                                                                  |
+| **WCAG 2.2 AA**          | Standar aksesibilitas target AWCMS.                                                                                                  |
 | **Sync indicator**       | Komponen UI penunjuk status koneksi & antrean sync.                                                                                  |
 
 ## Peran (persona)

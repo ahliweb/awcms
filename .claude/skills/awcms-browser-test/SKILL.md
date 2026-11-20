@@ -220,7 +220,7 @@ Ordering inside the run is not `fullyParallel` alone — see convention 7.
 `@axe-core/playwright` **is now a devDependency of this repo**
 (`bun add -d @axe-core/playwright`) — the paragraph that used to live in this
 section claiming otherwise was corrected once the harness actually shipped.
-`tests/e2e/a11y-axe.e2e.ts` runs `AxeBuilder` (WCAG 2.0/2.1 A+AA tags) against
+`tests/e2e/a11y-axe.e2e.ts` runs `AxeBuilder` (WCAG 2.0/2.1/2.2 A+AA tags, `wcag22aa` included) against
 eight representative admin routes — `/admin`, `/admin/comments`,
 `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
 `/admin/omes/jobs`, `/admin/site-profile` — in light AND dark theme (via the
