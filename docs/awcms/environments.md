@@ -14,6 +14,14 @@
 > For the deployment mechanics see [`deploy-coolify.md`](deploy-coolify.md) and
 > [`deployment-profiles.md`](deployment-profiles.md).
 
+> **Scope of this decision.** ADR-0083 is a decision about **this repo's
+> reference deployment**. It is not a ban on a consumer or derived repo running
+> its own pre-production environment: such an installation uses `development` or
+> a second `production` deployment under the isolation contract below. Adding a
+> staging tier to `awcms` itself needs a new ADR that supersedes ADR-0083. How
+> this reads against the generic flow (steps 13 and 14, and UAT in the
+> implementation repo): [`alur-pengembangan.md`](alur-pengembangan.md) §13–14.
+
 ## One environment
 
 | Environment    | Domain                 | `APP_ENV`    | Notes                                                                           |
