@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](research-openapi-mock-and-two-way-contract-tests-2026-11-20.md)
 
-<!-- i18n-source-hash: sha256:7e770e693fc0b940bb12d8f8421f4105a4908bda7693ff8f3343ccc46014fb0e -->
+<!-- i18n-source-hash: sha256:0b4de4698f217074d232986503d84c49b661bffeb69f404436addd5ff988297d -->
 
 # Riset: mock turunan OpenAPI dan uji kontrak dua arah — 20 November 2026
 
@@ -33,8 +33,7 @@ direproduksi di sini), **ASSUMED**, **PLANNED**, **DEFERRED**.
 **Hubungan dengan pekerjaan lain, agar tidak ada yang dikerjakan dua kali.**
 
 - Audit pendamping
-  (`audit-alur-v2-adr-0156-2026-11-20.md`, issue #1377, PR #1383; tidak ditautkan
-  karena belum di-merge saat ini ditulis) menetapkan celahnya (M6 contoh, M7 tanpa generator, M9
+  ([`audit-alur-v2-adr-0156-2026-11-20.md`](audit-alur-v2-adr-0156-2026-11-20.md), issue #1377, PR #1383) menetapkan celahnya (M6 contoh, M7 tanpa generator, M9
   respons palsu konsumen). Dokumen ini tidak mengulangnya; ia memilih cara
   menutup M6, M7, M8, dan M9.
 - `ahliweb/awcms-lynx` menerbitkan validasi kontraknya sendiri pada 20 November 2026

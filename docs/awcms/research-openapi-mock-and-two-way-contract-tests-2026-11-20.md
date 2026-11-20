@@ -31,8 +31,7 @@ reproduced here), **ASSUMED**, **PLANNED**, **DEFERRED**.
 **Relation to other work, so nothing is done twice.**
 
 - The companion audit
-  (`audit-alur-v2-adr-0156-2026-11-20.md`, issue #1377, PR #1383; not linked
-  because it was not merged when this was written) established the gap (M6 examples, M7 no generator, M9
+  ([`audit-alur-v2-adr-0156-2026-11-20.md`](audit-alur-v2-adr-0156-2026-11-20.md), issue #1377, PR #1383) established the gap (M6 examples, M7 no generator, M9
   consumer fakes). This document does not repeat it; it chooses among ways to close
   M6, M7, M8 and M9.
 - `ahliweb/awcms-lynx` published its own contract validation on 20 November 2026

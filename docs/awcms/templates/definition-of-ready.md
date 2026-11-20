@@ -7,6 +7,9 @@
 > which is checked at the end. This list is checked at the start.
 
 - **Flow step:** 9 ([`../alur-pengembangan.md`](../alur-pengembangan.md)).
+- **Flow version:** v2.0.0. The v2 gate-9 checks are in §Gate 9 checks added by
+  flow v2 below; their source is
+  [ADR-0156](../../adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.md) §4.
 - **For a NEW module**, this list does not replace
   [`module-admission-decision-checklist.md`](module-admission-decision-checklist.md)
   — it comes before it.
@@ -51,6 +54,52 @@ One question would have found both at step 9, and it is the first one below.
 | personal data               | the three questions in [`../privacy-analysis.md`](../privacy-analysis.md) §3                       |
 | something landing **inert** | what makes it inert, and which PR turns it on                                                      |
 | a foundation layer          | **its ADR**, not the intention to write one                                                        |
+
+## Gate 9 checks added by flow v2 (ADR-0156 §4)
+
+Flow v2 adds five checks to this gate and one more blocking defect. A box
+answered "yes" with nothing a reviewer can open is **not** an answer: each row
+names the evidence, and says honestly where the evidence **does not exist yet**.
+Where the tooling for a check is missing, the check is answered "not ready" (or
+"not applicable" with a reason), never ticked.
+
+| #   | Check                                                                                                         | Evidence a reviewer can open                                                                                                                                                                                                                                                                                                                                                                                    | N/A only when                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| V1  | Every screen has a data source **mapped to a contract operation** (OpenAPI `operationId` or AsyncAPI channel) | The per-screen data inventory of step 4 (**no template exists yet**, see [`../alur-pengembangan.md`](../alur-pengembangan.md) §4, so link the inventory the issue carries) with each row pointing at a fragment in [`../../../openapi/modules/`](../../../openapi/modules/) or [`../../../asyncapi/`](../../../asyncapi/). `bun run api:spec:check` proves the fragment is valid, not that the screen is mapped | the change adds or alters **no screen** (backend-only, docs-only, chore)                                |
+| V2  | High-severity usability findings (`UXT-*`) are **closed, or accepted by a named person**                      | The usability-test report of step 4. **No report template, ID scheme or recorded test round exists yet** (flow §4 gap): until one does, write "no test round held" and the **named person** who accepts shipping an untested screen                                                                                                                                                                             | no user-visible screen or flow changes                                                                  |
+| V3  | The design is checked against **WCAG 2.2 AA**                                                                 | A design review against 2.2 AA, recorded in the issue or PR. `bun run design:token-contrast:check` and `tests/e2e/a11y-axe.e2e.ts` act **later and on built output**; they do not replace the design check. [`../14_ui_ux_design_system.md`](../14_ui_ux_design_system.md) still states 2.1 AA (flow §4 gap): review against 2.2 AA anyway                                                                      | no user-visible UI changes                                                                              |
+| V4  | The mock is **generated from the contract** and **runs the contract's examples**                              | The generator run and its output. **No generator is installed** ([`../alur-pengembangan.md`](../alur-pengembangan.md) §8 gap), so for a slice that has an 11.1 this check currently cannot be satisfied: answer "not ready for 11.1 against a mock" or record, on the issue, the alternative used (see §11.1 for the SSR admin case). A hand-written mock is a second specification and never counts            | the slice has **no 11.1** (no screen or client consumes the contract)                                   |
+| V5  | A **second** security and privacy pass over step 3, now that UI, data and API have a shape                    | The three questions of [`../privacy-analysis.md`](../privacy-analysis.md) §3 re-answered against the final screens, tables and operations; the permission of every operation and the RLS answer of question 1 above; masking on every screen that shows classified data. Record it in the issue or PR                                                                                                           | **never N/A as a whole**: a change with no data, endpoint or access effect writes that sentence instead |
+
+### Blocking defects
+
+A defect below sends the work **back to the step that holds it and then through
+this gate again**. It cannot be waved through with a note.
+
+| Defect                                                | Where to look                                                                                                                                                           | Automated check that exists                                                                                                               |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| a screen with **no data source in the contract** (v2) | V1 above                                                                                                                                                                | none (`admin:screen-coverage:check` maps permissions to screens, which is a different question)                                           |
+| an endpoint with **no permission**                    | the `permissions` descriptor in `src/modules/*/module.ts` and the operation's security fragment                                                                         | `access:permissions:enforcement:check`, `access:chokepoint:check`, `api:spec:check`                                                       |
+| a table with **no classification**                    | the sensitivity level in [`../04_erd_data_dictionary.md`](../04_erd_data_dictionary.md) §Sensitive data classification, plus the RLS answer and the data-subject answer | RLS: `security:readiness`; data subject: `subject-data:coverage:check`. **No gate that checks the classification level itself was found** |
+| a PII column with **no retention policy**             | the table's `dataLifecycle` descriptor ([`../data-lifecycle.md`](../data-lifecycle.md))                                                                                 | `data-lifecycle:table-coverage:check`                                                                                                     |
+
+### A change that has no screen
+
+Backend-only, docs-only, chore and dependency changes do **not** need a UI
+prototype, a usability test, a WCAG review or a mock. V1–V4 are then written
+"N/A" **with the reason** (for example "no screen: adds `GET /api/v1/...` only"),
+and the reviewer can disagree with the reason. What never becomes N/A: the
+permission of every operation, the RLS answer, the privacy answer and V5. The
+change-class table in [`../alur-pengembangan.md`](../alur-pengembangan.md)
+decides which of steps 1–8 are mandatory; this section only says how the new
+checks apply once that is decided.
+
+### Frontend and persona-app consumers
+
+For a slice whose screens live in a consumer repo (`awcms-astro`, a persona
+app), V1–V4 are answered there against **this repo's contract**, and the issue
+here only links that evidence. This repo does not own the consumer's usability
+test, but it owns the contract operation that V1 maps to.
 
 ## New product surface (a screen or an app)
 

@@ -16,7 +16,7 @@ Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontr
 > **Dokumen ini menjelaskan langkah 10–12** dari alur pengembangan penuh (issue
 > → implementasi → PR). Langkah 1–9 (blueprint, riset pengguna + PRD, threat model,
 > UX/UI + prototipe tervalidasi, ERD, matriks RBAC/ABAC/RLS, spesifikasi domain,
-> kontrak API + mock, review lintas-spesifikasi) dan 13–18 (staging, UAT, go/no-go, produksi, validasi, monitoring) ada di
+> kontrak API + mock, review lintas-spesifikasi) dan 13–18 (staging dan UAT tidak berlaku di repo ini: ADR-0083 dan DL-059; go/no-go, produksi, validasi, monitoring) ada di
 > **[`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md)**, yang
 > juga memuat tabel **kelas perubahan**: tidak setiap perubahan menempuh 18
 > langkah, dan yang menentukan bukan selera.
