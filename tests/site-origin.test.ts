@@ -14,8 +14,10 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+  declaredSiteHost,
   declaredSiteScheme,
   resolveHostOrigin,
+  resolveRequestHost,
   resolveRequestOrigin,
   resolveSiteScheme
 } from "../src/lib/http/site-origin";
@@ -135,6 +137,83 @@ describe("resolveRequestOrigin", () => {
   });
 });
 
+describe("host behind a proxy whose Host Astro does not trust (#1366)", () => {
+  // Astro 7 trusts Host/X-Forwarded-* only for `security.allowedDomains`, which
+  // AWCMS deliberately leaves unset (it would also make Astro believe a
+  // client-supplied X-Forwarded-For). So `url.host` is the listener's own
+  // `localhost:<port>` in a proxied deployment.
+  const LISTENER = new URL("http://localhost:4321/blog/ahliweb/feed.xml");
+  const ENV = { APP_URL: "https://awcms.ahlikoding.com" } as NodeJS.ProcessEnv;
+
+  test("a loopback listener host is replaced by APP_URL's host", () => {
+    expect(resolveRequestOrigin(LISTENER, request(), ENV)).toBe(
+      "https://awcms.ahlikoding.com"
+    );
+    expect(resolveRequestHost(LISTENER, request(), ENV)).toBe(
+      "awcms.ahlikoding.com"
+    );
+  });
+
+  test("APP_URL's port is kept", () => {
+    expect(
+      resolveRequestHost(LISTENER, request(), {
+        APP_URL: "https://awcms.example:8443"
+      } as NodeJS.ProcessEnv)
+    ).toBe("awcms.example:8443");
+  });
+
+  test("dev: loopback APP_URL leaves the request host alone", () => {
+    expect(
+      resolveRequestHost(new URL("http://localhost:5000/"), request(), {
+        APP_URL: "http://localhost:4321"
+      } as NodeJS.ProcessEnv)
+    ).toBe("localhost:5000");
+  });
+
+  test("no APP_URL or an unparseable one: request host, never a throw", () => {
+    expect(resolveRequestHost(LISTENER, request(), {})).toBe("localhost:4321");
+    expect(
+      resolveRequestHost(LISTENER, request(), {
+        APP_URL: "not a url"
+      } as NodeJS.ProcessEnv)
+    ).toBe("localhost:4321");
+  });
+
+  test("a non-loopback request host is never overridden by APP_URL", () => {
+    expect(
+      resolveRequestHost(new URL("http://tenant-two.example/"), request(), ENV)
+    ).toBe("tenant-two.example");
+  });
+
+  test("trusted X-Forwarded-Host still wins", () => {
+    expect(
+      resolveRequestHost(
+        LISTENER,
+        request({ "x-forwarded-host": "tenant-two.example" }),
+        { ...ENV, PUBLIC_TRUST_PROXY: "true" }
+      )
+    ).toBe("tenant-two.example");
+  });
+
+  test("an untrusted X-Forwarded-Host is ignored", () => {
+    expect(
+      resolveRequestHost(
+        LISTENER,
+        request({ "x-forwarded-host": "evil.example" }),
+        ENV
+      )
+    ).toBe("awcms.ahlikoding.com");
+  });
+
+  test("declaredSiteHost", () => {
+    expect(declaredSiteHost(ENV)).toBe("awcms.ahlikoding.com");
+    expect(declaredSiteHost({})).toBeNull();
+    expect(
+      declaredSiteHost({ APP_URL: "ftp://x" } as NodeJS.ProcessEnv)
+    ).toBeNull();
+  });
+});
+
 describe("declaredSiteScheme", () => {
   test.each([
     ["https://awcms.ahlikoding.com", "https"],
@@ -189,6 +268,25 @@ describe("resolveSiteScheme without a request", () => {
   });
 });
 
+describe("site-origin:check: request host", () => {
+  test.each([
+    ["the auth footer defect", "const host = Astro.url.host;"],
+    ["a destructured url", "const label = url.host;"],
+    ["an interpolation", "const s = `site: ${context.url.host}`;"]
+  ])("catches %s", (_name, line) => {
+    const found = scanSource("src/components/X.astro", line);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.rule).toBe("request-host");
+  });
+
+  test.each([
+    ["hostname (a comparison key)", "const h = url.hostname.toLowerCase();"],
+    ["a comment", "// was Astro.url.host"]
+  ])("does not flag %s", (_name, line) => {
+    expect(scanSource("src/components/X.astro", line)).toEqual([]);
+  });
+});
+
 describe("site-origin:check", () => {
   test("the resolver itself is exempt", () => {
     expect(
@@ -205,7 +303,8 @@ describe("site-origin:check", () => {
       "the canonical defect",
       "canonicalUrl: `${url.origin}/blog/${tenantCode}`,"
     ],
-    ["an Astro component", "const self = `${Astro.url.origin}${path}`;"]
+    ["an Astro component", "const self = `${Astro.url.origin}${path}`;"],
+    ["a JSX-style attribute", '<a href={Astro.url.origin + "/x"}>x</a>']
   ])("catches %s", (_name, line) => {
     const found = scanSource("src/pages/blog/x.ts", line);
     expect(found).toHaveLength(1);
