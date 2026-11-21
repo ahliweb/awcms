@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](dependency-governance.md)
 
-<!-- i18n-source-hash: sha256:b480a62846fca8a16be40e3ee5e94a1b75bd869a9734b18a44927f9a1934c036 -->
+<!-- i18n-source-hash: sha256:a5b655b979278c9b5148d0c9987d79f42daa194457244e293abee5b683645e80 -->
 
 # Tata kelola dependensi — audit kesegaran dan upgrade atomik
 
@@ -293,3 +293,16 @@ registry, `deps:freshness --strict` melaporkannya agar dihapus alih-alih dibiark
 sebagai sesuatu yang tak lagi benar. Drift yang belum dievaluasi siapa pun tidak
 termasuk di sini (itu backlog), dan advisory yang tak bisa diperbaiki masuk ke
 `scripts/dependency-audit-exceptions.ts`.
+
+### Override transitif yang di-pin dan tidak ada di register
+
+Register di atas dievaluasi terhadap `bun outdated`, yang hanya mendaftar dependensi
+**langsung**; entri untuk paket transitif akan selalu terbaca "tidak lagi tertinggal"
+dan dilaporkan basi. Paket transitif yang sengaja ditahan karena itu di-pin lewat
+`overrides` di `package.json` dan dicatat di sini beserta syarat pelepasannya:
+
+| Paket                  | Pin   | Alasan                                                                                                                                                                                                 | Syarat pelepasan                                                                                  |
+| ---------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `@astrojs/compiler-rs` | 0.5.2 | Binding 0.5.3 `@astrojs/compiler-binding-linux-x64-gnu` membuat `astro build` mati SIGILL pada CPU x86-64 tanpa AVX (Issue #1367). 0.5.3 masih `latest` di registry saat pin ditambahkan (2026-11-22). | Rilis binding yang berjalan pada baseline x86-64, diverifikasi `bun run build` di host tanpa AVX. |
+
+Lihat [`deploy-coolify.id.md`](deploy-coolify.id.md) §"Build host: CPU tanpa AVX".

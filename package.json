@@ -237,6 +237,7 @@
     "yaml": "^2.9.1"
   },
   "overrides": {
+    "@astrojs/compiler-rs": "0.5.2",
     "postcss": "^8.5.23",
     "nanoid": "^3.3.17",
     "js-yaml": "^4.3.2",
