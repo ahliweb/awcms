@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:c635760469c9934ad72dc08ba22fe0964cfc02611fbdb0f492b4fccfee83eb7f -->
+<!-- i18n-source-hash: sha256:12ca2999ed49c78b524915fe7fd4216ff7558319f5218f0870b78f5f6fe99246 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -148,7 +148,7 @@ Sebuah deployment dapat mengganti warna brand-nya tanpa mengedit `src/styles/tok
 - Override ditambahkan ke `tokens.css` saat build (transform Vite di `astro.config.mjs`), sehingga ikut berkas stylesheet eksternal yang sama: tanpa style inline, CSP tidak berubah, tanpa permintaan tambahan, baik halaman admin maupun publik.
 - `bun run design:token-contrast:check` mengukur nilai EFEKTIF (bawaan ditambah override), sehingga brand yang menurunkan pasangan terdaftar di bawah WCAG 2.1 AA menggagalkan `bun run check`. Registri pasangan tidak berubah.
 - Tanpa berkas, keluaran identik dengan build tanpa fitur ini.
-- Byte tambahan dihitung terhadap anggaran aset klien (`build:asset-budget:check`); override penuh ketiga keluarga menambah sekitar 1,5 kB pada anggaran app.
+- Override adalah data deployment, bukan pertumbuhan kode upstream: `build:asset-budget:check` tidak menghitung byte yang ditambahkannya (panjang tepat CSS override yang dibangkitkan dikurangkan dari stylesheet pembawanya), sehingga memakainya tidak pernah menuntut pengeditan anggaran. Ukuran override dibatasi allow-list dan nilai hex; pertumbuhan non-override tetap tertangkap.
 - Di luar lingkup: token baru, tema runtime per-tenant (itu modul `theming`), tipografi, dan jarak.
 
 ## Component library

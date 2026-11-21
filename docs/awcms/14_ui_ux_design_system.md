@@ -146,7 +146,7 @@ A deployment can change its brand colours without editing `src/styles/tokens.css
 - The override is appended to `tokens.css` at build time (a Vite transform in `astro.config.mjs`), so it ships inside the same external stylesheet: no inline style, no CSP change, no extra request, admin and public pages alike.
 - `bun run design:token-contrast:check` measures the EFFECTIVE values (shipped plus override), so a brand that drops a registered pair below WCAG 2.1 AA fails `bun run check`. The pair registry is unchanged.
 - With no file, the output is identical to a build without the feature.
-- The added bytes count against the client asset budget (`build:asset-budget:check`); a full override of all three families adds roughly 1.5 kB to the app budget.
+- The override is deployment data, not upstream code growth: `build:asset-budget:check` does not count the bytes it adds (it discounts the exact length of the generated override CSS from the stylesheet that carries it), so using it never requires editing the budget. The override size is bounded by the allow-list and hex-only values; non-override growth is still caught.
 - Out of scope: new tokens, per-tenant runtime theming (that is the `theming` module), typography and spacing.
 
 ## Component library

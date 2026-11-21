@@ -81,6 +81,12 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  BRAND_OVERRIDE_FILE,
+  parseBrandOverride,
+  renderBrandOverrideCss
+} from "../src/lib/ui/brand-token-override";
+
 const CLIENT_DIST = "dist/client";
 
 /**
@@ -1612,6 +1618,65 @@ export async function measureClientAssets(root: string): Promise<Measurement> {
   };
 }
 
+/**
+ * Deployment brand override (#1355) is DEPLOYMENT DATA, not upstream code
+ * growth. The budgets measure the latter, so the bytes the override adds are
+ * not counted: the carrier stylesheets (those holding the shipped token
+ * block) are reduced by the exact byte length of the CSS the build transform
+ * appended (`renderBrandOverrideCss`, deterministic). That length is an upper
+ * bound of what survives minification, so at most the minifier's saving on the
+ * override (well under 1 kB) is forgiven in addition. The override's size is
+ * itself bounded by the token allow-list + 7-char hex values (asserted in
+ * tests/client-asset-budget.test.ts). No override file = no adjustment.
+ */
+export function discountBrandOverride(
+  measurement: Measurement,
+  carrierPaths: ReadonlySet<string>,
+  overrideBytes: number
+): Measurement {
+  if (overrideBytes <= 0 || carrierPaths.size === 0) return measurement;
+
+  const files = measurement.files.map((file) =>
+    carrierPaths.has(file.path.split(path.sep).join("/"))
+      ? { ...file, bytes: Math.max(0, file.bytes - overrideBytes) }
+      : file
+  );
+
+  return {
+    totalBytes: files.reduce((sum, file) => sum + file.bytes, 0),
+    files
+  };
+}
+
+async function brandOverrideDiscount(
+  measurement: Measurement
+): Promise<Measurement> {
+  if (!(await Bun.file(BRAND_OVERRIDE_FILE).exists())) return measurement;
+
+  const override = parseBrandOverride(
+    JSON.parse(await Bun.file(BRAND_OVERRIDE_FILE).text()),
+    await Bun.file("src/styles/tokens.css").text()
+  );
+  const overrideBytes = Buffer.byteLength(renderBrandOverrideCss(override));
+  const carriers = new Set<string>();
+
+  for (const file of measurement.files) {
+    const normalised = file.path.split(path.sep).join("/");
+
+    if (
+      normalised.startsWith("_astro/") &&
+      normalised.endsWith(".css") &&
+      (await Bun.file(path.join(CLIENT_DIST, file.path)).text()).includes(
+        "--color-primary-strong:"
+      )
+    ) {
+      carriers.add(normalised);
+    }
+  }
+
+  return discountBrandOverride(measurement, carriers, overrideBytes);
+}
+
 export function evaluateBudget(
   measurement: Measurement,
   budget: Budget = {
@@ -1828,7 +1893,10 @@ async function main(): Promise<void> {
     throw error;
   }
 
-  const report = evaluateBudget(measurement, budget);
+  const report = evaluateBudget(
+    await brandOverrideDiscount(measurement),
+    budget
+  );
 
   if (!report.ok) {
     for (const line of formatFailure(report, measurement, budget)) {
