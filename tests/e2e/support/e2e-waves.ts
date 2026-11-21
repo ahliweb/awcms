@@ -97,6 +97,9 @@ export const READ_WAVE: readonly string[] = [
   // Issue #1365 — the `/login` second-factor step. Both API answers are
   // fulfilled by the spec itself, so no session is minted.
   "login-mfa.e2e.ts",
+  // Issue #1425 — the `/login` pre-session enrolment step, same arrangement:
+  // every API answer is fulfilled by the spec.
+  "login-mfa-enrolment.e2e.ts",
   "not-found.e2e.ts",
   // Anonymous GETs against the public blog. Read-wave in the strictest sense:
   // it never logs in and never touches tenant state, and it needs no content

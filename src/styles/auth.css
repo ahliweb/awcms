@@ -546,3 +546,45 @@
     display: none;
   }
 }
+
+/* Pre-session enrolment step on /login (#1425). The QR is a locally encoded
+   SVG (src/lib/ui/enrolment-qr.ts); both it and the manual key shrink to the
+   card at 360 px instead of scrolling the page sideways. */
+.auth-qr svg {
+  display: block;
+  width: 12rem;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+
+.auth-qr:empty {
+  display: none;
+}
+
+.auth-secret {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+}
+
+.auth-secret-label {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.auth-secret code {
+  font-size: var(--fs-lg);
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+
+.auth-recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, monospace;
+}

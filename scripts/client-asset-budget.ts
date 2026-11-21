@@ -1374,8 +1374,20 @@ export const READER_BUDGET_BYTES = 39_000;
  * lifecycle stays in `admin-form-client.ts`, so nothing is duplicated per
  * screen), and a few rules in `auth.css`. A person with a TOTP factor could not
  * sign in through the page at all before this. Margin 140 B, as above.
+ *
+ * **Raised for Issue #1425** (the `/login` pre-session enrolment step): +3,729 B
+ * (388,085 -> 391,814), measured 391,674 B on a clean build. The cost is the
+ * enrolment form and the recovery-code panel on the sign-in page (seven
+ * server-rendered sentences), the step's client logic in the login script, the
+ * four small helpers in `src/lib/ui/login-mfa-client.ts`, the QR encoder now
+ * reached from the login script (it is the SAME `src/lib/qr/qr-code.ts` and
+ * `src/lib/ui/enrolment-qr.ts` that `/admin/account` uses — made addressable by
+ * an optional `targets` argument rather than copied), and a few rules in
+ * `auth.css`. A person whose tenant requires a second factor and who has none
+ * was locked out of the page before this (the code was shown as "sign in
+ * failed" with a correct password). Margin 140 B, as above.
  */
-export const APP_BUDGET_BYTES = 388_085;
+export const APP_BUDGET_BYTES = 391_814;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -122,6 +122,10 @@ const formMessages = {
   "data-msg-mfa-use-code": tx("login", "Use an authenticator code instead"),
   "data-msg-mfa-label-code": tx("login", "Authentication code"),
   "data-msg-mfa-label-recovery": tx("login", "Recovery code"),
+  "data-msg-enrol-qr-label": tx(
+    "login",
+    "QR code for your authenticator app. If you cannot scan it, type the key shown below into the app instead."
+  ),
   // Server configuration, rendered so the page never needs a refusal reason
   // to know when a challenge is spent (anti-oracle, #1365).
   "data-mfa-ttl-sec": String(resolveChallengeTtlSec()),
@@ -298,6 +302,70 @@ const formMessages = {
             </div>
           </form>
 
+          {/* Pre-session enrolment (#1425): a tenant policy requires a second
+              factor and this person has none yet. The grant lives in script
+              memory only; the secret is the QR plus the manual key, nothing
+              else, and both are cleared when the step ends. */}
+          <form id="enrol-form" class="auth-form" novalidate hidden>
+            <p class="auth-subtitle" id="enrol-intro">
+              {tx(
+                "login",
+                "Your organization requires two-factor authentication. Scan the QR code with an authenticator app, or type the key into it, then enter the 6-digit code it shows."
+              )}
+            </p>
+            <p id="enrol-error" class="auth-error" role="alert" hidden></p>
+            <div class="auth-qr" id="enrol-qr"></div>
+            <p class="auth-secret">
+              <span class="auth-secret-label" id="enrol-secret-label">
+                {tx("login", "Key for your authenticator app")}
+              </span>
+              <code
+                id="enrol-secret"
+                aria-labelledby="enrol-secret-label"
+              ></code>
+            </p>
+            <div class="auth-field">
+              <label for="enrol-code">
+                {tx("login", "Authentication code")}
+              </label>
+              <input
+                id="enrol-code"
+                name="code"
+                type="text"
+                required
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="7"
+                pattern="[0-9 ]*"
+                spellcheck={false}
+              />
+            </div>
+            <button type="submit" id="enrol-submit" class="auth-submit">
+              {tx("login", "Confirm and finish")}
+            </button>
+            <div class="auth-links">
+              <button type="button" id="enrol-back" class="auth-link-button">
+                {tx("login", "Back to sign in")}
+              </button>
+            </div>
+          </form>
+
+          <section id="enrol-recovery" class="auth-form" hidden>
+            <h2 class="auth-title" id="enrol-recovery-title" tabindex="-1">
+              {tx("login", "Save your recovery codes")}
+            </h2>
+            <p class="auth-subtitle">
+              {tx(
+                "login",
+                "Each code works once if you lose your authenticator app. They are shown only now: store them somewhere safe before you continue."
+              )}
+            </p>
+            <ul class="auth-recovery-codes" id="enrol-recovery-list"></ul>
+            <button type="button" id="enrol-continue" class="auth-submit">
+              {tx("login", "Continue to your workspace")}
+            </button>
+          </section>
+
           <nav class="auth-links" aria-label={tx("login", "Account recovery")}>
             <a href="/forgot-password">
               {tx("login", "Forgot your password?")}
@@ -325,12 +393,20 @@ const formMessages = {
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
       import {
+        buildEnrolHeaders,
+        buildEnrolVerifyBody,
         buildVerifyBody,
         createChallengeBudget,
         isPlausibleTotpCode,
+        readEnrolStart,
+        readEnrolVerify,
         readLoginOutcome,
         readVerifySuccess
       } from "../lib/ui/login-mfa-client";
+      import {
+        clearEnrolmentSecret,
+        renderEnrolmentQr
+      } from "../lib/ui/enrolment-qr";
       import {
         holdForNavigation,
         lockElement,
@@ -448,6 +524,125 @@ const formMessages = {
         setRecoveryMode(false);
       }
 
+      // --- Pre-session enrolment step (#1425) ------------------------------
+      // The enrolment grant lives ONLY in these variables, like the challenge
+      // token above: never in storage, the URL or the DOM. The TOTP secret is
+      // rendered as the QR and the manual key the person needs, and nothing
+      // else; both are wiped when the step ends or the page is left.
+      const enrolForm = document.getElementById("enrol-form");
+      const enrolError = document.getElementById("enrol-error");
+      const enrolCode = document.getElementById(
+        "enrol-code"
+      ) as HTMLInputElement | null;
+      const enrolBack = document.getElementById("enrol-back");
+      const enrolRecovery = document.getElementById("enrol-recovery");
+      const enrolRecoveryList = document.getElementById("enrol-recovery-list");
+      const enrolContinue = document.getElementById("enrol-continue");
+      const enrolTargets = { qrId: "enrol-qr", secretId: "enrol-secret" };
+      let enrolToken: string | null = null;
+      let enrolTenant = "";
+      let enrolBudget: ReturnType<typeof createChallengeBudget> | null = null;
+      let recoveryShown = false;
+
+      function showEnrolError(message: string): void {
+        if (!enrolError) return;
+        enrolError.textContent = message;
+        enrolError.hidden = false;
+      }
+
+      function endEnrolStep(restart: boolean): void {
+        enrolToken = null;
+        enrolBudget = null;
+        clearEnrolmentSecret(document, enrolTargets);
+        if (enrolCode) enrolCode.value = "";
+        if (enrolError) enrolError.hidden = true;
+        if (enrolForm) enrolForm.hidden = true;
+        if (loginForm) loginForm.hidden = false;
+        if (passwordInput) passwordInput.value = "";
+        if (restart) showError(messages.msgMfaRestart ?? "");
+        passwordInput?.focus();
+      }
+
+      function showRecoveryCodes(codes: readonly string[]): void {
+        clearEnrolmentSecret(document, enrolTargets);
+        enrolToken = null;
+        enrolBudget = null;
+        if (enrolForm) enrolForm.hidden = true;
+        recoveryShown = codes.length > 0;
+        if (!recoveryShown) {
+          holdForNavigation();
+          window.location.href = "/admin";
+          return;
+        }
+        // `textContent`, never `innerHTML`.
+        enrolRecoveryList?.replaceChildren(
+          ...codes.map((code) => {
+            const item = document.createElement("li");
+            item.textContent = code;
+            return item;
+          })
+        );
+        if (enrolRecovery) enrolRecovery.hidden = false;
+        document.getElementById("enrol-recovery-title")?.focus();
+      }
+
+      enrolBack?.addEventListener("click", () => endEnrolStep(false));
+      enrolContinue?.addEventListener("click", () => {
+        recoveryShown = false;
+        enrolRecoveryList?.replaceChildren();
+        holdForNavigation();
+        window.location.href = "/admin";
+      });
+      window.addEventListener("pagehide", () => {
+        if (enrolToken) endEnrolStep(false);
+        if (recoveryShown) enrolRecoveryList?.replaceChildren();
+      });
+      window.addEventListener("pageshow", (event) => {
+        // Back/forward cache restored the page after its recovery codes were
+        // wiped: the session already exists, so go on rather than show a blank
+        // panel.
+        if (event.persisted && recoveryShown) window.location.href = "/admin";
+      });
+
+      /** Starts enrolment; true when the secret is on screen. */
+      async function startEnrolStep(
+        token: string,
+        tenantId: string
+      ): Promise<boolean> {
+        const response = await fetch("/api/v1/auth/mfa/totp/enroll/start", {
+          method: "POST",
+          headers: buildEnrolHeaders(tenantId, token),
+          credentials: "same-origin",
+          body: "{}"
+        });
+        const started = readEnrolStart(
+          response.ok,
+          await response.json().catch(() => null)
+        );
+        if (!started) return false;
+
+        enrolToken = token;
+        enrolTenant = tenantId;
+        enrolBudget = createChallengeBudget(
+          Number(messages.mfaTtlSec) || 300,
+          Number(messages.mfaMaxAttempts) || 5
+        );
+        renderEnrolmentQr(
+          document,
+          started.otpauthUri,
+          messages.msgEnrolQrLabel ?? "",
+          enrolTargets
+        );
+        const secret = document.getElementById("enrol-secret");
+        if (secret) secret.textContent = started.secret;
+        if (errorBox) errorBox.hidden = true;
+        if (enrolError) enrolError.hidden = true;
+        if (loginForm) loginForm.hidden = true;
+        if (enrolForm) enrolForm.hidden = false;
+        enrolCode?.focus();
+        return true;
+      }
+
       mfaToggle?.addEventListener("click", () =>
         setRecoveryMode(!recoveryMode)
       );
@@ -500,6 +695,19 @@ const formMessages = {
             return;
           }
 
+          if (outcome.kind === "enrol") {
+            // Any refusal of the start (expired or spent grant, deployment
+            // switch off, rate limit) is the same way back to the password
+            // step: the page does not read why.
+            if (await startEnrolStep(outcome.enrolmentToken, tenantId)) {
+              unlock();
+              return;
+            }
+            showError(messages.msgMfaRestart ?? "");
+            unlock();
+            return;
+          }
+
           if (outcome.kind !== "success") {
             // Generic message only — the server deliberately collapses every
             // deny reason so the UI must not reconstruct a specific one, and it
@@ -515,6 +723,54 @@ const formMessages = {
           window.location.href = "/admin";
         } catch {
           showError(messages.msgNetwork ?? "");
+          unlock();
+        }
+      });
+
+      onSubmit("enrol-form", async ({ submit }) => {
+        if (!enrolToken || !enrolBudget || !enrolCode) return;
+        const unlock = submit
+          ? lockElement(submit, messages.msgBusy ?? "")
+          : () => {};
+        if (enrolError) enrolError.hidden = true;
+
+        if (!isPlausibleTotpCode(enrolCode.value)) {
+          showEnrolError(messages.msgMfaFailed ?? "");
+          unlock();
+          enrolCode.focus();
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/v1/auth/mfa/totp/enroll/verify", {
+            method: "POST",
+            headers: buildEnrolHeaders(enrolTenant, enrolToken),
+            credentials: "same-origin",
+            body: JSON.stringify(buildEnrolVerifyBody(enrolCode.value))
+          });
+          const done = readEnrolVerify(
+            response.ok,
+            await response.json().catch(() => null)
+          );
+
+          if (done) {
+            // The session cookies are set; the grant is spent.
+            showRecoveryCodes(done.recoveryCodes);
+            unlock();
+            return;
+          }
+
+          enrolBudget.recordFailure();
+          unlock();
+          if (enrolBudget.exhausted()) {
+            endEnrolStep(true);
+            return;
+          }
+          showEnrolError(messages.msgMfaFailed ?? "");
+          enrolCode.value = "";
+          enrolCode.focus();
+        } catch {
+          showEnrolError(messages.msgNetwork ?? "");
           unlock();
         }
       });

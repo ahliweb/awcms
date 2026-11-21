@@ -8,9 +8,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  buildEnrolHeaders,
+  buildEnrolVerifyBody,
   buildVerifyBody,
   createChallengeBudget,
   isPlausibleTotpCode,
+  readEnrolStart,
+  readEnrolVerify,
   readLoginOutcome,
   readVerifySuccess
 } from "../src/lib/ui/login-mfa-client";
@@ -43,7 +47,6 @@ describe("readLoginOutcome", () => {
   test("every other error code is the same generic failure", () => {
     for (const code of [
       "INVALID_CREDENTIALS",
-      "MFA_ENROLLMENT_REQUIRED",
       "RATE_LIMITED",
       "ACCOUNT_LOCKED",
       "SOMETHING_NEW"
@@ -52,6 +55,31 @@ describe("readLoginOutcome", () => {
         kind: "failed"
       });
     }
+  });
+
+  test("MFA_ENROLLMENT_REQUIRED with a token selects the enrolment branch (#1425)", () => {
+    const body = (code: unknown, token: unknown = "enrol-tok") => ({
+      success: false,
+      error: {
+        code,
+        message: "ignored",
+        details: { mfaEnrollmentToken: token, expiresAt: "2030-01-01" }
+      }
+    });
+    expect(readLoginOutcome(false, body("MFA_ENROLLMENT_REQUIRED"))).toEqual({
+      kind: "enrol",
+      enrolmentToken: "enrol-tok"
+    });
+    // No usable token, or the token under the wrong code: generic failure.
+    expect(
+      readLoginOutcome(false, body("MFA_ENROLLMENT_REQUIRED", ""))
+    ).toEqual({ kind: "failed" });
+    expect(readLoginOutcome(false, body("MFA_REQUIRED"))).toEqual({
+      kind: "failed"
+    });
+    expect(readLoginOutcome(true, body("MFA_ENROLLMENT_REQUIRED"))).toEqual({
+      kind: "failed"
+    });
   });
 
   test("MFA_REQUIRED without a usable token, or a non-object body, fails", () => {
@@ -154,6 +182,68 @@ describe("createChallengeBudget", () => {
   });
 });
 
+describe("enrolment helpers (#1425)", () => {
+  test("headers carry the tenant and the grant, never a cookie-less guess", () => {
+    expect(buildEnrolHeaders("tenant-1", "grant-1")).toEqual({
+      "Content-Type": "application/json",
+      "X-AWCMS-Tenant-ID": "tenant-1",
+      "X-AWCMS-MFA-Enrollment-Token": "grant-1"
+    });
+  });
+
+  test("readEnrolStart needs success and both secret fields", () => {
+    const good = {
+      success: true,
+      data: { secret: "JBSWY3DP", otpauthUri: "otpauth://totp/x?secret=J" }
+    };
+    expect(readEnrolStart(true, good)).toEqual({
+      secret: "JBSWY3DP",
+      otpauthUri: "otpauth://totp/x?secret=J"
+    });
+    expect(readEnrolStart(false, good)).toBeNull();
+    expect(readEnrolStart(true, { ...good, success: false })).toBeNull();
+    expect(
+      readEnrolStart(true, { success: true, data: { secret: "A" } })
+    ).toBeNull();
+    expect(readEnrolStart(true, null)).toBeNull();
+  });
+
+  test("readEnrolVerify reads success and the recovery codes only", () => {
+    expect(
+      readEnrolVerify(true, {
+        success: true,
+        data: { recoveryCodes: ["a", "b", 3], token: "ignored" }
+      })
+    ).toEqual({ recoveryCodes: ["a", "b"] });
+    expect(readEnrolVerify(true, { success: true, data: {} })).toEqual({
+      recoveryCodes: []
+    });
+    expect(
+      readEnrolVerify(false, {
+        success: false,
+        error: { code: "MFA_INVALID_CODE" }
+      })
+    ).toBeNull();
+
+    const touched: string[] = [];
+    const body = new Proxy(
+      { success: false, error: { code: "MFA_ENROLLMENT_EXHAUSTED" } },
+      {
+        get(obj, key) {
+          touched.push(String(key));
+          return Reflect.get(obj, key);
+        }
+      }
+    );
+    expect(readEnrolVerify(false, body)).toBeNull();
+    expect(touched.filter((key) => key !== "success")).toEqual([]);
+  });
+
+  test("the verify body is the code without spaces", () => {
+    expect(buildEnrolVerifyBody(" 123 456 ")).toEqual({ code: "123456" });
+  });
+});
+
 describe("login.astro source contract", () => {
   const page = readFileSync(
     join(import.meta.dir, "..", "src", "pages", "login.astro"),
@@ -179,6 +269,17 @@ describe("login.astro source contract", () => {
     expect(page).toContain("readLoginOutcome(response.ok, payload)");
     expect(page).toContain("readVerifySuccess(response.ok, payload)");
     expect(page).not.toContain("payload.error");
+  });
+
+  test("the enrolment step reuses the shared QR renderer and keeps the grant out of storage, URL and DOM (#1425)", () => {
+    expect(page).toContain('id="enrol-form"');
+    expect(page).toContain("/api/v1/auth/mfa/totp/enroll/start");
+    expect(page).toContain("/api/v1/auth/mfa/totp/enroll/verify");
+    expect(page).toContain("renderEnrolmentQr");
+    expect(page).toContain("readEnrolStart(");
+    expect(page).toContain("readEnrolVerify(");
+    expect(page).not.toMatch(/data-[a-z-]*enrol[a-z-]*token/i);
+    expect(page).not.toMatch(/dataset\.[a-zA-Z]*[Ee]nrol[a-zA-Z]*[Tt]oken/);
   });
 
   test("TTL and attempt cap are rendered from server configuration", () => {
