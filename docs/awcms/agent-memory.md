@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 133.**
+**Jumlah memory saat snapshot terakhir: 134.**
 
 ## Sengaja TIDAK disertakan
 
@@ -30,6 +30,7 @@ Repo ini **publik**. Memory berikut tetap ada di device asalnya tetapi **tidak**
 | Memory | Alasan |
 | --- | --- |
 | `awcms-local-postgres-docker` | Device-specific: nama container dev + port, pola netns lokal, dan password role Postgres throwaway (`awcms:awcms`). Tidak berguna di device lain — tiap device menjalankan container-nya sendiri. |
+| `hermes-sosmed-bot-is-not-a-publisher` | Operasional internal: nama host, container, dan repo operasi milik deployment di luar repo ini. Isinya tentang bot di luar awcms (tidak ada integrasi), jadi tidak dibutuhkan untuk memulihkan konteks kode ini di device lain. |
 
 Isi yang tetap disertakan juga disanitasi otomatis: `originSessionId` dibuang, path home diganti `~`, dan placeholder berbentuk-password diredaksi (nilainya ada di `.env.example`).
 
@@ -40,6 +41,8 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 <!-- memory-file: MEMORY.md -->
 
 `````markdown
+- [Orkestrasi awcms — baca RESUME](awcms-orchestration-paused-2026-11-11.md) — 15 Nov sore SELESAI: 0 PR terbuka, main bff7955b, sql 414; sisa = keputusan ADR-0163/0164/0165 + isu "Refs" (#1171, #1321, …); skrip di resume-2026-11-11/scripts/merge-driver/
+- [Bot sosmed Hermes BUKAN penerbit](hermes-sosmed-bot-is-not-a-publisher.md) — CS/lead mirror + ide konten ke Telegram; tak ada integrasi awcms; jalur = ADR "usulan agen"
 - [ATURAN: keluarga = template dipakai-langsung](awcms-family-direct-use-rule.md) — ADR-0034/0035: template SEJAJAR, TIDAK ada repo…
 - [Konektor MCP sengaja DITUTUP — belum diperlukan](mcp-connectors-not-needed-yet.md) — Slack/Linear/Notion/+64 di `deniedMcpServers`…
 - [PENGEMBANGAN hanya di awcms + awcms-astro](awcms-mini-freeze-foundation-here.md) — ADR-0055: mini/micro = ARSIP; kapabilitas…
@@ -60,7 +63,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Gerbang approval berjalan SESUDAH penerbitan](awcms-approval-gate-ran-after-the-publish.md) — ADR-0117: `:latest` pindah sebelum ada yang…
 - [Gerbang yang hanya menyala saat RILIS](awcms-gates-that-only-fire-at-release.md) — v10.0.0: `pending.length > 0` + tautan…
 - [Bundle perbaikan EKSTERNAL: verifikasi dulu](awcms-external-fix-bundle-verify-first.md) — bug-hunt 16 Okt: 1 tak terkompilasi, 1 tak…
-- [Pelajaran desain gate](awcms-gate-design-lessons.md) — gate CAKUPAN hijau sambil jawabannya salah; uji…
+- [Pelajaran desain gate](awcms-gate-design-lessons.md) — gate CAKUPAN hijau sambil jawabannya salah; pin readiness `LIKE` atas policy RLS HAMPA (pin persis + probe)…
 - ["Jalankan, jangan dibaca" — 4 cacat lolos 37 gerbang](awcms-run-it-dont-read-it.md) — migrasi tak-apply, `isBlockedAddress` non-IP…
 - [Retensi outbox SELESAI — dua registry](awcms-lifecycle-two-registries-and-bounded-list.md) — #468: 5 deskriptor + `BOUNDED_BY_DESIGN`…
 - [Satu outbox + cursor sequence TIDAK aman](awcms-one-outbox-and-cursor-visibility.md) — ADR-0077: identity terlihat saat COMMIT…
@@ -100,7 +103,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Bun buang method HTTP non-standar](bun-drops-nonstandard-http-methods.md) — `BAN`/`PURGE` terkirim sebagai **GET**; uji…
 - [`ON CONFLICT` menuntut SELECT](postgres-on-conflict-needs-select.md) — GRANT INSERT saja = `permission denied`
 - [`hidden` kalah dari aturan `display`](html-hidden-loses-to-display-rule.md) — obatnya `[hidden]{display:none!important}`
-- [`now()` = instant MULAI TRANSAKSI](postgres-now-is-transaction-start.md) — CHECK yang mengaitkannya dengan jam APLIKASI…
+- [`now()` = instant MULAI TRANSAKSI](postgres-now-is-transaction-start.md) — CHECK vs jam APLIKASI menolak baris; jam DB µs vs `new Date()` ms = otorisasi FAIL-OPEN (#1270)…
 - [Anggaran query dulu hanya mengukur BACA](awcms-query-budgets-only-measure-reads.md) — anggaran TULIS/job kini ada (assignment 2…
 - [Benchmark WAJIB mengikat parameter seperti pemanggilnya](awcms-benchmark-must-bind-like-caller.md) — subquery/InitPlan tak di-konstanta-lipat →…
 - [Presisi keyset cursor](awcms-keyset-precision-notes.md) — timestamptz mikrodetik vs `Date` JS milidetik…
@@ -3156,7 +3159,7 @@ description: "Pelajaran desain gate di awcms — gate cakupan bisa hijau sambil 
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-08-25T09:29:14.716Z
+  modified: 2026-11-11T01:48:59.373Z
 ---
 
 Dari sesi 2026-07-26 yang menutup #255–#264 (8 PR). Tiga pelajaran yang mahal
@@ -3185,6 +3188,19 @@ tenant-admin, sekali menghapus seluruh lapisan override sidebar (~250 baris) —
 dan `git checkout` pada berkas test BARU tidak melakukan apa-apa karena belum
 ter-track, jadi mutasinya tertinggal. **Pola aman: `cp` ke scratchpad sebelum
 mutasi, `cp` balik sesudahnya.** Atau commit dulu, baru mutasi.
+
+**4. Pin `security:readiness` atas policy RLS dengan `LIKE` substring itu HAMPA
+(11 Nov 2026, dua audit independen sekaligus: PR #1259 dan #1261).** Gate
+mencocokkan potongan seperti `%esp_account%`, `'365 days'`, atau daftar larangan
+nama provider di `pg_get_expr(polqual)`. Menghapus satu korelasi
+(`c.access_secret_id = awcms_channel_secrets.id`), menambah `true OR`, atau
+membalik arah perbandingan semuanya tetap `pass`, padahal role-nya lalu membaca
+secret WhatsApp/Mailketing/Telegram semua tenant. Pin yang benar: ekspresi
+kanonik PERSIS (atau md5-nya) DITAMBAH probe perilaku (seed baris negatif dalam
+transaksi ber-rollback, `SET LOCAL ROLE`, harus 0 baris). Saat membrief agen yang
+menambah policy restriktif, tulis syarat ini sejak awal dan minta mutasinya
+dibuktikan memerah. Sepupunya: floor retensi berbasis `updated_at` tidak berarti
+bila role yang dibatasi floor itu punya UPDATE atas `updated_at`.
 
 **Jebakan latent-authz kambuh lagi, dua kali.** Saya menulis
 `logging.audit_log.read` (yang ter-seed `audit_trail`) dan nyaris mengarang
@@ -5200,6 +5216,30 @@ Jendela lag berbasis waktu **bukan** perbaikan: `statement_timeout` (satu-satuny
 **Kenapa perpindahan sumber cursor gratis SAAT ITU:** `last_pull_sequence` tiap node terbukti `0` karena query lama tak pernah bisa memajukannya. Setelah ada produsen, harganya pemetaan sequence lintas-tabel per node.
 
 Migrasi destruktif di repo ini **menolak, bukan menghancurkan**: hitung baris dulu, `RAISE EXCEPTION` bila ada. Lihat [[awcms-lifecycle-two-registries-and-bounded-list]] — `BOUNDED_BY_DESIGN` kembali kosong karena tabelnya tak ada lagi.
+`````
+
+<!-- memory-file: awcms-orchestration-paused-2026-11-11.md -->
+
+`````markdown
+---
+name: awcms-orchestration-paused-2026-11-11
+description: "Orkestrasi multi-PR awcms dijeda 11 Nov 2026 malam; titik-lanjut lengkap di resume-2026-11-11/RESUME.md"
+metadata:
+  node_type: memory
+  type: project
+  modified: 2026-11-15T08:30:00.000Z
+---
+
+Orkestrasi besar awcms (antrean merge #1273→#1274→#1267→#1275, gelombang 3 #1276/#1278/email-verify/#1162, lalu konektor sosial, #1265, #1215 M-c, #1277, #1279) dijeda 2026-11-11 karena pengguna mematikan laptop. Semua agen dihentikan bersih; titik-lanjut, urutan, dan brief agen disimpan di `~/.claude/projects/-home-data-dev-bun-awcms/resume-2026-11-11/RESUME.md`.
+
+**Pembaruan 12 Nov 2026:** antrean merge SELESAI (#1273/#1274/#1275/#1267 merged; repo bersih: hanya `main`, tanpa worktree agen). #1267 baru di-merge setelah audit ulang + perbaikan M1–M3; L1–L6 → issue #1298. Yang tersisa: gelombang 3, daftar "Menunggu", #1298. Aktor lain (akun `ahliweb`, kemungkinan sesi paralel) ikut me-merge PR antrean — selalu cek `gh pr list` dan siapa yang push ke branch sebelum force-push.
+
+**Pembaruan 15 Nov 2026:** antrean besar 14–15 Nov SELESAI (19 PR merged, termasuk #1334/#1348/#1350/semua layar UI); repo bersih di `main`. Skrip driver + resolver konflik (po 3-way, budget, sidebar, hash) disimpan di `resume-2026-11-11/scripts/merge-driver/`. Sisa = isu "Refs" + yang menunggu keputusan pemilik (lihat §"14–15 Nov malam" di RESUME.md).
+
+**Pembaruan 15 Nov 2026 sore (OpenCode):** antrean terakhir SELESAI — #1362/#1358/#1360/#1363/#1337/#1338/#1361 merged; **0 PR terbuka**, repo bersih di `main` `bff7955b`, sql tertinggi 414. Isu #1347/#1336/#1335/#1277 ditutup; #1171 & #1321 tetap terbuka (komentar status). Sisa = keputusan pemilik ADR-0163 Q1–Q4, ADR-0164, ADR-0165 Q1, plus daftar "Refs" (lihat §"15 Nov sore" di RESUME.md). `merge-when-green.sh` (merge serial tanpa --admin) ditambahkan ke `scripts/merge-driver/`.
+
+**Why:** scratchpad /tmp hilang saat reboot; brief dan rencana harus bertahan.
+**How to apply:** saat pengguna bilang "lanjutkan", baca RESUME.md dulu, cek state PR/main yang sebenarnya (bisa sudah berubah), lalu lanjutkan antrean merge. Hapus memori ini setelah semua item di RESUME.md selesai. Lihat juga [[awcms-serial-merge-queue-tax]].
 `````
 
 <!-- memory-file: awcms-outbox-retention-two-blockers.md -->
@@ -7934,6 +7974,19 @@ menolak baris yang sepenuhnya normal begitu transaksi sudah terbuka sesaat: apli
 **Aturan:** kalau sebuah CHECK membandingkan dua kolom waktu, aplikasi harus menulis **KEDUANYA dari satu jam** — jangan biarkan satu memakai DEFAULT `now()`. Di `issueHandoffCode` sekarang `created_at` ditulis eksplisit dari `input.now`, sehingga constraint benar-benar berarti "umur baris ini ≤60 detik".
 
 Ditemukan integration test, bukan pembacaan. Lihat juga [[awcms-integration-test-fixture-traps]] (anchor waktu WAJIB dari DB) — arah sebaliknya, dan keduanya berakar pada hal yang sama: jam DB dan jam JS bukan jam yang sama, dan mencampurnya dalam satu invarian selalu berakhir buruk.
+
+**Sepupu yang FAIL-OPEN (11 Nov 2026, PR #1270, #1171).** `callerIsScopeConfined`
+membandingkan `effective_from` (dicap DB, mikrodetik, jam DB) dengan `new Date()`
+request (milidetik, terpotong, jam host app). Request < 1 ms setelah assignment
+dibuat — atau di host yang jamnya tertinggal — menilai kurungan "belum berlaku",
+menganggap pemanggil tenant-wide, dan menampilkan baris SEMUA brand. Gejalanya
+hanya tes keamanan yang gagal SESEKALI di CI lalu hijau saat rerun. Pelajaran:
+(1) tes keamanan yang flaky diperlakukan sebagai kebocoran sampai terbukti
+artefak — reproduksi dengan menggeser jam (+3 ms), jangan dengan mengulang;
+(2) bila sebuah keputusan "terkurung?" ragu, sisi ragu harus yang MEMBATASI;
+(3) jangan bandingkan stempel jam DB dengan jam app untuk otorisasi — bandingkan
+di SQL (`effective_from <= clock_timestamp()`) atau abaikan `effective_from` pada
+arah yang mempersempit.
 `````
 
 <!-- memory-file: postgres-on-conflict-needs-select.md -->
