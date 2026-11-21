@@ -54,104 +54,123 @@ export function createFonnteWhatsappProvider(
 
   return {
     async send(request: WhatsappSendRequest): Promise<WhatsappSendResult> {
-      const attemptedAt = now();
-      const form = new URLSearchParams({
-        target: request.to.replace(/^\+/, ""),
-        message: request.body
-      });
+      const permit = breaker.tryAcquire(now());
 
-      const response = await http(FONNTE_SEND_URL, {
-        method: "POST",
-        headers: {
-          Authorization: options.token,
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: form.toString(),
-        timeoutMs: options.timeoutMs
-      });
-
-      if (!response.ok) {
-        breaker.recordFailure(attemptedAt);
-
+      if (!permit) {
         return {
           ok: false,
-          error: scrubProviderText(response.reason),
+          error: "WhatsApp circuit breaker is open; no attempt was made.",
           retryable: true,
-          failureCode: "network_error"
+          failureCode: "circuit_open",
+          skipped: true
         };
       }
 
-      if (response.status === 429 || response.status >= 500) {
-        breaker.recordFailure(attemptedAt);
+      // Every path below that gives the breaker no verdict (a bad message, a
+      // credential problem, a throw) hands the half-open probe back here; a
+      // recorded verdict has already moved the state, which makes this a no-op.
+      try {
+        const attemptedAt = now();
+        const form = new URLSearchParams({
+          target: request.to.replace(/^\+/, ""),
+          message: request.body
+        });
+
+        const response = await http(FONNTE_SEND_URL, {
+          method: "POST",
+          headers: {
+            Authorization: options.token,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: form.toString(),
+          timeoutMs: options.timeoutMs
+        });
+
+        if (!response.ok) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: scrubProviderText(response.reason),
+            retryable: true,
+            failureCode: "network_error"
+          };
+        }
+
+        if (response.status === 429 || response.status >= 500) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: `Fonnte answered HTTP ${response.status}.`,
+            retryable: true,
+            failureCode:
+              response.status === 429 ? "rate_limited" : "provider_error"
+          };
+        }
+
+        const payload = safeParse(response.body);
+        const reason =
+          typeof payload.reason === "string"
+            ? scrubProviderText(payload.reason)
+            : "";
+
+        if (response.status === 401 || response.status === 403) {
+          // A credential problem is a configuration fact, not an outage signal.
+          return {
+            ok: false,
+            error: "Fonnte rejected the configured token.",
+            retryable: false,
+            failureCode: "unauthorized"
+          };
+        }
+
+        if (
+          response.status >= 200 &&
+          response.status < 300 &&
+          payload.status === true
+        ) {
+          breaker.recordSuccess(attemptedAt);
+
+          const id = Array.isArray(payload.id) ? payload.id[0] : payload.id;
+
+          return {
+            ok: true,
+            ...(typeof id === "string" || typeof id === "number"
+              ? { providerMessageId: String(id).slice(0, 200) }
+              : {})
+          };
+        }
+
+        // Fonnte offers no STRUCTURED "this number cannot receive WhatsApp" signal,
+        // only free-text `reason`. Matching that text to create a permanent
+        // hard-failure suppression would let a provider wording change (or a
+        // reason that merely mentions "target") silently and permanently block a
+        // recipient from every message, security ones included. So without a
+        // structured signal a rejection is a failure of THIS message only
+        // (audit F7): never `recipientInvalid`. Meta's numeric error codes are
+        // structured and keep that verdict.
+        if (TRANSIENT.test(reason)) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: reason,
+            retryable: true,
+            failureCode: "provider_unavailable"
+          };
+        }
 
         return {
           ok: false,
-          error: `Fonnte answered HTTP ${response.status}.`,
-          retryable: true,
-          failureCode:
-            response.status === 429 ? "rate_limited" : "provider_error"
-        };
-      }
-
-      const payload = safeParse(response.body);
-      const reason =
-        typeof payload.reason === "string"
-          ? scrubProviderText(payload.reason)
-          : "";
-
-      if (response.status === 401 || response.status === 403) {
-        // A credential problem is a configuration fact, not an outage signal.
-        return {
-          ok: false,
-          error: "Fonnte rejected the configured token.",
+          error:
+            reason || `Fonnte rejected the message (HTTP ${response.status}).`,
           retryable: false,
-          failureCode: "unauthorized"
+          failureCode: "rejected"
         };
+      } finally {
+        permit.release();
       }
-
-      if (
-        response.status >= 200 &&
-        response.status < 300 &&
-        payload.status === true
-      ) {
-        breaker.recordSuccess(attemptedAt);
-
-        const id = Array.isArray(payload.id) ? payload.id[0] : payload.id;
-
-        return {
-          ok: true,
-          ...(typeof id === "string" || typeof id === "number"
-            ? { providerMessageId: String(id).slice(0, 200) }
-            : {})
-        };
-      }
-
-      // Fonnte offers no STRUCTURED "this number cannot receive WhatsApp" signal,
-      // only free-text `reason`. Matching that text to create a permanent
-      // hard-failure suppression would let a provider wording change (or a
-      // reason that merely mentions "target") silently and permanently block a
-      // recipient from every message, security ones included. So without a
-      // structured signal a rejection is a failure of THIS message only
-      // (audit F7): never `recipientInvalid`. Meta's numeric error codes are
-      // structured and keep that verdict.
-      if (TRANSIENT.test(reason)) {
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: reason,
-          retryable: true,
-          failureCode: "provider_unavailable"
-        };
-      }
-
-      return {
-        ok: false,
-        error:
-          reason || `Fonnte rejected the message (HTTP ${response.status}).`,
-        retryable: false,
-        failureCode: "rejected"
-      };
     },
 
     async healthCheck(): Promise<WhatsappHealthResult> {

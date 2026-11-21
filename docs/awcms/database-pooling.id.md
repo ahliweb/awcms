@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:a2912e1f6c07e1be153ba61e55b696aa637bf8149298dfef7406a073f18e34fe -->
+<!-- i18n-source-hash: sha256:b2221241a8c25420e13b3f056c0cd979d9e210e29b1963daf97439a70c87b12b -->
 
 # Database Connection Pooling and Backpressure
 
@@ -134,9 +134,17 @@ sepenuhnya unit-testable tanpa menunggu waktu nyata.
 - **Reservasi vs intip**: `tryAcquire` untuk pemanggil yang akan melakukan
   panggilan. `wouldAllowAttempt(now)` read-only (gerbang dispatcher, health
   check): tidak mereservasi dan tidak menjamin apa pun. Dispatcher batch
-  WhatsApp, Telegram, dan push hanya mengintip sekali per putaran dan adapter-nya
-  tidak melakukan acquire, sehingga putaran half-open di sana dibatasi oleh
-  batas batch, bukan satu pesan.
+  WhatsApp, Telegram, dan push tetap hanya mengintip sekali per putaran; probe
+  tunggal dipegang oleh ADAPTER-nya (Fonnte, Meta Cloud, StarSender, Telegram,
+  Web Push, FCM): tiap `send` memanggil `tryAcquire` lebih dulu dan
+  mengembalikan probe di `finally` bila panggilan tidak memberi vonis kepada
+  breaker (masalah kredensial, langganan mati, pesan buruk, throw). Pengiriman
+  yang ditolak mengembalikan `skipped: true` dan tidak ada yang sampai ke
+  provider; dispatcher menahan barisnya (WhatsApp: `retry_wait` selama jendela
+  tahan pengirim; Telegram: baris itu dan sisa batch dilepas 30 dtk; push:
+  ditunda 30 dtk) dengan `retry_count` tidak berubah dan tanpa catatan upaya
+  pengiriman. Kuncinya adalah kunci breaker adapter itu sendiri, sehingga probe
+  yang dipegang satu pengirim WhatsApp tidak melewati pengirim lain.
 - **Hanya per proses**: reservasi hidup di memori proses ini (atomik karena
   `tryAcquire` sinkron selesai tuntas di satu thread JS). Dengan beberapa
   replika, tiap replika meloloskan probe-nya sendiri; single-flight lintas

@@ -375,6 +375,40 @@ suite("push operator matrix, automated half (#1107)", () => {
     }
   );
 
+  test("a send the breaker refused (skipped) is deferred: no attempt recorded, no retry spent (Issue #1409)", async () => {
+    await register(T_A, USER_A, 1);
+    const id = (await enqueue(T_A, USER_A, "approval.pending")).messageIds[0]!;
+    const provider: PushProvider = {
+      supportedTransports: ["web_push", "fcm"],
+      async send() {
+        return {
+          ok: false,
+          error: "Push circuit breaker is open; no attempt was made.",
+          retryable: true,
+          skipped: true
+        };
+      },
+      async healthCheck() {
+        return { ok: true };
+      }
+    };
+    const t0 = new Date();
+
+    expect(await dispatch(T_A, provider, { now: t0 })).toMatchObject({
+      claimed: 1,
+      deferred: 1,
+      retried: 0,
+      failed: 0
+    });
+
+    const row = await messageRow(id);
+
+    expect(row.status).toBe("retry_wait");
+    expect(Number(row.retry_count)).toBe(0);
+    expect(row.next_attempt_at!.getTime()).toBe(t0.getTime() + 30_000);
+    expect(await attemptsOf(id)).toEqual([]);
+  });
+
   test("retries are bounded: a persistently failing provider ends in failed, not a loop", async () => {
     await register(T_A, USER_A, 1);
     const id = (await enqueue(T_A, USER_A, "approval.pending")).messageIds[0]!;

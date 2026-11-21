@@ -133,9 +133,17 @@ unit-testable without waiting on real time.
 - **Reserve vs peek**: `tryAcquire` is for a caller that is about to make the
   call. `wouldAllowAttempt(now)` is read-only (dispatcher gates, health
   checks): it reserves nothing and guarantees nothing. The batch dispatchers
-  for WhatsApp, Telegram and push only peek once per pass and their adapters
-  do not acquire, so a half-open pass there is bounded by the batch limit,
-  not by one message.
+  for WhatsApp, Telegram and push still only peek once per pass; the single
+  probe is held by their ADAPTERS instead (Fonnte, Meta Cloud, StarSender,
+  Telegram, Web Push, FCM): each `send` calls `tryAcquire` first and hands the
+  probe back in a `finally` when the call gave the breaker no verdict (a
+  credential problem, a dead subscription, a bad message, a throw). A refused
+  send returns `skipped: true` and nothing reaches the provider; the dispatcher
+  holds the row (WhatsApp: `retry_wait` for the sender-hold window; Telegram:
+  the row and the rest of the batch are released for 30 s; push: deferred for
+  30 s) with `retry_count` unchanged and no delivery attempt recorded. The key
+  is the adapter's own breaker key, so one WhatsApp sender's held probe never
+  skips another sender.
 - **Per process only**: the reservation lives in this process's memory (it is
   atomic because the synchronous `tryAcquire` runs to completion on a single
   JS thread). With several replicas each one admits its own probe;

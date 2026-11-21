@@ -486,3 +486,77 @@ describe("the adapter sends what RFC 8030 requires", () => {
     expect(result.ok === false && result.retryable).toBe(false);
   });
 });
+
+describe("half-open: the adapter reserves the single probe per send (Issue #1409)", () => {
+  const T0 = new Date("2026-11-22T00:00:00.000Z");
+  const HALF_OPEN_AT = new Date(T0.getTime() + 31_000);
+
+  function tripBreaker(): void {
+    const breaker = getProviderCircuitBreaker(PUSH_CIRCUIT_BREAKER_KEY);
+
+    for (let i = 0; i < 5; i += 1) breaker.recordFailure(T0);
+  }
+
+  test("N sends at once: one reaches the push service, the rest are skipped, and the breaker closes", async () => {
+    tripBreaker();
+
+    let calls = 0;
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const provider = createWebPushProvider({
+      vapid: VAPID,
+      timeoutMs: 5000,
+      now: () => HALF_OPEN_AT,
+      http: async () => {
+        calls += 1;
+        await gate;
+
+        return { ok: true, status: 201, body: "" };
+      }
+    });
+    const pending = Array.from({ length: 8 }, () =>
+      provider.send(TARGET, { title: "t", body: "b" })
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toBe(1);
+
+    open();
+
+    const results = await Promise.all(pending);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(
+      results.filter((result) => !result.ok && result.skipped === true)
+    ).toHaveLength(7);
+    expect(
+      getProviderCircuitBreaker(PUSH_CIRCUIT_BREAKER_KEY).getState(HALF_OPEN_AT)
+    ).toBe("closed");
+  });
+
+  test("a dead subscription (410) gives the breaker no verdict and frees the probe", async () => {
+    tripBreaker();
+
+    const answers = [
+      { ok: true as const, status: 410, body: "" },
+      { ok: true as const, status: 201, body: "" }
+    ];
+    let calls = 0;
+    const provider = createWebPushProvider({
+      vapid: VAPID,
+      timeoutMs: 5000,
+      now: () => HALF_OPEN_AT,
+      http: async () => answers[calls++]!
+    });
+
+    expect(
+      await provider.send(TARGET, { title: "t", body: "b" })
+    ).toMatchObject({ ok: false, subscriptionGone: true });
+    expect(
+      await provider.send(TARGET, { title: "t", body: "b" })
+    ).toMatchObject({ ok: true });
+    expect(calls).toBe(2);
+  });
+});
