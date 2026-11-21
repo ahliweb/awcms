@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:047dd7f94694ab5a397f9130f6bf6e7e564047a3a2439dee973e4f67efaccd76 -->
+<!-- i18n-source-hash: sha256:5e058f3fa8cf4b7b374d63e6fa07c1848f6699561c6a1c8899134b7fca035132 -->
 
 # Deploy Coolify
 
@@ -184,6 +184,20 @@ Pertimbangkan memisahkan (database eksternal/managed, atau VPS terpisah) bila sa
 - Resource VPS (CPU/RAM/disk/I/O) mulai penuh secara konsisten.
 - Proses build/deploy satu aplikasi mulai mengganggu performa aplikasi lain pada VPS yang sama.
 - Butuh isolasi blast radius yang lebih tegas antar klien/aplikasi (mis. kontrak SLA klien mensyaratkan infrastruktur terpisah).
+
+## Build host: CPU tanpa AVX (pin `@astrojs/compiler-rs`)
+
+Binding native prebuilt `@astrojs/compiler-binding-linux-x64-gnu` **0.5.3**
+(dibawa `@astrojs/compiler-rs` 0.5.3, yang di-resolve astro 7.4.12) menjalankan
+instruksi AVX dan mati dengan `SIGILL` saat `astro build` pada CPU x86-64 tanpa
+AVX (VPS Xeon/Opteron lama, sebagian model CPU emulasi atau nested
+virtualisation). Karena itu template mem-pin `@astrojs/compiler-rs` ke **0.5.2**
+lewat `overrides` di `package.json` (astro menerima `^0.5.2`), dan mencatat pin
+itu di tabel "Override transitif yang di-pin" di `dependency-governance.id.md` (Issue #1367)
+beserta syarat pelepasannya: rilis binding yang berjalan pada baseline x86-64.
+Jangan menghapus override atau menjalankan `bun update` atasnya selama host
+build tidak punya AVX. Periksa host dengan `grep -c avx /proc/cpuinfo` (0 berarti
+tanpa AVX).
 
 ## Environment variable minimal
 

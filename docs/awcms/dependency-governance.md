@@ -281,3 +281,16 @@ Entries also go **stale**: when the held version is no longer behind the registr
 something no longer true. Drift nobody has evaluated yet does not belong here (it is
 the backlog), and an advisory that cannot be fixed goes in
 `scripts/dependency-audit-exceptions.ts`.
+
+### Pinned transitive overrides that are not in the register
+
+The register above is evaluated against `bun outdated`, which lists **direct**
+dependencies only; an entry for a transitive package would always read "no longer
+behind" and be reported stale. A transitive package held on purpose is therefore
+pinned in `package.json` `overrides` and recorded here, with its release condition:
+
+| Package                | Pinned | Why                                                                                                                                                                                                                | Release condition                                                                                      |
+| ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `@astrojs/compiler-rs` | 0.5.2  | The 0.5.3 binding `@astrojs/compiler-binding-linux-x64-gnu` crashes `astro build` with SIGILL on x86-64 CPUs without AVX (Issue #1367). 0.5.3 was still the registry `latest` when the pin was added (2026-11-22). | A binding release that runs on the x86-64 baseline, verified by `bun run build` on a host without AVX. |
+
+See [`deploy-coolify.md`](deploy-coolify.md) §"Build host: CPU without AVX".
