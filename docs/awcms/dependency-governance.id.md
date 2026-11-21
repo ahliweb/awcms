@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](dependency-governance.md)
 
-<!-- i18n-source-hash: sha256:a5b655b979278c9b5148d0c9987d79f42daa194457244e293abee5b683645e80 -->
+<!-- i18n-source-hash: sha256:0565cdc63c2784ea30dd54c98b48ebbf141bbbeb2880475129cc7a4febfa797d -->
 
 # Tata kelola dependensi — audit kesegaran dan upgrade atomik
 
@@ -294,15 +294,21 @@ sebagai sesuatu yang tak lagi benar. Drift yang belum dievaluasi siapa pun tidak
 termasuk di sini (itu backlog), dan advisory yang tak bisa diperbaiki masuk ke
 `scripts/dependency-audit-exceptions.ts`.
 
-### Override transitif yang di-pin dan tidak ada di register
+### Tahanan transitif (`transitive: true`)
 
-Register di atas dievaluasi terhadap `bun outdated`, yang hanya mendaftar dependensi
-**langsung**; entri untuk paket transitif akan selalu terbaca "tidak lagi tertinggal"
-dan dilaporkan basi. Paket transitif yang sengaja ditahan karena itu di-pin lewat
-`overrides` di `package.json` dan dicatat di sini beserta syarat pelepasannya:
+`bun outdated` hanya mendaftar dependensi **langsung**, sehingga entri biasa untuk
+paket transitif akan selalu terbaca "tidak lagi tertinggal" dan dilaporkan basi.
+Paket transitif yang sengaja ditahan karena itu di-pin pada versi persis di
+`overrides` `package.json` **dan** didaftarkan dengan `transitive: true` serta
+`releaseCondition` (apa yang harus benar agar pin dilepas). Register adalah sumber
+tunggal: dokumen ini tidak mendaftar tiap tahanan. Saat ini: `@astrojs/compiler-rs`
+(Issue #1367; lihat [`deploy-coolify.id.md`](deploy-coolify.id.md) §"Build host: CPU tanpa AVX").
 
-| Paket                  | Pin   | Alasan                                                                                                                                                                                                 | Syarat pelepasan                                                                                  |
-| ---------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `@astrojs/compiler-rs` | 0.5.2 | Binding 0.5.3 `@astrojs/compiler-binding-linux-x64-gnu` membuat `astro build` mati SIGILL pada CPU x86-64 tanpa AVX (Issue #1367). 0.5.3 masih `latest` di registry saat pin ditambahkan (2026-11-22). | Rilis binding yang berjalan pada baseline x86-64, diverifikasi `bun run build` di host tanpa AVX. |
-
-Lihat [`deploy-coolify.id.md`](deploy-coolify.id.md) §"Build host: CPU tanpa AVX".
+- **Gerbang offline** (`bun run deps:held-back:check`, bagian dari `bun run check`):
+  setiap `overrides` berversi _persis_ wajib punya entri transitif yang cocok;
+  setiap entri transitif wajib cocok dengan pin `overrides` persis dan versi yang
+  di-resolve `bun.lock`. Override rentang (`^8.5.23`) adalah lantai keamanan, bukan
+  tahanan, dan diabaikan. Ketidakcocokan = merah dengan pesan yang menyebut paketnya.
+- **Laporan mingguan** (`deps:freshness`, online): versi terbaru entri transitif
+  dibaca dari registry npm, dan bila ada rilis lebih baru baris itu berkata
+  "periksa apakah syarat pelepasan terpenuhi".

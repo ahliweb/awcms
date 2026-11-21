@@ -96,6 +96,7 @@ scheduled, or by a specific CI workflow.
 | `db:work-class:generate`                  | `work-class-registry-generate.ts`              | —    |
 | `deps:audit:check`                        | `dependency-audit-check.ts`                    | ✅   |
 | `deps:freshness`                          | `dependency-freshness.ts`                      | —    |
+| `deps:held-back:check`                    | `dependency-held-back-check.ts`                | ✅   |
 | `deps:issues:sync`                        | `dependency-issue-sync.ts`                     | —    |
 | `deps:license:check`                      | `dependency-license-check.ts`                  | ✅   |
 | `deps:provider-changelog:check`           | `provider-changelog-check.ts`                  | ✅   |
