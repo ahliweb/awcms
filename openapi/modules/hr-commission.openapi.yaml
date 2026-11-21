@@ -1438,9 +1438,9 @@ components:
         seq:
           type: integer
         fromStatus:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrCommissionAccrualStatus"
-          nullable: true
+            - type: "null"
         toStatus:
           $ref: "#/components/schemas/HrCommissionAccrualStatus"
         actorTenantUserId:

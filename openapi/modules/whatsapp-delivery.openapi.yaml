@@ -1661,7 +1661,6 @@ components:
           nullable: true
           description: Null is the deployment sender.
         availability:
-          nullable: true
           description: Null for the deployment sender, which has no account record.
           oneOf:
             - type: object
@@ -1679,6 +1678,7 @@ components:
                 reason:
                   type: string
                   description: A coarse reason code (for example `ACCOUNT_REVOKED`, `CAPABILITY_DENIED`, `RISK_ACKNOWLEDGEMENT_REQUIRED` for an unofficial provider such as StarSender whose current risk text the tenant has not acknowledged).
+            - type: "null"
         queue:
           type: object
           properties:
