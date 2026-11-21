@@ -167,6 +167,26 @@ test.describe("login: pre-session enrolment step", () => {
     await expect(page.locator("#login-error")).toBeVisible();
   });
 
+  test("the QR chunk is lazy, and failing to load it returns to the password step (#1425)", async ({
+    page
+  }) => {
+    const scripts: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "script") scripts.push(request.url());
+    });
+    await page.route("**/_astro/enrolment-qr*.js", (route) => route.abort());
+    await openEnrolStep(page);
+
+    await expect(page.locator("#login-form")).toBeVisible();
+    await expect(page.locator("#enrol-form")).toBeHidden();
+    await expect(page.locator("#login-error")).toBeVisible();
+    // The chunk was only asked for after MFA_ENROLLMENT_REQUIRED, never on load.
+    expect(scripts.filter((url) => url.includes("enrolment-qr"))).toHaveLength(
+      1
+    );
+    expect(await page.content()).not.toContain(GRANT);
+  });
+
   test("back returns to the password step and clears the secret, and the attempt cap does too", async ({
     page
   }) => {

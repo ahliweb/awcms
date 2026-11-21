@@ -403,10 +403,7 @@ const formMessages = {
         readLoginOutcome,
         readVerifySuccess
       } from "../lib/ui/login-mfa-client";
-      import {
-        clearEnrolmentSecret,
-        renderEnrolmentQr
-      } from "../lib/ui/enrolment-qr";
+
       import {
         holdForNavigation,
         lockElement,
@@ -544,6 +541,15 @@ const formMessages = {
       let enrolBudget: ReturnType<typeof createChallengeBudget> | null = null;
       let recoveryShown = false;
 
+      // Drops the QR and the manual key. Local on purpose: the QR encoder is
+      // loaded only when an enrolment actually starts (see `startEnrolStep`),
+      // so clearing must not need it.
+      function clearEnrolSecret(): void {
+        document.getElementById(enrolTargets.qrId)?.replaceChildren();
+        const secret = document.getElementById(enrolTargets.secretId);
+        if (secret) secret.textContent = "";
+      }
+
       function showEnrolError(message: string): void {
         if (!enrolError) return;
         enrolError.textContent = message;
@@ -553,7 +559,7 @@ const formMessages = {
       function endEnrolStep(restart: boolean): void {
         enrolToken = null;
         enrolBudget = null;
-        clearEnrolmentSecret(document, enrolTargets);
+        clearEnrolSecret();
         if (enrolCode) enrolCode.value = "";
         if (enrolError) enrolError.hidden = true;
         if (enrolForm) enrolForm.hidden = true;
@@ -564,7 +570,7 @@ const formMessages = {
       }
 
       function showRecoveryCodes(codes: readonly string[]): void {
-        clearEnrolmentSecret(document, enrolTargets);
+        clearEnrolSecret();
         enrolToken = null;
         enrolBudget = null;
         if (enrolForm) enrolForm.hidden = true;
@@ -620,6 +626,11 @@ const formMessages = {
           await response.json().catch(() => null)
         );
         if (!started) return false;
+
+        // The QR encoder is a separate chunk, fetched here and not on the
+        // initial `/login` load: almost every visit never enrols. A failed
+        // fetch throws to the caller, which returns to the password step.
+        const { renderEnrolmentQr } = await import("../lib/ui/enrolment-qr");
 
         enrolToken = token;
         enrolTenant = tenantId;
@@ -699,10 +710,19 @@ const formMessages = {
             // Any refusal of the start (expired or spent grant, deployment
             // switch off, rate limit) is the same way back to the password
             // step: the page does not read why.
-            if (await startEnrolStep(outcome.enrolmentToken, tenantId)) {
+            let started = false;
+            try {
+              started = await startEnrolStep(outcome.enrolmentToken, tenantId);
+            } catch {
+              // Network failure or the lazy chunk did not load: the grant was
+              // never stored, so there is nothing to clear.
+              started = false;
+            }
+            if (started) {
               unlock();
               return;
             }
+            enrolToken = null;
             showError(messages.msgMfaRestart ?? "");
             unlock();
             return;

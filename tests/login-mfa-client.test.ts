@@ -276,6 +276,9 @@ describe("login.astro source contract", () => {
     expect(page).toContain("/api/v1/auth/mfa/totp/enroll/start");
     expect(page).toContain("/api/v1/auth/mfa/totp/enroll/verify");
     expect(page).toContain("renderEnrolmentQr");
+    // The QR encoder is a lazy chunk, never part of the initial login script.
+    expect(page).toContain('await import("../lib/ui/enrolment-qr")');
+    expect(page).not.toMatch(/^\s*import[^;]*enrolment-qr/m);
     expect(page).toContain("readEnrolStart(");
     expect(page).toContain("readEnrolVerify(");
     expect(page).not.toMatch(/data-[a-z-]*enrol[a-z-]*token/i);
