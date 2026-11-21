@@ -84,38 +84,57 @@ export function createStarsenderWhatsappProvider(
 
   return {
     async send(request: WhatsappSendRequest): Promise<WhatsappSendResult> {
-      const body = buildStarsenderRequestBody({
-        to: request.to,
-        body: request.body
-      });
+      const permit = breaker.tryAcquire(now());
 
-      if (body === null) return starsenderFailure("recipient_unusable");
-
-      const attemptedAt = now();
-      const response = await http(STARSENDER_SEND_URL, {
-        method: "POST",
-        headers: {
-          Authorization: options.deviceKey,
-          "Content-Type": "application/json"
-        },
-        body,
-        timeoutMs: options.timeoutMs,
-        maxRedirects: 0
-      });
-
-      const result: WhatsappSendResult = response.ok
-        ? classifyStarsenderResponse(response.status, response.body)
-        : starsenderFailure(
-            classifyStarsenderTransportFailure(response.reason)
-          );
-
-      if (result.ok) {
-        breaker.recordSuccess(attemptedAt);
-      } else if (starsenderFailureFeedsBreaker(result.failureCode)) {
-        breaker.recordFailure(attemptedAt);
+      if (!permit) {
+        return {
+          ok: false,
+          error: "WhatsApp circuit breaker is open; no attempt was made.",
+          retryable: true,
+          failureCode: "circuit_open",
+          skipped: true
+        };
       }
 
-      return result;
+      // Every path below that gives the breaker no verdict (a bad message, a
+      // credential problem, a throw) hands the half-open probe back here; a
+      // recorded verdict has already moved the state, which makes this a no-op.
+      try {
+        const body = buildStarsenderRequestBody({
+          to: request.to,
+          body: request.body
+        });
+
+        if (body === null) return starsenderFailure("recipient_unusable");
+
+        const attemptedAt = now();
+        const response = await http(STARSENDER_SEND_URL, {
+          method: "POST",
+          headers: {
+            Authorization: options.deviceKey,
+            "Content-Type": "application/json"
+          },
+          body,
+          timeoutMs: options.timeoutMs,
+          maxRedirects: 0
+        });
+
+        const result: WhatsappSendResult = response.ok
+          ? classifyStarsenderResponse(response.status, response.body)
+          : starsenderFailure(
+              classifyStarsenderTransportFailure(response.reason)
+            );
+
+        if (result.ok) {
+          breaker.recordSuccess(attemptedAt);
+        } else if (starsenderFailureFeedsBreaker(result.failureCode)) {
+          breaker.recordFailure(attemptedAt);
+        }
+
+        return result;
+      } finally {
+        permit.release();
+      }
     },
 
     async healthCheck(): Promise<WhatsappHealthResult> {

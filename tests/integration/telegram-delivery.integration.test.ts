@@ -1511,6 +1511,51 @@ suite("telegram_delivery against PostgreSQL", () => {
     );
 
     workerTest(
+      "a send the breaker refused (skipped) spends no retry, records no attempt, and releases the rest of the batch (Issue #1409)",
+      async () => {
+        await activate(TENANT_A, USER_1, CHAT_1);
+        await activate(TENANT_A, USER_2, CHAT_2);
+        await enqueue(TENANT_A, USER_1);
+        await enqueue(TENANT_A, USER_2);
+
+        const provider = fakeProvider(() => ({
+          ok: false,
+          error: "Telegram circuit breaker is open; no attempt was made.",
+          retryable: true,
+          failureCode: "circuit_open",
+          skipped: true
+        }));
+        const before = Date.now();
+        const result = await dispatch(TENANT_A, provider);
+
+        // One call reached the adapter; the second row was never offered to it.
+        expect(provider.requests).toHaveLength(1);
+        expect(result).toMatchObject({ claimed: 2, sent: 0, deferred: 2 });
+
+        const rows = (await getAdminSql()`
+        SELECT status, retry_count, next_attempt_at, failure_code
+        FROM awcms_telegram_messages ORDER BY created_at
+      `) as {
+          status: string;
+          retry_count: number;
+          next_attempt_at: Date;
+          failure_code: string;
+        }[];
+
+        for (const row of rows) {
+          expect(row.status).toBe("retry_wait");
+          expect(row.retry_count).toBe(0);
+          expect(row.failure_code).toBe("circuit_open");
+          expect(
+            new Date(row.next_attempt_at).getTime()
+          ).toBeGreaterThanOrEqual(before + 29_000);
+        }
+
+        expect(await count("awcms_telegram_delivery_attempts")).toBe(0);
+      }
+    );
+
+    workerTest(
       "429 reschedules to retry_after without spending the retry budget, and releases the rest of the batch",
       async () => {
         await activate(TENANT_A, USER_1, CHAT_1);

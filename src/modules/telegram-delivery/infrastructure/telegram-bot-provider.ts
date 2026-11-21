@@ -137,143 +137,162 @@ export function createTelegramBotProvider(
 
   return {
     async send(request: TelegramSendRequest): Promise<TelegramSendResult> {
-      const attemptedAt = now();
+      const permit = breaker.tryAcquire(now());
 
-      if (pausedUntil > attemptedAt.getTime()) {
+      if (!permit) {
         return {
           ok: false,
-          error: "Telegram asked this bot to slow down.",
+          error: "Telegram circuit breaker is open; no attempt was made.",
           retryable: true,
-          failureCode: "rate_limited",
-          retryAfterSeconds: Math.max(
-            1,
-            Math.ceil((pausedUntil - attemptedAt.getTime()) / 1000)
-          )
+          failureCode: "circuit_open",
+          skipped: true
         };
       }
 
-      await pace();
-
-      let response: Awaited<ReturnType<TelegramHttpClient>>;
-
+      // Every path below that gives the breaker no verdict (a bad message, a
+      // credential problem, a throw) hands the half-open probe back here; a
+      // recorded verdict has already moved the state, which makes this a no-op.
       try {
-        response = await withTimeout(
-          http(options.token, {
-            method: "sendMessage",
-            body: JSON.stringify({
-              chat_id: request.chatId,
-              text: request.text,
-              disable_web_page_preview: true,
-              link_preview_options: { is_disabled: true },
-              protect_content: true
+        const attemptedAt = now();
+
+        if (pausedUntil > attemptedAt.getTime()) {
+          return {
+            ok: false,
+            error: "Telegram asked this bot to slow down.",
+            retryable: true,
+            failureCode: "rate_limited",
+            retryAfterSeconds: Math.max(
+              1,
+              Math.ceil((pausedUntil - attemptedAt.getTime()) / 1000)
+            )
+          };
+        }
+
+        await pace();
+
+        let response: Awaited<ReturnType<TelegramHttpClient>>;
+
+        try {
+          response = await withTimeout(
+            http(options.token, {
+              method: "sendMessage",
+              body: JSON.stringify({
+                chat_id: request.chatId,
+                text: request.text,
+                disable_web_page_preview: true,
+                link_preview_options: { is_disabled: true },
+                protect_content: true
+              }),
+              timeoutMs: options.timeoutMs
             }),
-            timeoutMs: options.timeoutMs
-          }),
-          options.timeoutMs + 2000,
-          "telegram-send"
-        );
-      } catch (error) {
-        breaker.recordFailure(attemptedAt);
+            options.timeoutMs + 2000,
+            "telegram-send"
+          );
+        } catch (error) {
+          breaker.recordFailure(attemptedAt);
 
-        // An exception message can carry the URL (and so the token). Only the
-        // redacted form survives, and the error name tells an operator the class.
+          // An exception message can carry the URL (and so the token). Only the
+          // redacted form survives, and the error name tells an operator the class.
+          return {
+            ok: false,
+            error: clean(
+              error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : "Unknown transport error."
+            ),
+            retryable: true,
+            failureCode: "network_error"
+          };
+        }
+
+        if (!response.ok) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: clean(response.reason),
+            retryable: true,
+            failureCode: "network_error"
+          };
+        }
+
+        const body = readBody(response.body);
+
+        if (response.status >= 200 && response.status < 300 && body.ok) {
+          breaker.recordSuccess(attemptedAt);
+
+          return {
+            ok: true,
+            ...(body.messageId ? { providerMessageId: body.messageId } : {})
+          };
+        }
+
+        const description = clean(body.description);
+
+        if (response.status === 429) {
+          const retryAfter = Math.min(
+            Math.max(1, Math.ceil(body.retryAfter ?? 5)),
+            options.retryAfterCapSeconds
+          );
+
+          pausedUntil = attemptedAt.getTime() + retryAfter * 1000;
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: description || "Telegram rate limit.",
+            retryable: true,
+            failureCode: "rate_limited",
+            retryAfterSeconds: retryAfter
+          };
+        }
+
+        if (response.status >= 500) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: description || `Telegram answered HTTP ${response.status}.`,
+            retryable: true,
+            failureCode: "provider_error"
+          };
+        }
+
+        if (isBindingUnreachable(response.status, body.description)) {
+          return {
+            ok: false,
+            error: description || "The chat cannot be reached.",
+            retryable: false,
+            failureCode: "chat_unreachable",
+            bindingUnreachable: true
+          };
+        }
+
+        // A wrong or revoked token answers 401 (or 404 for a malformed path). That
+        // is the deployment's problem, not the message's: retry under the backoff
+        // (the message expires on its own) and let the breaker stop the hammering.
+        if (response.status === 401 || response.status === 404) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: "Telegram rejected the configured bot token.",
+            retryable: true,
+            failureCode: "unauthorized"
+          };
+        }
+
         return {
           ok: false,
-          error: clean(
-            error instanceof Error
-              ? `${error.name}: ${error.message}`
-              : "Unknown transport error."
-          ),
-          retryable: true,
-          failureCode: "network_error"
-        };
-      }
-
-      if (!response.ok) {
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: clean(response.reason),
-          retryable: true,
-          failureCode: "network_error"
-        };
-      }
-
-      const body = readBody(response.body);
-
-      if (response.status >= 200 && response.status < 300 && body.ok) {
-        breaker.recordSuccess(attemptedAt);
-
-        return {
-          ok: true,
-          ...(body.messageId ? { providerMessageId: body.messageId } : {})
-        };
-      }
-
-      const description = clean(body.description);
-
-      if (response.status === 429) {
-        const retryAfter = Math.min(
-          Math.max(1, Math.ceil(body.retryAfter ?? 5)),
-          options.retryAfterCapSeconds
-        );
-
-        pausedUntil = attemptedAt.getTime() + retryAfter * 1000;
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: description || "Telegram rate limit.",
-          retryable: true,
-          failureCode: "rate_limited",
-          retryAfterSeconds: retryAfter
-        };
-      }
-
-      if (response.status >= 500) {
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: description || `Telegram answered HTTP ${response.status}.`,
-          retryable: true,
-          failureCode: "provider_error"
-        };
-      }
-
-      if (isBindingUnreachable(response.status, body.description)) {
-        return {
-          ok: false,
-          error: description || "The chat cannot be reached.",
+          error:
+            description ||
+            `Telegram rejected the message (HTTP ${response.status}).`,
           retryable: false,
-          failureCode: "chat_unreachable",
-          bindingUnreachable: true
+          failureCode: "rejected"
         };
+      } finally {
+        permit.release();
       }
-
-      // A wrong or revoked token answers 401 (or 404 for a malformed path). That
-      // is the deployment's problem, not the message's: retry under the backoff
-      // (the message expires on its own) and let the breaker stop the hammering.
-      if (response.status === 401 || response.status === 404) {
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: "Telegram rejected the configured bot token.",
-          retryable: true,
-          failureCode: "unauthorized"
-        };
-      }
-
-      return {
-        ok: false,
-        error:
-          description ||
-          `Telegram rejected the message (HTTP ${response.status}).`,
-        retryable: false,
-        failureCode: "rejected"
-      };
     },
 
     async healthCheck(): Promise<TelegramHealthResult> {

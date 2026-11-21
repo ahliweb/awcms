@@ -64,6 +64,8 @@ const MODULE_KEY = "push_delivery";
 export const PUSH_DISPATCH_DEFAULT_LIMIT = 50;
 export const PUSH_DISPATCH_LEASE_MINUTES = 2;
 const MAX_RESPONSE_SNIPPET_LENGTH = 500;
+/** How long a row waits after the breaker refused a call mid-pass (Issue #1409): the breaker's default open window. */
+const PUSH_BREAKER_HOLD_MS = 30_000;
 
 type ClaimedRow = {
   id: string;
@@ -93,6 +95,8 @@ export type DispatchPushQueueResult = {
   failed: number;
   /** Rows whose subscription the push service reported gone. Counted apart from `failed` because it is not an error to chase. */
   subscriptionsDisabled: number;
+  /** Rows the circuit breaker refused mid-pass (open, or its one half-open probe was held): parked with no attempt and no retry spent. */
+  deferred: number;
   breakerOpen: boolean;
 };
 
@@ -216,6 +220,31 @@ async function finalizeSent(
   );
 }
 
+/**
+ * Parks a row the breaker refused (Issue #1409): back to `retry_wait` with the
+ * retry count UNCHANGED, since nothing reached the push service and this is not
+ * a failed attempt.
+ */
+async function deferMessage(
+  sql: Bun.SQL,
+  tenantId: string,
+  messageId: string,
+  until: Date
+): Promise<void> {
+  await withTenantOrThrow(
+    sql,
+    tenantId,
+    (tx) => tx`
+      UPDATE awcms_push_messages
+      SET status = 'retry_wait', next_attempt_at = ${until},
+          updated_at = now()
+      WHERE tenant_id = ${tenantId} AND id = ${messageId}
+        AND status = 'sending'
+    `,
+    { workClass: "background_sync" }
+  );
+}
+
 async function finalizeFailure(
   sql: Bun.SQL,
   tenantId: string,
@@ -289,6 +318,7 @@ export async function dispatchPushQueue(
     retried: 0,
     failed: 0,
     subscriptionsDisabled: 0,
+    deferred: 0,
     breakerOpen
   };
 
@@ -461,6 +491,20 @@ export async function dispatchPushQueue(
       ...(entry.data ? { data: entry.data } : {}),
       correlationId: messageCorrelationId
     });
+
+    if (!deliveryResult.ok && deliveryResult.skipped) {
+      // The breaker refused the call (open, or its one half-open probe is held
+      // by another send): nothing reached the push service (Issue #1409). No
+      // attempt row and no retry spent.
+      await deferMessage(
+        sql,
+        tenantId,
+        entry.id,
+        new Date(now.getTime() + PUSH_BREAKER_HOLD_MS)
+      );
+      result.deferred += 1;
+      continue;
+    }
 
     if (deliveryResult.ok) {
       await recordDeliveryAttempt(

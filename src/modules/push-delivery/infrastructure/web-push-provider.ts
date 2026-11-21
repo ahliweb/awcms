@@ -100,97 +100,116 @@ export function createWebPushProvider(
       target: PushTarget,
       message: PushMessage
     ): Promise<PushDeliveryResult> {
-      const attemptedAt = now();
+      const permit = breaker.tryAcquire(now());
 
-      if (!target.p256dhKey || !target.authSecret) {
-        // Structurally impossible for a stored row — the DB CHECK requires both
-        // for `web_push` — so this can only be an injected/hand-built target.
-        // Refused rather than encrypted with a guessed key, which would produce
-        // a message the browser silently drops.
+      if (!permit) {
         return {
           ok: false,
-          error: "web_push target is missing p256dh/auth key material.",
-          retryable: false
+          error: "Push circuit breaker is open; no attempt was made.",
+          retryable: true,
+          skipped: true
         };
       }
 
-      let body: Uint8Array;
-      let authorization: string;
-
+      // Every path below that gives the breaker no verdict (a dead
+      // subscription, a bad key, a credential problem, a throw) hands the
+      // half-open probe back here; a recorded verdict has already moved the
+      // state, which makes this a no-op.
       try {
-        body = await encryptWebPushPayload(
-          buildWebPushPayload(message, {
-            format: options.payloadFormat,
-            publicOrigin: options.publicOrigin
-          }),
-          { p256dh: target.p256dhKey, authSecret: target.authSecret },
-          {}
-        );
-        authorization = await buildVapidAuthorizationHeader(
-          target.endpoint,
-          options.vapid,
-          attemptedAt
-        );
-      } catch (error) {
-        // Malformed key material or an unparseable endpoint. Both are facts
-        // about the stored row, and both will hold next time.
-        return {
-          ok: false,
-          error: `could not prepare the push request: ${(error as Error).message}`,
-          retryable: false
-        };
-      }
+        const attemptedAt = now();
 
-      const response = await http(target.endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: authorization,
-          "Content-Encoding": "aes128gcm",
-          "Content-Type": "application/octet-stream",
-          TTL: String(ttlSeconds)
-        },
-        body,
-        timeoutMs: options.timeoutMs
-      });
+        if (!target.p256dhKey || !target.authSecret) {
+          // Structurally impossible for a stored row — the DB CHECK requires both
+          // for `web_push` — so this can only be an injected/hand-built target.
+          // Refused rather than encrypted with a guessed key, which would produce
+          // a message the browser silently drops.
+          return {
+            ok: false,
+            error: "web_push target is missing p256dh/auth key material.",
+            retryable: false
+          };
+        }
 
-      if (!response.ok) {
-        breaker.recordFailure(attemptedAt);
+        let body: Uint8Array;
+        let authorization: string;
 
-        return { ok: false, error: response.reason, retryable: true };
-      }
+        try {
+          body = await encryptWebPushPayload(
+            buildWebPushPayload(message, {
+              format: options.payloadFormat,
+              publicOrigin: options.publicOrigin
+            }),
+            { p256dh: target.p256dhKey, authSecret: target.authSecret },
+            {}
+          );
+          authorization = await buildVapidAuthorizationHeader(
+            target.endpoint,
+            options.vapid,
+            attemptedAt
+          );
+        } catch (error) {
+          // Malformed key material or an unparseable endpoint. Both are facts
+          // about the stored row, and both will hold next time.
+          return {
+            ok: false,
+            error: `could not prepare the push request: ${(error as Error).message}`,
+            retryable: false
+          };
+        }
 
-      const outcome = mapWebPushResponse(response.status, response.body);
-
-      if (outcome.kind === "success") {
-        breaker.recordSuccess(attemptedAt);
-
-        return { ok: true };
-      }
-
-      if (outcome.kind === "subscription_gone") {
-        log("info", "push.web_push.subscription_gone", {
-          moduleKey: MODULE_KEY,
-          endpoint: target.endpointMasked,
-          correlationId: message.correlationId
+        const response = await http(target.endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: authorization,
+            "Content-Encoding": "aes128gcm",
+            "Content-Type": "application/octet-stream",
+            TTL: String(ttlSeconds)
+          },
+          body,
+          timeoutMs: options.timeoutMs
         });
+
+        if (!response.ok) {
+          breaker.recordFailure(attemptedAt);
+
+          return { ok: false, error: response.reason, retryable: true };
+        }
+
+        const outcome = mapWebPushResponse(response.status, response.body);
+
+        if (outcome.kind === "success") {
+          breaker.recordSuccess(attemptedAt);
+
+          return { ok: true };
+        }
+
+        if (outcome.kind === "subscription_gone") {
+          log("info", "push.web_push.subscription_gone", {
+            moduleKey: MODULE_KEY,
+            endpoint: target.endpointMasked,
+            correlationId: message.correlationId
+          });
+
+          return {
+            ok: false,
+            error: outcome.error,
+            retryable: false,
+            subscriptionGone: true
+          };
+        }
+
+        if (outcome.tripsBreaker) {
+          breaker.recordFailure(attemptedAt);
+        }
 
         return {
           ok: false,
           error: outcome.error,
-          retryable: false,
-          subscriptionGone: true
+          retryable: outcome.retryable
         };
+      } finally {
+        permit.release();
       }
-
-      if (outcome.tripsBreaker) {
-        breaker.recordFailure(attemptedAt);
-      }
-
-      return {
-        ok: false,
-        error: outcome.error,
-        retryable: outcome.retryable
-      };
     },
 
     /**

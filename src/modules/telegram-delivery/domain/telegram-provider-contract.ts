@@ -39,6 +39,13 @@ export type TelegramSendResult =
       failureCode: string;
       retryAfterSeconds?: number;
       bindingUnreachable?: boolean;
+      /**
+       * The circuit breaker refused the call (open, or its single half-open
+       * probe is held): nothing reached Telegram (Issue #1409). The dispatcher
+       * releases the row and the rest of the batch without recording an attempt
+       * or spending a retry.
+       */
+      skipped?: true;
     };
 
 export type TelegramHealthResult = { ok: true } | { ok: false; error: string };

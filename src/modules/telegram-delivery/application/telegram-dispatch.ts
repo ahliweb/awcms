@@ -90,6 +90,8 @@ import { sweepIneligibleBindings } from "./telegram-binding-sweep";
 /** The SHORT per-row lease, written immediately before each row is processed. */
 export const TELEGRAM_DISPATCH_LEASE_MINUTES = 2;
 const MAX_RESPONSE_SNIPPET_LENGTH = 500;
+/** How long rows wait after the breaker refused a call mid-pass (Issue #1409): the breaker's default open window. */
+const TELEGRAM_BREAKER_HOLD_MS = 30_000;
 
 type ClaimedRow = {
   id: string;
@@ -566,6 +568,7 @@ export async function dispatchTelegramQueue(
   });
 
   let rateLimitedUntil: Date | null = null;
+  let breakerHeldUntil: Date | null = null;
 
   for (let index = 0; index < claimed.length; index += 1) {
     const entry = claimed[index]!;
@@ -583,6 +586,22 @@ export async function dispatchTelegramQueue(
       );
 
       result.rateLimited += released;
+      break;
+    }
+
+    if (breakerHeldUntil) {
+      // The breaker refused a call mid-pass: release the rest of the batch
+      // without sending it (Issue #1409).
+      const released = await releaseRows(
+        sql,
+        tenantId,
+        claimed.slice(index).map((row) => row.id),
+        claimLease,
+        breakerHeldUntil,
+        "circuit_open"
+      );
+
+      result.deferred += released;
       break;
     }
 
@@ -837,6 +856,29 @@ export async function dispatchTelegramQueue(
       templateKey: entry.template_key,
       correlationId: messageCorrelationId
     });
+
+    if (!sendResult.ok && sendResult.skipped) {
+      // The breaker refused the call (open, or its one half-open probe is held
+      // by another send): nothing reached Telegram (Issue #1409). The row waits
+      // with its retry count UNCHANGED and no attempt recorded, and the rest of
+      // this batch is released to the same instant instead of being sent.
+      const until = new Date(clock().getTime() + TELEGRAM_BREAKER_HOLD_MS);
+
+      await scheduleRetry(
+        sql,
+        tenantId,
+        entry.id,
+        retryCount,
+        until,
+        "circuit_open",
+        null,
+        leaseUntil
+      );
+      breakerHeldUntil = until;
+      result.deferred += 1;
+
+      return;
+    }
 
     if (sendResult.ok) {
       await recordDeliveryAttempt(

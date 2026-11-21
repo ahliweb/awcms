@@ -665,6 +665,33 @@ suite("whatsapp_delivery against PostgreSQL", () => {
     );
 
     workerTest(
+      "a send the breaker refused (skipped) is held: no attempt recorded, no retry spent (Issue #1409)",
+      async () => {
+        const queued = await enqueue(TENANT_A);
+        const id = (queued as { messageId: string }).messageId;
+        const provider = fakeProvider(() => ({
+          ok: false,
+          error: "WhatsApp circuit breaker is open; no attempt was made.",
+          retryable: true,
+          failureCode: "circuit_open",
+          skipped: true
+        }));
+        const result = await dispatch(TENANT_A, provider);
+
+        expect(result).toMatchObject({ claimed: 1, held: 1, retried: 0 });
+
+        const row = await message(id);
+
+        expect(row.status).toBe("retry_wait");
+        expect(row.retry_count).toBe(0);
+        expect(
+          (await getAdminSql()`SELECT * FROM awcms_whatsapp_delivery_attempts`)
+            .length
+        ).toBe(0);
+      }
+    );
+
+    workerTest(
       "disabled: claims nothing and never touches the provider",
       async () => {
         await enqueue(TENANT_A);
