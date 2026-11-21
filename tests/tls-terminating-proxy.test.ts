@@ -290,15 +290,18 @@ describe("behind a TLS-terminating proxy", () => {
     expect(await (await call("/origin")).text()).toStartWith("http://");
   });
 
-  test("the host is the visitor's, not APP_URL's — multi-host deployments depend on it", async () => {
+  test("a listener-local host is replaced by APP_URL's host (#1366)", async () => {
     if (!available) return;
 
+    // Astro 7 hands the app `localhost:<port>` for any Host it was not told to
+    // trust. That value is the listener's own address, never the visitor's, so
+    // it must not reach output; APP_URL's host stands in for it. A non-loopback
+    // request host is still kept (tests/site-origin.test.ts).
     originEnv = { APP_URL: "https://canonical.example" };
 
-    const resolved = await (await call("/origin")).text();
-
-    expect(resolved).toContain(`localhost:${proxy!.port}`);
-    expect(resolved).not.toContain("canonical.example");
+    expect(await (await call("/origin")).text()).toBe(
+      "https://canonical.example"
+    );
   });
 
   test("REPRODUCES v9.1.1: a genuine form POST is refused against url.origin", async () => {
@@ -331,7 +334,9 @@ describe("behind a TLS-terminating proxy", () => {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
-        origin: base
+        // What the browser sends at the public URL (the listener-local host
+        // is not what the visitor typed).
+        origin: "https://awcms.example"
       },
       body: "locale=id"
     });

@@ -53,6 +53,10 @@ const EXCLUDE = new Map<string, string>([
   [
     "awcms-local-postgres-docker.md",
     "Device-specific: nama container dev + port, pola netns lokal, dan password role Postgres throwaway (`awcms:awcms`). Tidak berguna di device lain — tiap device menjalankan container-nya sendiri."
+  ],
+  [
+    "hermes-sosmed-bot-is-not-a-publisher.md",
+    "Operasional internal: nama host, container, dan repo operasi milik deployment di luar repo ini. Isinya tentang bot di luar awcms (tidak ada integrasi), jadi tidak dibutuhkan untuk memulihkan konteks kode ini di device lain."
   ]
 ]);
 
