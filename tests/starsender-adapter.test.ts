@@ -311,12 +311,12 @@ describe("per-device circuit breaker and isolation", () => {
       up.calls.every((c) => c.request.headers.Authorization === DEVICE_KEY_B)
     ).toBe(true);
     expect(
-      getProviderCircuitBreaker(whatsappSenderBreakerKey(D1)).canAttempt(
+      getProviderCircuitBreaker(whatsappSenderBreakerKey(D1)).wouldAllowAttempt(
         new Date()
       )
     ).toBe(false);
     expect(
-      getProviderCircuitBreaker(whatsappSenderBreakerKey(D2)).canAttempt(
+      getProviderCircuitBreaker(whatsappSenderBreakerKey(D2)).wouldAllowAttempt(
         new Date()
       )
     ).toBe(true);
@@ -353,9 +353,9 @@ describe("per-device circuit breaker and isolation", () => {
       for (let i = 0; i < 8; i += 1) await provider.send(REQUEST);
 
       expect(
-        getProviderCircuitBreaker(whatsappSenderBreakerKey(D1)).canAttempt(
-          new Date()
-        )
+        getProviderCircuitBreaker(
+          whatsappSenderBreakerKey(D1)
+        ).wouldAllowAttempt(new Date())
       ).toBe(!shouldOpen);
     }
   });

@@ -277,7 +277,7 @@ export function createTelegramBotProvider(
     },
 
     async healthCheck(): Promise<TelegramHealthResult> {
-      return breaker.canAttempt(now())
+      return breaker.wouldAllowAttempt(now())
         ? { ok: true }
         : { ok: false, error: "Circuit breaker is open." };
     }

@@ -833,7 +833,7 @@ describe("the Bot API adapter", () => {
       await rejecting.provider.send(SEND);
     }
 
-    expect(breaker.canAttempt(now)).toBe(true);
+    expect(breaker.wouldAllowAttempt(now)).toBe(true);
 
     const failing = setup(async () => json(500, { ok: false }));
 
@@ -841,7 +841,7 @@ describe("the Bot API adapter", () => {
       await failing.provider.send(SEND);
     }
 
-    expect(breaker.canAttempt(now)).toBe(false);
+    expect(breaker.wouldAllowAttempt(now)).toBe(false);
     expect(await failing.provider.healthCheck()).toEqual({
       ok: false,
       error: "Circuit breaker is open."

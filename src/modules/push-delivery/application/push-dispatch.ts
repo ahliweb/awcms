@@ -281,7 +281,7 @@ export async function dispatchPushQueue(
   const correlationId = options.correlationId ?? crypto.randomUUID();
   const maxRetries = resolvePushSendMaxRetries(env);
   const breaker = getProviderCircuitBreaker(PUSH_CIRCUIT_BREAKER_KEY);
-  const breakerOpen = !breaker.canAttempt(now);
+  const breakerOpen = !breaker.wouldAllowAttempt(now);
 
   const result: DispatchPushQueueResult = {
     claimed: 0,

@@ -60,7 +60,7 @@ async function openTheBreaker(sql: Bun.SQL): Promise<void> {
     }).catch(() => undefined);
   }
 
-  expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(false);
+  expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(false);
 }
 
 const neverHeld: LegalHoldGuardPort = {

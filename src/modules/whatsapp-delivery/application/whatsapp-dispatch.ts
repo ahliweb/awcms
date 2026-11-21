@@ -760,7 +760,7 @@ export async function dispatchWhatsappQueue(
   const correlationId = options.correlationId ?? crypto.randomUUID();
   const maxRetries = resolveWhatsappSendMaxRetries(env);
   const breaker = getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY);
-  const breakerOpen = !breaker.canAttempt(now);
+  const breakerOpen = !breaker.wouldAllowAttempt(now);
 
   const result: DispatchWhatsappQueueResult = {
     claimed: 0,
@@ -878,7 +878,7 @@ export async function dispatchWhatsappQueue(
     let enforceQuota = false;
 
     if (laneSenderId !== null) {
-      if (!getProviderCircuitBreaker(lane.breakerKey).canAttempt(now)) {
+      if (!getProviderCircuitBreaker(lane.breakerKey).wouldAllowAttempt(now)) {
         summary.skipped = "breaker_open";
         continue;
       }
@@ -1104,7 +1104,9 @@ export async function dispatchWhatsappQueue(
     }
 
     // This sender's breaker only: another sender's failures never reach it.
-    if (!getProviderCircuitBreaker(lane.breakerKey).canAttempt(clock())) {
+    if (
+      !getProviderCircuitBreaker(lane.breakerKey).wouldAllowAttempt(clock())
+    ) {
       return { ok: false, kind: "hold", reason: "BREAKER_OPEN" };
     }
 

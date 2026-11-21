@@ -161,7 +161,12 @@ async function runTenantWork<T>(
       cause: { kind: "busy", message, retryAfterSeconds }
     }) satisfies TenantWorkOutcome<T>;
 
-  if (!breaker.canAttempt(now)) {
+  // Issue #1409: reserves the single half-open probe (per process). Every
+  // path below that ends WITHOUT a breaker verdict must hand it back, or the
+  // breaker would hold half_open until the probe timeout expires.
+  const permit = breaker.tryAcquire(now);
+
+  if (!permit) {
     return busy(
       "Database circuit breaker is open.",
       CIRCUIT_OPEN_RETRY_AFTER_SECONDS
@@ -173,6 +178,8 @@ async function runTenantWork<T>(
   try {
     slot = await acquireWorkClassSlot(workClass, queueTimeoutMs);
   } catch (error) {
+    permit.release();
+
     if (error instanceof WorkClassQueueFullError) {
       // Issue #743 — rejected immediately (queue was already at its bounded
       // cap), never actually waited. Distinct log event from the
@@ -270,6 +277,9 @@ async function runTenantWork<T>(
 
     throw error;
   } finally {
+    // No-op once recordSuccess/recordFailure resolved the probe; frees it for
+    // the no-verdict exits (idempotency race, client-input error).
+    permit.release();
     slot.release();
   }
 }

@@ -2331,7 +2331,7 @@ suite("social_publishing against PostgreSQL", () => {
         socialPublishBreakerKey(bad.id)
       );
 
-      expect(breaker.canAttempt(at(0)())).toBe(false);
+      expect(breaker.wouldAllowAttempt(at(0)())).toBe(false);
 
       const callsBefore = fb.calls.length;
       const run = await dispatch(TENANT_A, {
@@ -2345,9 +2345,9 @@ suite("social_publishing against PostgreSQL", () => {
       expect(fb.calls.length).toBe(callsBefore);
       expect(li.calls.length).toBeGreaterThan(0);
       expect(
-        getProviderCircuitBreaker(socialPublishBreakerKey(good.id)).canAttempt(
-          at(0)()
-        )
+        getProviderCircuitBreaker(
+          socialPublishBreakerKey(good.id)
+        ).wouldAllowAttempt(at(0)())
       ).toBe(true);
     });
 

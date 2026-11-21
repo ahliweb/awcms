@@ -1343,9 +1343,9 @@ suite("StarSender adapter against PostgreSQL (Issue #1142)", () => {
           )
         ).toBe(true);
         expect(
-          getProviderCircuitBreaker(whatsappSenderBreakerKey(up.id)).canAttempt(
-            new Date()
-          )
+          getProviderCircuitBreaker(
+            whatsappSenderBreakerKey(up.id)
+          ).wouldAllowAttempt(new Date())
         ).toBe(true);
       }
     );

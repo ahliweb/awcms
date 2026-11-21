@@ -287,7 +287,7 @@ export async function verifyTurnstileToken(
   // harmless.
   const secrets = [config.secretKey, token];
 
-  if (!breaker.canAttempt(now)) {
+  if (!breaker.tryAcquire(now)) {
     // While the shared breaker is open, `enforceTurnstileIfRequired` fails
     // closed and blocks every gated request for every tenant. Logged at
     // `warning` so a sustained open breaker (a real Cloudflare outage) is
