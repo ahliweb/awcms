@@ -105,7 +105,8 @@ export function planWebhookRegistration(input: {
       secret_token: env.TELEGRAM_WEBHOOK_SECRET,
       allowed_updates: ["message"]
     }),
-    summary: `setWebhook host=${url.host} path=${TELEGRAM_WEBHOOK_PATH} allowed_updates=["message"] secret_token=(set)`
+    // The operator-supplied webhook target, not a request host.
+    summary: `setWebhook host=${webhookHost(url)} path=${TELEGRAM_WEBHOOK_PATH} allowed_updates=["message"] secret_token=(set)`
   };
 }
 
@@ -175,4 +176,8 @@ export async function executeWebhookRegistration(
       token
     )
   };
+}
+
+function webhookHost(target: URL): string {
+  return target.host;
 }
