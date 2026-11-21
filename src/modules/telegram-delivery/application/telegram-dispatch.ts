@@ -459,7 +459,7 @@ export async function dispatchTelegramQueue(
   const perChatIntervalMs = resolveTelegramPerChatIntervalMs(env);
   const retryAfterCapSeconds = resolveTelegramRetryAfterCapSeconds(env);
   const breaker = getProviderCircuitBreaker(TELEGRAM_CIRCUIT_BREAKER_KEY);
-  const breakerOpen = !breaker.canAttempt(now);
+  const breakerOpen = !breaker.wouldAllowAttempt(now);
 
   const result: DispatchTelegramQueueResult = {
     claimed: 0,

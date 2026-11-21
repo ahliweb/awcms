@@ -100,7 +100,7 @@ describe("D4 — two analytics jobs abandoned every remaining tenant", () => {
     // because that shape only ever comes out of `withTenant`.
     //
     // Recorded against the REAL clock, not `NOW`: the breaker's open window is
-    // 30 s, and `runTenantWork` asks `canAttempt(new Date())`. Tripping it with
+    // 30 s, and `runTenantWork` asks `wouldAllowAttempt(new Date())`. Tripping it with
     // a fixed past timestamp opens it and then immediately elapses it to
     // half-open, which lets the attempt through — the test would pass for the
     // wrong reason and prove nothing.

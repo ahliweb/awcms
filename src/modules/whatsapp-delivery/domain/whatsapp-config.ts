@@ -37,7 +37,7 @@ export function isKnownWhatsappProvider(
 
 /**
  * The key the adapters FEED (`recordSuccess`/`recordFailure`) and the
- * dispatcher READS (`canAttempt`). One constant so the two cannot drift apart
+ * dispatcher READS (`wouldAllowAttempt`). One constant so the two cannot drift apart
  * silently: a dispatcher consulting a breaker nothing trips reports
  * `breakerOpen: false` forever while hammering a provider that is down.
  */

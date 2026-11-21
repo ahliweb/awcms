@@ -654,18 +654,18 @@ describe("the tenant-owned sender's provider adapter", () => {
     expect(down.calls[0]!.url).toContain("/11111111111/");
     expect(up.calls[0]!.url).toContain("/22222222222/");
     expect(
-      getProviderCircuitBreaker(whatsappSenderBreakerKey(S1)).canAttempt(
+      getProviderCircuitBreaker(whatsappSenderBreakerKey(S1)).wouldAllowAttempt(
         new Date()
       )
     ).toBe(false);
     expect(
-      getProviderCircuitBreaker(whatsappSenderBreakerKey(S2)).canAttempt(
+      getProviderCircuitBreaker(whatsappSenderBreakerKey(S2)).wouldAllowAttempt(
         new Date()
       )
     ).toBe(true);
     // ... and the deployment sender's breaker was never touched.
     expect(
-      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).canAttempt(
+      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).wouldAllowAttempt(
         new Date()
       )
     ).toBe(true);
@@ -679,7 +679,7 @@ describe("the tenant-owned sender's provider adapter", () => {
       openDurationMs: 10
     });
 
-    expect(breaker.canAttempt(new Date())).toBe(true);
+    expect(breaker.wouldAllowAttempt(new Date())).toBe(true);
   });
 });
 

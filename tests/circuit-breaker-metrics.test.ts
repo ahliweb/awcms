@@ -119,7 +119,7 @@ describe("circuit breaker metrics decorator (Issue #698)", () => {
       breaker.recordFailure(now);
     }
 
-    expect(breaker.canAttempt(now)).toBe(false);
+    expect(breaker.wouldAllowAttempt(now)).toBe(false);
     expect(
       port.getSnapshot().gauges["provider_circuit_state{provider=email}"]
     ).toBe(2);

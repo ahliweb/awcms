@@ -116,7 +116,7 @@ export function createR2ObjectUploader(
   return async (input) => {
     const attemptedAt = new Date();
 
-    if (!breaker.canAttempt(attemptedAt)) {
+    if (!breaker.tryAcquire(attemptedAt)) {
       return {
         ok: false,
         error: "Object storage circuit breaker is open; skipping attempt."

@@ -53,7 +53,7 @@ export const DEFAULT_PUSH_SEND_MAX_RETRIES = 3;
 
 /**
  * The circuit-breaker key BOTH sides must use: the dispatcher, which only
- * READS it (`canAttempt`), and the network adapters, which are the only things
+ * READS it (`wouldAllowAttempt`), and the network adapters, which are the only things
  * that may FEED it (`recordSuccess`/`recordFailure`) — the split
  * `email/infrastructure/mailketing-provider.ts` established.
  *
