@@ -5,7 +5,7 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:ed124f24c18411a233b4a07931c9fffbe3c1eb548ccd0cdeb604b9211f6a7a4e -->
+<!-- i18n-source-hash: sha256:868bb3d562192a0059d59e055c5e2aa794264856109ea443aec38ed63f5f2394 -->
 
 # AWCMS — Integration Hub Module
 
@@ -18,6 +18,16 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 > skill ini sebagai spesifikasi target port (via ADR admission; `awcms-port-from-mini` HISTORIS),
 > bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
 > mengklaim apa pun ada.
+>
+> **Provenance (Issue #1408):** setiap "Issue #754" di skill ini adalah nomor
+> tracker `awcms-mini` yang diarsipkan, dipertahankan sebagai sejarah. Di repo
+> ini #754 adalah PR newsletter yang tak terkait dan sudah di-merge; tidak ada
+> isu di sini yang melacak hub. Apakah hub masih dibenarkan, dibanding port/outbox
+> provider milik domain yang kini ada (email, WhatsApp, Telegram, push, R2,
+> commerce), diusulkan di
+> [ADR-0169](../../../docs/adr/0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md)
+> (Diusulkan). Default sampai pemilik memutuskan: tambahkan provider sebagai
+> port milik domain + antrean sendiri, bukan sebagai adapter `integration_hub`.
 
 `integration_hub` (`src/modules/integration-hub`, Issue #754, epic
 `platform-evolution` #738 Wave 3, `type: "system"` — ADR-0013 §1/§6, admission
