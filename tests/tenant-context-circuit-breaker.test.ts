@@ -59,7 +59,7 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
 
     const breaker = getDatabaseCircuitBreaker();
 
-    expect(breaker.canAttempt(new Date())).toBe(true);
+    expect(breaker.wouldAllowAttempt(new Date())).toBe(true);
   });
 
   test("a foreign-key violation (23503) does not trip the breaker", async () => {
@@ -80,7 +80,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(violation);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 
   test("a data exception (22P02 invalid_text_representation) does not trip the breaker", async () => {
@@ -101,7 +103,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(violation);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 
   test("a program limit error (54000 index row size exceeds btree maximum) does not trip the breaker", async () => {
@@ -122,7 +126,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(violation);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 
   test("a numeric data exception (22003 numeric_value_out_of_range) does not trip the breaker", async () => {
@@ -140,7 +146,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(violation);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 
   test("a genuine Postgres infra error (e.g. connection failure, 08xxx) still trips the breaker", async () => {
@@ -159,7 +167,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(connectionError);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(false);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      false
+    );
   });
 
   test("a non-Postgres error still trips the breaker (existing behavior preserved)", async () => {
@@ -174,7 +184,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
       ).rejects.toBe(genericError);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(false);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      false
+    );
   });
 
   test("a success still resets recorded state (no regression)", async () => {
@@ -183,7 +195,9 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
     const result = await withTenantOrThrow(sql, TENANT_ID, async () => "ok");
 
     expect(result).toBe("ok");
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 
   test("an excluded integrity violation logs the SQLSTATE for observability, without recording a breaker failure", async () => {
@@ -246,7 +260,9 @@ describe("graceful saturation and Retry-After (Issue #743)", () => {
       ).rejects.toBe(genericError);
     }
 
-    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(false);
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      false
+    );
 
     const response = await withTenant<Response>(
       sql,
@@ -323,5 +339,77 @@ describe("graceful saturation and Retry-After (Issue #743)", () => {
     expect(response.headers.get("Retry-After")).toBe("2");
 
     active.release();
+  });
+});
+
+describe("tenant transaction half-open single probe (Issue #1409)", () => {
+  beforeEach(() => {
+    resetDatabaseCircuitBreakerForTests();
+    resetWorkClassGatesForTests();
+  });
+
+  afterEach(() => {
+    resetDatabaseCircuitBreakerForTests();
+    resetWorkClassGatesForTests();
+  });
+
+  /** Opens the shared breaker with failures stamped long enough ago that its window has already elapsed. */
+  function openThenElapse(): void {
+    const long = new Date(Date.now() - 10 * 60_000);
+
+    for (let i = 0; i < 5; i++) {
+      getDatabaseCircuitBreaker().recordFailure(long);
+    }
+  }
+
+  test("concurrent transactions while half-open: one runs, the rest are refused DATABASE_BUSY", async () => {
+    openThenElapse();
+
+    let finish!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let ran = 0;
+    const calls = Array.from({ length: 6 }, async () => {
+      const response = await withTenant(fakeSql(), TENANT_ID, async () => {
+        ran += 1;
+        await parked;
+
+        return new Response("ok");
+      });
+
+      return response as Response;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finish();
+
+    const results = await Promise.all(calls);
+    const refused = results.filter((r) => r.status === 503);
+
+    expect(ran).toBe(1);
+    expect(refused).toHaveLength(5);
+    expect(getDatabaseCircuitBreaker().getState(new Date())).toBe("closed");
+  });
+
+  test("a probe that ends without a verdict (client-input error) hands the probe on", async () => {
+    openThenElapse();
+
+    const clientInput = new Bun.SQL.PostgresError("string too long", {
+      code: "22001",
+      errno: "22001"
+    });
+
+    await expect(
+      withTenantOrThrow(fakeSql(), TENANT_ID, async () => {
+        throw clientInput;
+      })
+    ).rejects.toBe(clientInput);
+
+    // Neither success nor failure was recorded; the probe must not stay held.
+    expect(getDatabaseCircuitBreaker().getState(new Date())).toBe("half_open");
+    expect(getDatabaseCircuitBreaker().wouldAllowAttempt(new Date())).toBe(
+      true
+    );
   });
 });

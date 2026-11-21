@@ -157,7 +157,7 @@ export function createFonnteWhatsappProvider(
     async healthCheck(): Promise<WhatsappHealthResult> {
       // Fonnte offers no side-effect-free probe; a send would message someone.
       // The breaker state is the honest signal.
-      return breaker.canAttempt(now())
+      return breaker.wouldAllowAttempt(now())
         ? { ok: true }
         : { ok: false, error: "Circuit breaker is open." };
     }

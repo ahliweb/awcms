@@ -189,7 +189,7 @@ export function createMailketingV2Provider(
     async send(message: EmailMessage): Promise<EmailDeliveryResult> {
       const attemptedAt = clock();
 
-      if (!breaker.canAttempt(attemptedAt)) {
+      if (!breaker.tryAcquire(attemptedAt)) {
         return {
           ok: false,
           error: "Mailketing circuit breaker is open; no attempt was made.",

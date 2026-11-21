@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:2cf6fbb313d4ee61c06fcfeed478572e28e1b6b01f926e0e49288947471e587b -->
+<!-- i18n-source-hash: sha256:a2912e1f6c07e1be153ba61e55b696aa637bf8149298dfef7406a073f18e34fe -->
 
 # Database Connection Pooling and Backpressure
 
@@ -116,10 +116,34 @@ sepenuhnya unit-testable tanpa menunggu waktu nyata.
 
 - **Closed → Open**: setelah `failureThreshold` (5) kegagalan berturut-turut.
 - **Open → Half-open**: setelah `openDurationMs` (30 detik) berlalu sejak
-  breaker terbuka, tepat satu percobaan diizinkan lewat.
+  breaker terbuka, tepat satu percobaan diizinkan lewat. Percobaan itu
+  **direservasi**: `tryAcquire(now)` memberi izin kepada pemanggil pertama dan
+  `null` kepada semua pemanggil lain sampai probe itu melapor. (Isu #1409:
+  `canAttempt` lama hanya membaca state, sehingga setiap pemanggil yang
+  bertanya sebelum probe selesai ikut lolos.)
 - **Half-open → Closed**: percobaan sukses.
 - **Half-open → Open**: percobaan gagal; jendela `openDurationMs` dimulai
   ulang dari waktu kegagalan tersebut.
+
+- **Siklus hidup probe**: `recordSuccess`/`recordFailure` menyelesaikan probe.
+  Panggilan yang berakhir tanpa vonis untuk breaker (mis. penolakan per-pesan,
+  galat input klien) memanggil `permit.release()` agar pemanggil berikutnya
+  mengambil probe. Probe yang tidak pernah diselesaikan kedaluwarsa setelah
+  `probeTimeoutMs` (bawaan `openDurationMs`), sehingga breaker tidak bisa
+  macet di `half_open` selamanya.
+- **Reservasi vs intip**: `tryAcquire` untuk pemanggil yang akan melakukan
+  panggilan. `wouldAllowAttempt(now)` read-only (gerbang dispatcher, health
+  check): tidak mereservasi dan tidak menjamin apa pun. Dispatcher batch
+  WhatsApp, Telegram, dan push hanya mengintip sekali per putaran dan adapter-nya
+  tidak melakukan acquire, sehingga putaran half-open di sana dibatasi oleh
+  batas batch, bukan satu pesan.
+- **Hanya per proses**: reservasi hidup di memori proses ini (atomik karena
+  `tryAcquire` sinkron selesai tuntas di satu thread JS). Dengan beberapa
+  replika, tiap replika meloloskan probe-nya sendiri; single-flight lintas
+  replika **tidak** diklaim.
+- **Metrik**: tidak berubah dan tetap terbatas. `provider_call_total`/
+  `provider_circuit_state` hanya dipancarkan pada hasil yang tercatat,
+  berlabel keluarga provider; `tryAcquire` yang ditolak tidak menambah seri.
 
 Satu instance breaker dipakai bersama di seluruh aplikasi (module-level
 singleton `getDatabaseCircuitBreaker()`), bukan per-request — sehingga
@@ -137,7 +161,7 @@ withTenant(sql, tenantId, fn, {
 
 Alur:
 
-1. Cek `circuitBreaker.canAttempt(now)` — jika `false`, langsung
+1. Cek `circuitBreaker.tryAcquire(now)` — jika `false`, langsung
    `503 DATABASE_BUSY` + `Retry-After: 30` (skip antrean sepenuhnya,
    fail-fast).
 2. `acquireWorkClassSlot(workClass, queueTimeoutMs)`:

@@ -707,7 +707,7 @@ export async function dispatchEmailQueue(
   const correlationId = options.correlationId ?? crypto.randomUUID();
   const maxRetries = resolveEmailSendMaxRetries(env);
   const breaker = getProviderCircuitBreaker(CIRCUIT_BREAKER_KEY);
-  const breakerOpen = !breaker.canAttempt(now);
+  const breakerOpen = !breaker.wouldAllowAttempt(now);
 
   const result: DispatchEmailQueueResult = {
     claimed: 0,
@@ -1243,7 +1243,7 @@ export async function dispatchEmailQueue(
 
     // 2. This ACCOUNT's breaker only: another tenant's (or the deployment's)
     //    failures never reach it, and its failures never reach them (M9).
-    if (!getProviderCircuitBreaker(breakerKey).canAttempt(now)) {
+    if (!getProviderCircuitBreaker(breakerKey).wouldAllowAttempt(now)) {
       result.senderLanesSkipped += 1;
       log("warning", "email.dispatch.sender_breaker_open", {
         correlationId,

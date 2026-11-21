@@ -7,12 +7,24 @@
  * States:
  * - `closed` — normal operation. `failureThreshold` consecutive failures
  *   (no intervening success) transitions to `open`.
- * - `open` — fails fast (`canAttempt` returns false) until `openDurationMs`
+ * - `open` — fails fast (`tryAcquire` returns null) until `openDurationMs`
  *   has elapsed since the breaker opened, at which point exactly one trial
  *   call is allowed through (`half_open`).
- * - `half_open` — a single trial call is in flight. Success closes the
- *   breaker and resets the failure count; failure reopens it and resets the
- *   "open since" timestamp (a fresh `openDurationMs` window starts).
+ * - `half_open` — a single trial call is in flight. `tryAcquire` RESERVES that
+ *   one probe synchronously: while it is outstanding every other `tryAcquire`
+ *   returns null. Success closes the breaker and resets the failure count;
+ *   failure reopens it and resets the "open since" timestamp (a fresh
+ *   `openDurationMs` window starts). A probe that never reports (caller
+ *   crashed, timed out without recording, outcome that feeds nothing) is
+ *   released by `permit.release()` or, at the latest, expires after
+ *   `probeTimeoutMs` so the breaker cannot stick in `half_open` forever.
+ *
+ * Scope of the guarantee (Issue #1409): single-flight is PER PROCESS. The
+ * state lives in this module's memory; it is atomic because JavaScript runs a
+ * synchronous `tryAcquire` to completion, not because anything is locked.
+ * With N replicas each one lets its own probe through. `canAttempt` was
+ * removed: it only read the state, so it implied single-flight it could not
+ * give — callers either reserve (`tryAcquire`) or peek (`wouldAllowAttempt`).
  *
  * Metrics decorator import note: this file imports
  * `recordCounter`/`recordHistogram`/`recordGauge` from
@@ -37,10 +49,32 @@ import {
 
 export type CircuitState = "closed" | "open" | "half_open";
 
+/**
+ * Permission to make ONE call through the breaker. `probe` is true when this
+ * permit is the single half-open trial. Report the outcome with
+ * `recordSuccess`/`recordFailure`; call `release()` (idempotent, safe in a
+ * `finally`) when the call produced no verdict for the breaker, so a probe is
+ * not held until it expires.
+ */
+export type CircuitPermit = {
+  readonly probe: boolean;
+  release(): void;
+};
+
 export type CircuitBreaker = {
   recordSuccess(now: Date, durationMs?: number): void;
   recordFailure(now: Date, durationMs?: number): void;
-  canAttempt(now: Date): boolean;
+  /**
+   * Atomically asks to make a call. Returns null while open, or while the
+   * half-open probe is held by someone else. Reserves the probe on success.
+   */
+  tryAcquire(now: Date): CircuitPermit | null;
+  /**
+   * READ-ONLY: would `tryAcquire` succeed right now? Reserves nothing and
+   * guarantees nothing — another caller may take the probe right after.
+   * For gates that only decide whether to start a pass or report health.
+   */
+  wouldAllowAttempt(now: Date): boolean;
   getState(now: Date): CircuitState;
 };
 
@@ -49,32 +83,89 @@ export type CircuitBreakerOptions = {
   failureThreshold: number;
   /** How long the breaker stays open before allowing one trial call. */
   openDurationMs: number;
+  /**
+   * How long a reserved half-open probe may stay outstanding without a
+   * verdict before another caller may take over. Defaults to
+   * `openDurationMs`.
+   */
+  probeTimeoutMs?: number;
 };
 
 type InternalState =
   | { kind: "closed"; consecutiveFailures: number }
   | { kind: "open"; openedAt: number }
-  | { kind: "half_open" };
+  | {
+      kind: "half_open";
+      probe: { token: number; startedAt: number } | null;
+    };
 
 export function createCircuitBreaker(
   options: CircuitBreakerOptions
 ): CircuitBreaker {
   let state: InternalState = { kind: "closed", consecutiveFailures: 0 };
+  let nextProbeToken = 0;
+  const probeTimeoutMs = options.probeTimeoutMs ?? options.openDurationMs;
+
+  function probeHeld(now: Date): boolean {
+    return (
+      state.kind === "half_open" &&
+      state.probe !== null &&
+      now.getTime() - state.probe.startedAt < probeTimeoutMs
+    );
+  }
 
   function transitionIfOpenElapsed(now: Date): void {
     if (
       state.kind === "open" &&
       now.getTime() - state.openedAt >= options.openDurationMs
     ) {
-      state = { kind: "half_open" };
+      state = { kind: "half_open", probe: null };
     }
   }
 
   return {
-    canAttempt(now: Date): boolean {
+    tryAcquire(now: Date): CircuitPermit | null {
       transitionIfOpenElapsed(now);
 
-      return state.kind !== "open";
+      if (state.kind === "open") {
+        return null;
+      }
+
+      if (state.kind === "closed") {
+        return { probe: false, release: () => {} };
+      }
+
+      if (probeHeld(now)) {
+        return null;
+      }
+
+      const token = ++nextProbeToken;
+
+      state = { kind: "half_open", probe: { token, startedAt: now.getTime() } };
+
+      return {
+        probe: true,
+        release: () => {
+          // Only the permit that still owns the reservation may free it: a
+          // stale permit whose probe expired must not free a newer probe.
+          if (
+            state.kind === "half_open" &&
+            state.probe !== null &&
+            state.probe.token === token
+          ) {
+            state = { kind: "half_open", probe: null };
+          }
+        }
+      };
+    },
+
+    wouldAllowAttempt(now: Date): boolean {
+      transitionIfOpenElapsed(now);
+
+      return (
+        state.kind === "closed" ||
+        (state.kind === "half_open" && !probeHeld(now))
+      );
     },
 
     recordSuccess(now: Date): void {
@@ -177,7 +268,8 @@ function decorateWithMetrics(
   }
 
   return {
-    canAttempt: (now) => breaker.canAttempt(now),
+    tryAcquire: (now) => breaker.tryAcquire(now),
+    wouldAllowAttempt: (now) => breaker.wouldAllowAttempt(now),
     getState: (now) => breaker.getState(now),
     recordSuccess: (now, durationMs) => {
       breaker.recordSuccess(now);

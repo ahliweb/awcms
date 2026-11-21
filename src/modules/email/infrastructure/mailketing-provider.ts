@@ -106,7 +106,9 @@ export function createMailketingEmailProvider(
     async send(message: EmailMessage): Promise<EmailDeliveryResult> {
       const attemptedAt = new Date();
 
-      if (!breaker.canAttempt(attemptedAt)) {
+      const permit = breaker.tryAcquire(attemptedAt);
+
+      if (!permit) {
         // `skipped` — nothing was sent, so there is no attempt to record and
         // no retry to spend. `dispatchEmailQueue` short-circuits when the
         // breaker is already open at the START of a pass; this branch is the
@@ -124,7 +126,9 @@ export function createMailketingEmailProvider(
 
       if (!recipient) {
         // Deliberately does NOT feed the breaker: a message with no recipient
-        // is this deployment's own bad row, not a Mailketing outage.
+        // is this deployment's own bad row, not a Mailketing outage. It hands
+        // back the half-open probe it reserved (Issue #1409).
+        permit.release();
         return {
           ok: false,
           error: "Email message has no recipient address.",
@@ -150,6 +154,8 @@ export function createMailketingEmailProvider(
           // request was understood and refused, which is about this message.
           if (response.status === 429 || response.status >= 500) {
             breaker.recordFailure(attemptedAt);
+          } else {
+            permit.release();
           }
 
           return {
@@ -177,6 +183,7 @@ export function createMailketingEmailProvider(
         if (parsed.status !== "success") {
           // Also deliberately breaker-free. Mailketing answered, in time, with
           // a well-formed body — it is up. It just refused THIS message.
+          permit.release();
           return {
             ok: false,
             error: truncate(parsed.response ?? "Unknown error from Mailketing"),

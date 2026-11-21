@@ -389,7 +389,7 @@ async function claim(
         socialPublishBreakerKey(accountId)
       );
 
-      if (!breaker.canAttempt(now)) {
+      if (!breaker.wouldAllowAttempt(now)) {
         result.skippedBreaker += rows.length;
         continue;
       }
@@ -1185,7 +1185,7 @@ export async function dispatchSocialPublishQueue(
       continue;
     }
 
-    if (!breaker.canAttempt(clock())) {
+    if (!breaker.wouldAllowAttempt(clock())) {
       await finalise(
         sql,
         tenantId,
