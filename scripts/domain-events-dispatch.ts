@@ -36,8 +36,12 @@ import {
   type JobContext
 } from "../src/lib/jobs/job-runner";
 import {
+  collectDomainEventBacklogRows,
   dispatchDomainEventsForTenant,
-  recordDomainEventBacklogGauges,
+  flushDomainEventBacklogGauges,
+  foldDomainEventBacklogRows,
+  type DomainEventBacklogAggregate,
+  type DomainEventBacklogRow,
   type DispatchDomainEventsResult
 } from "../src/modules/domain-event-runtime/application/dispatch-domain-events";
 
@@ -84,6 +88,11 @@ export async function runDomainEventsDispatch(
     };
   }
 
+  // Issue #1412: keep each tenant's LATEST backlog snapshot (a tenant takes
+  // several passes) and fold them once at the end, so the gauges are a
+  // cross-tenant aggregate instead of whichever tenant ran last.
+  const backlogByTenant = new Map<string, DomainEventBacklogRow[]>();
+
   const { tenants, perTenant } = await iterateTenantsInBatches(
     sql,
     async (tenantId) => {
@@ -93,12 +102,23 @@ export async function runDomainEventsDispatch(
         correlationId: ctx.correlationId
       });
 
-      await recordDomainEventBacklogGauges(sql, tenantId);
+      backlogByTenant.set(
+        tenantId,
+        await collectDomainEventBacklogRows(sql, tenantId)
+      );
 
       return result;
     },
     { signal: ctx.signal, maxPasses: options.maxPasses }
   );
+
+  const backlogAggregate: DomainEventBacklogAggregate = new Map();
+
+  for (const rows of backlogByTenant.values()) {
+    foldDomainEventBacklogRows(backlogAggregate, rows);
+  }
+
+  flushDomainEventBacklogGauges(backlogAggregate);
 
   const tenantsHitPassLimit = [...perTenant.entries()]
     .filter(([, outcome]) => outcome.hitPassLimit)

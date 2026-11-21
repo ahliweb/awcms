@@ -428,10 +428,82 @@ export async function dispatchDomainEventsForTenant(
  * `domain_event_dispatch_total` counter recorded in
  * `dispatchDomainEventsForTenant` above.
  */
+export type DomainEventBacklogRow = {
+  consumer_name: string;
+  status: string;
+  row_count: number;
+  oldest_age_seconds: number;
+};
+
+/**
+ * Issue #1412: the gauges are set from a cross-tenant AGGREGATE. Recording per
+ * tenant (the original shape) let whichever tenant ran last overwrite every
+ * other tenant's lag, so a stuck tenant in the middle of the loop was invisible.
+ * Counts add up and the oldest age is the maximum, per (consumer, status).
+ */
+export type DomainEventBacklogAggregate = Map<
+  string,
+  { consumerName: string; status: string; count: number; oldestAge: number }
+>;
+
+export function foldDomainEventBacklogRows(
+  aggregate: DomainEventBacklogAggregate,
+  rows: readonly DomainEventBacklogRow[]
+): void {
+  for (const row of rows) {
+    const key = `${row.consumer_name}\u0000${row.status}`;
+    const existing = aggregate.get(key);
+
+    aggregate.set(key, {
+      consumerName: row.consumer_name,
+      status: row.status,
+      count: (existing?.count ?? 0) + row.row_count,
+      oldestAge: Math.max(existing?.oldestAge ?? 0, row.oldest_age_seconds)
+    });
+  }
+}
+
+export function flushDomainEventBacklogGauges(
+  aggregate: DomainEventBacklogAggregate
+): void {
+  for (const entry of aggregate.values()) {
+    recordGauge("domain_event_delivery_backlog", entry.count, {
+      consumerName: entry.consumerName,
+      status: entry.status
+    });
+
+    if (entry.status === "pending") {
+      recordGauge(
+        "domain_event_delivery_oldest_pending_seconds",
+        entry.oldestAge,
+        { consumerName: entry.consumerName }
+      );
+    }
+  }
+}
+
+/** Single-tenant convenience: collect and record in one call (kept for callers that visit one tenant). */
 export async function recordDomainEventBacklogGauges(
   sql: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  aggregate?: DomainEventBacklogAggregate
 ): Promise<void> {
+  const target: DomainEventBacklogAggregate = aggregate ?? new Map();
+
+  foldDomainEventBacklogRows(
+    target,
+    await collectDomainEventBacklogRows(sql, tenantId)
+  );
+
+  if (aggregate === undefined) {
+    flushDomainEventBacklogGauges(target);
+  }
+}
+
+export async function collectDomainEventBacklogRows(
+  sql: Bun.SQL,
+  tenantId: string
+): Promise<DomainEventBacklogRow[]> {
   const rows = await withTenantOrThrow(
     sql,
     tenantId,
@@ -445,23 +517,5 @@ export async function recordDomainEventBacklogGauges(
     { workClass: "background_sync" }
   );
 
-  for (const row of rows as {
-    consumer_name: string;
-    status: string;
-    row_count: number;
-    oldest_age_seconds: number;
-  }[]) {
-    recordGauge("domain_event_delivery_backlog", row.row_count, {
-      consumerName: row.consumer_name,
-      status: row.status
-    });
-
-    if (row.status === "pending") {
-      recordGauge(
-        "domain_event_delivery_oldest_pending_seconds",
-        row.oldest_age_seconds,
-        { consumerName: row.consumer_name }
-      );
-    }
-  }
+  return rows as DomainEventBacklogRow[];
 }
