@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:4425ddf136182f0aefb30cf14ddac91fe010d41e911816dc011e7e5b68f58da2 -->
+<!-- i18n-source-hash: sha256:8abd4404ba9a9ad43ddfbcfebfe192f9a0abc15a292551b89a5ae45c99a06827 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -374,3 +374,15 @@ flowchart LR
 - Event envelope lengkap.
 - Event payload sesuai schema.
 - Event tidak membawa raw sensitive data.
+
+## Gerbang lint kontrak (`api:contract:lint`)
+
+`bun run api:contract:lint` (Issue #1390, [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.id.md)) ada di rantai `check` tepat setelah `api:spec:check`. `api:spec:check` membandingkan template path dan bentuk operasi; ia tidak melihat isi skema. Gerbang ini mengompilasi, dengan `ajv` (draft 2020-12, `strict: true`, dijalankan Bun), setiap skema di bundle: seluruh `components.schemas`, setiap `requestBody`, dan setiap respons (sukses **dan** galat, inline atau lewat `components.responses`). Kegagalan mencetak operasi (`METHOD /path -> status`) dan JSON pointer skemanya, misalnya `/paths/~1x/post/responses/201/content/application~1json/schema`.
+
+- **Ketat, bukan longgar.** Keyword tak dikenal, `format` tak dikenal, `properties: null`, `$ref` putus, `required` bukan array, dan `exclusiveMinimum: true` gaya 3.0 semuanya gagal. Keyword OpenAPI yang bukan JSON Schema didaftarkan satu per satu: `discriminator` (bentuknya diperiksa), `xml`, `externalDocs`, `example`, ekstensi `x-*` yang muncul, dan kunci tingkat-atas dokumen OpenAPI sendiri. `nullable` ditangani `ajv` sendiri, yang menolaknya tanpa `type`; pada 3.1 ia tidak berefek dan diperbaiki bertahap (ADR-0167 §6).
+- **Format dikenali, tidak ditegakkan.** Hanya format JSON Schema dan OpenAPI yang diterima, sebagai nama; instance tidak divalidasi di sini sehingga `ajv-formats` tidak diperlukan.
+- **Di luar scope.** Contoh, paket fixture, dan validasi respons handler nyata adalah isu terpisah (#1391 sampai #1395).
+- **Biaya.** Sekitar 2,5 sampai 3 detik untuk sekitar 2.300 lokasi skema di satu mesin pengembang (Bun 1.4.4); satu kali jalan, bukan benchmark.
+- **Dependensi.** `ajv` 8.20.0 adalah dependensi dev, dipin persis (MIT; empat dependensi langsung miliknya); lolos `deps:audit:check` dan `deps:license:check`.
+
+Tes: `tests/api-contract-lint.test.ts` (bundle asli harus terkompilasi; kontrak yang sengaja dirusak harus gagal).
