@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:92bb7833b3728de21f55aae286b037c62e4715b6e25d2aaad86a3eb979cde4bc -->
+<!-- i18n-source-hash: sha256:c635760469c9934ad72dc08ba22fe0964cfc02611fbdb0f492b4fccfee83eb7f -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -131,6 +131,25 @@ Aturan:
 - **Halaman publik juga menghormati pilihan pembaca sendiri.** Panel preferensi baca (di bawah) memasang `data-a11y-motion="reduce"` pada `<html>`, lalu `public-a11y.css` mematikan setiap animasi CSS, transisi, dan gulir halus. Ticker, carousel, atau autoplay berbasis skrip di halaman publik harus berhenti pada atribut itu **dan** pada `prefers-reduced-motion`, serta sebaiknya mendengarkan event `awcms-a11y-change` pada `document` agar bereaksi saat pembaca mengubah pengaturan tanpa memuat ulang.
 - **Tanpa layout shift** — animasikan hanya `opacity`/`transform`/warna/`box-shadow`, bukan `width`/`height`/`top`/`left`.
 - **Entrance konten utama yang sudah tampil saat SSR sebaiknya `transform`-saja (mis. `translateY`), bukan dari `opacity: 0`.** Scan axe-core dapat membaca teks setengah-transparan di tengah animasi sebagai pelanggaran kontras bila kebetulan men-scan sebelum animasi selesai. Kartu login (`login.astro`) memakai `@keyframes auth-card-rise` (translateY-only) sebagai contoh kanonis. Fade `opacity:0` (mis. utility `.fade-in-up`) tetap pas untuk elemen yang di-reveal **setelah** load (banner/dialog pasca-aksi) atau elemen sekunder — hindari hanya untuk konten teks utama layar auth/entry.
+
+### Override brand deployment (`brand/tokens.override.json`)
+
+Sebuah deployment dapat mengganti warna brand-nya tanpa mengedit `src/styles/tokens.css`, yang tetap milik upstream. Buat berkas opsional `brand/tokens.override.json` (Issue #1355):
+
+```json
+{
+  "light": { "color-primary": "#1d4ed8", "color-primary-strong": "#1e3a8a" },
+  "dark": { "color-primary": "#93c5fd" }
+}
+```
+
+- Hanya keluarga `--color-primary*`, `--color-info*`, dan `--color-sidebar*` yang dapat ditimpa, dan hanya token yang sudah ada di `tokens.css`. Token tak dikenal atau di luar daftar izin, nilai yang bukan warna hex 6 digit, atau kunci tingkat-atas lain menggagalkan build dan `design:token-contrast:check`, dengan daftar seluruh masalahnya.
+- Kedua skema opsional. `light` menulis ke blok `:root`; `dark` menulis ke `:root[data-theme="dark"]`. Token yang hanya diberikan di `light` tetap memakai nilai gelap bawaan bila blok gelap bawaan menyatakannya ulang, jadi isi keduanya bila brand membutuhkannya.
+- Override ditambahkan ke `tokens.css` saat build (transform Vite di `astro.config.mjs`), sehingga ikut berkas stylesheet eksternal yang sama: tanpa style inline, CSP tidak berubah, tanpa permintaan tambahan, baik halaman admin maupun publik.
+- `bun run design:token-contrast:check` mengukur nilai EFEKTIF (bawaan ditambah override), sehingga brand yang menurunkan pasangan terdaftar di bawah WCAG 2.1 AA menggagalkan `bun run check`. Registri pasangan tidak berubah.
+- Tanpa berkas, keluaran identik dengan build tanpa fitur ini.
+- Byte tambahan dihitung terhadap anggaran aset klien (`build:asset-budget:check`); override penuh ketiga keluarga menambah sekitar 1,5 kB pada anggaran app.
+- Di luar lingkup: token baru, tema runtime per-tenant (itu modul `theming`), tipografi, dan jarak.
 
 ## Component library
 
