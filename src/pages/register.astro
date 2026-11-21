@@ -38,6 +38,7 @@ import {
 } from "../lib/security/turnstile";
 import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
+import { resolveProductIdentity } from "../lib/product-identity";
 
 const enabled = isSelfRegistrationEnabled();
 const turnstileActive = enabled && isTurnstileRequired();
@@ -51,6 +52,9 @@ const picker = enabled
 const tenantOptions = picker.options;
 const tenantPickerMode = picker.mode;
 const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
+
+// Issue #1352: deployment product identity (default = "AWCMS").
+const identity = resolveProductIdentity(process.env);
 ---
 
 <!doctype html>
@@ -59,7 +63,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Request access · AWCMS</title>
+    <title>Request access · {identity.productName}</title>
   </head>
   <body class="auth-body">
     <main class="auth">
@@ -72,9 +76,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
           <div class="auth-head">
             <div class="auth-brand">
               <span class="auth-mark" aria-hidden="true">
-                A
+                {identity.mark}
               </span>
-              <span class="auth-wordmark">AWCMS</span>
+              <span class="auth-wordmark">{identity.wordmark}</span>
             </div>
             <h1 class="auth-title">Request access</h1>
             <p class="auth-subtitle">
@@ -196,7 +200,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             <a href="/login">Back to sign in</a>
           </nav>
 
-          <p class="auth-foot">Secured workspace access · AWCMS</p>
+          <p class="auth-foot">
+            Secured workspace access · {identity.productName}
+          </p>
         </div>
       </div>
     </main>

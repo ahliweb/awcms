@@ -97,7 +97,7 @@ import {
   WEB_APP_MANIFEST_PATH,
   resolvePwaIdentity
 } from "../lib/pwa/web-app-manifest";
-import packageJson from "../../package.json";
+import { resolveProductIdentity } from "../lib/product-identity";
 
 /**
  * Issue #1105 -- installable admin. Deployment branding for the Home Screen
@@ -108,8 +108,13 @@ import packageJson from "../../package.json";
  */
 const pwa = resolvePwaIdentity(process.env);
 
-/** Shown in the sidebar footer; single source of truth is package.json. */
-const appVersion = packageJson.version;
+/**
+ * Issue #1352: deployment product identity. `appVersion` is DISPLAY only (the
+ * sidebar footer) and defaults to package.json; module compatibility never
+ * reads it.
+ */
+const identity = resolveProductIdentity(process.env);
+const appVersion = identity.version;
 
 interface Props {
   title: string;
@@ -399,9 +404,12 @@ const accountInitials =
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title} · AWCMS</title>
+    <title>{title} · {identity.productName}</title>
     <link rel="manifest" href={WEB_APP_MANIFEST_PATH} />
-    <link rel="apple-touch-icon" href={APPLE_TOUCH_ICON_PATH} />
+    <link
+      rel="apple-touch-icon"
+      href={identity.icons.appleTouch ?? APPLE_TOUCH_ICON_PATH}
+    />
     <meta name="theme-color" content={pwa.themeColor} />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -455,12 +463,12 @@ const accountInitials =
               it at every width, and both visible children stay `aria-hidden`
               so nothing is announced twice. */}
           <a href="/admin" class="admin-brand">
-            <span class="sr-only">AWCMS</span>
+            <span class="sr-only">{identity.wordmark}</span>
             {/* ADR-0120 — a letterform tile, not an image file: it costs no
                 request on a page that renders for every `/admin/*` hit, it
                 inherits the theme, and it cannot 404. */}
             <span class="admin-brand-mark" aria-hidden="true">
-              A
+              {identity.mark}
             </span>
             {/* Wrapped so the wordmark can be hidden at phone widths while the
                 mark stays. A bare text node cannot be targeted by CSS, and the
@@ -469,7 +477,7 @@ const accountInitials =
                 name comes from the `sr-only` span above, so this span is also
                 `aria-hidden` to avoid announcing "AWCMS" twice. */}
             <span class="admin-brand-text" aria-hidden="true">
-              AWCMS
+              {identity.wordmark}
             </span>
           </a>
         </div>
@@ -575,9 +583,9 @@ const accountInitials =
               `aria-hidden`, so a screen reader is not told the tenant name
               twice. */}
           <div class="admin-sidebar-brand" aria-hidden="true">
-            <span class="admin-sidebar-brand-mark">A</span>
+            <span class="admin-sidebar-brand-mark">{identity.mark}</span>
             <div class="admin-sidebar-brand-text-group">
-              <span class="admin-sidebar-brand-text">AWCMS</span>
+              <span class="admin-sidebar-brand-text">{identity.wordmark}</span>
               <span class="admin-sidebar-tenant">{tenantName}</span>
             </div>
           </div>
@@ -767,7 +775,7 @@ const accountInitials =
             <nav class="admin-breadcrumb" aria-label={t("Breadcrumb")}>
               <ol>
                 <li>
-                  <a href="/admin">AWCMS</a>
+                  <a href="/admin">{identity.wordmark}</a>
                 </li>
                 {currentSectionLabel && <li>{currentSectionLabel}</li>}
                 <li aria-current="page">{title}</li>

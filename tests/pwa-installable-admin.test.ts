@@ -135,9 +135,9 @@ describe("shared admin layout head", () => {
     const source = await readFile(LAYOUT, "utf8");
 
     expect(source).toContain('rel="manifest" href={WEB_APP_MANIFEST_PATH}');
-    expect(source).toContain(
-      'rel="apple-touch-icon" href={APPLE_TOUCH_ICON_PATH}'
-    );
+    // Issue #1352: the path may be overridden by the deployment identity.
+    expect(source).toContain('rel="apple-touch-icon"');
+    expect(source).toContain("?? APPLE_TOUCH_ICON_PATH");
     expect(source).toContain('name="apple-mobile-web-app-capable"');
     expect(source).toContain('name="apple-mobile-web-app-title"');
     expect(WEB_APP_MANIFEST_PATH).toBe("/manifest.webmanifest");

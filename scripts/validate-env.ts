@@ -333,6 +333,17 @@ const RULES: readonly Rule[] = [
   { name: "PWA_APP_SHORT_NAME", required: false, type: "string" },
   { name: "PWA_THEME_COLOR", required: false, type: "string" },
   { name: "PWA_BACKGROUND_COLOR", required: false, type: "string" },
+  { name: "PWA_ICON_192_PATH", required: false, type: "string" },
+  { name: "PWA_ICON_512_PATH", required: false, type: "string" },
+  { name: "PWA_ICON_MASKABLE_512_PATH", required: false, type: "string" },
+  { name: "PWA_APPLE_TOUCH_ICON_PATH", required: false, type: "string" },
+
+  // Deployment product identity (Issue #1352). All optional; unset = "AWCMS".
+  // Invalid values fall back to the default (src/lib/product-identity.ts).
+  { name: "PRODUCT_NAME", required: false, type: "string" },
+  { name: "PRODUCT_WORDMARK", required: false, type: "string" },
+  { name: "PRODUCT_VERSION", required: false, type: "string" },
+  { name: "PRODUCT_FRONT_DOOR_PATH", required: false, type: "string" },
 
   // push_delivery (ADR-0074, epic #463). Off by default; off means the
   // dispatcher claims nothing at all. `PUSH_PROVIDER` is an enum listing only

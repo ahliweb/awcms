@@ -41,6 +41,23 @@
 import "../styles/tokens.css";
 import "../styles/motion.css";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
+import { resolveProductIdentity } from "../lib/product-identity";
+
+/**
+ * Issue #1352: a deployment may point `/` somewhere else (its own landing, the
+ * admin). The path is validated same-origin by the resolver, and the redirect
+ * is TEMPORARY (302) -- never 301 -- so a later change reaches browsers that
+ * would otherwise cache it forever. Unset = this page renders, unchanged.
+ */
+const identity = resolveProductIdentity(process.env);
+
+// A top-level `return` is rejected by `check:astro-frontmatter`, so the redirect
+// is expressed as status + `Location`; the landing markup below is then only
+// the redirect's body.
+if (identity.frontDoorPath !== null) {
+  Astro.response.status = 302;
+  Astro.response.headers.set("location", identity.frontDoorPath);
+}
 
 /**
  * Static copy. Kept in this file rather than a catalog because it describes the
@@ -80,7 +97,7 @@ const CAPABILITIES = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AWCMS — platform CMS & ERP multi-tenant</title>
+    <title>{identity.productName} — platform CMS & ERP multi-tenant</title>
     <meta
       name="description"
       content="AWCMS adalah platform multi-tenant untuk manajemen konten dan back-office: isolasi tenant di lapisan basis data, otorisasi default-deny, dan arsitektur modular monolith."
@@ -93,7 +110,7 @@ const CAPABILITIES = [
     </a>
 
     <header class="site-header">
-      <span class="wordmark">AWCMS</span>
+      <span class="wordmark">{identity.wordmark}</span>
       <a class="btn btn--ghost" href="/login">
         Masuk
       </a>

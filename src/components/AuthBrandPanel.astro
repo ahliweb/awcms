@@ -33,6 +33,10 @@
 import { resolveRequestHost } from "../lib/http/site-origin";
 import { getTranslatorFor } from "../lib/i18n";
 import type { Locale } from "../lib/i18n/locales";
+import {
+  DEFAULT_PRODUCT_NAME,
+  resolveProductIdentity
+} from "../lib/product-identity";
 
 interface Props {
   /** The page's resolved language; absent means English. */
@@ -48,16 +52,27 @@ interface Props {
 
 const { tx } = getTranslatorFor(Astro.props.locale);
 
-const {
-  headline = tx(
-    "login",
-    "One admin surface for every tenant, module and audit trail."
-  ),
-  subline = tx(
-    "login",
-    "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
-  )
-} = Astro.props;
+// Issue #1352: deployment identity. The catalogue sentences name the platform;
+// a renamed deployment swaps ONLY that brand token, so the translation stays.
+const identity = resolveProductIdentity(process.env);
+const rebrand = (text: string): string =>
+  identity.productName === DEFAULT_PRODUCT_NAME
+    ? text
+    : text.replaceAll(DEFAULT_PRODUCT_NAME, identity.productName);
+
+const { headline: headlineProp, subline: sublineProp } = Astro.props;
+
+const headline = rebrand(
+  headlineProp ??
+    tx("login", "One admin surface for every tenant, module and audit trail.")
+);
+const subline = rebrand(
+  sublineProp ??
+    tx(
+      "login",
+      "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+    )
+);
 
 /**
  * The capability chips.
@@ -87,8 +102,8 @@ const host = resolveRequestHost(Astro.url, Astro.request);
 
 <aside class="auth-brand-panel" aria-hidden="true">
   <div class="auth-brand-panel-mark">
-    <span class="auth-brand-panel-tile">A</span>
-    <span class="auth-brand-panel-word">AWCMS</span>
+    <span class="auth-brand-panel-tile">{identity.mark}</span>
+    <span class="auth-brand-panel-word">{identity.wordmark}</span>
   </div>
 
   <div class="auth-brand-panel-body">
