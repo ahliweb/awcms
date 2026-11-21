@@ -94,6 +94,9 @@ export const READ_WAVE: readonly string[] = [
   // Issue #1224 — a double click and an Enter on `/login`. The login request is
   // fulfilled by the spec itself (a delayed 401), so no session is minted.
   "login-double-submit.e2e.ts",
+  // Issue #1365 — the `/login` second-factor step. Both API answers are
+  // fulfilled by the spec itself, so no session is minted.
+  "login-mfa.e2e.ts",
   "not-found.e2e.ts",
   // Anonymous GETs against the public blog. Read-wave in the strictest sense:
   // it never logs in and never touches tenant state, and it needs no content

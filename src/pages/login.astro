@@ -67,6 +67,10 @@ import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenan
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 import { getTranslatorFor } from "../lib/i18n";
 import { resolveAuthPageLocale } from "../lib/i18n/auth-page-locale";
+import {
+  resolveChallengeTtlSec,
+  resolveMfaMaxVerifyAttempts
+} from "../lib/auth/mfa-config";
 
 const turnstileActive = isTurnstileRequired();
 const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
@@ -105,7 +109,23 @@ const formMessages = {
   "data-msg-show": tx("login", "Show"),
   "data-msg-hide": tx("login", "Hide"),
   "data-msg-show-password": tx("login", "Show password"),
-  "data-msg-hide-password": tx("login", "Hide password")
+  "data-msg-hide-password": tx("login", "Hide password"),
+  "data-msg-mfa-failed": tx(
+    "login",
+    "That code was not accepted. Check it and try again."
+  ),
+  "data-msg-mfa-restart": tx(
+    "login",
+    "Verification could not be completed. Sign in again."
+  ),
+  "data-msg-mfa-use-recovery": tx("login", "Use a recovery code instead"),
+  "data-msg-mfa-use-code": tx("login", "Use an authenticator code instead"),
+  "data-msg-mfa-label-code": tx("login", "Authentication code"),
+  "data-msg-mfa-label-recovery": tx("login", "Recovery code"),
+  // Server configuration, rendered so the page never needs a refusal reason
+  // to know when a challenge is spent (anti-oracle, #1365).
+  "data-mfa-ttl-sec": String(resolveChallengeTtlSec()),
+  "data-mfa-max-attempts": String(resolveMfaMaxVerifyAttempts())
 };
 ---
 
@@ -241,6 +261,43 @@ const formMessages = {
             </button>
           </form>
 
+          <form id="mfa-form" class="auth-form" novalidate hidden>
+            <p class="auth-subtitle" id="mfa-intro">
+              {tx(
+                "login",
+                "Enter the 6-digit code from your authenticator app to finish signing in."
+              )}
+            </p>
+            <p id="mfa-error" class="auth-error" role="alert" hidden></p>
+            <div class="auth-field">
+              <label for="mfa-code" id="mfa-code-label">
+                {tx("login", "Authentication code")}
+              </label>
+              <input
+                id="mfa-code"
+                name="code"
+                type="text"
+                required
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="7"
+                pattern="[0-9 ]*"
+                spellcheck={false}
+              />
+            </div>
+            <button type="submit" id="mfa-submit" class="auth-submit">
+              {tx("login", "Verify")}
+            </button>
+            <div class="auth-links">
+              <button type="button" id="mfa-toggle" class="auth-link-button">
+                {tx("login", "Use a recovery code instead")}
+              </button>
+              <button type="button" id="mfa-back" class="auth-link-button">
+                {tx("login", "Back to sign in")}
+              </button>
+            </div>
+          </form>
+
           <nav class="auth-links" aria-label={tx("login", "Account recovery")}>
             <a href="/forgot-password">
               {tx("login", "Forgot your password?")}
@@ -267,6 +324,13 @@ const formMessages = {
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
+      import {
+        buildVerifyBody,
+        createChallengeBudget,
+        isPlausibleTotpCode,
+        readLoginOutcome,
+        readVerifySuccess
+      } from "../lib/ui/login-mfa-client";
       import {
         holdForNavigation,
         lockElement,
@@ -312,6 +376,83 @@ const formMessages = {
         errorBox.hidden = false;
       }
 
+      // --- Second-factor step (#1365) -------------------------------------
+      // The challenge token lives ONLY in these variables: never in storage,
+      // the URL or the DOM. They are cleared when the step ends.
+      const loginForm = document.getElementById("login-form");
+      const mfaForm = document.getElementById("mfa-form");
+      const mfaError = document.getElementById("mfa-error");
+      const mfaCode = document.getElementById(
+        "mfa-code"
+      ) as HTMLInputElement | null;
+      const mfaLabel = document.getElementById("mfa-code-label");
+      const mfaToggle = document.getElementById("mfa-toggle");
+      const mfaBack = document.getElementById("mfa-back");
+      let challengeToken: string | null = null;
+      let challengeTenant = "";
+      let budget: ReturnType<typeof createChallengeBudget> | null = null;
+      let recoveryMode = false;
+
+      function showMfaError(message: string): void {
+        if (!mfaError) return;
+        mfaError.textContent = message;
+        mfaError.hidden = false;
+      }
+
+      function setRecoveryMode(on: boolean): void {
+        recoveryMode = on;
+        if (mfaCode) {
+          mfaCode.value = "";
+          mfaCode.maxLength = on ? 64 : 7;
+          mfaCode.inputMode = on ? "text" : "numeric";
+          mfaCode.autocomplete = on ? "off" : "one-time-code";
+          if (on) mfaCode.removeAttribute("pattern");
+          else mfaCode.setAttribute("pattern", "[0-9 ]*");
+        }
+        if (mfaLabel) {
+          mfaLabel.textContent =
+            (on ? messages.msgMfaLabelRecovery : messages.msgMfaLabelCode) ??
+            "";
+        }
+        if (mfaToggle) {
+          mfaToggle.textContent =
+            (on ? messages.msgMfaUseCode : messages.msgMfaUseRecovery) ?? "";
+        }
+        mfaCode?.focus();
+      }
+
+      function endMfaStep(restart: boolean): void {
+        challengeToken = null;
+        budget = null;
+        if (mfaCode) mfaCode.value = "";
+        if (mfaError) mfaError.hidden = true;
+        recoveryMode = false;
+        if (mfaForm) mfaForm.hidden = true;
+        if (loginForm) loginForm.hidden = false;
+        if (passwordInput) passwordInput.value = "";
+        if (restart) showError(messages.msgMfaRestart ?? "");
+        passwordInput?.focus();
+      }
+
+      function startMfaStep(token: string, tenantId: string): void {
+        challengeToken = token;
+        challengeTenant = tenantId;
+        budget = createChallengeBudget(
+          Number(messages.mfaTtlSec) || 300,
+          Number(messages.mfaMaxAttempts) || 5
+        );
+        if (errorBox) errorBox.hidden = true;
+        if (mfaError) mfaError.hidden = true;
+        if (loginForm) loginForm.hidden = true;
+        if (mfaForm) mfaForm.hidden = false;
+        setRecoveryMode(false);
+      }
+
+      mfaToggle?.addEventListener("click", () =>
+        setRecoveryMode(!recoveryMode)
+      );
+      mfaBack?.addEventListener("click", () => endMfaStep(false));
+
       // `onSubmit` owns the single-flight guard (#1224): a second submit —
       // click, double tap or Enter — while this handler is pending is ignored,
       // and it is released on ANY settled outcome, so a refused or expired
@@ -351,7 +492,15 @@ const formMessages = {
 
           const payload = await response.json().catch(() => null);
 
-          if (!response.ok || !payload || payload.success !== true) {
+          const outcome = readLoginOutcome(response.ok, payload);
+
+          if (outcome.kind === "mfa") {
+            startMfaStep(outcome.challengeToken, tenantId);
+            unlock();
+            return;
+          }
+
+          if (outcome.kind !== "success") {
             // Generic message only — the server deliberately collapses every
             // deny reason so the UI must not reconstruct a specific one, and it
             // must never surface internal detail (Issue #540).
@@ -366,6 +515,60 @@ const formMessages = {
           window.location.href = "/admin";
         } catch {
           showError(messages.msgNetwork ?? "");
+          unlock();
+        }
+      });
+
+      onSubmit("mfa-form", async ({ submit }) => {
+        if (!challengeToken || !budget || !mfaCode) return;
+        const unlock = submit
+          ? lockElement(submit, messages.msgBusy ?? "")
+          : () => {};
+        if (mfaError) mfaError.hidden = true;
+
+        const value = mfaCode.value;
+        const plausible = recoveryMode
+          ? value.trim().length > 0
+          : isPlausibleTotpCode(value);
+        if (!plausible) {
+          showMfaError(messages.msgMfaFailed ?? "");
+          unlock();
+          mfaCode.focus();
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/v1/auth/mfa/totp/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-AWCMS-Tenant-ID": challengeTenant
+            },
+            credentials: "same-origin",
+            body: JSON.stringify(
+              buildVerifyBody(challengeToken, value, recoveryMode)
+            )
+          });
+          const payload = await response.json().catch(() => null);
+
+          if (readVerifySuccess(response.ok, payload)) {
+            challengeToken = null;
+            holdForNavigation();
+            window.location.href = "/admin";
+            return;
+          }
+
+          budget.recordFailure();
+          unlock();
+          if (budget.exhausted()) {
+            endMfaStep(true);
+            return;
+          }
+          showMfaError(messages.msgMfaFailed ?? "");
+          mfaCode.value = "";
+          mfaCode.focus();
+        } catch {
+          showMfaError(messages.msgNetwork ?? "");
           unlock();
         }
       });
