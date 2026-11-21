@@ -66,6 +66,17 @@ function withoutIdempotencyKeyParameter(value: unknown): unknown {
     for (const [k, v] of Object.entries(value as AnyRecord)) {
       out[k] = withoutIdempotencyKeyParameter(v);
     }
+    // Issue #1385: a `429` response gained its `headers` (`Retry-After`, the
+    // shared `components.headers.RetryAfter`) where the handler sends it. Set
+    // aside on both sides, like the Idempotency-Key parameter above, so the
+    // frozen snapshot is not edited. Pinned in
+    // `tests/openapi-rate-limit-and-idempotency-declared.test.ts`.
+    const status = (value as AnyRecord)["429"];
+    if (status && typeof status === "object" && "headers" in status) {
+      const rest = { ...(out["429"] as AnyRecord) };
+      delete rest.headers;
+      out["429"] = rest;
+    }
     return out;
   }
   return value;
@@ -315,18 +326,40 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     for (const key of ["security", "info", "servers"] as const) {
       expect(sortDeep(after[key])).toEqual(sortDeep(before[key]));
     }
-    for (const key of ["securitySchemes", "responses"] as const) {
-      expect(sortDeep((after.components as AnyRecord)[key])).toEqual(
-        sortDeep((before.components as AnyRecord)[key])
-      );
+    expect(sortDeep((after.components as AnyRecord).securitySchemes)).toEqual(
+      sortDeep((before.components as AnyRecord).securitySchemes)
+    );
+    // Root responses: frozen, EXCEPT the two admitted rate-limit components
+    // (Issue #1385) — the only additions allowed.
+    const afterResponses = {
+      ...((after.components as AnyRecord).responses as AnyRecord)
+    };
+    for (const name of ["RateLimited", "RateLimitedNoRetryAfter"]) {
+      expect(afterResponses[name]).toBeDefined();
+      delete afterResponses[name];
     }
+    expect(sortDeep(afterResponses)).toEqual(
+      sortDeep((before.components as AnyRecord).responses)
+    );
+    // The snapshot declares no reusable headers; the bundle adds exactly
+    // `RetryAfter` (Issue #1385).
+    expect(before.components as AnyRecord).not.toHaveProperty("headers");
+    expect(
+      Object.keys(
+        ((after.components as AnyRecord).headers as AnyRecord) ?? {}
+      ).sort()
+    ).toEqual(["RetryAfter"]);
     // Root parameters: frozen, EXCEPT the deliberately admitted shared
-    // `IdempotencyKey` component (ADR-0129) — the only addition allowed.
+    // `IdempotencyKey` component (ADR-0129) and its optional sibling
+    // `IdempotencyKeyOptional` (ADR-0129 §2, Issue #1385) — the only additions
+    // allowed.
     const afterParameters = {
       ...((after.components as AnyRecord).parameters as AnyRecord)
     };
     expect(afterParameters.IdempotencyKey).toBeDefined();
+    expect(afterParameters.IdempotencyKeyOptional).toBeDefined();
     delete afterParameters.IdempotencyKey;
+    delete afterParameters.IdempotencyKeyOptional;
     expect(sortDeep(afterParameters)).toEqual(
       sortDeep((before.components as AnyRecord).parameters)
     );
@@ -354,7 +387,7 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "/api/v1/auth/login":
         "#186 optional turnstileToken (backward-compatible)",
       "/api/v1/setup/initialize":
-        "#186 optional turnstileToken (backward-compatible)",
+        "#186 optional turnstileToken; #1385 declares the 429 RATE_LIMITED the handler already answers (both additive)",
       // #1004 adds an OPTIONAL `currentPassword` body and 400/429 responses to
       // the TOTP enrolment start; the operation description is untouched.
       // #1004 follow-up: enroll/verify gains a 429 (rate limit / pending secret

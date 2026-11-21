@@ -10,7 +10,7 @@ import type { Document, Scalar } from "yaml";
  * (plus a `foundation` fragment for the truly module-less platform ops), plus
  * a root fragment (`openapi/awcms-public-api.src.yaml`) holding the shared
  * `info`/`servers`/`tags`/`security`/`components.securitySchemes`/
- * `components.parameters`/`components.responses`, and any schema shared by 2+
+ * `components.parameters`/`components.headers`/`components.responses`, and any schema shared by 2+
  * modules (or referenced by none). This script merges every fragment into the
  * single published artifact at the SAME path every consumer already uses,
  * `openapi/awcms-public-api.openapi.yaml` -- that file is now GENERATED, never
@@ -282,6 +282,11 @@ export async function buildBundledDocument(
     components: {
       securitySchemes: rootComponents.securitySchemes,
       parameters: rootComponents.parameters,
+      // Root-owned reusable response headers (e.g. `RetryAfter`); absent from a
+      // root that declares none, so the bundle of such a root is unchanged.
+      ...(rootComponents.headers !== undefined
+        ? { headers: rootComponents.headers }
+        : {}),
       responses: rootComponents.responses,
       schemas: sortObject(mergedSchemas)
     },

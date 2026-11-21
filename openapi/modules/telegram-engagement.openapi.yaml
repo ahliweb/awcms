@@ -108,6 +108,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate limited (per address or per bot endpoint). Telegram retries.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

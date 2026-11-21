@@ -266,6 +266,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many verification attempts for this tenant (RATE_LIMITED). Carries `Retry-After`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

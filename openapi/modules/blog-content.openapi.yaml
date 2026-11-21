@@ -1810,6 +1810,7 @@ paths:
         restore, the effect cannot be safely replayed once the row is gone.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Institution purged.

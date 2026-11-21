@@ -400,6 +400,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many registration attempts (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -538,6 +541,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many enrollment-challenge requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -810,6 +816,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many operation submissions (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1206,6 +1215,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many restore requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1298,6 +1310,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, server).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1338,6 +1353,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1374,6 +1392,9 @@ paths:
               schema: {}
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1411,6 +1432,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1449,6 +1473,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1488,6 +1515,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1525,6 +1555,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1727,6 +1760,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many approval requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

@@ -1139,6 +1139,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/analytics/devices:
     get:
       tags:
@@ -1663,6 +1665,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source. Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1711,6 +1716,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1789,6 +1797,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1850,6 +1861,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many login attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2142,6 +2156,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many verification attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2252,6 +2269,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many enrolment attempts for this session/grant or source, or the person is locked out after failed password attempts (they count toward the same lockout as a failed login).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2327,6 +2347,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Rate limited per source and per session/grant, or MFA_ENROLLMENT_EXHAUSTED - five wrong codes destroyed the pending secret (a pending enrolment is also bound to the session or grant that started it, expires after 10 minutes, and is then reported as 404; start again).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2397,6 +2420,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many verification attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2482,6 +2508,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many password change attempts from this source, or the person is locked out by failed password attempts (a wrong currentPassword counts toward the same principal lockout as a failed login).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2538,6 +2567,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many password reset requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2597,6 +2629,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many password reset attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -2995,6 +3030,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many registration attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3031,6 +3069,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many introspection requests from this source (RATE_LIMITED); `Retry-After` carries the window.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3081,6 +3122,8 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
   /api/v1/auth/session-handoff/redeem:
     post:
       operationId: redeemSessionHandoffCode
@@ -3127,6 +3170,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
   /api/v1/auth/session/switch:
     post:
       operationId: postAuthSessionSwitch
@@ -3196,6 +3241,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3264,6 +3312,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3302,6 +3353,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many session requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3354,6 +3408,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many revocation requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3394,6 +3451,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many revocation requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3783,6 +3843,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
         "502":
           description: The provider could not be reached (SSO_PROVIDER_UNAVAILABLE).
           content:
@@ -3869,6 +3931,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Too many requests from this source (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -4264,6 +4329,7 @@ paths:
       description: "Gated by blog_content.institutions.purge. Requires a prior soft delete: the statement matches only a row whose deleted_at is set, so a live institution answers 404 rather than being destroyed. Deletes every awcms_blog_post_institutions link first, so the articles that named it lose this classification permanently. Idempotency-Key is REQUIRED — unlike restore, the effect cannot be safely replayed once the row is gone."
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Institution purged.
@@ -10859,6 +10925,9 @@ paths:
                     $ref: "#/components/schemas/PublicCommentPage"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -10910,6 +10979,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -11046,6 +11118,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -11098,6 +11173,8 @@ paths:
                       - true
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/comments/admin/{id}/archive:
     post:
       operationId: archiveComment
@@ -15694,6 +15771,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many FAILED proofs from this address (checked before any database work), or the per-callback rate after proof.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -22499,6 +22579,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -22533,6 +22616,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many subscription requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -22630,6 +22716,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -23005,6 +23094,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many approval requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -23238,6 +23330,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many restore requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -23958,6 +24053,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many operation submissions (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24290,6 +24388,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many registration attempts (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24431,6 +24532,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many enrollment-challenge requests (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24518,6 +24622,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24549,6 +24656,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, server).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24580,6 +24690,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24611,6 +24724,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24642,6 +24758,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24673,6 +24792,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -24698,6 +24820,9 @@ paths:
               schema: {}
         "429":
           description: Rate-limited per (tenant, worker).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -29494,6 +29619,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/setup/status:
     get:
       operationId: getSetupStatus
@@ -29855,6 +29982,8 @@ paths:
         "429":
           description: Too many search requests from this source.
           headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
             Vary:
               description: Always `Origin`. The limiter answers before the origin is classified, so this response never carries a grant — but it is still one of the answers this URL gives (ADR-0107).
               required: false
@@ -29988,6 +30117,8 @@ paths:
         "429":
           description: Too many suggestion requests from this source.
           headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
             Vary:
               description: Always `Origin`. The limiter answers before the origin is classified, so this response never carries a grant — but it is still one of the answers this URL gives (ADR-0107).
               required: false
@@ -32151,6 +32282,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate limited (per address or per bot endpoint). Telegram retries.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -32552,6 +32686,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many link codes were requested (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -32747,6 +32884,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate limited, per address; repeated wrong secrets from one address are throttled the same way.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -33059,6 +33199,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many verification attempts for this tenant (RATE_LIMITED). Carries `Retry-After`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -34830,6 +34973,7 @@ paths:
       description: Requires `website_engagement.sources.manage` and a signed-in person. Rename, pause or resume, change the consent copy version, the challenge mode, the accepted kinds or the host list. Audited at warning (the changed field NAMES, never values, plus the old and new `challengeMode` when it changes). Setting `challengeMode` to `none` REQUIRES an `Idempotency-Key` (`400 IDEMPOTENCY_REQUIRED` without it). Revocation is its own operation, and a revoked source cannot be changed (`409 SOURCE_REVOKED`).
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKeyOptional"
         - name: id
           in: path
           required: true
@@ -35074,6 +35218,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many submissions from this address or for this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -36113,6 +36260,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Too many attempts from this address for this tenant.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -36163,6 +36313,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts or refusals from this address for this tenant.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -37067,6 +37220,16 @@ components:
         minLength: 1
         maxLength: 255
         pattern: ^[!-~]{1,255}$
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: "Deduplicates a retried HTTP request on an operation that applies the key only in some cases (the operation's description says which; where the key is not applied the header is ignored). Same bound as `IdempotencyKey`: 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs. When the operation needs the key and it is absent the refusal is `400 IDEMPOTENCY_REQUIRED` (ADR-0129 §2)."
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[!-~]{1,255}$
     SyncNodeId:
       name: X-AWCMS-Node-ID
       in: header
@@ -37088,6 +37251,12 @@ components:
       description: HMAC-SHA256 signature over "<timestamp>.<body>".
       schema:
         type: string
+  headers:
+    RetryAfter:
+      description: Whole seconds until the request is worth retrying (RFC 9110 delay-seconds). Sent on rate-limit refusals. An account-lockout `429` on the same operation does not always carry it, so a client falls back to its own backoff when it is absent.
+      schema:
+        type: integer
+        minimum: 0
   responses:
     BadRequest:
       description: Validation error.
@@ -37109,6 +37278,21 @@ components:
             $ref: "#/components/schemas/ApiError"
     NotFound:
       description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    RateLimited:
+      description: RATE_LIMITED. The caller exceeded this operation's budget; retry after the number of seconds in `Retry-After`.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    RateLimitedNoRetryAfter:
+      description: RATE_LIMITED. The caller exceeded this operation's budget. This operation's handler does not send `Retry-After`; use your own backoff.
       content:
         application/json:
           schema:

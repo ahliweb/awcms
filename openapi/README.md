@@ -27,6 +27,14 @@ fragments reference shared components (`$ref:
 "#/components/schemas/ApiError"`, `"#/components/responses/BadRequest"`, etc.)
 that only resolve once every fragment is merged into one document.
 
+The root fragment also owns the reusable rate-limit and idempotency pieces
+(Issue #1385): `components.headers.RetryAfter`, `components.responses.RateLimited`
+(429 with `Retry-After`) and `RateLimitedNoRetryAfter` (a handler that answers
+429 without the header), and `components.parameters.IdempotencyKey` /
+`IdempotencyKeyOptional` (ADR-0129). An operation declares them exactly where its
+handler applies them; `tests/openapi-rate-limit-and-idempotency-declared.test.ts`
+follows each route handler through the helpers it calls and fails on a mismatch.
+
 Each base module points at its own fragment via
 `ModuleDescriptor.api.openApiPath` in its `src/modules/<module>/module.ts` —
 that is also what `module-management`'s readiness check reads to confirm the
