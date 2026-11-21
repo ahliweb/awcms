@@ -108,6 +108,33 @@ export function declaredSiteScheme(
   }
 }
 
+/**
+ * Read `APP_URL`'s host (with port), or `null` when it is unset, unparseable
+ * or not http(s). Never throws, same reason as `declaredSiteScheme`.
+ */
+export function declaredSiteHost(
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  if (declaredSiteScheme(env) === null) return null;
+
+  try {
+    return new URL(env.APP_URL!.trim()).host || null;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return (
+    h === "localhost" ||
+    h === "[::1]" ||
+    h === "::1" ||
+    h === "0.0.0.0" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
+  );
+}
+
 /** Is this deployment allowed to believe `X-Forwarded-*`? */
 function proxyIsTrusted(env: NodeJS.ProcessEnv): boolean {
   return env.PUBLIC_TRUST_PROXY === "true";
@@ -204,9 +231,48 @@ export function resolveRequestOrigin(
       stripColon(url.protocol))
     : (declaredSiteScheme(env) ?? stripColon(url.protocol));
 
-  const host = (trusted ? forwardedHost(request) : null) ?? url.host;
+  return `${scheme}://${resolveRequestHost(url, request, env)}`;
+}
 
-  return `${scheme}://${host}`;
+/**
+ * The host (`name[:port]`) for output that names this site.
+ *
+ * Why this exists (#1366): Astro 7 believes `Host`/`X-Forwarded-*` only for
+ * hosts in `security.allowedDomains`, which AWCMS leaves unset ON PURPOSE —
+ * setting it also makes Astro trust a client-supplied `X-Forwarded-For` for
+ * `clientAddress` (any client that sends the right `Host` would pick its own
+ * rate-limit key), and the value is frozen at BUILD time while `APP_URL` is a
+ * runtime variable. So behind a proxy `url.host` is the listener's own
+ * `localhost:<port>`.
+ *
+ * Order: trusted `X-Forwarded-Host` (`PUBLIC_TRUST_PROXY`), then `url.host`,
+ * EXCEPT that a loopback `url.host` is replaced by `APP_URL`'s host when that
+ * host is not itself loopback. The substitution never trusts anything a client
+ * sent: it only swaps the listener's own address for the operator's declaration.
+ * A non-loopback `url.host` is left alone (multi-host deployments).
+ *
+ * Known limit: a tenant custom domain reached through a proxy yields
+ * `APP_URL`'s host here unless `PUBLIC_TRUST_PROXY=true` with an edge that
+ * overwrites `X-Forwarded-Host`. Code that already knows the tenant's verified
+ * host (`awcms_tenant_domains`) should use `resolveHostOrigin(host)` instead.
+ */
+export function resolveRequestHost(
+  url: URL,
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  if (proxyIsTrusted(env)) {
+    const forwarded = forwardedHost(request);
+    if (forwarded) return forwarded;
+  }
+
+  if (isLoopbackHostname(url.hostname)) {
+    const declared = declaredSiteHost(env);
+    if (declared && !isLoopbackHostname(new URL(`http://${declared}`).hostname))
+      return declared;
+  }
+
+  return url.host;
 }
 
 /**

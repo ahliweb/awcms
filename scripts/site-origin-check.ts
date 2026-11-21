@@ -49,12 +49,21 @@ const SCANNED_EXTENSIONS = [".ts", ".astro"] as const;
 export type OriginViolation = {
   file: string;
   line: number;
-  rule: "request-origin" | "hardcoded-scheme";
+  rule: "request-origin" | "request-host" | "hardcoded-scheme";
   text: string;
 };
 
 /** `${url.origin}` / `${Astro.url.origin}` / `${ctx.url.origin}` in a template. */
-const REQUEST_ORIGIN = /\$\{[^}]*\burl\.origin\b[^}]*\}/;
+const REQUEST_ORIGIN =
+  /\$\{[^}]*\burl\.origin\b[^}]*\}|\{[^}]*\bAstro\.url\.origin\b[^}]*\}/;
+
+/**
+ * `url.host` / `Astro.url.host` read for output (#1366). Behind a proxy Astro 7
+ * does not trust the Host header (`security.allowedDomains` is unset on
+ * purpose), so this is the listener's own `localhost:<port>`. `hostname` is not
+ * matched: it is a comparison key, and `\b` after `host` excludes it.
+ */
+const REQUEST_HOST = /\burl\.host\b/;
 
 /**
  * A hardcoded scheme whose host is ENTIRELY interpolated.
@@ -113,6 +122,15 @@ export function scanSource(file: string, source: string): OriginViolation[] {
       });
     }
 
+    if (REQUEST_HOST.test(line)) {
+      violations.push({
+        file,
+        line: index + 1,
+        rule: "request-host",
+        text: raw.trim()
+      });
+    }
+
     if (HARDCODED_SCHEME.test(line)) {
       violations.push({
         file,
@@ -129,6 +147,8 @@ export function scanSource(file: string, source: string): OriginViolation[] {
 const ADVICE: Record<OriginViolation["rule"], string> = {
   "request-origin":
     "interpolates the REQUEST origin, whose scheme is the listener's (plain HTTP behind TLS termination). Use `resolveRequestOrigin(url, request)` from `src/lib/http/site-origin.ts`.",
+  "request-host":
+    "reads the REQUEST host, which behind a proxy is the listener's `localhost:<port>` (Astro 7 only trusts Host for `security.allowedDomains`, left unset on purpose). Use `resolveRequestHost(url, request)` from `src/lib/http/site-origin.ts`.",
   "hardcoded-scheme":
     "hardcodes a scheme beside an interpolated host. Use `resolveHostOrigin(host)` or take a `SiteScheme` parameter — `src/lib/http/site-origin.ts` is the only place a scheme is decided."
 };

@@ -74,21 +74,21 @@ export function planWebhookRegistration(input: {
     };
   }
 
-  let url: URL;
+  let target: URL;
 
   try {
-    url = new URL(input.url ?? "");
+    target = new URL(input.url ?? "");
   } catch {
     return { ok: false, error: "--url must be an absolute https URL." };
   }
 
   if (
-    url.protocol !== "https:" ||
-    url.username !== "" ||
-    url.password !== "" ||
-    url.search !== "" ||
-    url.hash !== "" ||
-    url.pathname !== TELEGRAM_WEBHOOK_PATH
+    target.protocol !== "https:" ||
+    target.username !== "" ||
+    target.password !== "" ||
+    target.search !== "" ||
+    target.hash !== "" ||
+    target.pathname !== TELEGRAM_WEBHOOK_PATH
   ) {
     return {
       ok: false,
@@ -101,11 +101,12 @@ export function planWebhookRegistration(input: {
     action: "set",
     method: "setWebhook",
     body: JSON.stringify({
-      url: url.toString(),
+      url: target.toString(),
       secret_token: env.TELEGRAM_WEBHOOK_SECRET,
       allowed_updates: ["message"]
     }),
-    summary: `setWebhook host=${url.host} path=${TELEGRAM_WEBHOOK_PATH} allowed_updates=["message"] secret_token=(set)`
+    // `target` is the operator-supplied webhook URL (`--url`), not a request host.
+    summary: `setWebhook host=${target.host} path=${TELEGRAM_WEBHOOK_PATH} allowed_updates=["message"] secret_token=(set)`
   };
 }
 
