@@ -105,7 +105,11 @@ declares its own `derived.<name>` category in its descriptor
 including `email:dispatch`; an undeclared category is rejected at create
 (fail-closed). The categories a worker transaction may enqueue are rows of
 `awcms_email_worker_categories` (sql/410), not a function body: a module seeds
-its row in its own migration.
+its row in its own migration. The worker's UPDATE on `awcms_email_messages` is
+column-only (sql/415, Issue #1364): `status`, `next_attempt_at`, `retry_count`,
+`last_error`, `sent_at`, `provider_name`, `provider_message_id`. It cannot
+rewrite a queued row's recipient, subject, variables, template or category
+(pinned in `security:readiness` as `WORKER_COLUMN_GRANTS`).
 
 - Body columns are `jsonb` per-locale (`{"en": "...", "id": "..."}`, doc 04
   §Multi-language content). Rendering (`domain/email-template-render.ts`)

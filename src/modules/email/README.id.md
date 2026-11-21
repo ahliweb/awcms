@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:eaa1322f1fa9e8b6d8f13a74345725b175f0485863dd0f5bdc7131074065a521 -->
+<!-- i18n-source-hash: sha256:48a7b01800b6d2b62cc1a3d3f5c886caf531a5f79eda140e06fed81c7fa30364 -->
 
 # Email
 
@@ -113,7 +113,12 @@ mendeklarasikan kategori `derived.<name>`-nya sendiri di descriptor
 proses termasuk `email:dispatch`; kategori yang tak dideklarasikan ditolak saat
 pembuatan (fail-closed). Kategori yang boleh di-enqueue transaksi worker adalah
 baris `awcms_email_worker_categories` (sql/410), bukan isi fungsi: modul
-menanam barisnya sendiri di migrasinya.
+menanam barisnya sendiri di migrasinya. UPDATE worker pada
+`awcms_email_messages` hanya per kolom (sql/415, Issue #1364): `status`,
+`next_attempt_at`, `retry_count`, `last_error`, `sent_at`, `provider_name`,
+`provider_message_id`. Worker tidak bisa menulis ulang penerima, subjek,
+variabel, template, atau kategori baris antrean (dipin di `security:readiness`
+sebagai `WORKER_COLUMN_GRANTS`).
 
 - Kolom body bertipe `jsonb` per-locale (`{"en": "...", "id": "..."}`, doc 04
   §Konten multi-bahasa). Perenderan (`domain/email-template-render.ts`)

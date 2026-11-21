@@ -577,7 +577,10 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
         `
       ),
       "worker re-point to the deployment sender",
-      "23514"
+      // Refused at the GRANT since sql/415 (Issue #1364): the worker holds no
+      // UPDATE on the sender columns at all, so the immutability trigger
+      // (which still guards `awcms_app` above) is no longer the first line.
+      "42501"
     );
   });
 
