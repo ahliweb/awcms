@@ -1,13 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md)
 
-<!-- i18n-source-hash: sha256:75c39571ab4096ef64118d6530bf325b17ca5a6c125061af7385f9f63f2ef42b -->
+<!-- i18n-source-hash: sha256:b948c93b4a977770ba9b35bf3f640b9414d935c86670e4f15d5f57bbce39eae6 -->
 
 # ADR-0169 — Admisi `integration_hub` belum diimplementasikan, dan batas provider sudah hidup di port dan outbox milik domain
 
-- **Status:** Diusulkan
-- **Catatan status:** menunggu keputusan pemilik atas pertanyaan Q1–Q3 di bawah.
+- **Status:** Diterima (Accepted)
+- **Catatan status (2026-11-22):** pemilik mendelegasikan Q1–Q3 ke orchestrator, yang memutuskannya seperti tercatat di bagian "Keputusan" di bawah (prioritas: skalabilitas, performa, keamanan).
 - **Tanggal:** 2026-11-22
-- **Pengambil keputusan:** ahliweb (pemilik). ADR ini hanya **merekomendasikan**; ia tidak mengubah status maupun substansi ADR-0019.
+- **Pengambil keputusan:** ahliweb (pemilik), didelegasikan ke orchestrator pada 2026-11-22. ADR-0019 hanya berubah status (menjadi Deferred); teksnya dipertahankan sebagai sejarah.
 - **Menyelesaikan (usulan):** Issue #1408
 - **Mengamendemen (usulan):** [ADR-0019](0019-integration-hub-module-admission.md) (`integration_hub`, `Accepted (belum diimplementasikan)`)
 - **Terkait:** [ADR-0006](0006-offline-first-sync-outbox.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0013](0013-extension-layers-and-boundary-model.md) §6, [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md), [ADR-0074](0074-push-delivery-is-a-second-outbox.md), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md), [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.md), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md), [ADR-0152](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.md), [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md); aturan template konsumen di `ahliweb/awcms-one` ADR-0017 (provider eksternal adalah port milik commerce dengan kredensial env dan webhook beralamat token)
@@ -76,7 +76,7 @@ Deployable terpisah (control plane SaaS atau produk manajemen API) di depan prov
 
 ## Rekomendasi
 
-**Opsi A adalah default.** Rekonsiliasi ADR-0019 sebagai berikut (pemilik memutuskan, Q1): statusnya berpindah dari `Accepted (belum diimplementasikan)` ke keadaan ditangguhkan, dan hub generik diadmisi **kembali** (ADR admisi baru) hanya bila Definition of Ready di bawah terpenuhi. Opsi B dipertahankan sebagai bentuk admisi mendatang itu, dipersempit ke langganan keluar dan ingress non-provider. Opsi C bukan opsi base.
+**Opsi A adalah default.** Rekonsiliasi ADR-0019 sebagai berikut (sudah diputuskan, lihat "Keputusan"): statusnya berpindah dari `Accepted (belum diimplementasikan)` ke keadaan ditangguhkan, dan hub generik diadmisi **kembali** (ADR admisi baru) hanya bila Definition of Ready di bawah terpenuhi. Opsi B dipertahankan sebagai bentuk admisi mendatang itu, dipersempit ke langganan keluar dan ingress non-provider. Opsi C bukan opsi base.
 
 Soal apakah hub masih dibenarkan: pada bukti hari ini, **tidak**. Tidak ada konsumen bernama, tidak ada tracker yang valid, dan domain yang butuh batas provider membangunnya tanpa hub.
 
@@ -84,7 +84,7 @@ Soal apakah hub masih dibenarkan: pada bukti hari ini, **tidak**. Tidak ada kons
 
 1. Isu tracker **di repo ini** (bukan #754) yang menyebut sekurangnya **dua konsumen konkret** yang tidak bisa dilayani port milik domain mana pun, beserta tipe event dan sistem tujuan.
 2. ADR admisi baru (ADR-0055 §3: ADR wajib, review keamanan, `bun run check` penuh) yang memeriksa ulang matriks ini dan menyatakan apa yang tetap milik domain.
-3. Jawaban pemilik atas Q2 dan Q3 di bawah.
+3. Jawaban atas Q3 di atas untuk konsumen itu (modul base atau template konsumen).
 4. Review keamanan sebelum merge (verifikasi masuk, SSRF termasuk redirect dan DNS rebinding, referensi secret, keunikan replay).
 5. Deskriptor `domain_event_runtime` dan `data_lifecycle` untuk payload mentah dan riwayat pengiriman.
 6. Saklar nonaktif fail-closed (mati secara default; mati berarti `404`), seperti ADR-0148 dan ADR-0154.
@@ -93,11 +93,18 @@ Soal apakah hub masih dibenarkan: pada bukti hari ini, **tidak**. Tidak ada kons
 
 Dikirim inert di balik saklar; hanya skema fixture (tanpa provider nyata); dispatch keluar sebagai worker berlease terpisah dengan batch terbatas dan entri anggaran query; satu tenant pilot dengan konsumen nyata; dipromosikan hanya setelah probe SSRF dan replay ada di CI dan decision log tidak menunjukkan baca lintas-tenant; tidak ada pemindahan antrean domain yang ada ke hub tanpa ADR terpisah.
 
-## Pertanyaan yang harus diputuskan pemilik
+## Keputusan (2026-11-22, didelegasikan pemilik ke orchestrator)
 
-- **Q1.** Pindahkan ADR-0019 ke keadaan ditangguhkan/dicabut sekarang (rekomendasi: ya, sebagai suntingan pemilik atas ADR-0019 bersama pin di `tests/adr-admission-implementation-status.test.ts`), atau pertahankan `Accepted (belum diimplementasikan)` sampai ada konsumen?
-- **Q2.** Adakah **konsumen bernama** untuk langganan keluar yang dikonfigurasi tenant atau ingress non-provider generik? Bila tidak, catat idenya sebagai "belum diperlukan".
-- **Q3.** Bila ada: bolehkah hub menjadi modul base (Opsi B), atau template konsumen yang harus memilikinya (seperti `awcms-one` ADR-0017 untuk commerce), sehingga base bebas dari hub generik?
+- **Q1 — ADR-0019 menjadi `Deferred` (Ditangguhkan)** (bukan dicabut); ADR ini menjadi `Accepted`. Keputusan lama tetap terbaca sebagai sejarah dan opsinya tetap terbuka tanpa biaya.
+- **Q2 — Tidak ada konsumen bernama hari ini, jadi hub tidak dibangun.** Tidak ada tracker, modul, migrasi, permission, atau layanan yang dibuat.
+- **Q3 — Bila kelak ada konsumen,** hub dinilai lewat ADR admisi baru (Opsi B di atas, atau dimiliki template konsumen, seperti `awcms-one` ADR-0017 untuk commerce). Pilihan itu **tidak diambil sekarang**.
+
+Alasan yang dicatat (prioritas: skalabilitas, performa, keamanan):
+
+- Port dan outbox milik domain dapat diskalakan dan dibatasi **per provider secara independen**; hub adalah satu titik antrean.
+- Hub menambah satu lompatan dan serialisasi di setiap panggilan provider.
+- Hub memusatkan secret dan permukaan SSRF lintas provider (radius dampak besar).
+- Menangguhkan menjaga opsi tanpa biaya.
 
 ## Koreksi provenance (sejarah dipertahankan, tidak dihapus)
 
@@ -108,7 +115,7 @@ Dikirim inert di balik saklar; hanya skema fixture (tanpa provider nyata); dispa
 
 - **Positif:** Tidak ada runtime yang disimpulkan dari label status; tracker palsu tidak lagi terbaca sebagai pekerjaan aktif; batas provider tetap pada pemilik data; satu tabel memisahkan beberapa makna "gateway/hub".
 - **Negatif/trade-off:** Bila kebutuhan langganan lintas-domain yang nyata muncul, ia menunggu ADR admisi baru.
-- **Netral:** Tanpa perubahan kode, migrasi, layanan atau database. ADR-0019 mempertahankan statusnya sampai pemilik memutuskan Q1.
+- **Netral:** Tanpa perubahan kode, migrasi, layanan atau database. ADR-0019 berpindah ke Deferred; teksnya tidak disentuh.
 
 ## Alternatif yang dipertimbangkan
 

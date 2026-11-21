@@ -5,7 +5,7 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:868bb3d562192a0059d59e055c5e2aa794264856109ea443aec38ed63f5f2394 -->
+<!-- i18n-source-hash: sha256:2ced43bb3d80dfaabd67769b5d4e843060d65d5b270cf797b6ffa711c3e26ba0 -->
 
 # AWCMS — Integration Hub Module
 
@@ -18,6 +18,11 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 > skill ini sebagai spesifikasi target port (via ADR admission; `awcms-port-from-mini` HISTORIS),
 > bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
 > mengklaim apa pun ada.
+>
+> **PEMBARUAN STATUS (2026-11-22): hub DITANGGUHKAN, tidak direncanakan** —
+> [ADR-0169](../../../docs/adr/0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md)
+> (Accepted) menetapkan ADR-0019 `Deferred`: tidak ada konsumen bernama, jadi
+> jangan dibangun; konsumen mendatang lewat ADR admisi baru.
 >
 > **Provenance (Issue #1408):** setiap "Issue #754" di skill ini adalah nomor
 > tracker `awcms-mini` yang diarsipkan, dipertahankan sebagai sejarah. Di repo

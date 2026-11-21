@@ -1,10 +1,11 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0019-integration-hub-module-admission.md)
 
-<!-- i18n-source-hash: sha256:2b2498a68a450ca943fc13deb60533747b9ef68fbb2d08112d42f3a46c0426ae -->
+<!-- i18n-source-hash: sha256:72bc4f0a15559b0c17f1696cf99fb258c9945e18d137dbbc34b43a7b45ff1ca0 -->
 
 # ADR-0019 — Admission of `integration_hub` as a System Foundation module
 
-- **Status:** Accepted (belum diimplementasikan)
+- **Status:** Ditangguhkan (Deferred)
+- **Catatan status (2026-11-22):** Ditangguhkan oleh [ADR-0169](0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md) (Accepted; keputusan didelegasikan pemilik ke orchestrator): tidak ada konsumen bernama, jadi hub tidak dibangun; konsumen mendatang dinilai lewat ADR admisi baru. Keputusan di bawah dipertahankan apa adanya sebagai sejarah dan TIDAK dibatalkan.
 - **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/integration-hub/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
 - **Catatan provenance (2026-11-22, Issue #1408):** "Issue #754" di bawah adalah nomor tracker `awcms-mini` yang diarsipkan, dipertahankan sebagai sejarah. Di repo INI #754 adalah PR newsletter yang tak terkait dan sudah di-merge, jadi **bukan** tracker integration-hub dan tidak ada isu di sini yang melacak hub. Rekonsiliasi admisi ini dengan port/outbox provider milik domain yang dibangun sejak itu diusulkan di [ADR-0169](0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md) (Diusulkan, menunggu pemilik). Status ADR ini tidak berubah.
 - **Tanggal:** 2026-07-14

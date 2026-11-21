@@ -3,7 +3,7 @@
  *
  * ## The gap this closes (C12, `docs/awcms/standar-performa-dan-keamanan.md` §9)
  *
- * Six ADRs — 0016, 0017, 0018, 0019, 0020, 0021 — are `Accepted` for artifacts
+ * Six ADRs — 0016, 0017, 0018, 0019, 0020, 0021 — were `Accepted` for artifacts
  * with no code in this repository: five module admissions whose modules were
  * never built here, and one contract family (ADR-0020) whose `_shared` files
  * were deleted along with the derived-application pathway (ADR-0034). The
@@ -11,6 +11,9 @@
  * of the module/files, or a new status `Accepted (not yet implemented)`.
  * This delivers BOTH: the six ADRs now carry the qualified status, and this
  * test enforces the binding in both directions.
+ *
+ * UPDATE 2026-11-22: ADR-0019 left the set — ADR-0169 deferred it (see the
+ * live test on `Deferred` below); the other five remain mapped.
  *
  * ## How it differs from `tests/adr-admission-implementation-status.test.ts`
  *
@@ -94,10 +97,9 @@ const ADR_ARTIFACT_MAP: readonly {
     adrFile: "0018-data-exchange-module-admission.md",
     artifacts: [["src/modules/data-exchange", "src/modules/data_exchange"]]
   },
-  {
-    adrFile: "0019-integration-hub-module-admission.md",
-    artifacts: [["src/modules/integration-hub", "src/modules/integration_hub"]]
-  },
+  // 0019 is NOT here: ADR-0169 (Accepted, 2026-11-22) set it to `Deferred`, a
+  // status that promises no artifact. It is bound by its own test below instead
+  // of the map, so a deferral cannot silently outlive a module landing.
   {
     adrFile: "0020-erp-extension-readiness-contracts.md",
     artifacts: [
@@ -295,6 +297,27 @@ describe("ADR status agrees with the existence of its promised artifacts", () =>
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  test("live: ADR-0019 stays Deferred by an Accepted ADR-0169 while the hub is absent", () => {
+    const adr19 = extractStatus(
+      liveSnapshot.readAdr("0019-integration-hub-module-admission.md") ?? ""
+    );
+    const adr169 = extractStatus(
+      liveSnapshot.readAdr(
+        "0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md"
+      ) ?? ""
+    );
+    const hubExists = [
+      "src/modules/integration-hub",
+      "src/modules/integration_hub"
+    ].some((relPath) => liveSnapshot.artifactExists(relPath));
+
+    expect(adr169).toBe("Accepted");
+
+    // Either direction is a defect: a built hub under a Deferred ADR, or a
+    // missing hub under an ADR that no longer says Deferred.
+    expect(hubExists ? "built" : adr19).toBe("Deferred");
   });
 
   const syntheticMap: typeof ADR_ARTIFACT_MAP = [

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](absorb-awcms-mini-backbone-roadmap.md)
 
-<!-- i18n-source-hash: sha256:7fab6b090db6507a8f672cab2bfcc959833f1c4cd9873e132ae61fd1f635a059 -->
+<!-- i18n-source-hash: sha256:86c78d9a3d1c1376ec8ccdd6939563e31316cc459af9ba46acd781a2d719df99 -->
 
 # Roadmap Penyerapan Tulang Punggung awcms-mini → awcms
 
@@ -91,13 +91,13 @@ selalu disertai pembaruan pin `contracts.moduleDescriptorContractVersion` di
 Dikerjakan berurut: `reference_data` lebih dulu karena tiga modul berikutnya
 mengonsumsi value set-nya.
 
-| #   | Modul                     | ADR admission (sudah ada) | Catatan port                                                                                                                                                                                                     |
-| --- | ------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `reference_data`          | ADR-0021                  | Value set **GLOBAL** (tanpa `tenant_id`, RLS-exempt yang di-review, ADR-0021 §8) + override per tenant, effective-dated. Perhatikan: pengecualian RLS di sini disengaja dan harus dibawa utuh berikut alasannya. |
-| 2   | `organization_structure`  | ADR-0016                  | Legal entity + unit organisasi tenant-scoped. Kosakata ADR-0013 §2/§4 (tenant ≠ legal entity ≠ unit). Bergantung `logging` untuk audit.                                                                          |
-| 3   | `document_infrastructure` | ADR-0017                  | METADATA dokumen generik saja — bukan skema dokumen domain. Rekonsiliasi dengan `media_library` yang sudah ada (ADR-0036) agar tidak tumpang tindih kepemilikan berkas.                                          |
-| 4   | `data_exchange`           | ADR-0018                  | Import/export CSV/JSON bertahap; descriptor kontribusi per modul, netralisasi formula-injection, commit idempoten resumable.                                                                                     |
-| 5   | `integration_hub`         | ADR-0019                  | Webhook masuk bertanda-tangan, HMAC per-endpoint + rotasi overlap, proteksi replay lewat keunikan DB. Cek dulu apakah bertabrakan dengan `sync-storage`.                                                         |
+| #   | Modul                     | ADR admission (sudah ada) | Catatan port                                                                                                                                                                                                              |
+| --- | ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `reference_data`          | ADR-0021                  | Value set **GLOBAL** (tanpa `tenant_id`, RLS-exempt yang di-review, ADR-0021 §8) + override per tenant, effective-dated. Perhatikan: pengecualian RLS di sini disengaja dan harus dibawa utuh berikut alasannya.          |
+| 2   | `organization_structure`  | ADR-0016                  | Legal entity + unit organisasi tenant-scoped. Kosakata ADR-0013 §2/§4 (tenant ≠ legal entity ≠ unit). Bergantung `logging` untuk audit.                                                                                   |
+| 3   | `document_infrastructure` | ADR-0017                  | METADATA dokumen generik saja — bukan skema dokumen domain. Rekonsiliasi dengan `media_library` yang sudah ada (ADR-0036) agar tidak tumpang tindih kepemilikan berkas.                                                   |
+| 4   | `data_exchange`           | ADR-0018                  | Import/export CSV/JSON bertahap; descriptor kontribusi per modul, netralisasi formula-injection, commit idempoten resumable.                                                                                              |
+| 5   | `integration_hub`         | ADR-0019                  | **Ditangguhkan oleh ADR-0169 (2026-11-22): tidak direncanakan.** Webhook masuk bertanda-tangan, HMAC per-endpoint + rotasi overlap, proteksi replay lewat keunikan DB. Cek dulu apakah bertabrakan dengan `sync-storage`. |
 
 ### Gelombang B — SaaS control plane (**butuh ADR admission baru lebih dulu**)
 
@@ -164,15 +164,15 @@ langkah provisioning terhadap seam yang belum terbukti.
 
 ## 5. Status penyerapan (potret sejarah, tidak dirawat)
 
-| Gel. | Item                                     | Status                                                              | PR   |
-| ---- | ---------------------------------------- | ------------------------------------------------------------------- | ---- |
-| A    | `reference_data` (ADR-0021)              | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
-| A    | `organization_structure` (ADR-0016)      | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
-| A    | `document_infrastructure` (ADR-0017)     | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
-| A    | `data_exchange` (ADR-0018)               | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
-| A    | `integration_hub` (ADR-0019)             | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
-| B    | **ADR admission SaaS control plane**     | ⏳ belum — **memblokir seluruh Gelombang B**                        | —    |
-| B    | 7 modul control plane                    | ⏳ belum                                                            | —    |
-| C    | Implementasi kontrak ERP (ADR-0020)      | ⏳ belum — ADR + docs ada, kode `_shared` belum                     | —    |
-| D    | `idn_admin_regions`                      | ✅ live — dirintis di sini (ADR-0046, `sql/080`–`081`)              | #312 |
-| —    | Wiring Cloudflare DNS + rute host publik | ⏳ belum — adapter ada, tak dipanggil; `middleware.ts` tak disentuh | —    |
+| Gel. | Item                                     | Status                                                                                          | PR   |
+| ---- | ---------------------------------------- | ----------------------------------------------------------------------------------------------- | ---- |
+| A    | `reference_data` (ADR-0021)              | ⏸ ditangguhkan — ADR-0019 `Deferred` oleh ADR-0169 (tanpa konsumen bernama); tidak direncanakan | —    |
+| A    | `organization_structure` (ADR-0016)      | ⏳ belum — ADR sudah `Accepted`, kode belum ada                                                 | —    |
+| A    | `document_infrastructure` (ADR-0017)     | ⏳ belum — ADR sudah `Accepted`, kode belum ada                                                 | —    |
+| A    | `data_exchange` (ADR-0018)               | ⏳ belum — ADR sudah `Accepted`, kode belum ada                                                 | —    |
+| A    | `integration_hub` (ADR-0019)             | ⏳ belum — ADR sudah `Accepted`, kode belum ada                                                 | —    |
+| B    | **ADR admission SaaS control plane**     | ⏳ belum — **memblokir seluruh Gelombang B**                                                    | —    |
+| B    | 7 modul control plane                    | ⏳ belum                                                                                        | —    |
+| C    | Implementasi kontrak ERP (ADR-0020)      | ⏳ belum — ADR + docs ada, kode `_shared` belum                                                 | —    |
+| D    | `idn_admin_regions`                      | ✅ live — dirintis di sini (ADR-0046, `sql/080`–`081`)                                          | #312 |
+| —    | Wiring Cloudflare DNS + rute host publik | ⏳ belum — adapter ada, tak dipanggil; `middleware.ts` tak disentuh                             | —    |

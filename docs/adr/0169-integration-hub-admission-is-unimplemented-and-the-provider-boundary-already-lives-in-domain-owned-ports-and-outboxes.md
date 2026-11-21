@@ -2,10 +2,10 @@
 
 # ADR-0169 — `integration_hub` admission is unimplemented, and the provider boundary already lives in domain-owned ports and outboxes
 
-- **Status:** Proposed
-- **Status note:** awaiting the owner's decision on questions Q1–Q3 below.
+- **Status:** Accepted
+- **Status note (2026-11-22):** the owner delegated Q1–Q3 to the orchestrator, who decided them as recorded under "Decision" below (priority: scalability, performance, security).
 - **Date:** 2026-11-22
-- **Decision maker:** ahliweb (owner). This ADR only **recommends**; it changes neither the status nor the substance of ADR-0019.
+- **Decision maker:** ahliweb (owner), delegated to the orchestrator on 2026-11-22. ADR-0019 changes status only (to Deferred); its text is kept as history.
 - **Resolves (proposes to):** Issue #1408
 - **Amends (proposes to):** [ADR-0019](0019-integration-hub-module-admission.md) (`integration_hub`, `Accepted (not yet implemented)`)
 - **Related:** [ADR-0006](0006-offline-first-sync-outbox.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0013](0013-extension-layers-and-boundary-model.md) §6, [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md), [ADR-0074](0074-push-delivery-is-a-second-outbox.md), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md), [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.md), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md), [ADR-0152](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.md), [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md); the consumer-template rule in `ahliweb/awcms-one` ADR-0017 (external providers are commerce-owned ports with env credentials and token-addressed webhooks)
@@ -74,7 +74,7 @@ A separate deployable (SaaS control plane or an API-management product) fronting
 
 ## Recommendation
 
-**Option A is the default.** Reconcile ADR-0019 as follows (owner decides, Q1): its status moves from `Accepted (not yet implemented)` to a deferred state, and the generic hub is admitted **again** (a fresh admission ADR) only when the Definition of Ready below is met. Option B is kept as the shape of that future admission, narrowed to outbound subscriptions and non-provider ingress. Option C is not a base option.
+**Option A is the default.** Reconcile ADR-0019 as follows (decided, see "Decision"): its status moves from `Accepted (not yet implemented)` to a deferred state, and the generic hub is admitted **again** (a fresh admission ADR) only when the Definition of Ready below is met. Option B is kept as the shape of that future admission, narrowed to outbound subscriptions and non-provider ingress. Option C is not a base option.
 
 On whether the hub is still justified: on today's evidence, **it is not**. There is no named consumer, no valid tracker, and the domains that needed provider boundaries built them without it.
 
@@ -82,7 +82,7 @@ On whether the hub is still justified: on today's evidence, **it is not**. There
 
 1. A tracker issue **in this repo** (never #754) naming at least **two concrete consumers** that no domain-owned port can serve, with event types and target systems.
 2. A fresh admission ADR (ADR-0055 §3: ADR mandatory, security review, full `bun run check`) that re-checks this matrix and states what stays domain-owned.
-3. The owner's answers to Q2 and Q3 below.
+3. The answer to Q3 above for that consumer (base module or consumer template).
 4. A security review before merge (inbound verification, SSRF including redirects and DNS rebinding, secret references, replay uniqueness).
 5. `domain_event_runtime` and `data_lifecycle` descriptors for raw payloads and delivery history.
 6. A fail-closed disable flag (off by default; off is `404`), as ADR-0148 and ADR-0154 did.
@@ -91,11 +91,18 @@ On whether the hub is still justified: on today's evidence, **it is not**. There
 
 Ships inert behind a flag; fixture schemes only (no real provider); outbound dispatch as a separate lease worker with a bounded batch and a query-budget entry; one pilot tenant with a real consumer; promote only after the SSRF and replay probes are in CI and the decision log shows no cross-tenant read; no migration of an existing domain queue into the hub without a separate ADR.
 
-## Questions the owner must decide
+## Decision (2026-11-22, delegated by the owner to the orchestrator)
 
-- **Q1.** Move ADR-0019 to a deferred/withdrawn state now (recommended: yes, as an owner edit of ADR-0019 together with the pin in `tests/adr-admission-implementation-status.test.ts`), or keep `Accepted (not yet implemented)` until a consumer exists?
-- **Q2.** Is there a **named consumer** for tenant-configured outbound subscriptions or generic non-provider ingress? If not, record the idea as "not needed yet".
-- **Q3.** If yes: may the hub be a base module (Option B), or must the consumer template own it (as `awcms-one` ADR-0017 does for commerce), keeping the base free of a generic hub?
+- **Q1 — ADR-0019 becomes `Deferred`** (not withdrawn); this ADR becomes `Accepted`. The old decision stays readable as history and the option stays open at no cost.
+- **Q2 — No named consumer exists today, so the hub is not built.** No tracker, module, migration, permission or service is created.
+- **Q3 — If a consumer appears later,** the hub is assessed through a fresh admission ADR (Option B above, or ownership by the consumer template, as `awcms-one` ADR-0017 does for commerce). That choice is **not taken now**.
+
+Recorded reasons (priority: scalability, performance, security):
+
+- Domain-owned ports and outboxes scale and are throttled **per provider, independently**; a hub is a single queueing point.
+- A hub adds one more hop and serialisation to every provider call.
+- A hub concentrates secrets and the SSRF surface across all providers (a large blast radius).
+- Deferring keeps the option without cost.
 
 ## Provenance corrections (history is kept, not deleted)
 
@@ -106,7 +113,7 @@ Ships inert behind a flag; fixture schemes only (no real provider); outbound dis
 
 - **Positive:** No runtime is inferred from a status label; the false tracker no longer reads as active work; provider boundaries stay with the data owners; one table separates the several "gateway/hub" meanings.
 - **Negative/trade-off:** If a real cross-domain subscription need appears, it waits on a fresh admission ADR.
-- **Neutral:** No code, migration, service or database change. ADR-0019 keeps its status until the owner decides Q1.
+- **Neutral:** No code, migration, service or database change. ADR-0019 moves to Deferred; its text is untouched.
 
 ## Alternatives considered
 
