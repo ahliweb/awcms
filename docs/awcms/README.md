@@ -145,6 +145,10 @@ See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every tas
 
 [**Social publishing**](social-publishing.md) documents the `social_publishing` module ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.md), Issue [#1145](https://github.com/ahliweb/awcms/issues/1145)): one publication with an immutable content snapshot and one job per connected account behind the existing `SocialPublishingPort`, with approval, a schedule, a provider-adapter interface whose capability map is a ceiling and never a grant, and a dispatcher that calls providers outside any transaction. No provider adapter ships (connectors are #1146 to #1151), no admin screen yet.
 
+## LinkedIn API capabilities (documentation only, no-build)
+
+[**LinkedIn API capabilities**](linkedin-api-capabilities.md) (Issue [#1150](https://github.com/ahliweb/awcms/issues/1150)) records, from LinkedIn's official documentation read on 22 November 2026, the access program for organisation-Page posting (Community Management API, Development and Standard tiers), the OAuth 2.0 flow and token lifetimes, the supported content types and limits, the data-storage and restricted-use rules and their consequences for `data_lifecycle`, the `SocialPublishAdapter` capability map, and the list of unverified items and owner questions. **No connector is built**; legal review of LinkedIn's terms stays with the owner.
+
 ## Website engagement (implemented)
 
 [**Website engagement**](website-engagement.md) documents the `website_engagement` module ([ADR-0155](../adr/0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md), Issue [#1153](https://github.com/ahliweb/awcms/issues/1153)): tenant-scoped website lead and contact capture, intake only, authenticated by a per-source token and the verified Origin host, with explicit consent provenance and an outbox event contract for a downstream CRM adapter.

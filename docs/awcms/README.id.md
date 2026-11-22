@@ -145,6 +145,10 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 
 [**Penerbitan sosial**](social-publishing.id.md) mendokumentasikan modul `social_publishing` ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md), Issue [#1145](https://github.com/ahliweb/awcms/issues/1145)): satu publikasi dengan snapshot konten immutable dan satu job per akun terhubung di belakang `SocialPublishingPort` yang sudah ada, dengan persetujuan, jadwal, antarmuka adapter provider yang peta kapabilitasnya adalah plafon dan tidak pernah hibah, dan dispatcher yang memanggil provider di luar transaksi apa pun. Tidak ada adapter provider yang dikirim (konektor adalah #1146 sampai #1151), belum ada layar admin.
 
+## Kapabilitas API LinkedIn (hanya dokumentasi, no-build)
+
+[**Kapabilitas API LinkedIn**](linkedin-api-capabilities.id.md) (Issue [#1150](https://github.com/ahliweb/awcms/issues/1150)) mencatat, dari dokumentasi resmi LinkedIn yang dibaca pada 22 November 2026, program akses untuk posting Page organisasi (Community Management API, tier Development dan Standard), alur OAuth 2.0 dan masa berlaku token, jenis konten dan batas yang didukung, aturan penyimpanan data dan penggunaan terbatas beserta konsekuensinya bagi `data_lifecycle`, peta kapabilitas `SocialPublishAdapter`, serta daftar butir belum terverifikasi dan pertanyaan untuk pemilik. **Tidak ada konektor yang dibangun**; tinjauan hukum ketentuan LinkedIn tetap pada pemilik.
+
 ## Website engagement (terimplementasi)
 
 [**Website engagement**](website-engagement.id.md) mendokumentasikan modul `website_engagement` ([ADR-0155](../adr/0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.id.md), Issue [#1153](https://github.com/ahliweb/awcms/issues/1153)): penangkapan lead dan kontak situs web per tenant, hanya intake, diautentikasi dengan token per-source dan host Origin terverifikasi, dengan provenance persetujuan eksplisit dan kontrak event outbox untuk adapter CRM hilir.
