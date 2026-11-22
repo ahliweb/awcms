@@ -42,8 +42,10 @@ Issue [#1171](https://github.com/ahliweb/awcms/issues/1171), decided by
 - **Not built:** a campaign topic (no campaign entity exists) and
   cross-channel per-message status. Each is added to
   `src/modules/_shared/realtime-topics.ts` in the change that builds its source
-  rows. WebSocket and cross-instance fan-out stay outside ADR-0154 (a later ADR
-  admits them; a reconnect already resumes by cursor on any instance).
+  rows. WebSocket stays outside ADR-0154 (a later ADR admits it).
+- **Cross-instance wake-up hint (built, `sql/418`):** see
+  [Cross-instance wake-up](#cross-instance-wake-up) below. It shortens the wait
+  before a stream's next tick; it is never a source of truth.
 
 A stream is a **projection of committed rows**. It never sends, enqueues or
 changes a status. It is not a delivery receipt and it is not durable push: a
@@ -128,6 +130,7 @@ config:validate` refuses a malformed value.
 | `REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE` | `500`    | Open streams one instance holds, all tenants.           |
 | `REALTIME_SSE_SLOW_CONSUMER_BYTES`          | `262144` | Unflushed bytes above which a client counts as behind.  |
 | `REALTIME_SSE_SLOW_CONSUMER_GRACE_MS`       | `15000`  | How long a client may stay behind before it is evicted. |
+| `REALTIME_WAKE_HINT_ENABLED`                | `true`   | `false` switches the LISTEN/NOTIFY wake-up hint off.    |
 
 **Every cap is per instance.** With N replicas a tenant can hold up to N times
 the tenant cap. The caps bound memory and database load per process; they are
@@ -160,6 +163,49 @@ scope carrying a probe over the response (`src/lib/server/response-pressure.ts`)
 and the stream reads it. Under `astro dev` there is no probe: the buffer is
 **unmeasured**, and only the bounded frame size, tick and lifetime limit it.
 
+## Cross-instance wake-up
+
+A stream re-reads PostgreSQL on its own tick, so it is already correct on any
+number of instances. What a replica cannot know is that **another instance** (or
+a worker job) just committed a change. `sql/418` makes the writer say so, with
+no new service (no Redis, no broker):
+
+- Row triggers on `awcms_whatsapp_messages` and `awcms_inbox_conversations`
+  call `pg_notify('awcms_realtime', '{"t":"<tenant id>","k":"<topic>"}')`. The
+  payload is **only a tenant id and a topic name**: no row id, no field of the
+  row, nothing personal, about 90 bytes against PostgreSQL's 8000-byte limit.
+  The notification is delivered **at commit** (a woken stream reads visible
+  data; a rolled-back write notifies nobody) and identical payloads inside one
+  transaction collapse into one.
+- Each process holds **one** `LISTEN` connection (not one per client), started
+  on the first stream open. It is not drawn from the request pool and it
+  **refuses a SUPERUSER or BYPASSRLS login for good** (loud log,
+  `realtime_wake_listener_events_total{state="refused"}`; streams keep polling).
+- A hint wakes only the streams of **the same tenant and topic** on that
+  instance; the woken stream runs its ordinary tick (fresh transaction,
+  authorization, resource visibility, read from its cursor). The hint grants
+  nothing and the tenant filter and authorization stay on the server, not in the
+  payload. At most one wake per tenant and topic per 250 ms (a burst is two
+  ticks, and the last write of a burst is never left unannounced).
+- **Durability never depends on it.** If the connection drops, the listener
+  closes the client, reconnects with exponential jittered backoff (500 ms up to
+  30 s) and, once back, wakes every stream: each reads from the cursor it
+  already holds (`Last-Event-ID` semantics), so a hint sent while it was down
+  costs latency, not data. A lost, forged or duplicated hint costs latency or
+  one redundant read.
+- **Not attempted** when `REALTIME_WAKE_HINT_ENABLED=false` or when
+  `DATABASE_PGBOUNCER=true` (a session `LISTEN` does not survive transaction
+  pooling). Streams then poll; nothing else changes.
+- It reduces **latency**, not load: the tick interval is unchanged (ADR-0154
+  section 7 says lengthening ticks when the hint is healthy needs a measurement
+  first, and none was taken).
+
+Tests: `tests/realtime-wake-hub.test.ts` (parse, isolation, throttle) and
+`tests/integration/realtime-wake-hint.integration.test.ts` (two listener
+connections as two instances, the join race, tenant isolation, payload content,
+rollback, privileged-login refusal, kill-and-reconnect with exactly one
+backend).
+
 ## Metrics
 
 Tenant-aggregate only; `topic` is a code-defined constant and never a resource
@@ -174,6 +220,11 @@ id.
 | `realtime_stream_frames_total`     | counter   | `topic`,`kind`   |
 | `realtime_stream_tick_duration_ms` | histogram | `topic`          |
 | `realtime_stream_frame_lag_ms`     | histogram | `topic`          |
+
+Wake-up hint metrics: `realtime_wake_hints_total{result}` (`delivered`,
+`no_subscriber`, `malformed`), `realtime_wake_listener_up` (gauge, 1 while
+listening) and `realtime_wake_listener_events_total{state}` (`connecting`,
+`down`, `refused`).
 
 Refusal reasons: `origin`, `auth_denied`, `not_found`, `capped_actor`,
 `capped_tenant`, `capped_instance`, `unavailable`. Close reasons: `revoked`,
@@ -192,6 +243,9 @@ Refusal reasons: `origin`, `auth_denied`, `not_found`, `capped_actor`,
 - **A permission revoked but the user still sees progress:** the stream ends
   within one tick (5 s). A page left open shows "Access ended". If not, check
   `awcms_audit_events` for `realtime_stream.revoked`.
+- **Updates arrive only at the tick, not instantly:** check
+  `realtime_wake_listener_up` (0 means the listener is down or refused; look for
+  `realtime.wake.listener` in the log). Streams are correct either way.
 - **Existing tenants do not get the permission:** like every permission seed,
   `sql/360` and `sql/413` extend the global catalogue only; run
   `bun run identity-access:permissions:backfill`.

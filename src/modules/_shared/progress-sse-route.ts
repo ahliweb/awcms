@@ -19,7 +19,9 @@ import {
 } from "../identity-access/application/access-guard";
 import type { AccessRequest } from "../identity-access/domain/access-control";
 import { recordAuditEvent } from "../logging/application/audit-log";
+import type { WakeHub } from "../../lib/realtime/wake-hub";
 import { fail } from "./api-response";
+import { ensureRealtimeWakeListener, realtimeWakeHub } from "./realtime-wake";
 import {
   declaredAppOrigin,
   isStreamFetchMetadataAllowed,
@@ -168,6 +170,13 @@ export type ProgressSseRouteConfig<TResource, TCounts, TChange> = {
   /** Injection seams for tests. */
   connections?: SseConnectionRegistry;
   env?: NodeJS.ProcessEnv;
+  /**
+   * The cross-instance wake-up hint (ADR-0154 section 2 and 7). A hint only
+   * shortens the wait before the next tick; every tick still authorizes and
+   * reads from the cursor, so a lost hint costs latency, never correctness.
+   * Defaults to the process hub and its one lazily started listener.
+   */
+  wake?: { hub: WakeHub; ensure: () => void };
 };
 
 /** The longest a client-supplied `Last-Event-ID` may be before it is not even parsed. */
@@ -645,6 +654,32 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
     let wake: (() => void) | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
+    // A hint that lands while a tick is running (not waiting) is remembered, so
+    // the next wait returns at once instead of sleeping a whole interval past
+    // a commit this tick may have read too early.
+    let wakePending = false;
+
+    const wakeHint = () => {
+      if (wake === null) {
+        wakePending = true;
+        return;
+      }
+
+      stopWaiting();
+    };
+    const wakeConfig = config.wake ?? {
+      hub: realtimeWakeHub,
+      ensure: () => ensureRealtimeWakeListener()
+    };
+
+    wakeConfig.ensure();
+
+    const unsubscribeWake = wakeConfig.hub.subscribe(
+      tenantId,
+      topic.topic,
+      wakeHint
+    );
+
     const stopWaiting = () => {
       if (timer !== null) clearTimeout(timer);
       timer = null;
@@ -710,7 +745,8 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
             },
             waitForNextTick: () =>
               new Promise<void>((resolve) => {
-                if (clientGone) {
+                if (clientGone || wakePending) {
+                  wakePending = false;
                   resolve();
                   return;
                 }
@@ -756,6 +792,7 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
             pressure?.destroy();
           }
         } finally {
+          unsubscribeWake();
           stopWaiting();
           request.signal.removeEventListener("abort", onAbort);
           heldLease.release();

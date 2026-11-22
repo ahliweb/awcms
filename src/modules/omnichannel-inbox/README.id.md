@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e8977b61cff80f2cd8fe3bc5ef94e15985500c13cf3b6139b1531200ba00554b -->
+<!-- i18n-source-hash: sha256:03c55c8318530283db47e20e7537d80444087457e04a5aeeb1fe856832725277 -->
 
 # `omnichannel_inbox`
 
@@ -166,6 +166,10 @@ Telegram: staf disebut "Anda" atau "staf lain".
 - Sengaja belum dibangun: tampilan utas split-pane, catatan internal dan balasan
   cepat (inbox tidak menyimpan teks, ADR-0160 bagian 1), dan toolbar aksi massal
   (tidak ada API massal).
+
+## Bangun realtime (sql/418)
+
+Stream `inbox.status.progress` (ADR-0154) dibangunkan lintas instance oleh trigger baris pada `awcms_inbox_conversations` yang memberi tahu `{id tenant, topik}` saat commit (PostgreSQL LISTEN/NOTIFY, tanpa layanan baru). Ia hanya mempersingkat tunggu sebelum tick berikutnya: stream tetap mengotorisasi ulang dan membaca dari cursor-nya, jadi petunjuk yang hilang hanya berbiaya latensi, bukan kebenaran. Lihat `docs/awcms/realtime-progress-streams.id.md`.
 
 ## Tindak lanjut
 

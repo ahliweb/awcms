@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](realtime-progress-streams.md)
 
-<!-- i18n-source-hash: sha256:17956dbdd158ad7e01cecb62082b7100b1f3bb99c9cf4a04637582897f536380 -->
+<!-- i18n-source-hash: sha256:1b8ed996b48926f20a9cb351a3b72bfdd28cb6248eb83d1c48858acfe4f5e599 -->
 
 # Stream progres real-time — operasional
 
@@ -46,9 +46,11 @@ Issue [#1171](https://github.com/ahliweb/awcms/issues/1171), diputuskan oleh
 - **Belum dibangun:** topik kampanye (tidak ada entitas kampanye) dan status
   per-pesan lintas kanal. Masing-masing ditambahkan ke
   `src/modules/_shared/realtime-topics.ts` dalam perubahan yang membangun baris
-  sumbernya. WebSocket dan fan-out lintas-instance tetap di luar ADR-0154 (ADR
-  berikutnya yang mengadmisinya; sambungan ulang sudah melanjutkan lewat cursor
-  di instance mana pun).
+  sumbernya. WebSocket tetap di luar ADR-0154 (ADR berikutnya yang
+  mengadmisinya).
+- **Petunjuk bangun lintas-instance (dibangun, `sql/418`):** lihat
+  [Bangun lintas-instance](#bangun-lintas-instance) di bawah. Ia hanya
+  mempersingkat tunggu sebelum tick berikutnya; bukan sumber kebenaran.
 
 Stream adalah **proyeksi baris yang sudah di-commit**. Ia tidak pernah mengirim,
 mengantrekan, atau mengubah status. Ia bukan tanda terima pengiriman dan bukan
@@ -137,6 +139,7 @@ Semua opsional. Tidak di-set atau tidak valid kembali ke default;
 | `REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE` | `500`    | Stream terbuka di satu instance, semua tenant.                   |
 | `REALTIME_SSE_SLOW_CONSUMER_BYTES`          | `262144` | Byte belum-terkirim di atas mana klien dianggap tertinggal.      |
 | `REALTIME_SSE_SLOW_CONSUMER_GRACE_MS`       | `15000`  | Berapa lama klien boleh tertinggal sebelum dikeluarkan.          |
+| `REALTIME_WAKE_HINT_ENABLED`                | `true`   | `false` mematikan petunjuk bangun LISTEN/NOTIFY.                 |
 
 **Setiap batas berlaku per instance.** Dengan N replika, sebuah tenant dapat
 memegang hingga N kali batas tenant. Batas ini membatasi memori dan beban
@@ -169,6 +172,57 @@ Karena itu standalone entry menjalankan setiap request di dalam scope
 (`src/lib/server/response-pressure.ts`) dan stream membacanya. Di `astro dev`
 tidak ada probe: buffer **tidak terukur**, dan hanya ukuran frame, tick, serta
 umur koneksi yang membatasinya.
+
+## Bangun lintas-instance
+
+Sebuah stream membaca ulang PostgreSQL pada tick-nya sendiri, jadi ia sudah
+benar di instance berapa pun. Yang tidak bisa diketahui sebuah replika adalah
+bahwa **instance lain** (atau job worker) baru saja meng-commit perubahan.
+`sql/418` membuat penulis memberi tahu, tanpa layanan baru (tanpa Redis, tanpa
+broker):
+
+- Trigger baris pada `awcms_whatsapp_messages` dan `awcms_inbox_conversations`
+  memanggil `pg_notify('awcms_realtime', '{"t":"<id tenant>","k":"<topik>"}')`.
+  Muatannya **hanya id tenant dan nama topik**: tanpa id baris, tanpa field
+  baris, tanpa data pribadi, sekitar 90 byte terhadap batas 8000 byte
+  PostgreSQL. Notifikasi dikirim **saat commit** (stream yang dibangunkan
+  membaca data yang sudah terlihat; tulisan yang di-rollback tidak memberi tahu
+  siapa pun) dan muatan identik dalam satu transaksi menyatu menjadi satu.
+- Tiap proses memegang **satu** koneksi `LISTEN` (bukan satu per klien), dimulai
+  saat stream pertama dibuka. Ia tidak diambil dari pool permintaan dan
+  **menolak login SUPERUSER atau BYPASSRLS selamanya** (log keras,
+  `realtime_wake_listener_events_total{state="refused"}`; stream tetap polling).
+- Sebuah petunjuk hanya membangunkan stream **tenant dan topik yang sama** di
+  instance itu; stream yang dibangunkan menjalankan tick biasanya (transaksi
+  baru, otorisasi, visibilitas resource, baca dari cursor-nya). Petunjuk tidak
+  memberi izin apa pun; filter tenant dan otorisasi tetap di server, bukan di
+  muatan. Paling banyak satu bangun per tenant dan topik per 250 ms (lonjakan
+  menjadi dua tick, dan tulisan terakhir sebuah lonjakan tidak pernah
+  terlewat).
+- **Durabilitas tidak pernah bergantung padanya.** Bila koneksi putus, listener
+  menutup klien, tersambung ulang dengan backoff eksponensial berjitter (500 ms
+  sampai 30 s) dan, setelah kembali, membangunkan semua stream: masing-masing
+  membaca dari cursor yang sudah dipegangnya (semantik `Last-Event-ID`), jadi
+  petunjuk yang terkirim saat putus hanya menambah latensi, bukan kehilangan
+  data. Petunjuk yang hilang, dipalsukan atau ganda hanya berbiaya latensi atau
+  satu pembacaan berlebih.
+- **Tidak dicoba** bila `REALTIME_WAKE_HINT_ENABLED=false` atau
+  `DATABASE_PGBOUNCER=true` (`LISTEN` sesi tidak bertahan pada pooling
+  transaksi). Stream lalu polling; tidak ada hal lain yang berubah.
+- Ia mengurangi **latensi**, bukan beban: interval tick tidak berubah (ADR-0154
+  bagian 7 menyebut memperpanjang tick saat petunjuk sehat perlu pengukuran
+  lebih dulu, dan belum ada yang diukur).
+
+Uji: `tests/realtime-wake-hub.test.ts` (parse, isolasi, throttle) dan
+`tests/integration/realtime-wake-hint.integration.test.ts` (dua koneksi
+listener sebagai dua instance, balapan bergabung, isolasi tenant, isi muatan,
+rollback, penolakan login istimewa, kill-dan-sambung-ulang dengan tepat satu
+backend).
+
+Metrik petunjuk: `realtime_wake_hints_total{result}` (`delivered`,
+`no_subscriber`, `malformed`), `realtime_wake_listener_up` (gauge, 1 saat
+mendengarkan) dan `realtime_wake_listener_events_total{state}` (`connecting`,
+`down`, `refused`).
 
 ## Metrik
 

@@ -383,6 +383,9 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  // Issue #1171, ADR-0154 section 2 and 7: the LISTEN/NOTIFY wake-up hint.
+  // Default on; not attempted under DATABASE_PGBOUNCER=true.
+  { name: "REALTIME_WAKE_HINT_ENABLED", required: false, type: "bool" },
   { name: "PUSH_ENABLED", required: false, type: "bool" },
   {
     name: "PUSH_PROVIDER",

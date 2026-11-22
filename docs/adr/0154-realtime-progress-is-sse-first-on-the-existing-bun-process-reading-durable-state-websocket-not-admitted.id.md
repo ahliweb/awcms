@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md)
 
-<!-- i18n-source-hash: sha256:dcbb49e89df5d3b82039e72e1e02d507aed48d7da49801419970f15953c7c38e -->
+<!-- i18n-source-hash: sha256:78bd2f9fd1b11bb23b3927954e5d3df6418dde3da3dd14ba91de0ff36d16db08 -->
 
 # ADR-0154 — Progres realtime memakai SSE lebih dulu di proses Bun yang sudah ada dan membaca state durable; WebSocket belum diadmisi sampai kebutuhan dua arah terbukti
 
@@ -142,7 +142,7 @@ flowchart LR
 2. **Topik progres kampanye.** Satu topik, permission yang di-seed, snapshot REST-nya, path OpenAPI dan catatan proyeksi AsyncAPI; tes integrasi untuk dua tenant dan dua brand, peran dicabut di tengah stream, id resource berbahaya, Origin salah, sesi kedaluwarsa, gangguan provider, reconnect dengan cursor, pembaca lambat.
 3. **Topik petunjuk inbox** dan **topik status pesan**, masing-masing sebagai perubahan sendiri dengan permission dan tes sendiri.
 4. **Metrik, entri registri env, dokumen dan runbook;** komponen progres yang aksesibel beserta fallback polling-nya; catatan konfigurasi proxy (buffering mati, idle timeout di atas heartbeat).
-5. **Opsional, kelak, issue terpisah:** petunjuk bangun lewat `LISTEN/NOTIFY` atau Redis, hanya setelah pengukuran beban.
+5. **Petunjuk bangun (dibangun 22 November 2026, Issue #1171):** lewat `LISTEN/NOTIFY`, tanpa Redis dan tanpa layanan baru. Pemilik memprioritaskannya demi skalabilitas horizontal dan mendelegasikan keputusannya ke orchestrator (komentar di #1171). Ia tetap persis seperti yang dikatakan bagian 2: petunjuk yang membawa id tenant dan topik, bukan durabilitas, bukan otorisasi, dengan satu koneksi `LISTEN` per proses (login SUPERUSER atau BYPASSRLS ditolak), sambung ulang dengan backoff dan bangun-susul, dan `sql/418` sebagai sisi penulis. Ia tidak memperpanjang tick (itu masih perlu pengukuran beban). Operasi: [`realtime-progress-streams.id.md`](../awcms/realtime-progress-streams.id.md#bangun-lintas-instance).
 
 ## Invarian untuk #1171
 

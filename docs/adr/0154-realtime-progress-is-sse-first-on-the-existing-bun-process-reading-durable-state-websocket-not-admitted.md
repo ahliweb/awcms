@@ -140,7 +140,7 @@ flowchart LR
 2. **Campaign progress topic.** One topic, its seeded permission, its REST snapshot, OpenAPI paths and the AsyncAPI projection note; integration tests for two tenants and two brands, role revoked mid-stream, malicious resource id, wrong Origin, expired session, provider outage, reconnect with cursor, slow reader.
 3. **Inbox hint topic** and **message status topic**, each as its own change with its own permission and tests.
 4. **Metrics, env registry entries, docs and runbook;** the accessible progress component and its polling fallback; proxy configuration notes (buffering off, idle timeouts above the heartbeat).
-5. **Optional, later, separate issue:** wake-up hint through `LISTEN/NOTIFY` or Redis, only after a load measurement.
+5. **Wake-up hint (built 22 November 2026, Issue #1171):** through `LISTEN/NOTIFY`, with no Redis and no new service. The owner prioritised it for horizontal scalability and delegated the decision to the orchestrator (comment on #1171). It stays exactly what section 2 says it is: a hint carrying a tenant id and a topic, never durability, never authorization, with one `LISTEN` connection per process (a SUPERUSER or BYPASSRLS login is refused), reconnect with backoff and a catch-up wake, and `sql/418` as the writer side. It does not lengthen ticks (that still needs a load measurement). Operations: [`realtime-progress-streams.md`](../awcms/realtime-progress-streams.md#cross-instance-wake-up).
 
 ## Invariants for #1171
 
