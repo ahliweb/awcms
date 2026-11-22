@@ -429,9 +429,9 @@ pioneered directly here after the ADR-0047 freeze.)
   per tenant without an oracle, the first verified wins (partial unique index,
   race-safe) and the loser gets 409 at verification; providers without
   verification (StarSender) keep the claim plus the dispute path C
-  (platform-scoped, step-up, audit, not seeded to tenant roles); M1 and M3 are
-  fixed first in separate PRs (M3 is write amplification of the decision log on
-  a read path).
+  (platform-scoped, step-up, audit, not seeded to tenant roles); M1 and M3 were
+  already fixed by PRs #1218/#1219 (re-verified 22 Nov by mutation: the
+  decision-log row count of one GET stays at most 6 for 4 or 24 connections).
   K3 (#1095) payroll mutation routes return a masked shape (full values only
   from the audited read endpoint); `payroll:catalog-boundary:check` is scheduled
   daily against the deployed database under a minimal dedicated role (CONNECT
@@ -480,7 +480,7 @@ pioneered directly here after the ADR-0047 freeze.)
   K14 (others) #1185 is worked (consumer tests against the pinned contract in
   this repository); #1186 after the ADR-0163 implementation; CRM #1164-#1166
   after wave 2; #1173 stays open as a monthly recurring task. Waves: G1 is this
-  decision PR, #1215 M1+M3, #1095 masking plus the daily job, and #1171
+  decision PR, #1095 masking plus the daily job, and #1171
   fan-out; G2 and G3 follow the order above.
 
 - **`email:senders:verify` SCHEDULED — 14 November 2026 (#1160, ADR-0162).**
