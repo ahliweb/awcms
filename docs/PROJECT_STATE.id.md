@@ -410,6 +410,31 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
+- **KEPUTUSAN 22 NOVEMBER 2026 (K16): ADR-0168 (passkey, WebAuthn) DITERIMA
+  DENGAN AMANDEMEN (#1405, #1406, #1407).** Melaksanakan K8: pemilik
+  mendelegasikan keputusan ke orchestrator, diambil setelah tinjauan
+  `awcms-security-auditor` atas `origin/main` pada `16c8ebcd` (tidak ada temuan
+  Critical; lima temuan High yang mengubah model data atau batas otorisasi,
+  sehingga kini normatif di ADR). Hanya dokumen; tanpa migrasi. A1 kode
+  pemulihan menjadi milik principal dan tak bergantung jenis faktor (hari ini
+  `sql/114` mengikatnya ke faktor TOTP). A2 `awcms_sessions` mencatat
+  `stepped_up_method` dan `stepped_up_passkey_id`, dan masa tenang pemulihan
+  dievaluasi di gerbang. A3 reset passkey ber-scope platform bila sasaran punya
+  identitas di tenant lain, dengan maker/checker wajib. A4 passkey sebagai
+  faktor pertama tunduk pada `password_login_disabled`/penegakan SSO di
+  `evaluateTenantEntry`. A5 `/login`, `/admin/*`, dan endpoint upacara hanya
+  dilayani di host `APP_URL` (hari ini `src/middleware.ts` tak punya gerbang
+  host). A6 sepuluh pemeriksaan verifier normatif, `attStmt` tak pernah
+  dipercaya. A7 compare-and-set counter atomik, tanpa "admin menghapus tanda".
+  A8 passkey adalah faktor aktif di setiap tempat faktor dibaca. A9 TTL
+  challenge 300 dtk, tanpa passwordless di rilis pertama (Q3). A10 gerbang
+  go/no-go S1 G1 sampai G7; **S3 dan seterusnya diblokir sampai S1
+  meluluskannya**, NO-GO berarti opsi B lewat ADR dependensinya sendiri. A11
+  model ancaman, analisis privasi, dan matriks izin sebelum Definition of
+  Ready. Semuanya di balik `AUTH_PASSKEY_ENABLED=false`. Q1 sampai Q9 dijawab di
+  ADR. #1406 tidak boleh bersandar pada passkey untuk pengikatan perangkat.
+  Berikutnya: S1 (spike verifier murni) beserta gerbangnya.
+
 - **`email:senders:verify` DIJADWALKAN — 14 November 2026 (#1160, ADR-0162).**
   Melaksanakan keputusan pemilik 11 November 2026 (entri ADR-0159 di bawah).
   Job kini ada di crontab ter-generate per jam (`0 * * * *`), sebagai job
