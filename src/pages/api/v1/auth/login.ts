@@ -34,9 +34,9 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  LOGIN_TURNSTILE_ACTION
-} from "../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../lib/security/public-form-challenge";
 import {
   isMfaFeatureEnabled,
   resolveChallengeTtlSec
@@ -331,20 +331,15 @@ async function handleTenantlessLogin(
     );
   }
 
-  const turnstileResult = await enforceTurnstileIfRequired(
-    body.turnstileToken,
-    clientIp,
-    { action: LOGIN_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.login,
+    body,
+    { clientIp, tenantId: null }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();
@@ -512,20 +507,15 @@ export const POST: APIRoute = async ({
   // with ONE generic response (no account-enumeration oracle: this runs before
   // any identity lookup, so it cannot distinguish accounts). Rate limit and
   // lockout above/below keep working independently of this.
-  const turnstileResult = await enforceTurnstileIfRequired(
-    body.turnstileToken,
-    clientIp,
-    { action: LOGIN_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.login,
+    body,
+    { clientIp }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const loginIdentifier = body.loginIdentifier;

@@ -1,4 +1,5 @@
 import { defineModule } from "../_shared/module-contract";
+import { turnstileChallengeProvider } from "./infrastructure/turnstile-challenge-provider";
 
 export const identityAccessModule = defineModule({
   key: "identity_access",
@@ -8,6 +9,10 @@ export const identityAccessModule = defineModule({
   description:
     "Login identity, password hashing, tenant user membership, session-based authentication, and RBAC/ABAC access control (roles, permissions, assignments, decision log).",
   dependencies: ["tenant_admin", "profile_identity"],
+  // Issue #1353: Cloudflare Turnstile is the first provider behind the
+  // public-form challenge seam. Off unless TURNSTILE_ENABLED=true on the
+  // full-online profile.
+  publicFormChallengeProviders: [turnstileChallengeProvider],
   api: {
     openApiPath: "openapi/modules/identity-access.openapi.yaml",
     basePath: "/api/v1/auth",

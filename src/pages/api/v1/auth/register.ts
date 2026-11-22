@@ -13,9 +13,9 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  REGISTER_TURNSTILE_ACTION
-} from "../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../lib/security/public-form-challenge";
 import { fail, ok } from "../../../../modules/_shared/api-response";
 import { withPublicAuthTenant } from "../../../../modules/identity-access/application/public-auth-tenant";
 import { submitRegistrationRequest } from "../../../../modules/identity-access/application/self-registration";
@@ -111,20 +111,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
     );
   }
 
-  const turnstileResult = await enforceTurnstileIfRequired(
-    (rawBody as Record<string, unknown> | null)?.turnstileToken,
-    clientIp,
-    { action: REGISTER_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.register,
+    rawBody,
+    { clientIp }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();

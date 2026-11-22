@@ -5,6 +5,7 @@
  */
 
 import type { ModuleDomainEventConsumer } from "./domain-event-consumer-contract";
+import type { ModulePublicFormChallengeProvider } from "./public-form-challenge-contract";
 
 /** Descriptive category only — not itself an authorization or enable/disable mechanism. */
 export type ModuleType = "base" | "system" | "domain" | "integration";
@@ -416,6 +417,16 @@ export type ModuleDescriptor = {
    * `dependencies` or in `capabilities.consumes`.
    */
   whatsappTemplates?: ModuleWhatsappTemplate[];
+  /**
+   * Public-form challenge (captcha) providers this module OWNS (Issue #1353,
+   * ADR-0164's model). `enforcePublicFormCaptcha`
+   * (`src/lib/security/public-form-challenge.ts`) resolves them from every
+   * module's array on demand, in the web process. OFF by default: a provider
+   * participates only when its own `isEnabled(env)` says so, and the platform
+   * itself ships exactly one (Cloudflare Turnstile, declared by
+   * `identity-access`). See `ModulePublicFormChallengeProvider`.
+   */
+  publicFormChallengeProviders?: ModulePublicFormChallengeProvider[];
   /**
    * High-volume table lifecycle descriptors this module owns (ported from
    * awcms-micro Issue #745, ADR-0037) — see `HighVolumeTableDescriptor`'s own
@@ -1469,6 +1480,14 @@ export type SubjectDataDescriptor = {
  * quantity (the first user is `booking`: unit-nights and seconds booked) through
  * the same `cursor_table` engine instead of a second one.
  *
+ * `4.8.0` (Issue #1353) — added the optional
+ * `ModuleDescriptor.publicFormChallengeProviders` field plus the
+ * `ModulePublicFormChallengeProvider` family
+ * (`public-form-challenge-contract.ts`). MINOR: purely additive, no existing
+ * descriptor changes meaning. A public pre-session form opts into a captcha
+ * with ONE call (`enforcePublicFormCaptcha`) and a module contributes the
+ * provider from its own descriptor; Turnstile is the first provider.
+ *
  * `4.7.0` (ADR-0164, Issue #1277) — added the optional
  * `ModuleDescriptor.emailTemplateCategories`, `workerEmailCategories` and
  * `whatsappTemplates` fields plus the `ModuleEmailTemplateCategory` /
@@ -1488,7 +1507,7 @@ export type SubjectDataDescriptor = {
  * join (the registry gate requires `retain_under_obligation`); the first users
  * are `awcms_hr_employment_terms` and `awcms_hr_shift_assignments`.
  */
-export const MODULE_CONTRACT_VERSION = "4.7.0";
+export const MODULE_CONTRACT_VERSION = "4.8.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

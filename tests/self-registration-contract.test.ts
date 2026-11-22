@@ -98,8 +98,8 @@ describe("the public registration endpoint", () => {
     expect(clientCall).toBeGreaterThan(-1);
     expect(rateLimitCall).toBeLessThan(clientCall);
 
-    expect(source).toContain("REGISTER_TURNSTILE_ACTION");
-    expect(source).not.toContain("LOGIN_TURNSTILE_ACTION");
+    expect(source).toContain("PUBLIC_FORM_NAMES.register");
+    expect(source).not.toContain("PUBLIC_FORM_NAMES.login");
   });
 
   test("is a reviewed entry on the public-operation allowlist", async () => {

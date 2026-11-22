@@ -12,9 +12,9 @@ import {
   readJsonBody
 } from "../../../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  INVITATION_ACCEPT_TURNSTILE_ACTION
-} from "../../../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../../../lib/security/public-form-challenge";
 import { resolveInvitationRateLimit } from "../../../../../../lib/auth/invitation-config";
 import { fail, ok } from "../../../../../../modules/_shared/api-response";
 import { acceptInvitation } from "../../../../../../modules/identity-access/application/invitation-acceptance";
@@ -102,19 +102,15 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
     );
   }
 
-  const turnstileResult = await enforceTurnstileIfRequired(
-    (rawBody as Record<string, unknown> | null)?.turnstileToken,
-    clientIp,
-    { action: INVITATION_ACCEPT_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.invitationAccept,
+    rawBody,
+    { clientIp }
   );
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();

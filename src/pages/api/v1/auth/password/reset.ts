@@ -12,9 +12,9 @@ import {
   readJsonBody
 } from "../../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  PASSWORD_RESET_TURNSTILE_ACTION
-} from "../../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../../lib/security/public-form-challenge";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { completePasswordReset } from "../../../../../modules/identity-access/application/password-reset";
 import { withPublicAuthTenant } from "../../../../../modules/identity-access/application/public-auth-tenant";
@@ -101,20 +101,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   // Full-online only (Issue #186): a no-op on every local/offline/LAN
   // deployment, and cheaper than the argon2id hash + DB mutation below when it
   // does apply.
-  const turnstileResult = await enforceTurnstileIfRequired(
-    (rawBody as Record<string, unknown> | null)?.turnstileToken,
-    clientIp,
-    { action: PASSWORD_RESET_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.passwordReset,
+    rawBody,
+    { clientIp }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();

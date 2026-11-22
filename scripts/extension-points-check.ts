@@ -29,6 +29,7 @@ import { listModules } from "../src/modules";
 import {
   formatExtensionPointIssue,
   validateEmailCategoryDeclarations,
+  validatePublicFormChallengeProviderDeclarations,
   validateWhatsappTemplateDeclarations
 } from "../src/modules/_shared/extension-point-declarations";
 import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
@@ -68,6 +69,31 @@ export function findManualRegistrations(
   }
 
   return [...offenders].sort();
+}
+
+/**
+ * The only source files that may call `enforceTurnstileIfRequired`: its own
+ * file and the web-only binding that adapts it to the public-form challenge seam
+ * (Issue #1353). Any other caller is a SECOND path around the seam: it would
+ * skip the single-use burn, the deadline, the one-provider rule and the uniform
+ * refusal. A form calls `enforcePublicFormCaptcha` instead. Tests are not scanned.
+ */
+export const DIRECT_TURNSTILE_ALLOWED_FILES: readonly string[] = [
+  "src/lib/security/turnstile.ts",
+  "src/lib/security/public-form-challenge-bindings.ts"
+];
+
+export function findDirectTurnstileCalls(
+  files: readonly { path: string; text: string }[]
+): string[] {
+  return files
+    .filter(
+      (file) =>
+        !DIRECT_TURNSTILE_ALLOWED_FILES.includes(file.path) &&
+        /\benforceTurnstileIfRequired\s*\(/.test(stripComments(file.text))
+    )
+    .map((file) => file.path)
+    .sort();
 }
 
 /**
@@ -734,7 +760,8 @@ function main(): void {
       modules,
       BASE_EMAIL_TEMPLATE_CATEGORIES
     ),
-    ...validateWhatsappTemplateDeclarations(modules)
+    ...validateWhatsappTemplateDeclarations(modules),
+    ...validatePublicFormChallengeProviderDeclarations(modules)
   ]) {
     failures.push(formatExtensionPointIssue(issue));
   }
@@ -759,6 +786,12 @@ function main(): void {
   for (const file of findManualRegistrations(files)) {
     failures.push(
       `${file} registers an e-mail category or a WhatsApp template by hand. Declare it in the owning module's descriptor (emailTemplateCategories / whatsappTemplates, ADR-0164): a manual registration lives in one process and leaves email:dispatch / whatsapp:dispatch without it.`
+    );
+  }
+
+  for (const file of findDirectTurnstileCalls(files)) {
+    failures.push(
+      `${file} calls enforceTurnstileIfRequired directly. A public form calls enforcePublicFormCaptcha (src/lib/security/public-form-challenge.ts, Issue #1353); a direct call is a second path that skips the single-use burn, the deadline and the uniform refusal.`
     );
   }
 

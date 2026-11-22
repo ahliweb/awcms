@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:985aab8811b76e75871d150e7e6f6bee7b4612d017a1838ffd634b462fdc5e3c -->
+<!-- i18n-source-hash: sha256:67a26658a97d7bcc69895bbbc35ef9a1727dd1e9f9b64533ce1a8964d90e3a06 -->
 
 # Identity & Access
 
@@ -213,6 +213,14 @@ Diadaptasi dari awcms-micro Issue #496. Dua endpoint publik + dua halaman:
 - **Rate limit + Turnstile** — per `clientIp:tenantId` pada KEDUA endpoint,
   dicek sebelum menyentuh DB; Turnstile memakai action `password_reset` sendiri
   (token dari form login tidak bisa di-replay ke sini).
+- **Seam challenge (Issue #1353)** — Turnstile adalah provider pertama di
+  belakang seam challenge form publik. Modul mendeklarasikannya di descriptor
+  (`publicFormChallengeProviders`, `infrastructure/turnstile-challenge-provider.ts`),
+  dan setiap rute pra-sesi (login x2, register, forgot, reset, terima undangan,
+  setup) memanggil `enforcePublicFormCaptcha` alih-alih Turnstile langsung.
+  Kontrak terbit tak berubah (`turnstileToken`, `TURNSTILE_REQUIRED` /
+  `TURNSTILE_INVALID`); field netral `challenge*` ikut dibaca. Lihat
+  `docs/awcms/public-form-challenge.md`.
 
 ## Self-registration ber-persetujuan admin (Gelombang 2 delta auth)
 

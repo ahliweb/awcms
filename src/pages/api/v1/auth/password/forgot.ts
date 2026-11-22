@@ -13,9 +13,9 @@ import {
   readJsonBody
 } from "../../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  PASSWORD_RESET_TURNSTILE_ACTION
-} from "../../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../../lib/security/public-form-challenge";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { createEmailAuthNotificationAdapter } from "../../../../../modules/email/application/auth-notification-port-adapter";
 import { requestPasswordReset } from "../../../../../modules/identity-access/application/password-reset";
@@ -113,20 +113,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   // Full-online only (Issue #186): a no-op on every local/offline/LAN
   // deployment, and cheaper than the DB write + enqueue below when it does
   // apply — so it is verified before either.
-  const turnstileResult = await enforceTurnstileIfRequired(
-    (rawBody as Record<string, unknown> | null)?.turnstileToken,
-    clientIp,
-    { action: PASSWORD_RESET_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.passwordReset,
+    rawBody,
+    { clientIp }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();

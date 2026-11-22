@@ -211,3 +211,93 @@ export function validateWhatsappTemplateDeclarations(
 export function formatExtensionPointIssue(issue: ExtensionPointIssue): string {
   return `module "${issue.moduleKey}": ${issue.message}`;
 }
+
+const CHALLENGE_PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
+const CHALLENGE_REFUSAL_CODE_PATTERN = /^[A-Z][A-Z0-9_]*$/;
+const CHALLENGE_LEGACY_FIELD_PATTERN = /^[a-z][a-zA-Z0-9]*$/;
+const CHALLENGE_RESERVED_FIELDS = [
+  "challengeId",
+  "challengeAnswer",
+  "challengeToken"
+];
+
+/**
+ * Public-form challenge providers (Issue #1353): unique snake_case keys across
+ * the composed registry, the three contract functions present, and refusal
+ * codes and the legacy field in a shape a client can rely on. Pure.
+ */
+export function validatePublicFormChallengeProviderDeclarations(
+  modules: readonly ModuleDescriptor[]
+): ExtensionPointIssue[] {
+  const issues: ExtensionPointIssue[] = [];
+  const owners = new Map<string, string>();
+
+  for (const module of modules) {
+    for (const provider of module.publicFormChallengeProviders ?? []) {
+      const label = `challenge provider "${provider.key}"`;
+
+      if (
+        typeof provider.key !== "string" ||
+        !CHALLENGE_PROVIDER_KEY_PATTERN.test(provider.key)
+      ) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} must have a lower-case snake case key.`
+        });
+      }
+
+      const owner = owners.get(provider.key);
+
+      if (owner !== undefined) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} is also declared by module "${owner}".`
+        });
+      } else {
+        owners.set(provider.key, module.key);
+      }
+
+      if (!provider.description?.trim()) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} needs a description.`
+        });
+      }
+
+      for (const method of ["isEnabled", "issue", "verify"] as const) {
+        if (typeof provider[method] !== "function") {
+          issues.push({
+            moduleKey: module.key,
+            message: `${label} must implement ${method}().`
+          });
+        }
+      }
+
+      if (provider.legacyTokenField !== undefined) {
+        if (
+          !CHALLENGE_LEGACY_FIELD_PATTERN.test(provider.legacyTokenField) ||
+          CHALLENGE_RESERVED_FIELDS.includes(provider.legacyTokenField)
+        ) {
+          issues.push({
+            moduleKey: module.key,
+            message: `${label} has an invalid legacyTokenField "${provider.legacyTokenField}".`
+          });
+        }
+      }
+
+      for (const code of [
+        provider.refusal?.requiredCode,
+        provider.refusal?.invalidCode
+      ]) {
+        if (code !== undefined && !CHALLENGE_REFUSAL_CODE_PATTERN.test(code)) {
+          issues.push({
+            moduleKey: module.key,
+            message: `${label} has an invalid refusal code "${code}" (UPPER_SNAKE_CASE).`
+          });
+        }
+      }
+    }
+  }
+
+  return issues;
+}
