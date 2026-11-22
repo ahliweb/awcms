@@ -11,7 +11,8 @@
  *   bun run omes:contract:preflight
  *     Release-side checks: PIN.json drift (same as contracts:omes:sync:check),
  *     the PIN matches the hand-declared source commit + aggregate digest in
- *     `domain/contracts/compatibility.ts`, and the OpenAPI document still
+ *     `domain/contracts/compatibility.ts`, `OMES_OPERATION_CODES` equals the
+ *     vendored operation enums (code-vs-contract drift), and the OpenAPI document still
  *     carries the four worker routes (enroll/poll/result/heartbeat).
  *
  *   bun run omes:contract:preflight -- --worker <descriptor.json>
@@ -37,6 +38,7 @@ import {
   evaluateWorkerCompatibility,
   omesWorkerContractDigest
 } from "../src/modules/omes-control/domain/contracts/compatibility";
+import { OMES_OPERATION_CODES } from "../src/modules/omes-control/domain/operations";
 import {
   PIN_MANIFEST_FILENAME,
   VENDORED_CONTRACTS_DIR,
@@ -137,6 +139,83 @@ export function checkProducerCompatPin(rootDir: string): string[] {
   return failures;
 }
 
+/** Reads the string enum at `properties[...path]` of a vendored schema, or `null` when absent. */
+function readSchemaEnum(
+  rootDir: string,
+  schemaFile: string,
+  propertyPath: readonly string[]
+): string[] | null {
+  const file = path.join(rootDir, VENDORED_CONTRACTS_DIR, schemaFile);
+  if (!existsSync(file)) return null;
+  try {
+    let node = JSON.parse(readFileSync(file, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    for (const key of propertyPath) {
+      const props = node.properties as Record<string, unknown> | undefined;
+      const next = props?.[key];
+      if (typeof next !== "object" || next === null) return null;
+      node = next as Record<string, unknown>;
+    }
+    const e = node.enum;
+    return Array.isArray(e) && e.every((x) => typeof x === "string")
+      ? (e as string[])
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Code-vs-contract drift: `OMES_OPERATION_CODES` (and, through it, the
+ * advertised worker capabilities) must equal, in order, the closed
+ * `operation` enum of the vendored `operation-request` schema and of the job
+ * embedded in `worker-poll.response`, and must be a subset of every broader
+ * operation enum the worker/job schemas allow. A schema edit that is not
+ * mirrored in code, or code that grows an operation the contract lacks,
+ * refuses the release. Read-only.
+ */
+export function checkOperationCodesAgainstContract(
+  rootDir: string,
+  codes: readonly string[] = OMES_OPERATION_CODES
+): string[] {
+  const failures: string[] = [];
+  const exact: Array<[string, string[]]> = [
+    ["operation-request.schema.json", ["operation"]],
+    ["worker-poll.response.schema.json", ["job", "operation"]]
+  ];
+  for (const [file, propPath] of exact) {
+    const contract = readSchemaEnum(rootDir, file, propPath);
+    if (contract === null) {
+      failures.push(`${file} has no readable ${propPath.join(".")} enum`);
+    } else if (JSON.stringify(contract) !== JSON.stringify(codes)) {
+      failures.push(
+        `OMES_OPERATION_CODES [${codes.join(", ")}] differs from ${file} ${propPath.join(".")} enum [${contract.join(", ")}] (must match byte-for-byte, in order)`
+      );
+    }
+  }
+  const supersets: Array<[string, string[]]> = [
+    ["deployment.request.schema.json", ["operation"]],
+    ["job-status.response.schema.json", ["operation"]],
+    ["worker-result.request.schema.json", ["operation"]]
+  ];
+  for (const [file, propPath] of supersets) {
+    const contract = readSchemaEnum(rootDir, file, propPath);
+    if (contract === null) {
+      failures.push(`${file} has no readable ${propPath.join(".")} enum`);
+      continue;
+    }
+    const missing = codes.filter((c) => !contract.includes(c));
+    if (missing.length > 0) {
+      failures.push(
+        `OMES_OPERATION_CODES contains [${missing.join(", ")}] which ${file} ${propPath.join(".")} does not allow`
+      );
+    }
+  }
+  return failures;
+}
+
 export type PreflightResult = { failures: string[]; notes: string[] };
 
 export function runOmesContractPreflight(
@@ -189,6 +268,7 @@ export function runOmesContractPreflight(
   }
 
   failures.push(...checkProducerCompatPin(rootDir));
+  failures.push(...checkOperationCodesAgainstContract(rootDir));
 
   const openApiPath = path.join(
     rootDir,
