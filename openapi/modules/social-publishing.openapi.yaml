@@ -988,9 +988,9 @@ components:
           type: string
           nullable: true
         media:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/SocialPublicationMedia"
-          nullable: true
+            - type: "null"
         contentHash:
           type: string
         notBefore:

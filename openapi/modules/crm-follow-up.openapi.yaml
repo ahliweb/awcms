@@ -954,8 +954,9 @@ components:
           type: string
           format: date-time
         currentRevision:
-          $ref: "#/components/schemas/CrmFollowUpRevision"
-          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/CrmFollowUpRevision"
+            - type: "null"
     CrmFollowUpRuleCreate:
       type: object
       additionalProperties: false

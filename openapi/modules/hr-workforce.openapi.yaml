@@ -2385,9 +2385,9 @@ components:
           format: date-time
           nullable: true
         currentTerm:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrEmploymentTerm"
+            - type: "null"
     HrTermsFields:
       type: object
       properties:
@@ -3031,9 +3031,9 @@ components:
         accuracyCeilingMeters:
           type: integer
         notice:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrGeolocationNotice"
+            - type: "null"
         acknowledged:
           type: boolean
     HrGeolocationAcknowledgeInput:
@@ -3147,12 +3147,12 @@ components:
           type: string
           format: uuid
         positionSample:
-          nullable: true
           description:
             Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the
             server in the request and discarded (ADR-0138). `null` or absent is a declined fix.
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrPositionSample"
+            - type: "null"
     HrAttendanceCorrection:
       type: object
       description:

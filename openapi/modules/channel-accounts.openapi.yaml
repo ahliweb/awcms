@@ -1885,9 +1885,9 @@ components:
           type: string
           format: uuid
         businessScope:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelBusinessScope"
-          nullable: true
+            - type: "null"
         provider:
           type: string
         accountKind:
@@ -2030,9 +2030,9 @@ components:
           description: >-
             The authority boundary of the grant, carried from the authorisation
             that started it; null is tenant-wide.
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelBusinessScope"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -2059,9 +2059,9 @@ components:
             - not_offered
             - absent
         evidenceKind:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelEvidenceKind"
-          nullable: true
+            - type: "null"
         evidenceRef:
           type: string
           nullable: true

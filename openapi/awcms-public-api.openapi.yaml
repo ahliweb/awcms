@@ -14571,9 +14571,9 @@ paths:
                   description: "Issue #1160 - send AS this tenant-owned, provider-verified Mailketing sender (a channel account id of the caller's tenant; never a token or an address). Without it the prospective default sender of the scope or the tenant (routing enabled and a policy set) or the deployment sender is used. Whenever the result is a TENANT sender (named or chosen by a policy, tenant-wide included), the caller needs `email.senders.use` and the channel-account access rules on that sender. The chosen sender is snapshotted on every queued row and never changes; one that cannot send is refused (422 SENDER_UNAVAILABLE, or 409 SENDER_ROUTING_DISABLED when tenant senders are off), never swapped. Security mail (auth.*, system.security_notice) always uses the deployment sender."
                 businessScope:
                   description: "Issue #1160 - the business scope (brand) this announcement speaks for; selects that scope's default sender. Requires `email.senders.use`."
-                  allOf:
+                  oneOf:
                     - $ref: "#/components/schemas/EmailBusinessScope"
-                  nullable: true
+                    - type: "null"
       responses:
         "200":
           description: Recipients enqueued.
@@ -14944,9 +14944,9 @@ paths:
                 - defaultSenderAccountId
               properties:
                 businessScope:
-                  allOf:
+                  oneOf:
                     - $ref: "#/components/schemas/EmailBusinessScope"
-                  nullable: true
+                    - type: "null"
                 defaultSenderAccountId:
                   type: string
                   format: uuid
@@ -26163,11 +26163,11 @@ paths:
               additionalProperties: false
               properties:
                 approvalThreshold:
-                  nullable: true
                   oneOf:
                     - $ref: "#/components/schemas/ProcurementDecimal"
                     - type: number
                       minimum: 0
+                    - type: "null"
       responses:
         "200":
           description: The policy.
@@ -32291,9 +32291,9 @@ paths:
                     type: object
                     properties:
                       binding:
-                        allOf:
+                        oneOf:
                           - $ref: "#/components/schemas/TelegramBinding"
-                        nullable: true
+                          - type: "null"
                       available:
                         type: boolean
                   meta:
@@ -39253,48 +39253,58 @@ components:
             - defaultTimezone
             - defaultCheckInTime
             - defaultCheckOutTime
-          properties: null
-          defaultHoldSeconds:
-            type: integer
-            nullable: true
-            minimum: 60
-            maximum: 86400
-          maxHoldSeconds:
-            type: integer
-            nullable: true
-            minimum: 60
-            maximum: 86400
-          maxActiveHoldsPerCustomer:
-            type: integer
-            nullable: true
-            minimum: 1
-          maxActiveHoldsPerTenant:
-            type: integer
-            nullable: true
-            minimum: 1
-          minLeadSeconds:
-            type: integer
-            nullable: true
-            minimum: 0
-          maxHorizonDays:
-            type: integer
-            nullable: true
-            minimum: 1
-            maximum: 3650
-          noShowGraceSeconds:
-            type: integer
-            nullable: true
-            minimum: 0
-            maximum: 2592000
-          defaultTimezone:
-            type: string
-            nullable: true
-          defaultCheckInTime:
-            type: string
-            nullable: true
-          defaultCheckOutTime:
-            type: string
-            nullable: true
+          properties:
+            defaultHoldSeconds:
+              type:
+                - integer
+                - "null"
+              minimum: 60
+              maximum: 86400
+            maxHoldSeconds:
+              type:
+                - integer
+                - "null"
+              minimum: 60
+              maximum: 86400
+            maxActiveHoldsPerCustomer:
+              type:
+                - integer
+                - "null"
+              minimum: 1
+            maxActiveHoldsPerTenant:
+              type:
+                - integer
+                - "null"
+              minimum: 1
+            minLeadSeconds:
+              type:
+                - integer
+                - "null"
+              minimum: 0
+            maxHorizonDays:
+              type:
+                - integer
+                - "null"
+              minimum: 1
+              maximum: 3650
+            noShowGraceSeconds:
+              type:
+                - integer
+                - "null"
+              minimum: 0
+              maximum: 2592000
+            defaultTimezone:
+              type:
+                - string
+                - "null"
+            defaultCheckInTime:
+              type:
+                - string
+                - "null"
+            defaultCheckOutTime:
+              type:
+                - string
+                - "null"
         effective:
           description: What is in force (the tenant value, or the module default where it is null).
           type: object
@@ -39543,9 +39553,9 @@ components:
         quantity:
           type: integer
         stay:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/BookingReservationStay"
+            - type: "null"
     BookingReservationResult:
       type: object
       properties:
@@ -40444,9 +40454,9 @@ components:
           type: string
           format: uuid
         businessScope:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelBusinessScope"
-          nullable: true
+            - type: "null"
         provider:
           type: string
         accountKind:
@@ -40538,9 +40548,9 @@ components:
             - not_offered
             - absent
         evidenceKind:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelEvidenceKind"
-          nullable: true
+            - type: "null"
         evidenceRef:
           type: string
           nullable: true
@@ -40691,9 +40701,9 @@ components:
           nullable: true
         businessScope:
           description: The authority boundary of the grant, carried from the authorisation that started it; null is tenant-wide.
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ChannelBusinessScope"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -40933,9 +40943,9 @@ components:
           type: string
           format: date-time
         image:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ComposedHomepageImage"
-          nullable: true
+            - type: "null"
     ComposedHomepageSection:
       type: object
       properties:
@@ -41490,8 +41500,9 @@ components:
           type: string
           format: date-time
         currentRevision:
-          $ref: "#/components/schemas/CrmFollowUpRevision"
-          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/CrmFollowUpRevision"
+            - type: "null"
     CrmFollowUpRuleCreate:
       type: object
       additionalProperties: false
@@ -43044,9 +43055,9 @@ components:
           type: string
           format: uuid
         businessScope:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/EmailBusinessScope"
-          nullable: true
+            - type: "null"
         defaultSenderAccountId:
           type: string
           format: uuid
@@ -43525,10 +43536,10 @@ components:
           type: string
           format: uuid
         positionSample:
-          nullable: true
           description: Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the server in the request and discarded (ADR-0138). `null` or absent is a declined fix.
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrPositionSample"
+            - type: "null"
     HrAttendanceEventRecorded:
       description: A recorded attendance event plus the verdict of its location evidence (ADR-0138).
       allOf:
@@ -43721,9 +43732,9 @@ components:
         seq:
           type: integer
         fromStatus:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrCommissionAccrualStatus"
-          nullable: true
+            - type: "null"
         toStatus:
           $ref: "#/components/schemas/HrCommissionAccrualStatus"
         actorTenantUserId:
@@ -44074,9 +44085,9 @@ components:
           format: date-time
           nullable: true
         currentTerm:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrEmploymentTerm"
+            - type: "null"
     HrEmploymentInput:
       type: object
       additionalProperties: false
@@ -44314,9 +44325,9 @@ components:
         accuracyCeilingMeters:
           type: integer
         notice:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HrGeolocationNotice"
+            - type: "null"
         acknowledged:
           type: boolean
     HrGeolocationSettings:
@@ -44960,9 +44971,9 @@ components:
         onHand:
           $ref: "#/components/schemas/InventoryQuantity"
         lowStockThreshold:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/InventoryQuantity"
-          nullable: true
+            - type: "null"
         isLow:
           type: boolean
         movementCount:
@@ -47263,11 +47274,11 @@ components:
             - type: number
               exclusiveMinimum: 0
         unitCost:
-          nullable: true
           oneOf:
             - $ref: "#/components/schemas/ProcurementDecimal"
             - type: number
               minimum: 0
+            - type: "null"
           description: Required for `receive` and `supplier_return` (the approval threshold is cost-based).
     ProcurementMovementLink:
       type: object
@@ -49066,9 +49077,9 @@ components:
           type: string
           nullable: true
         media:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/SocialPublicationMedia"
-          nullable: true
+            - type: "null"
         contentHash:
           type: string
         notBefore:
@@ -52458,7 +52469,6 @@ components:
           nullable: true
           description: Null is the deployment sender.
         availability:
-          nullable: true
           description: Null for the deployment sender, which has no account record.
           oneOf:
             - type: object
@@ -52476,6 +52486,7 @@ components:
                 reason:
                   type: string
                   description: A coarse reason code (for example `ACCOUNT_REVOKED`, `CAPABILITY_DENIED`, `RISK_ACKNOWLEDGEMENT_REQUIRED` for an unofficial provider such as StarSender whose current risk text the tenant has not acknowledged).
+            - type: "null"
         queue:
           type: object
           properties:

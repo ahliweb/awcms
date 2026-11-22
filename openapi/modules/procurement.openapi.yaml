@@ -1112,11 +1112,11 @@ paths:
               additionalProperties: false
               properties:
                 approvalThreshold:
-                  nullable: true
                   oneOf:
                     - $ref: "#/components/schemas/ProcurementDecimal"
                     - type: number
                       minimum: 0
+                    - type: "null"
       responses:
         "400":
           $ref: "#/components/responses/BadRequest"
@@ -1476,11 +1476,11 @@ components:
             - type: number
               exclusiveMinimum: 0
         unitCost:
-          nullable: true
           oneOf:
             - $ref: "#/components/schemas/ProcurementDecimal"
             - type: number
               minimum: 0
+            - type: "null"
           description: Required for `receive` and `supplier_return` (the approval threshold is cost-based).
     ProcurementDocumentInput:
       type: object

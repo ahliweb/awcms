@@ -4368,9 +4368,9 @@ components:
           type: string
           format: date-time
         image:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/ComposedHomepageImage"
-          nullable: true
+            - type: "null"
     ComposedHomepageGroup:
       type: object
       properties:
