@@ -2,7 +2,7 @@
 
 # ADR-0165 — Public site search cannot use its GIN index under FORCE RLS without a SECURITY DEFINER read path or a LEAKPROOF decision
 
-- **Status:** Proposed (awaiting the owner's decision, question Q1)
+- **Status:** Accepted (22 November 2026) with decision K1: option 0 stays; option 2 pre-approved behind a measured trigger; option 3 rejected permanently.
 - **Date:** 2026-11-15
 - **Decision maker:** ahliweb (owner)
 - **Resolves (when accepted):** Issue #1321.
@@ -60,3 +60,11 @@ Option 0 now (it is bounded by a rate limit and a timeout) and, if a tenant corp
 ## Consequences
 
 If accepted as option 0: `tests/integration/site-search-prefix-plan.integration.test.ts` stays the pin and this ADR is its recorded reason. If option 2: a migration adds the function and grants, the search service calls it, the RLS probes and the plan test are updated in the same change, and the ADR becomes Accepted with its own security review.
+
+## Decision (22 November 2026, K1)
+
+The decision was delegated by the owner to the orchestrator ("choose the best per recommendation and professional practice, priority on scalability, performance and security"). Answer to **Q1**:
+
+1. **Option 0 is the standing decision.** Issue #1321 is closed as "accepted, measured, pinned". RLS is not weakened without a measured need.
+2. **Option 2 (`SECURITY DEFINER` read function) is pre-approved**, to be built only when a trigger is met in production: the largest tenant's public corpus exceeds **100,000 documents**, OR the p95 of public search exceeds **50 ms**. Building it requires the gates named above (a tenant predicate inside the function, a pinned `search_path`, EXECUTE-only grant, an explicit exception in the RLS probe) and a security review. It is tracked in #1433.
+3. **Option 3 (`LEAKPROOF`) is rejected permanently.**

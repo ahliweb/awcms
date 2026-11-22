@@ -2,7 +2,7 @@
 
 # ADR-0164 — E-mail categories and WhatsApp templates are declared in the module descriptor, and the worker category allow-list is data
 
-- **Status:** Proposed (pending maintainer review)
+- **Status:** Accepted (22 November 2026). Basis: already implemented and gated since #1361 (`sql/410`, `bun run extension-points:check`); status follows reality.
 - **Date:** 2026-11-15
 - **Decision maker:** ahliweb (owner), to confirm
 - **Resolves:** Issue #1277.
@@ -77,3 +77,7 @@ Rejected: a worker session could set it itself, so the guard would protect nothi
 ### E. `SECURITY DEFINER` guard reading a table the worker cannot read
 
 Rejected: inside a definer function `current_user` is the owner, and the superuser exemption (`rolsuper` of `current_user`) would exempt every caller when the owner is a superuser. Granting the worker `SELECT` on a read-only list is simpler and leaks only category names.
+
+## Decision record (22 November 2026)
+
+Accepted. The decision was delegated by the owner to the orchestrator ("choose the best per recommendation and professional practice, priority on scalability, performance and security"). The basis is factual: the descriptor fields, `awcms_email_worker_categories` (`sql/410`) and the `extension-points:check` gate have been implemented and enforced in CI since #1361, so this ADR records what is already true. The text above is unchanged.

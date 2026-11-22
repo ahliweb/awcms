@@ -2,9 +2,9 @@
 
 # ADR-0158 — StarSender adapter: the conditions that differ from ADR-0148 (operator-attested device state, held lanes, unknown outcomes, an unapproved acknowledgement text)
 
-- **Status:** Proposed
+- **Status:** Accepted as a condition (22 November 2026): Q1 to Q3 answered below; Q4 stays OPEN for the owner or counsel. The adapter stays OFF.
 - **Date:** 2026-11-03
-- **Decision maker:** ahliweb (owner). **Not decided.** This ADR records what the implementation of Issue #1142 had to do differently from, or beyond, what the Accepted [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) says, so that the owner can accept, change or reject each point. An agent cannot change an owner decision inside a pull request, and ADR-0148 is therefore **unchanged**.
+- **Decision maker:** ahliweb (owner). **Q1 to Q3 decided 22 November 2026 by delegation to the orchestrator (see Decision); Q4 not decided.** This ADR records what the implementation of Issue #1142 had to do differently from, or beyond, what the Accepted [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) says, so that the owner can accept, change or reject each point. An agent cannot change an owner decision inside a pull request, and ADR-0148 is therefore **unchanged**.
 - **Extends (when accepted):** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) section 4 (multi-sender semantics, "a provider's `success` is accepted, never delivered"), section 7 (unofficial-provider rules) and invariant I9 (verified inbound or deferred).
 - **Related:** Issue #1142 (the adapter), PR #1241, [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) (one queue, at-least-once), [ADR-0141](0141-permissions-may-require-an-enrolled-mfa-factor.md) (the conditional step-up rule), `docs/awcms/starsender-adapter-runbook.md`.
 
@@ -65,3 +65,14 @@ Accept points 1 to 8 as the conditions under which the StarSender adapter may be
 - **Positive:** every point where the implementation went beyond ADR-0148 is visible, attributable and reversible by the owner; the code is safe to merge because it is off and fail closed.
 - **Negative:** the adapter cannot be used until the owner decides; if the owner rejects point 1, the code that attests devices must be removed and the adapter becomes unusable.
 - **Neutral:** no behaviour changes for any deployment until the flag is set, the text is approved, and an operator acknowledges and attests.
+
+## Decision (22 November 2026, K4)
+
+The decision was delegated by the owner to the orchestrator ("choose the best per recommendation and professional practice, priority on scalability, performance and security"). Accepted as a condition:
+
+- **Q1: yes.** Operator attestation of device state is accepted as a recorded exception to "health is reported, never asserted by a person"; it ends as soon as a status call exists.
+- **Q2: yes.** A provider-reported disconnect holds the lane, with a bounded retry budget.
+- **Q3: yes.** No retry on 5xx or timeout: the outcome is `unknown` and the message is never blindly resent.
+- **Q4: NOT decided by an agent.** The acknowledgement text carries legal accountability (UU PDP). The agent prepares a draft; the owner or counsel approves it. It stays open and the text ships with `approval: null`.
+
+The adapter stays OFF. Production use only after Q4 is approved and the checklist in `docs/awcms/starsender-adapter-runbook.md` section 6 is completed with a test device. The official Meta Cloud API connector (#1143) takes priority over this unofficial gateway.

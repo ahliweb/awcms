@@ -406,6 +406,83 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **DECISIONS OF 22 NOVEMBER 2026 (K1-K14), DELEGATED TO THE ORCHESTRATOR.** The
+  owner (ahliweb) delegated the open decisions to the orchestrator with the
+  instruction "choose the best per recommendation and professional practice,
+  priority on scalability, performance and security". These are agent
+  decisions under that delegation, recorded as such, not decisions the owner
+  made one by one. ADR status changes: **ADR-0164 Accepted** (already
+  implemented and gated since #1361), **ADR-0165 Accepted** (K1),
+  **ADR-0163 Accepted** (K5), **ADR-0158 Accepted as a condition** (K4).
+  **Deliberately NOT decided by an agent** (legal accountability, cannot be
+  delegated): (a) the payroll phase-3 DPIA approval (#976; the controller signs,
+  UU PDP; the agent only drafts it), and (b) the StarSender risk-acknowledgement
+  text (ADR-0158 Q4; the owner or counsel approves it, the text ships with
+  `approval: null`). Docs only; no migration. Decisions:
+  K1 (#1321, ADR-0165 Q1) option 0 is the standing decision and #1321 is closed;
+  option 2 (`SECURITY DEFINER`) is pre-approved once the largest tenant's public
+  corpus exceeds 100,000 documents or public-search p95 exceeds 50 ms in
+  production, with its gates and a security review (tracked in #1433); option 3
+  (`LEAKPROOF`) is rejected permanently.
+  K2 (#1215, external_id squatting) A + C, B rejected: ADR-0170 will amend I1 of
+  ADR-0148 to "unique per verified id"; duplicate `pending` claims are accepted
+  per tenant without an oracle, the first verified wins (partial unique index,
+  race-safe) and the loser gets 409 at verification; providers without
+  verification (StarSender) keep the claim plus the dispute path C
+  (platform-scoped, step-up, audit, not seeded to tenant roles); M1 and M3 were
+  already fixed by PRs #1218/#1219 (re-verified 22 Nov by mutation: the
+  decision-log row count of one GET stays at most 6 for 4 or 24 connections).
+  K3 (#1095) payroll mutation routes return a masked shape (full values only
+  from the audited read endpoint); `payroll:catalog-boundary:check` is scheduled
+  daily against the deployed database under a minimal dedicated role (CONNECT
+  plus catalog, no table SELECT), the operator provides the credential, and
+  `PAYROLL_EXPECTED_OWNERS` is required in split-role; an allow-list direction
+  is accepted as a separate issue.
+  K4 (#1142, ADR-0158) Q1 to Q3 yes; Q4 is an agent draft awaiting the owner or
+  counsel; the adapter stays OFF, production only after Q4 plus the runbook
+  section 6 checklist with a test device; the official Meta Cloud API (#1143)
+  comes first.
+  K5 (ADR-0163) Q1 the human who owns the machine credential (one named owner;
+  deactivated owner revokes the credential), Q2 agents may not propose
+  `rollback` or backup restore, Q3 quorum of two for disruptive proposals
+  (`stop`, `restart`, `update`) and one approver for `status`/`preflight`/
+  `backup`/`start`, Q4 expiry after 24 hours, fail-closed; D7 needs a contract
+  change in `ahliweb/omes` (outside this repository).
+  K6 (ADR-0164) Accepted.
+  K7 (#1391-#1395) unblock #1391, then #1392, then #1393 and #1395, in order
+  after #1390 merges; #1394 stays blocked until a consumer (awcms-astro) asks
+  for pinned fixtures.
+  K8 (#1405-#1407) ADR-0168 gets an `awcms-security-auditor` review after #1417
+  merges, then Accepted, then #1405 is built; #1406 proceeds (ADR for native
+  OIDC + PKCE, rotating refresh tokens with reuse detection); #1407 after #1405.
+  K9 (#1353) proceed: an off-by-default, fail-closed seam, the existing
+  Turnstile as the first provider behind it, registration by descriptor; rate
+  limiting stays the primary control.
+  K10 (#1356) proceed in stages, one child issue per item, ordered by sync
+  conflict frequency; a descriptor may only ADD expectations beneath the central
+  ceiling, and the global deny-list stays central; the DB privilege item goes
+  last, with a security review.
+  K11 (social S1-S4) S1 A (Hermes proposes, ADR first); S2 A (freeze Meta DMs in
+  Hermes, inbound lives in awcms, the WABA moves after #1143 is proven); S3 A
+  (Instagram, then Telegram channel, then Threads, then YouTube/TikTok); S4 B (a
+  separate new Meta app for publishing only). The #1145 admission conditions
+  (evidence retention, a dedicated worker DB role, a credential-path review) come
+  before any connector leaves its flag.
+  K12 (#1171) prioritised for scalability: cross-instance fan-out through
+  PostgreSQL LISTEN/NOTIFY (no new service), payload limited to id/topic with no
+  PII, a multi-instance race test.
+  K13 (human activities) #976 the agent drafts the DPIA and the owner signs;
+  #968 the generic half is automated (restore rehearsal in a throwaway database),
+  the production drill is the operator's; #1283 harness plus a local baseline,
+  the production-like baseline waits for #1281; #1150 the agent writes the
+  document from the official LinkedIn documentation, legal review is the owner's;
+  #1159 live verification needs credentials and a test send by the operator.
+  K14 (others) #1185 is worked (consumer tests against the pinned contract in
+  this repository); #1186 after the ADR-0163 implementation; CRM #1164-#1166
+  after wave 2; #1173 stays open as a monthly recurring task. Waves: G1 is this
+  decision PR, #1095 masking plus the daily job, and #1171
+  fan-out; G2 and G3 follow the order above.
+
 - **`email:senders:verify` SCHEDULED — 14 November 2026 (#1160, ADR-0162).**
   Carries out the owner decision of 11 November 2026 (ADR-0159 entry below).
   The job is now on the generated crontab hourly (`0 * * * *`), as the third

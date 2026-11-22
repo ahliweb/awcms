@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0158-starsender-adapter-conditions-that-differ-from-adr-0148-operator-attested-device-state-held-lanes-and-an-unapproved-acknowledgement-text.md)
 
-<!-- i18n-source-hash: sha256:ea64e2b2650d080f3c5def49bbe739bd2cdf426ca4f116ed80caea4537703b90 -->
+<!-- i18n-source-hash: sha256:eeb589b0cf5d695f873a8a1ff42577101037f382fb7e19cc78cb75be0ded3ed7 -->
 
 # ADR-0158 — Adapter StarSender: kondisi yang berbeda dari ADR-0148 (status perangkat diatestasi operator, lane ditahan, hasil tak diketahui, teks pernyataan belum disetujui)
 
-- **Status:** Diusulkan
+- **Status:** Diterima sebagai syarat (22 November 2026): Q1 sampai Q3 dijawab di bawah; Q4 TETAP TERBUKA untuk pemilik atau penasihat hukum. Adapter tetap OFF.
 - **Tanggal:** 2026-11-03
-- **Pengambil keputusan:** ahliweb (pemilik). **Belum diputuskan.** ADR ini mencatat apa yang harus dilakukan implementasi Issue #1142 secara berbeda dari, atau melampaui, isi [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) yang berstatus Diterima, agar pemilik dapat menerima, mengubah, atau menolak tiap butir. Agen tidak dapat mengubah keputusan pemilik di dalam pull request, sehingga ADR-0148 **tidak diubah**.
+- **Pengambil keputusan:** ahliweb (pemilik). **Q1 sampai Q3 diputuskan 22 November 2026 lewat delegasi ke orchestrator (lihat Keputusan); Q4 belum diputuskan.** ADR ini mencatat apa yang harus dilakukan implementasi Issue #1142 secara berbeda dari, atau melampaui, isi [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) yang berstatus Diterima, agar pemilik dapat menerima, mengubah, atau menolak tiap butir. Agen tidak dapat mengubah keputusan pemilik di dalam pull request, sehingga ADR-0148 **tidak diubah**.
 - **Memperluas (bila diterima):** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) bagian 4 (semantik multi-pengirim, "`success` penyedia adalah diterima, tidak pernah terkirim"), bagian 7 (aturan penyedia tidak resmi), dan invarian I9 (masuk terverifikasi atau ditunda).
 - **Terkait:** Issue #1142 (adapter), PR #1241, [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) (satu antrean, at-least-once), [ADR-0141](0141-permissions-may-require-an-enrolled-mfa-factor.id.md) (aturan step-up bersyarat), `docs/awcms/starsender-adapter-runbook.id.md`.
 
@@ -67,3 +67,14 @@ Menerima butir 1 sampai 8 sebagai kondisi di mana adapter StarSender boleh dipak
 - **Positif:** setiap titik di mana implementasi melampaui ADR-0148 terlihat, dapat dipertanggungjawabkan, dan dapat dibalik oleh pemilik; kode aman di-merge karena mati dan gagal-tertutup.
 - **Negatif:** adapter tidak dapat dipakai sampai pemilik memutuskan; bila pemilik menolak butir 1, kode yang mengatestasi perangkat harus dihapus dan adapter menjadi tidak dapat dipakai.
 - **Netral:** tidak ada perubahan perilaku untuk deployment mana pun sampai flag disetel, teks disetujui, dan operator menyatakan serta mengatestasi.
+
+## Keputusan (22 November 2026, K4)
+
+Keputusan didelegasikan pemilik kepada orchestrator ("pilihkan yang terbaik sesuai rekomendasi dan praktek profesional, prioritas skalabilitas, performa dan security"). Diterima sebagai syarat:
+
+- **Q1: ya.** Atestasi operator atas status perangkat diterima sebagai pengecualian tercatat dari "kesehatan dilaporkan, tidak pernah dinyatakan seseorang"; berakhir begitu ada status call.
+- **Q2: ya.** Putusnya perangkat yang dilaporkan penyedia menahan lane, dengan anggaran retry terbatas.
+- **Q3: ya.** Tanpa retry untuk 5xx atau timeout: hasilnya `unknown` dan pesan tidak pernah dikirim ulang secara buta.
+- **Q4: TIDAK diputuskan agen.** Teks pengakuan memikul akuntabilitas hukum (UU PDP). Agen menyiapkan draf; pemilik atau penasihat hukum yang menyetujui. Tetap terbuka dan teks dikirim dengan `approval: null`.
+
+Adapter tetap OFF. Penggunaan produksi hanya setelah Q4 disetujui dan checklist di `docs/awcms/starsender-adapter-runbook.md` bagian 6 dijalankan dengan perangkat uji. Konektor resmi Meta Cloud API (#1143) didahulukan atas gateway tak resmi ini.
