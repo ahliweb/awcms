@@ -16,6 +16,20 @@ description: **ADR-0055 (2 August 2026): this is a BUILD-IT-HERE candidate, not 
 > this skill as the target specification for the port (via ADR admission;
 > `awcms-port-from-mini` is HISTORICAL), not as a code map you can call.
 > Verify `ls src/modules` before claiming anything exists.
+>
+> **STATUS UPDATE (2026-11-22): the hub is DEFERRED, not planned** —
+> [ADR-0169](../../../docs/adr/0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md)
+> (Accepted) set ADR-0019 to `Deferred`: no named consumer, so do not build
+> it; a future consumer goes through a fresh admission ADR.
+>
+> **Provenance (Issue #1408):** every "Issue #754" in this skill is the number
+> of the archived `awcms-mini` tracker, kept as history. In this repo #754 is an
+> unrelated merged newsletter PR; no issue here tracks the hub. Whether the hub
+> is still justified, versus the domain-owned provider ports/outboxes that now
+> exist (email, WhatsApp, Telegram, push, R2, commerce), is proposed in
+> [ADR-0169](../../../docs/adr/0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md)
+> (Proposed). Default until the owner decides: add a provider as a
+> domain-owned port + its own queue, not as an `integration_hub` adapter.
 
 `integration_hub` (`src/modules/integration-hub`, Issue #754, epic
 `platform-evolution` #738 Wave 3, `type: "system"` — ADR-0013 §1/§6, admission

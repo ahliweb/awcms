@@ -95,7 +95,7 @@ value sets.
 | 2   | `organization_structure`  | ADR-0016                 | Tenant-scoped legal entities + organisational units. ADR-0013 §2/§4 vocabulary (tenant ≠ legal entity ≠ unit). Depends on `logging` for audit.                                                                              |
 | 3   | `document_infrastructure` | ADR-0017                 | Generic document METADATA only — not a domain document schema. Reconcile with the existing `media_library` (ADR-0036) so that file ownership does not overlap.                                                              |
 | 4   | `data_exchange`           | ADR-0018                 | Staged CSV/JSON import/export; per-module contribution descriptor, formula-injection neutralisation, resumable idempotent commit.                                                                                           |
-| 5   | `integration_hub`         | ADR-0019                 | Signed inbound webhooks, per-endpoint HMAC + overlapping rotation, replay protection via DB uniqueness. First check whether it collides with `sync-storage`.                                                                |
+| 5   | `integration_hub`         | ADR-0019                 | **Deferred by ADR-0169 (2026-11-22): not planned.** Signed inbound webhooks, per-endpoint HMAC + overlapping rotation, replay protection via DB uniqueness. First check whether it collides with `sync-storage`.            |
 
 ### Wave B — SaaS control plane (**needs a new admission ADR first**)
 
@@ -163,15 +163,15 @@ steps against a seam that has not been proven.
 
 ## 5. Absorption status (historical snapshot, not maintained)
 
-| Wave | Item                                       | Status                                                                         | PR   |
-| ---- | ------------------------------------------ | ------------------------------------------------------------------------------ | ---- |
-| A    | `reference_data` (ADR-0021)                | ⏳ not yet — ADR is `Accepted`, no code yet                                    | —    |
-| A    | `organization_structure` (ADR-0016)        | ⏳ not yet — ADR is `Accepted`, no code yet                                    | —    |
-| A    | `document_infrastructure` (ADR-0017)       | ⏳ not yet — ADR is `Accepted`, no code yet                                    | —    |
-| A    | `data_exchange` (ADR-0018)                 | ⏳ not yet — ADR is `Accepted`, no code yet                                    | —    |
-| A    | `integration_hub` (ADR-0019)               | ⏳ not yet — ADR is `Accepted`, no code yet                                    | —    |
-| B    | **SaaS control plane admission ADR**       | ⏳ not yet — **blocks the whole of Wave B**                                    | —    |
-| B    | 7 control plane modules                    | ⏳ not yet                                                                     | —    |
-| C    | ERP contract implementation (ADR-0020)     | ⏳ not yet — ADR + docs exist, no `_shared` code                               | —    |
-| D    | `idn_admin_regions`                        | ✅ live — pioneered here (ADR-0046, `sql/080`–`081`)                           | #312 |
-| —    | Cloudflare DNS wiring + public host routes | ⏳ not yet — the adapter exists but is never called; `middleware.ts` untouched | —    |
+| Wave | Item                                       | Status                                                                           | PR   |
+| ---- | ------------------------------------------ | -------------------------------------------------------------------------------- | ---- |
+| A    | `reference_data` (ADR-0021)                | ⏸ deferred — ADR-0019 is `Deferred` by ADR-0169 (no named consumer); not planned | —    |
+| A    | `organization_structure` (ADR-0016)        | ⏳ not yet — ADR is `Accepted`, no code yet                                      | —    |
+| A    | `document_infrastructure` (ADR-0017)       | ⏳ not yet — ADR is `Accepted`, no code yet                                      | —    |
+| A    | `data_exchange` (ADR-0018)                 | ⏳ not yet — ADR is `Accepted`, no code yet                                      | —    |
+| A    | `integration_hub` (ADR-0019)               | ⏳ not yet — ADR is `Accepted`, no code yet                                      | —    |
+| B    | **SaaS control plane admission ADR**       | ⏳ not yet — **blocks the whole of Wave B**                                      | —    |
+| B    | 7 control plane modules                    | ⏳ not yet                                                                       | —    |
+| C    | ERP contract implementation (ADR-0020)     | ⏳ not yet — ADR + docs exist, no `_shared` code                                 | —    |
+| D    | `idn_admin_regions`                        | ✅ live — pioneered here (ADR-0046, `sql/080`–`081`)                             | #312 |
+| —    | Cloudflare DNS wiring + public host routes | ⏳ not yet — the adapter exists but is never called; `middleware.ts` untouched   | —    |

@@ -2,8 +2,10 @@
 
 # ADR-0019 — Admission of `integration_hub` as a System Foundation module
 
-- **Status:** Accepted (not yet implemented)
+- **Status:** Deferred
+- **Status note (2026-11-22):** Deferred by [ADR-0169](0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md) (Accepted; decision delegated by the owner to the orchestrator): no named consumer exists, so the hub is not built; a future consumer is assessed by a fresh admission ADR. The decision below is kept unchanged as history and is NOT cancelled.
 - **Status note (2026-08-05):** This admission decision still stands, but its artifact (`src/modules/integration-hub/`) does not exist in this repo, and since ADR-0055 its implementation waits on an admission ADR in this repo.
+- **Provenance note (2026-11-22, Issue #1408):** "Issue #754" below is the number of the archived `awcms-mini` tracker, kept as history. In THIS repo #754 is an unrelated merged newsletter PR, so it is **not** an integration-hub tracker and no issue here tracks the hub. A reconciliation of this admission with the domain-owned provider ports/outboxes that were built since is proposed in [ADR-0169](0169-integration-hub-admission-is-unimplemented-and-the-provider-boundary-already-lives-in-domain-owned-ports-and-outboxes.md) (Proposed, awaiting the owner). This ADR's status is unchanged.
 - **Date:** 2026-07-14
 - **Decision maker:** @ahliweb
 - **Related:** Issue #754 (epic #738 `platform-evolution`, Wave 3), Issue #742/#745 (`domain_event_runtime`, `data_lifecycle` — both dependencies), Issue #739/ADR-0013 §1/§6 (pre-classification of `integration_hub` as a System Foundation candidate + the data-ownership matrix), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
