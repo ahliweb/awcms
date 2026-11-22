@@ -88,30 +88,173 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [success, data]
                 properties:
                   success:
                     type: boolean
                     enum: [true]
                   data:
                     type: object
+                    required: [posts]
                     properties:
                       posts:
                         type: array
-                        description: "`BlogPostSummary` by default; `BlogPost` when `view=full`."
+                        description: "`BlogPostSummary` by default; `BlogPostFeedItem` (a `BlogPost` with the feed fields guaranteed) when `view=full`."
                         items:
                           oneOf:
                             - $ref: "#/components/schemas/BlogPostSummary"
-                            - $ref: "#/components/schemas/BlogPost"
+                            - $ref: "#/components/schemas/BlogPostFeedItem"
                       nextCursor:
                         type: string
                         nullable: true
                         description: Present only with `order=created_at`. Null means the traversal is complete.
+              examples:
+                summary:
+                  summary: Default projection (`BlogPostSummary`), `updated_at` ordering. No `nextCursor` key.
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          status: published
+                          visibility: public
+                          locale: id
+                          publishedAt: "2026-11-20T08:15:30.123Z"
+                          createdAt: "2026-11-19T03:02:11.456Z"
+                          updatedAt: "2026-11-20T08:15:30.123Z"
+                        - id: 9a0d4c7e-1b62-4e85-8f3a-6c5d2e7b1a40
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Draf yang belum terbit
+                          slug: draf-yang-belum-terbit
+                          status: draft
+                          visibility: private
+                          locale: id
+                          publishedAt: null
+                          createdAt: "2026-11-18T10:40:00.000Z"
+                          updatedAt: "2026-11-18T10:40:00.000Z"
+                    meta:
+                      correlationId: example-correlation-1
+                stable_order:
+                  summary: "`?order=created_at`. `nextCursor` is a string while more rows may follow, and null on the last page."
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          status: published
+                          visibility: public
+                          locale: id
+                          publishedAt: "2026-11-20T08:15:30.123Z"
+                          createdAt: "2026-11-20T08:15:30.123Z"
+                          updatedAt: "2026-11-20T08:15:30.123Z"
+                      nextCursor: MjAyNi0xMS0yMFQwODoxNTozMC4xMjM0NTZafDNmNmIxZDUyLThhNGUtNGMxYi05ZDdlLTJiNWYwYTljNGUxMQ
+                    meta:
+                      correlationId: example-correlation-2
+                full:
+                  summary: "`?view=full&order=created_at`. Each post is a `BlogPostFeedItem`: body, classification and byline included."
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          authorTenantUserId: b41e8d03-6a9f-4c27-85d1-0f3e7a2c9b68
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          excerpt: Ringkasan singkat sebuah berita contoh.
+                          contentJson:
+                            blocks:
+                              - type: paragraph
+                                text: Isi berita contoh.
+                          contentText: Isi berita contoh.
+                          bodyPortableText:
+                            - _type: block
+                              _key: k1
+                              style: normal
+                              children:
+                                - _type: span
+                                  _key: s1
+                                  text: Isi berita contoh.
+                                  marks: []
+                              markDefs: []
+                          status: published
+                          visibility: public
+                          featuredMediaId: null
+                          seoImageMediaId: null
+                          seoTitle: null
+                          metaDescription: Deskripsi meta contoh.
+                          canonicalUrl: null
+                          locale: id
+                          translationGroupId: null
+                          autoInternalTagLinksDisabled: false
+                          regionCode: null
+                          publishedAt: "2026-11-20T08:15:30.123Z"
+                          scheduledAt: null
+                          unpublishAt: null
+                          createdAt: "2026-11-20T08:15:30.123Z"
+                          updatedAt: "2026-11-20T08:15:30.123Z"
+                          version: 3
+                          termIds:
+                            - e5a7c1d9-2f40-4b86-9c13-7d8e0a5b6f21
+                          institutionIds: []
+                          authorByline: null
+                      nextCursor: null
+                    meta:
+                      correlationId: example-correlation-3
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: "`VALIDATION_ERROR`"
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: view must be one of summary, full.
+                    meta:
+                      correlationId: example-correlation-err
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: Missing or invalid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                auth_required:
+                  summary: "`AUTH_REQUIRED`"
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication required.
+                    meta:
+                      correlationId: example-correlation-err
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: Access denied by RBAC/ABAC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                access_denied:
+                  summary: "`ACCESS_DENIED`"
+                  value:
+                    success: false
+                    error:
+                      code: ACCESS_DENIED
+                      message: The permission required for this operation is not granted.
+                    meta:
+                      correlationId: example-correlation-err
     post:
       tags:
         - Blog Content
@@ -3262,6 +3405,9 @@ components:
         What the LIST endpoint returns by default — deliberately not a `BlogPost`.
 
         It exists as its own schema because the list used to be documented as returning `BlogPost`, and it never did: no `contentJson`, `excerpt`, `metaDescription`, `canonicalUrl`, or `translationGroupId`. A client that trusted the document read those as `undefined` and published a site with empty articles, with nothing failing. Ask for `?view=full` to get `BlogPost`.
+
+        `additionalProperties: false` is deliberate and truthful: `toBlogPostSummary` copies exactly these ten fields. It is also what keeps the list's `oneOf` exclusive — without it a full post would satisfy this schema as well and match both branches.
+      additionalProperties: false
       required:
         [
           id,
@@ -3271,6 +3417,7 @@ components:
           status,
           visibility,
           locale,
+          publishedAt,
           createdAt,
           updatedAt
         ]
@@ -3479,6 +3626,57 @@ components:
             message:
               description: Present only when outcome is "rejected" — a human-readable reason no redirect was created.
               type: string
+    BlogPostFeedItem:
+      description: >-
+        One element of `GET /api/v1/blog/posts?view=full`: a `BlogPost` whose
+        feed fields are GUARANTEED present (`BlogPost` alone cannot say so,
+        because the lifecycle responses share it and do not carry them).
+        `listBlogPostsFullPage` builds every row from the same projection as the
+        detail endpoint plus `termIds`, `institutionIds` and `authorByline`;
+        `null` and `[]` are values, never a missing key.
+      allOf:
+        - $ref: "#/components/schemas/BlogPost"
+        - type: object
+          required:
+            - authorTenantUserId
+            - excerpt
+            - contentJson
+            - contentText
+            - bodyPortableText
+            - featuredMediaId
+            - seoImageMediaId
+            - seoTitle
+            - metaDescription
+            - canonicalUrl
+            - translationGroupId
+            - autoInternalTagLinksDisabled
+            - regionCode
+            - publishedAt
+            - scheduledAt
+            - unpublishAt
+            - termIds
+            - institutionIds
+            - authorByline
+          properties:
+            authorTenantUserId: {}
+            excerpt: {}
+            contentJson: {}
+            contentText: {}
+            bodyPortableText: {}
+            featuredMediaId: {}
+            seoImageMediaId: {}
+            seoTitle: {}
+            metaDescription: {}
+            canonicalUrl: {}
+            translationGroupId: {}
+            autoInternalTagLinksDisabled: {}
+            regionCode: {}
+            publishedAt: {}
+            scheduledAt: {}
+            unpublishAt: {}
+            termIds: {}
+            institutionIds: {}
+            authorByline: {}
     BlogPageWriteInput:
       type: object
       description: Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all fields optional on update).

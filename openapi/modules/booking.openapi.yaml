@@ -2636,6 +2636,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [success, data, meta]
                 properties:
                   success:
                     type: boolean
@@ -2645,34 +2646,129 @@ paths:
                     allOf:
                       - $ref: "#/components/schemas/BookingPolicy"
                       - type: object
+                        required: [replayed]
                         properties:
                           replayed:
                             type: boolean
 
                   meta:
                     type: object
+              examples:
+                configured:
+                  summary: A policy where the tenant set the hold fields and left the rest at the module default (`null`).
+                  value:
+                    success: true
+                    data:
+                      policy:
+                        defaultHoldSeconds: 900
+                        maxHoldSeconds: 3600
+                        maxActiveHoldsPerCustomer: null
+                        maxActiveHoldsPerTenant: null
+                        minLeadSeconds: 7200
+                        maxHorizonDays: 365
+                        noShowGraceSeconds: null
+                        defaultTimezone: Asia/Pontianak
+                        defaultCheckInTime: "14:00:00"
+                        defaultCheckOutTime: "12:00:00"
+                      effective:
+                        defaultHoldSeconds: 900
+                        maxHoldSeconds: 3600
+                        maxActiveHoldsPerCustomer: 5
+                        maxActiveHoldsPerTenant: 500
+                        minLeadSeconds: 7200
+                        maxHorizonDays: 365
+                        noShowGraceSeconds: 86400
+                      updatedAt: "2026-11-22T09:30:00.123456Z"
+                      replayed: false
+                    meta: {}
         "400":
           description: "VALIDATION_ERROR (a missing or out-of-range field) or IDEMPOTENCY_REQUIRED."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: A field is outside its range.
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: Request is invalid.
+                      details:
+                        - field: maxHorizonDays
+                          message: maxHorizonDays must be a whole number from 1 to 3650, or null for the default.
+                    meta: {}
+                idempotency_required:
+                  summary: The `Idempotency-Key` header is missing or longer than 255 characters.
+                  value:
+                    success: false
+                    error:
+                      code: IDEMPOTENCY_REQUIRED
+                      message: Idempotency-Key header is required (at most 255 characters).
+                    meta: {}
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: Missing or invalid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                auth_required:
+                  summary: "`AUTH_REQUIRED`"
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication required.
+                    meta:
+                      correlationId: example-correlation-err
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: Access denied by RBAC/ABAC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                access_denied:
+                  summary: "`ACCESS_DENIED`"
+                  value:
+                    success: false
+                    error:
+                      code: ACCESS_DENIED
+                      message: The permission required for this operation is not granted.
+                    meta:
+                      correlationId: example-correlation-err
         "409":
           description: "IDEMPOTENCY_CONFLICT."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                idempotency_conflict:
+                  summary: The same key was already used with a different request body.
+                  value:
+                    success: false
+                    error:
+                      code: IDEMPOTENCY_CONFLICT
+                      message: Idempotency-Key was already used with a different request.
+                    meta: {}
         "422":
           description: "CONSTRAINT_VIOLATED."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                constraint_violated:
+                  summary: A database CHECK the validator did not catch.
+                  value:
+                    success: false
+                    error:
+                      code: CONSTRAINT_VIOLATED
+                      message: The request violates a rule of the booking configuration.
+                    meta: {}
 components:
   schemas:
     BookingLocalWindow:
@@ -4241,6 +4337,14 @@ components:
         effective:
           description: What is in force (the tenant value, or the module default where it is null).
           type: object
+          required:
+            - defaultHoldSeconds
+            - maxHoldSeconds
+            - maxActiveHoldsPerCustomer
+            - maxActiveHoldsPerTenant
+            - minLeadSeconds
+            - maxHorizonDays
+            - noShowGraceSeconds
           properties:
             defaultHoldSeconds:
               type: integer
