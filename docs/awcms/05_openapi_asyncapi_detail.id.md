@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:9bde35f937824e0198c6bbc0dc35f53ab0bdcf5d16a1092d2b35941c638d1832 -->
+<!-- i18n-source-hash: sha256:5c81095d7aded7ebe37710d98463cc162c1f3e84bd6c5cc1853699232d9831a7 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -397,3 +397,16 @@ Perintah yang sama juga memvalidasi setiap contoh di bundle dengan `ajv` yang sa
 - **Yang tercakup.** `GET /api/v1/blog/posts` (`summary`, `stable_order`, `full`, plus 400/401/403), `POST /api/v1/newsletter/subscribe` (satu 200 netral yang tak membedakan alamat baru dari yang dikenal; 400; 429) dan `PUT /api/v1/booking/policy` (200, 400 x2, 401, 403, 409, 422). Operasi lain belum wajib bercontoh (ADR-0167: syarat berlaku untuk operasi baru).
 
 Tes: `tests/api-contract-examples.test.ts` (bundle asli lolos; merusak satu field contoh nyata, uuid cacat, atau domain e-mail nyata memerahkannya).
+
+### Paket fixture dan gerbang kesegaran (`api:fixtures:*`, Issue #1392)
+
+`bun run api:fixtures:generate` menulis `fixtures/api-contract/contract-fixtures.json` dari bundle ([ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.id.md)); `bun run api:fixtures:check` (di rantai `check`, tepat setelah `api:contract:lint`) meregenerasi di memori dan gagal bila paket ter-commit berbeda. Paket adalah data, bukan layanan: konsumen mematoknya dan tidak pernah mengimpor kode repo ini. Generator: `scripts/api-contract-fixtures.ts`, di atas `yaml` dan `ajv` yang sudah ada (tanpa dependensi baru).
+
+- **Isi.** Per operasi: contoh body request dan satu contoh per respons JSON yang dideklarasikan. Contoh TERDEKLARASI (#1391) dipakai apa adanya (`source: "declared"`); selain itu nilai disintesis dari skema (`source: "generated"`): `$ref`, `allOf` (gabung objek), `oneOf`/`anyOf` (cabang pertama yang memvalidasi seluruh node), `example`, `const`, `enum`, `format`, batas, `minItems`, `minProperties`. Siklus dipotong di `$ref` pertama yang berulang (properti opsional dibuang, array menjadi kosong); siklus lewat properti WAJIB dilaporkan. `components.responses` yang dipakai banyak operasi (`BadRequest`, `Unauthorized`, ...) dikeluarkan sekali di `sharedResponses` dan dirujuk dengan `{"$ref": "#/sharedResponses/Nama"}`.
+- **Setiap fixture diperiksa.** Tiap nilai divalidasi dengan `ajv` yang sama seperti lint (format ditegakkan) dan diperiksa domain e-mail yang dicadangkan. Nilai yang gagal TIDAK ditulis; operasinya didaftarkan di `skipped` beserta alasannya (kini 4: tiga respons `text/event-stream` dan satu `text/plain`). `summary.skipped` selalu sama dengan panjang daftar itu.
+- **Deterministik.** Kunci berurutan tetap dan tidak ada nilai yang bergantung pada jam, keacakan, atau mesin, sehingga dua kali jalan identik byte demi byte. Paket membawa `contractSha256` (SHA-256 bundle), sehingga PERUBAHAN APA PUN pada bundle membuat paket ter-commit basi: regenerasi dengan `bun run api:fixtures:generate` dan commit bersama perubahan kontrak. Berkas ini dikecualikan dari prettier (`.prettierignore`) karena gerbang membandingkan byte.
+- **Hanya sintetis.** String hasil generate adalah placeholder tetap (`example`, `user@example.test`, `00000000-0000-4000-8000-000000000000`, `2026-01-01T00:00:00Z`); tanpa rahasia dan tanpa data pribadi.
+- **Batas yang diketahui (TV-2).** Sebuah instans hanya membuktikan body cocok dengan skema: properti yang diganti nama pada skema tanpa `required` tetap lolos. Tes menerapkan vektor laporan #1379 bagian 7 (TV-0 baseline, TV-1 aditif lolos, TV-2 ganti nama TIDAK tertangkap, TV-3 ubah tipe, TV-4 required baru, TV-5 `additionalProperties: false` tertangkap) dan menegaskan TV-2 sebagai batasnya; kebijakan kontrak (`required` pada operasi baru, ADR-0167 bagian 5) yang mempersempitnya.
+- **Di luar cakupan di sini.** Penerbitan paket sebagai artefak terpatok untuk konsumen (#1394) dan kesesuaian respons handler sungguhan (#1393).
+
+Tes: `tests/api-contract-fixtures.test.ts` (regenerasi identik byte, determinisme, contoh terdeklarasi dipakai, TV-0..TV-5, aturan generator `oneOf`/`allOf`/siklus/pola, kontrak yang dimutasi mengubah paket).
