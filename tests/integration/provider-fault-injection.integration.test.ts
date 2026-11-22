@@ -20,9 +20,9 @@
  *   - Half-open single-flight is PER PROCESS (circuit-breaker.ts). Nothing here
  *     says anything about N replicas.
  *
- * KNOWN DEFECTS PROVED HERE are `test.todo` (bun skips the body; run with
- * `--todo` to see them fail). They are findings for separate atomic follow-ups,
- * not fixed in this PR (Issue #1411: "test first, fix only proven failures").
+ * KNOWN DEFECTS found by this suite were first recorded as `test.todo` (bun
+ * skips the body) and are now real tests: the R2 findings F1/F2 and the
+ * Retry-After gap F3 were fixed in Issue #1432.
  *
  * Gated on `DATABASE_URL` (harness section Gating). Clock: breaker and retry
  * assertions use injected/pinned clocks; the only real waits are two
@@ -319,7 +319,7 @@ suite("provider fault injection (#1411)", () => {
       resetProviderCircuitBreakersForTests();
     });
 
-    test("503 and 429: the row returns to pending with a bounded exponential backoff, one retry spent, last_error set; Retry-After is NOT consulted (fixed backoff)", async () => {
+    test("503 and 429: the row returns to pending, one retry spent, last_error set; backoff is the bounded exponential one, lengthened (never shortened) by a provider Retry-After (#1432)", async () => {
       for (const next of ["unavailable", "rate_limited"] as const) {
         resetProviderCircuitBreakersForTests();
         mode = next;
@@ -336,8 +336,11 @@ suite("provider fault injection (#1411)", () => {
 
         expect(r.status).toBe("pending");
         expect(Number(r.retry_count)).toBe(1);
-        // First backoff is 2^0 = 1 minute, NOT the 3600s the provider asked for.
-        expect(r.next_retry_at!.getTime()).toBe(NOW.getTime() + 60_000);
+        // First backoff is 2^0 = 1 minute; a 429 carrying Retry-After: 3600
+        // is honoured (clamped to the 60-minute ceiling), a bare 503 is not.
+        expect(r.next_retry_at!.getTime()).toBe(
+          NOW.getTime() + (next === "rate_limited" ? 3_600_000 : 60_000)
+        );
         expect(r.last_error).toBeTruthy();
         expect(puts.length).toBeGreaterThanOrEqual(1);
 
@@ -512,40 +515,43 @@ suite("provider fault injection (#1411)", () => {
       expect((await row(a)).status).toBe("sent");
     });
 
-    test.todo(
-      "FINDING F1 (object-storage): a refused half-open/open attempt (breaker skipped) spends a retry like a real failure (no `skipped` outcome in ObjectUploader, unlike email/WhatsApp/push after #1409) — held rows must keep retry_count 0",
-      async () => {
-        tripToHalfOpen("object-storage");
-        mode = "unavailable";
-        const ids = [
-          await seedObject(T_A, nodeA),
-          await seedObject(T_A, nodeA),
-          await seedObject(T_A, nodeA)
-        ];
+    test("breaker refusal (F1, #1432): rows the breaker refused are released with NO attempt recorded and retry_count unchanged", async () => {
+      tripToHalfOpen("object-storage");
+      mode = "unavailable";
+      const ids = [
+        await seedObject(T_A, nodeA),
+        await seedObject(T_A, nodeA),
+        await seedObject(T_A, nodeA)
+      ];
 
-        await run(T_A, () => uploader());
+      const result = await run(T_A, () => uploader());
 
-        // Row 1 probed (and failed, reopening the breaker). Rows 2-3 never
-        // reached the provider, so no retry may be charged to them.
-        expect(Number((await row(ids[1]!)).retry_count)).toBe(0);
-        expect(Number((await row(ids[2]!)).retry_count)).toBe(0);
+      // Row 1 probed (and failed, reopening the breaker). Rows 2-3 never
+      // reached the provider, so no retry is charged and they are not failed.
+      expect(puts).toHaveLength(1);
+      expect(result).toMatchObject({ retried: 1, failed: 0, deferred: 2 });
+      for (const id of [ids[1]!, ids[2]!]) {
+        const r = await row(id);
+
+        expect(Number(r.retry_count)).toBe(0);
+        expect(r.status).toBe("pending");
+        expect(r.next_retry_at!.getTime()).toBeGreaterThan(NOW.getTime());
       }
-    );
+    });
 
-    test.todo(
-      "FINDING F2 (object-storage): a LOCAL problem (missing file) records a failure on the shared provider breaker — five bad local rows open the breaker for every tenant although the provider is healthy",
-      async () => {
-        for (let i = 0; i < 6; i += 1) {
-          await seedObject(T_A, nodeA, { missingFile: true });
-        }
-
-        await run(T_A, () => uploader());
-
-        expect(
-          getProviderCircuitBreaker("object-storage").getState(new Date())
-        ).toBe("closed");
+    test("local faults (F2, #1432): missing file / checksum mismatch fail the row WITHOUT touching the provider breaker", async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await seedObject(T_A, nodeA, { missingFile: true });
       }
-    );
+
+      const result = await run(T_A, () => uploader());
+
+      expect(result).toMatchObject({ retried: 6, deferred: 0 });
+      expect(puts).toHaveLength(0);
+      expect(
+        getProviderCircuitBreaker("object-storage").getState(new Date())
+      ).toBe("closed");
+    });
   });
 
   // ===========================================================================
