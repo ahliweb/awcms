@@ -402,10 +402,12 @@ describe("no API surface can leak a decrypted value", () => {
 describe("the module descriptor", () => {
   const module = listModules().find((item) => item.key === "channel_accounts")!;
 
-  test("declares the ten seeded permissions and nothing else", () => {
+  test("declares the eleven seeded permissions and nothing else", () => {
     expect(
       module.permissions?.map((p) => `${p.activityCode}.${p.action}`).sort()
     ).toEqual([
+      // Issue #1215 (sql/416): the one PLATFORM-scoped permission.
+      "account_claims.revoke",
       "accounts.create",
       "accounts.read",
       "accounts.revoke",
@@ -432,11 +434,13 @@ describe("the module descriptor", () => {
   test("the migration seeds exactly the declared permissions", () => {
     // `sql/319` seeded the first six; `sql/341` (Issue #1142) the three of the
     // risk acknowledgement surface; `sql/366` (Issue #1143) the signed webhook
-    // subscription. Together they are the declared ten.
+    // subscription; `sql/416` (Issue #1215, ADR-0170) the platform-scoped claim
+    // release. Together they are the declared eleven.
     const sql = [
       "sql/319_awcms_channel_accounts_permissions.sql",
       "sql/341_awcms_channel_provider_risk_acknowledgements_permissions.sql",
-      "sql/366_awcms_whatsapp_meta_sender_binding_permissions.sql"
+      "sql/366_awcms_whatsapp_meta_sender_binding_permissions.sql",
+      "sql/416_awcms_channel_accounts_claim_on_verify.sql"
     ]
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");

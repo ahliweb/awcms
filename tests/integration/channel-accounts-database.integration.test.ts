@@ -58,6 +58,10 @@ import {
   writeAccountCredential
 } from "../../src/modules/channel-accounts/application/account-directory";
 import {
+  findClaimHolder,
+  releaseContestedClaim
+} from "../../src/modules/channel-accounts/application/claim-release";
+import {
   listAccountCapabilities,
   resolveCapability,
   setAccountCapability
@@ -2150,6 +2154,184 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       const view = await inTenant(T1, (tx) => fetchAccountRecord(tx, T1, id));
 
       expect(view?.businessScope?.type).toBe("brand");
+    });
+  });
+  describe("an external id is claimed by verification, and a platform release settles disputes (Issue #1215, ADR-0170)", () => {
+    const T3 = "c1140000-0000-4000-8000-000000000003";
+    const U3 = "c1140000-0000-4000-8000-000000000301";
+
+    const botOf = (tenantId: string, actor: string, externalId: string) =>
+      inTenant(tenantId, (tx) =>
+        createAccount(tx, tenantId, actor, {
+          provider: "telegram",
+          accountKind: "bot",
+          authMode: "bot_token",
+          externalId,
+          displayName: `Bot ${externalId}`,
+          businessScope: null,
+          connectionId: null,
+          parentAccountId: null
+        })
+      );
+
+    const verify = (tenantId: string, accountId: string) =>
+      inTenant(tenantId, (tx) =>
+        recordAccountHealth(tx, tenantId, accountId, {
+          state: "ok",
+          reasonCode: null
+        })
+      );
+
+    test("two tenants register a verifiable id, the first to verify wins, and a racing pair of verifications has exactly one winner (as the least-privilege runtime role)", async () => {
+      const first = await botOf(T1, U1, "7400000001");
+      const second = await botOf(T2, U2, "7400000001");
+
+      expect(first.outcome).toBe("created");
+      expect(second.outcome).toBe("created");
+
+      if (first.outcome !== "created" || second.outcome !== "created") return;
+
+      const results = await Promise.all([
+        verify(T1, first.account.id),
+        verify(T2, second.account.id)
+      ]);
+
+      expect(results.filter((r) => r.claim === "lost")).toHaveLength(1);
+      expect(results.filter((r) => r.claim === undefined)).toHaveLength(1);
+
+      const rows = (await getAdminSql()`
+        SELECT status FROM awcms_channel_accounts
+        WHERE external_id = '7400000001' ORDER BY status
+      `) as { status: string }[];
+
+      expect(rows.map((row) => row.status)).toEqual(["connected", "pending"]);
+    });
+
+    test("the locator reads across tenants for the runtime role, while a direct SELECT still sees only the caller's own rows", async () => {
+      await created(T1, U1, "locator-dev");
+
+      const viaLocator = await inTenant(T2, (tx) =>
+        findClaimHolder(tx, "starsender", "locator-dev")
+      );
+      const direct = (await inTenant(
+        T2,
+        (tx) =>
+          tx`SELECT id FROM awcms_channel_accounts WHERE external_id = 'locator-dev'`
+      )) as unknown[];
+
+      expect(viaLocator?.tenantId).toBe(T1);
+      expect(direct).toHaveLength(0);
+
+      // A pending verification-basis id holds nothing: there is no claim to find.
+      await botOf(T1, U1, "7400000002");
+
+      expect(
+        await inTenant(T2, (tx) =>
+          findClaimHolder(tx, "telegram", "7400000002")
+        )
+      ).toBeNull();
+    });
+
+    test("the platform release, run as the runtime role, ends the holder's account, erases its credential, writes both trails, and the real owner can then register", async () => {
+      await seedTenant(T3, "ca-platform", [[U3, "u3"]]);
+
+      const squat = await created(T1, U1, "disputed-dev");
+
+      await inTenant(T1, (tx) =>
+        writeAccountCredential(tx, store, T1, U1, squat, CANARY)
+      );
+      expect(await secretCount(T1)).toBe(1);
+      expect((await page(T2, U2, "disputed-dev")).outcome).toBe("refused");
+
+      const released = await inTenant(T3, (tx) =>
+        releaseContestedClaim(
+          tx,
+          store,
+          { platformTenantId: T3, tenantUserId: U3 },
+          {
+            provider: "starsender",
+            externalId: "disputed-dev",
+            reason: "verified out of band (ticket 1215)"
+          }
+        )
+      );
+
+      expect(released).toMatchObject({
+        outcome: "released",
+        holderTenantId: T1,
+        accountId: squat,
+        credentialErased: true
+      });
+      expect(await secretCount(T1)).toBe(0);
+
+      const row = (await getAdminSql()`
+        SELECT status, status_reason, deleted_at, secret_id
+        FROM awcms_channel_accounts WHERE id = ${squat}
+      `) as {
+        status: string;
+        status_reason: string;
+        deleted_at: Date | null;
+        secret_id: string | null;
+      }[];
+
+      expect(row[0]!.status).toBe("deleted");
+      expect(row[0]!.status_reason).toBe("CLAIM_RELEASED_BY_PLATFORM");
+      expect(row[0]!.deleted_at).not.toBeNull();
+      expect(row[0]!.secret_id).toBeNull();
+
+      const trails = (await getAdminSql()`
+        SELECT tenant_id, action, severity FROM awcms_audit_events
+        WHERE action IN ('channel_accounts.claim.release',
+                         'channel_accounts.account.claim_released')
+        ORDER BY action
+      `) as { tenant_id: string; action: string; severity: string }[];
+
+      // The platform row is only writable when the platform tenant is bound
+      // again after the holder's context (FORCE RLS WITH CHECK).
+      expect(trails).toEqual([
+        {
+          tenant_id: T1,
+          action: "channel_accounts.account.claim_released",
+          severity: "warning"
+        },
+        {
+          tenant_id: T3,
+          action: "channel_accounts.claim.release",
+          severity: "critical"
+        }
+      ]);
+      expect((await page(T2, U2, "disputed-dev")).outcome).toBe("created");
+
+      // Nothing is left to release.
+      expect(
+        await inTenant(T3, (tx) =>
+          releaseContestedClaim(
+            tx,
+            store,
+            { platformTenantId: T3, tenantUserId: U3 },
+            {
+              provider: "starsender",
+              externalId: "no-such-claim",
+              reason: "verified out of band (ticket 1215)"
+            }
+          )
+        )
+      ).toEqual({ outcome: "not_found" });
+    });
+
+    test("an unprivileged runtime tenant cannot reach another tenant's row through the release path's tables", async () => {
+      const id = await created(T1, U1, "untouchable-dev");
+
+      // The platform route is the only caller; as a plain tenant transaction
+      // the runtime role still cannot see, update or delete a foreign row.
+      const updated = (await inTenant(
+        T2,
+        (tx) =>
+          tx`UPDATE awcms_channel_accounts SET status = 'deleted', deleted_at = now()
+             WHERE id = ${id} RETURNING id`
+      )) as unknown[];
+
+      expect(updated).toHaveLength(0);
     });
   });
 });

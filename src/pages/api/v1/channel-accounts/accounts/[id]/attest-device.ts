@@ -89,6 +89,15 @@ export const POST = defineTenantRoute<Prepared>({
 
         if (result.outcome === "not_found") return accountNotFound();
 
+        // ADR-0170: the one answer a refused registration gives, no oracle.
+        if (result.outcome === "claim_lost") {
+          return fail(
+            409,
+            "ACCOUNT_ALREADY_REGISTERED",
+            "This external account is already registered."
+          );
+        }
+
         if (result.outcome === "refused") {
           return fail(
             422,

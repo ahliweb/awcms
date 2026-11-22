@@ -137,6 +137,18 @@ BEGIN
 END;
 `;
 
+/** `sql/416` (Issue #1215, ADR-0170): the claim basis is chosen at INSERT and never changes. */
+const AWCMS_CHANNEL_ACCOUNTS_CLAIM_BASIS_GUARD_BODY = `
+BEGIN
+  IF NEW.claim_basis IS DISTINCT FROM OLD.claim_basis THEN
+    RAISE EXCEPTION 'the claim basis of a channel account is immutable'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+`;
+
 /** Whitespace- and case-insensitive: the shape of `normalizePolicyExpression`, local so this file does not import the readiness script back. */
 function normalise(text: string): string {
   return text.replace(/\s+/g, "").toLowerCase();
@@ -169,6 +181,14 @@ export const CHANNEL_ACCOUNTS_ACCESS_GUARDS: readonly PinnedGuard[] = [
     tgtype: 1 | 2 | 16,
     updateOf: "access_mode",
     body: AWCMS_CHANNEL_ACCOUNTS_ACCESS_MODE_GUARD_BODY
+  },
+  {
+    table: "awcms_channel_accounts",
+    trigger: "awcms_channel_accounts_claim_basis_guard",
+    fn: "awcms_channel_accounts_claim_basis_guard",
+    tgtype: 1 | 2 | 16,
+    updateOf: "claim_basis",
+    body: AWCMS_CHANNEL_ACCOUNTS_CLAIM_BASIS_GUARD_BODY
   },
   {
     table: "awcms_channel_account_assignments",
@@ -558,6 +578,12 @@ export async function probeChannelAccountsAccessGuards(
           tx`UPDATE awcms_channel_accounts
            SET business_scope_type = 'office',
                business_scope_id = ${crypto.randomUUID()}
+           WHERE tenant_id = ${tenant} AND id = ${account.id}`
+      );
+      await refuses(
+        "rewriting an account's claim basis",
+        () =>
+          tx`UPDATE awcms_channel_accounts SET claim_basis = 'verification'
            WHERE tenant_id = ${tenant} AND id = ${account.id}`
       );
       await refuses(

@@ -707,3 +707,42 @@ export function validateAcknowledgeRisk(
     }
   };
 }
+
+export type ReleaseClaimBodyInput = {
+  provider: string;
+  externalId: string;
+  reason: string;
+};
+
+/**
+ * The platform release of a contested claim (ADR-0170 option C). All three
+ * fields are required: the exact pair that names the claim, and a reason of at
+ * least 10 printable characters (the operator's out-of-band basis), which lands
+ * in both audit trails.
+ */
+export function validateReleaseClaim(
+  raw: unknown
+): Validated<ReleaseClaimBodyInput> {
+  if (!isRecord(raw)) {
+    return {
+      valid: false,
+      errors: [{ field: "body", message: "Must be a JSON object." }]
+    };
+  }
+
+  const errors = unknownFields(raw, ["provider", "externalId", "reason"]);
+  const provider = text(raw, "provider", errors, { min: 2, max: 32 });
+  const externalId = text(raw, "externalId", errors, { min: 1, max: 256 });
+  const reason = text(raw, "reason", errors, { min: 10, max: 500 });
+
+  if (provider !== null && !PROVIDER_PATTERN.test(provider)) {
+    errors.push({ field: "provider", message: "Must be lower snake case." });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    value: { provider: provider!, externalId: externalId!, reason: reason! }
+  };
+}

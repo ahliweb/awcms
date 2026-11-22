@@ -142,11 +142,20 @@ paths:
       summary: Register an external account.
       description: >-
         `(provider, accountKind, authMode)` must be a combination the provider
-        matrix admits. A live external account belongs to ONE tenant: a duplicate
-        is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds
-        it (one answer, so the conflict is not an oracle). The account starts
-        `pending` and becomes `connected` only when a connector verifies it. No
-        credential is accepted here. A `businessScope` is a request, not a fact:
+        matrix admits. An external account is claimed by ONE tenant (ADR-0170):
+        for a provider and kind no connector can verify, from registration; for
+        one whose id a connector proves (a Telegram bot, a Mailketing sender),
+        only once it is verified, so a `pending` registration of the latter holds
+        nothing against other tenants (it is accepted, with no oracle) and the
+        first to verify wins. A duplicate that IS refused is `409
+        ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one
+        answer, so the conflict is not an oracle); a tenant that registers the
+        same id twice is always refused. The account starts `pending` and becomes
+        `connected` only when a connector verifies it; a verification that loses
+        to another tenant leaves it `pending` with health `failing` and reason
+        `ACCOUNT_ALREADY_REGISTERED`. The dispute path is
+        `POST /api/v1/channel-accounts/claims/release` (platform). No credential
+        is accepted here. A `businessScope` is a request, not a fact:
         the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a
         caller confined to business scopes may not omit it (an account without
         one is tenant-wide). Binding to a `connectionId` lends the account that
@@ -751,7 +760,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: "`IDEMPOTENCY_CONFLICT`."
+          description: "`IDEMPOTENCY_CONFLICT`, or `ACCOUNT_ALREADY_REGISTERED` (ADR-0170: another tenant already holds the claim; unreachable for StarSender, whose claim is held from registration)."
           content:
             application/json:
               schema:
@@ -764,6 +773,119 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "503":
           description: "`CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/claims/release:
+    post:
+      operationId: releaseChannelAccountClaim
+      tags:
+        - Channel Accounts
+      summary: PLATFORM — release a contested external-account claim held by another tenant.
+      description: >-
+        The dispute path of ADR-0170 (option C) for an external-account claim
+        (`provider` + `externalId`), used after the operator has verified the real
+        owner out of band. It ends the account of the tenant that HOLDS the claim
+        for that exact pair: a soft delete with the fixed reason
+        `CLAIM_RELEASED_BY_PLATFORM`, its own credential ciphertext and webhook
+        secrets erased, so the real owner can register and verify the id. A claim
+        is held from registration by a provider no connector can verify
+        (`registration` basis) and, for a provider whose id a connector proves
+        (a Telegram bot, a Mailketing sender), only while the account is
+        `connected` or `degraded`: a `pending` account of the latter holds nothing
+        and answers `404`. A holder with live child accounts is refused (`409
+        HAS_CHILD_ACCOUNTS`): release the children first.
+
+        **Authority.** The PLATFORM-scoped permission
+        `channel_accounts.account_claims.revoke` (ADR-0053): the access chokepoint
+        refuses it unless the acting tenant IS the platform tenant, and it is in
+        no catalogue seeded to a tenant role, so a tenant owner receives the same
+        uniform `403` as anyone without the grant. A machine credential is refused
+        (`403 INTERACTIVE_SESSION_REQUIRED`). A person who has an MFA factor must
+        present a fresh step-up (`403 STEP_UP_REQUIRED`; conditional, ADR-0141
+        section 4). `Idempotency-Key` is required, and the `reason` (10 to 500
+        characters) is mandatory.
+
+        **Audit.** Two rows in one transaction: `critical`
+        `channel_accounts.claim.release` in the PLATFORM tenant's trail (with the
+        operator), and `warning` `channel_accounts.account.claim_released` in the
+        HOLDER's own trail (naming the platform tenant, not the individual
+        operator, ADR-0091). Neither carries the external id or any credential;
+        both carry the reason.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - provider
+                - externalId
+                - reason
+              properties:
+                provider:
+                  type: string
+                  pattern: "^[a-z][a-z0-9_]{1,31}$"
+                externalId:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  description: The operator's out-of-band basis. Lands in both audit trails.
+      responses:
+        "200":
+          description: Released (a replay of the same `Idempotency-Key` returns the stored answer).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      released:
+                        type: boolean
+                        enum:
+                          - true
+                      holderTenantId:
+                        type: string
+                        format: uuid
+                      accountId:
+                        type: string
+                        format: uuid
+                      accountKind:
+                        type: string
+                      credentialErased:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`HAS_CHILD_ACCOUNTS` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`."
           content:
             application/json:
               schema:

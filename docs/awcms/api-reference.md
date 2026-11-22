@@ -15244,7 +15244,7 @@ An `assigned` account (the default) is listed only to its assignees and to holde
 - **operationId**: `createChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). Binding to a `connectionId` lends the account that connection's token, so it needs authority over the CONNECTION (its business scope; a tenant-wide connection: its creator or an unconfined caller) and `owner` authority over accounts already bound to it, which holding the connection's scope does NOT replace (only the tenant administrator, the holder of `assignments.assign`, skips that check); otherwise `422 CONNECTION_NOT_FOUND`. A connection with no account yet is bound only by its creator or by whoever holds break-glass over it (the same authority as revoking it). The account's `businessScope` must also be CONTAINED in the connection's scope, with no administrator exception: a tenant-wide connection admits any account scope, a scoped connection admits only an account of exactly that scope (a tenant-wide account never), else the same `422 CONNECTION_NOT_FOUND`. A connection of another provider answers the same `CONNECTION_NOT_FOUND` as an unknown one, and a connection id sent for an auth mode that takes none is refused by shape BEFORE the connection is looked up, so no answer depends on whether the id exists. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
+`(provider, accountKind, authMode)` must be a combination the provider matrix admits. An external account is claimed by ONE tenant (ADR-0170): for a provider and kind no connector can verify, from registration; for one whose id a connector proves (a Telegram bot, a Mailketing sender), only once it is verified, so a `pending` registration of the latter holds nothing against other tenants (it is accepted, with no oracle) and the first to verify wins. A duplicate that IS refused is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle); a tenant that registers the same id twice is always refused. The account starts `pending` and becomes `connected` only when a connector verifies it; a verification that loses to another tenant leaves it `pending` with health `failing` and reason `ACCOUNT_ALREADY_REGISTERED`. The dispute path is `POST /api/v1/channel-accounts/claims/release` (platform). No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). Binding to a `connectionId` lends the account that connection's token, so it needs authority over the CONNECTION (its business scope; a tenant-wide connection: its creator or an unconfined caller) and `owner` authority over accounts already bound to it, which holding the connection's scope does NOT replace (only the tenant administrator, the holder of `assignments.assign`, skips that check); otherwise `422 CONNECTION_NOT_FOUND`. A connection with no account yet is bound only by its creator or by whoever holds break-glass over it (the same authority as revoking it). The account's `businessScope` must also be CONTAINED in the connection's scope, with no administrator exception: a tenant-wide connection admits any account scope, a scoped connection admits only an account of exactly that scope (a tenant-wide account never), else the same `422 CONNECTION_NOT_FOUND`. A connection of another provider answers the same `CONNECTION_NOT_FOUND` as an unknown one, and a connection id sent for an auth mode that takes none is refused by shape BEFORE the connection is looked up, so no answer depends on whether the id exists. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
 
 **Parameters**
 
@@ -15449,16 +15449,16 @@ The ONE place a person, not a connector, moves an account to `connected`, and on
 
 **Responses**
 
-| Status | Description                                                                                                    | Schema                                 |
-| ------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Attested, or already connected (`changed` is false).                                                           | object                                 |
-| 400    | Validation error.                                                                                              | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                    | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                    | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                            | [`ApiError`](#standard-error-envelope) |
-| 409    | `IDEMPOTENCY_CONFLICT`.                                                                                        | [`ApiError`](#standard-error-envelope) |
-| 422    | `RISK_ACKNOWLEDGEMENT_REQUIRED`, `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or `NOT_AN_UNOFFICIAL_DEVICE`. | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`.                                                    | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                    | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Attested, or already connected (`changed` is false).                                                                                                                           | object                                 |
+| 400    | Validation error.                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`, or `ACCOUNT_ALREADY_REGISTERED` (ADR-0170: another tenant already holds the claim; unreachable for StarSender, whose claim is held from registration). | [`ApiError`](#standard-error-envelope) |
+| 422    | `RISK_ACKNOWLEDGEMENT_REQUIRED`, `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or `NOT_AN_UNOFFICIAL_DEVICE`.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`.                                                                                                                    | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/accounts/{id}/capabilities` — All nine capabilities with the matrix cell and the effective verdict.
 
@@ -15604,6 +15604,35 @@ For a live Meta WhatsApp number (`whatsapp_cloud` `waba_phone_number`) with a li
 | 404    | Resource not found.                                                         | [`ApiError`](#standard-error-envelope) |
 | 409    | `NOT_A_META_NUMBER`, `CONTAINER_BINDING_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`.                  | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/channel-accounts/claims/release` — PLATFORM — release a contested external-account claim held by another tenant.
+
+- **operationId**: `releaseChannelAccountClaim`
+- **Security**: bearerAuth + tenantHeader
+
+The dispute path of ADR-0170 (option C) for an external-account claim (`provider` + `externalId`), used after the operator has verified the real owner out of band. It ends the account of the tenant that HOLDS the claim for that exact pair: a soft delete with the fixed reason `CLAIM_RELEASED_BY_PLATFORM`, its own credential ciphertext and webhook secrets erased, so the real owner can register and verify the id. A claim is held from registration by a provider no connector can verify (`registration` basis) and, for a provider whose id a connector proves (a Telegram bot, a Mailketing sender), only while the account is `connected` or `degraded`: a `pending` account of the latter holds nothing and answers `404`. A holder with live child accounts is refused (`409 HAS_CHILD_ACCOUNTS`): release the children first.
+**Authority.** The PLATFORM-scoped permission `channel_accounts.account_claims.revoke` (ADR-0053): the access chokepoint refuses it unless the acting tenant IS the platform tenant, and it is in no catalogue seeded to a tenant role, so a tenant owner receives the same uniform `403` as anyone without the grant. A machine credential is refused (`403 INTERACTIVE_SESSION_REQUIRED`). A person who has an MFA factor must present a fresh step-up (`403 STEP_UP_REQUIRED`; conditional, ADR-0141 section 4). `Idempotency-Key` is required, and the `reason` (10 to 500 characters) is mandatory.
+**Audit.** Two rows in one transaction: `critical` `channel_accounts.claim.release` in the PLATFORM tenant's trail (with the operator), and `warning` `channel_accounts.account.claim_released` in the HOLDER's own trail (naming the platform tenant, not the individual operator, ADR-0091). Neither carries the external id or any credential; both carry the reason.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                  | Schema                                 |
+| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Released (a replay of the same `Idempotency-Key` returns the stored answer). | object                                 |
+| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | `HAS_CHILD_ACCOUNTS` or `IDEMPOTENCY_CONFLICT`.                              | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`.                                                 | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/connections` — The tenant's provider connections.
 

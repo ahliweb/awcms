@@ -69,7 +69,12 @@ const EXPECTED_PLATFORM_KEYS = [
   // reason as the two above, and SEPARATE from each other because stopping a
   // partner reaching in and letting them back are two authorities.
   "identity_access.partner_registry.disable",
-  "identity_access.partner_registry.restore"
+  "identity_access.partner_registry.restore",
+  // ADR-0170 option C — releasing a contested external-account claim ends
+  // ANOTHER tenant's account (soft delete, credential erased). Held at tenant
+  // scope, any tenant owner could end a competitor's connected page or number.
+  // The deliberate edit, again.
+  "channel_accounts.account_claims.revoke"
 ];
 
 describe("platform-scoped permission declaration", () => {

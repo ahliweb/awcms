@@ -102,11 +102,15 @@ function refusalResponse(
 /**
  * `POST /api/v1/channel-accounts/accounts` (Issue #1140) — register an external
  * account. `(provider, accountKind, authMode)` must be a combination the provider
- * matrix admits. A live external account belongs to ONE tenant: a duplicate is
- * `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one
- * answer, so the conflict is not an oracle). The account starts `pending`; it
- * becomes `connected` only when a connector verifies it. No credential is
- * accepted here: that is `PUT /accounts/{id}/credential`.
+ * matrix admits. An external account is claimed by ONE tenant (ADR-0170): for a
+ * provider and kind no connector can verify, from registration; for one a
+ * connector proves (Telegram bot, Mailketing sender), only once it is verified,
+ * so a `pending` registration holds nothing against other tenants and the first
+ * to verify wins. A duplicate that IS refused is `409 ACCOUNT_ALREADY_REGISTERED`
+ * whether this tenant or another holds it (one answer, so the conflict is not an
+ * oracle). The account starts `pending`; it becomes `connected` only when a
+ * connector verifies it. No credential is accepted here: that is
+ * `PUT /accounts/{id}/credential`.
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",

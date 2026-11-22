@@ -185,10 +185,27 @@ async function connectorFinalize(
         `) as { id: string }[];
 
         if (rows.length > 0) {
-          await recordBotHealth(tx, tenantId, endpoint.account_id, {
-            state: "ok",
-            reasonCode: null
-          });
+          const health = await recordBotHealth(
+            tx,
+            tenantId,
+            endpoint.account_id,
+            { state: "ok", reasonCode: null }
+          );
+
+          // ADR-0170: the bot's id proved (getMe) but ANOTHER tenant verified
+          // the same bot first. The account stays `pending`, so the endpoint
+          // must not serve: it fails with the one code a refused registration
+          // answers (the operator rotates to retry once the dispute is
+          // resolved through the platform release action).
+          if (health.claim === "lost") {
+            await tx`
+              UPDATE awcms_telegram_engagement_endpoints
+              SET state = 'failed', last_error_code = 'ACCOUNT_ALREADY_REGISTERED',
+                  updated_at = now()
+              WHERE tenant_id = ${tenantId} AND id = ${endpoint.id}
+                AND state = 'active'
+            `;
+          }
         }
 
         return;

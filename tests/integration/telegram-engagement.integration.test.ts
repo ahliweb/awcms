@@ -271,9 +271,10 @@ async function seedBotAccount(
     const rows = (await tx`
       INSERT INTO awcms_channel_accounts
         (tenant_id, provider, account_kind, external_id, display_name,
-         auth_mode, secret_id, status, created_by)
+         auth_mode, secret_id, status, claim_basis, created_by)
       VALUES (${tenantId}, 'telegram', 'bot', ${botId}, ${`Bot ${botId}`},
-              'bot_token', ${secret.secretId}, 'pending', ${actor})
+              'bot_token', ${secret.secretId}, 'pending', 'verification',
+              ${actor})
       RETURNING id
     `) as { id: string }[];
     const accountId = rows[0]!.id;
@@ -564,11 +565,57 @@ suite("telegram_engagement against PostgreSQL (Issue #1156)", () => {
       expect(again).toEqual({ outcome: "refused", code: "ALREADY_REGISTERED" });
     });
 
-    test("a second tenant cannot hold the same bot (the channel account registry refuses it)", async () => {
-      await assertRejected(
-        seedBotAccount(T2, U2, BOT_IDS.a),
-        "the same bot in two tenants"
+    test("a second tenant can REGISTER the same bot but cannot hold it: the bot is claimed when its token is verified, and the first tenant already did (ADR-0170)", async () => {
+      // `pending` holds nothing against other tenants (a verification-basis
+      // account), so the registration itself is accepted without an oracle...
+      const second = await seedBotAccount(T2, U2, BOT_IDS.a);
+      const registered = await inTenant(T2, (tx) =>
+        registerBot(
+          tx,
+          T2,
+          U2,
+          { accountId: second, dailySendCeiling: null },
+          ENV
+        )
       );
+
+      expect(registered.outcome).toBe("registered");
+
+      // ...and the connector's getMe proves the id, but the claim is already
+      // T1's: the endpoint FAILS with the registration-refusal code, the account
+      // stays pending, and nothing is served for it.
+      await dispatch(T2);
+
+      const endpoint = (await getAdminSql()`
+        SELECT state, last_error_code FROM awcms_telegram_engagement_endpoints
+        WHERE account_id = ${second}
+      `) as { state: string; last_error_code: string }[];
+      const account = (await getAdminSql()`
+        SELECT status, status_reason FROM awcms_channel_accounts
+        WHERE id = ${second}
+      `) as { status: string; status_reason: string | null }[];
+
+      expect(endpoint[0]).toEqual({
+        state: "failed",
+        last_error_code: "ACCOUNT_ALREADY_REGISTERED"
+      });
+      expect(account[0]).toEqual({ status: "pending", status_reason: null });
+
+      const health = (await getAdminSql()`
+        SELECT state, reason_code FROM awcms_channel_account_health
+        WHERE account_id = ${second}
+      `) as { state: string; reason_code: string }[];
+
+      expect(health).toEqual([
+        { state: "failing", reason_code: "ACCOUNT_ALREADY_REGISTERED" }
+      ]);
+
+      // The winner is untouched.
+      const winner = (await getAdminSql()`
+        SELECT status FROM awcms_channel_accounts WHERE id = ${fx.accounts.a}
+      `) as { status: string }[];
+
+      expect(winner[0]!.status).toBe("connected");
     });
 
     test("another tenant's account is not found, never registered", async () => {

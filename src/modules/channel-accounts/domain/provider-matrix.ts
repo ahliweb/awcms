@@ -490,3 +490,50 @@ export function evaluateCapability(input: {
 
   return { allowed: true };
 }
+
+/**
+ * How a registered account comes to hold the GLOBAL `(provider, external id)`
+ * claim (ADR-0170, amending ADR-0148 invariant I1):
+ *
+ * - `registration` (the default, fail-closed): the row holds the claim from the
+ *   moment it is live, in every status. It is the basis of every provider and
+ *   kind for which this repository has no call that proves control of the id.
+ * - `verification`: the row holds the claim only while `connected` or
+ *   `degraded`, i.e. after a connector proved control of the id. A `pending`
+ *   row of this basis holds nothing against other tenants.
+ */
+export type ClaimBasis = "registration" | "verification";
+
+/**
+ * The ONLY `(provider, kind)` pairs whose id a connector in this repository
+ * proves, one entry per proof:
+ *
+ * - `telegram` `bot`: `telegram_engagement`'s connector calls `getMe` with the
+ *   account's own bot token and refuses the endpoint unless the returned bot id
+ *   equals the account's external id (`BOT_IDENTITY_MISMATCH`); only then does
+ *   it report the account healthy.
+ * - `mailketing` `sender_identity`: `email`'s sender verification lists the
+ *   senders the provider itself has verified for the account's token and moves
+ *   a sender to `connected` only when the address is on that list.
+ *
+ * Everything else keeps the `registration` claim: Graph API accounts (WhatsApp
+ * Cloud, Facebook, Instagram, Threads) and the other OAuth providers have no
+ * call that binds the id to the connection's token yet; `starsender` is
+ * operator-attested (`attest-device`), which is not proof; `mailketing`
+ * `esp_account` is proven only as "this token works", not as "this id is that
+ * token's account"; `telegram` `channel` is not checked by `getMe`. A provider
+ * enters this table in the SAME change as the connector call that proves it,
+ * and `tests/channel-accounts-claim-basis.test.ts` pins the table.
+ */
+export const VERIFIED_CLAIM_KINDS: Readonly<Record<string, readonly string[]>> =
+  {
+    telegram: ["bot"],
+    mailketing: ["sender_identity"]
+  };
+
+export function claimBasisFor(provider: string, kind: string): ClaimBasis {
+  return Object.hasOwn(VERIFIED_CLAIM_KINDS, provider) &&
+    VERIFIED_CLAIM_KINDS[provider]!.includes(kind)
+    ? "verification"
+    : "registration";
+}

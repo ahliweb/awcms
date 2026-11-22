@@ -23,7 +23,8 @@
 import {
   fetchAccountRecord,
   recordAccountHealth,
-  type RecordHealthInput
+  type RecordHealthInput,
+  type RecordHealthResult
 } from "../../channel-accounts/application/account-directory";
 import { resolveCapability } from "../../channel-accounts/application/capability-directory";
 import { defaultSecretStore } from "../../channel-accounts/application/secret-store";
@@ -131,8 +132,8 @@ export async function recordBotHealth(
   tenantId: string,
   accountId: string,
   input: RecordHealthInput
-): Promise<void> {
-  await recordAccountHealth(tx, tenantId, accountId, input);
+): Promise<RecordHealthResult> {
+  return recordAccountHealth(tx, tenantId, accountId, input);
 }
 
 /** Fail-closed per account (ADR-0148 I2): anything but an explicit allow, including a throw, is a denial. */

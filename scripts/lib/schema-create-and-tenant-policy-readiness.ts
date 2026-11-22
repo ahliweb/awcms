@@ -224,6 +224,13 @@ const REVIEWED_NARROW = (
 
 export const REVIEWED_PERMISSIVE_POLICIES: readonly ReviewedPermissivePolicy[] =
   [
+    // sql/416 (Issue #1215, ADR-0170): the platform release action's locator.
+    REVIEWED_NARROW(
+      "awcms_channel_accounts",
+      "awcms_channel_accounts_claim_locator_read",
+      "r",
+      "awcms_channel_claim_locator"
+    ),
     REVIEWED_NARROW(
       "awcms_delegated_access_grants",
       "awcms_delegated_access_grants_delegated_expiry_sweep",

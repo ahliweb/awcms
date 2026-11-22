@@ -29,6 +29,10 @@ describe("channel account access guard pins match the migrations", () => {
       readFileSync(
         "sql/399_awcms_channel_accounts_last_owner_guard.sql",
         "utf8"
+      ) +
+      readFileSync(
+        "sql/416_awcms_channel_accounts_claim_on_verify.sql",
+        "utf8"
       );
     const squash = (text: string) => text.replace(/\s+/g, "").toLowerCase();
 

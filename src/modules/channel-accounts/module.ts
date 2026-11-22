@@ -13,6 +13,7 @@ import { defineModule } from "../_shared/module-contract";
 import type { SubjectDataDescriptor } from "../_shared/module-contract";
 import {
   ACCOUNTS_ACTIVITY_CODE,
+  ACCOUNT_CLAIMS_ACTIVITY_CODE,
   ASSIGNMENTS_ACTIVITY_CODE,
   CAPABILITIES_ACTIVITY_CODE,
   CHANNEL_ACCOUNTS_MODULE_KEY,
@@ -127,6 +128,17 @@ export const channelAccountsModule = defineModule({
       action: "configure",
       description:
         "Create or rotate the signed webhook subscription of a Meta WhatsApp number (app secret stored write-only, callback token shown once; high-risk, audited at warning)"
+    },
+    // PLATFORM-scoped (ADR-0053, ADR-0170 option C): releasing a claim ends
+    // ANOTHER tenant's account, so it is excluded from the catalogue every
+    // tenant owner receives and the chokepoint refuses it unless the acting
+    // tenant is the platform tenant.
+    {
+      activityCode: ACCOUNT_CLAIMS_ACTIVITY_CODE,
+      action: "revoke",
+      scope: "platform",
+      description:
+        "PLATFORM: release a contested external-account claim held by another tenant (soft-deletes the holder account and erases its credential; critical audit in both tenants' trails)"
     }
   ],
   navigation: [

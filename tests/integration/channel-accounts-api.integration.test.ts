@@ -76,6 +76,11 @@ import {
   resolveRiskAcknowledgement
 } from "../../src/modules/channel-accounts/domain/risk-acknowledgements";
 import { rekeyChannelSecretsForTenant } from "../../src/modules/channel-accounts/application/secret-rekey";
+import {
+  recordAccountHealth,
+  writeAccountCredential
+} from "../../src/modules/channel-accounts/application/account-directory";
+import { createKeyRingSecretStore } from "../../src/modules/channel-accounts/application/secret-store";
 import { resolveChannelSecretsRing } from "../../src/modules/channel-accounts/domain/channel-accounts-config";
 import { POST as revokeConnection } from "../../src/pages/api/v1/channel-accounts/connections/[id]/revoke";
 import {
@@ -83,6 +88,7 @@ import {
   POST as acknowledgeRiskRoute
 } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/index";
 import { POST as attestDeviceRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/attest-device";
+import { POST as releaseClaimRoute } from "../../src/pages/api/v1/channel-accounts/claims/release";
 import { POST as createWebhookSubscriptionRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/webhook-subscription";
 import { POST as revokeRiskAcknowledgementRoute } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/[id]/revoke";
 import { POST as startOAuth } from "../../src/pages/api/v1/channel-accounts/connections/oauth/start";
@@ -596,6 +602,23 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             params: { id },
             token,
             body: { appSecret: "0123456789abcdef0123456789abcdef" }
+          })
+      ],
+      [
+        // ADR-0170 option C. PLATFORM-scoped: `env.tenantId` is the setup tenant
+        // and therefore the platform tenant, which is the only tenant it can be
+        // exercised from.
+        "channel_accounts.account_claims.revoke",
+        (_id, token) =>
+          call(releaseClaimRoute, {
+            method: "POST",
+            path: `${BASE}/claims/release`,
+            token,
+            body: {
+              provider: "starsender",
+              externalId: "no-such-claim",
+              reason: "guard probe: nothing is held for this id"
+            }
           })
       ]
     ];
@@ -3407,6 +3430,567 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       await sql`DELETE FROM awcms_channel_account_assignments WHERE account_id = ${wide}`;
       expect(await orphanAudits(wide)).toBe(0);
+    });
+  });
+  describe("an external id is claimed by verification (Issue #1215, ADR-0170)", () => {
+    const BOT_BODY = (externalId: string) => ({
+      provider: "telegram",
+      accountKind: "bot",
+      authMode: "bot_token",
+      externalId,
+      displayName: `Bot ${externalId}`
+    });
+
+    async function tenantWithAdmin(code: string) {
+      const tenantId = crypto.randomUUID();
+
+      await admin()`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenantId}, ${code}, ${code})
+      `;
+
+      const user = await seedUser(tenantId, `adm-${code}`, ALL_PERMISSIONS);
+
+      return { tenantId, ...user };
+    }
+
+    const bot = (
+      holder: { tenantId: string; token: string },
+      externalId: string
+    ) =>
+      register(externalId, holder.token, BOT_BODY(externalId), holder.tenantId);
+
+    /** What a connector's `ok` report does, as the runtime role in the account's tenant. */
+    const verify = (tenantId: string, accountId: string) =>
+      withTenantOrThrow(getHandlerDatabaseClient(), tenantId, (tx) =>
+        recordAccountHealth(tx, tenantId, accountId, {
+          state: "ok",
+          reasonCode: null
+        })
+      );
+
+    const statusOf = async (accountId: string) =>
+      (
+        (await admin()`
+          SELECT status, status_reason, claim_basis, deleted_at
+          FROM awcms_channel_accounts WHERE id = ${accountId}
+        `) as {
+          status: string;
+          status_reason: string | null;
+          claim_basis: string;
+          deleted_at: Date | null;
+        }[]
+      )[0]!;
+
+    test("a pending registration of a verifiable id holds nothing: two tenants register it, the first to verify wins, the other is told what a refused registration says", async () => {
+      if (!handlerReady) return;
+
+      const one = await tenantWithAdmin("claim-one");
+      const two = await tenantWithAdmin("claim-two");
+      const first = await bot(one, "7000000001");
+      const second = await bot(two, "7000000001");
+
+      // No oracle at registration: both are accepted.
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+      expect((await statusOf(first.body.data!.id)).claim_basis).toBe(
+        "verification"
+      );
+
+      const won = await verify(one.tenantId, first.body.data!.id);
+      const lost = await verify(two.tenantId, second.body.data!.id);
+
+      expect(won).toEqual({ recorded: true });
+      expect(lost).toEqual({ recorded: true, claim: "lost" });
+      expect((await statusOf(first.body.data!.id)).status).toBe("connected");
+
+      const loser = await statusOf(second.body.data!.id);
+
+      expect(loser.status).toBe("pending");
+      expect(loser.status_reason).toBeNull();
+
+      const health = (await admin()`
+        SELECT state, reason_code FROM awcms_channel_account_health
+        WHERE account_id = ${second.body.data!.id}
+      `) as { state: string; reason_code: string }[];
+
+      expect(health).toEqual([
+        { state: "failing", reason_code: "ACCOUNT_ALREADY_REGISTERED" }
+      ]);
+
+      // A THIRD registration of the same id after it is held: still accepted
+      // (pending holds nothing), still no way to tell who verified.
+      const three = await tenantWithAdmin("claim-three");
+
+      expect((await bot(three, "7000000001")).status).toBe(201);
+
+      // The same tenant registering it twice is the ordinary duplicate.
+      const again = await bot(one, "7000000001");
+
+      expect(again.status).toBe(409);
+      expect(again.body.error?.code).toBe("ACCOUNT_ALREADY_REGISTERED");
+    });
+
+    test("racing verifications of one id have exactly one winner and the rest lose cleanly", async () => {
+      if (!handlerReady) return;
+
+      for (let round = 0; round < 3; round += 1) {
+        const tenants = [];
+
+        for (let n = 0; n < 4; n += 1) {
+          tenants.push(await tenantWithAdmin(`race-${round}-${n}`));
+        }
+
+        const accounts: string[] = [];
+
+        for (const tenant of tenants) {
+          accounts.push((await bot(tenant, `71000000${round}`)).body.data!.id);
+        }
+
+        const results = await Promise.all(
+          tenants.map((tenant, n) => verify(tenant.tenantId, accounts[n]!))
+        );
+
+        expect(
+          results.filter((result) => result.claim === undefined)
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.claim === "lost")
+        ).toHaveLength(3);
+
+        const statuses = await Promise.all(accounts.map(statusOf));
+
+        expect(
+          statuses.filter((row) => row.status === "connected")
+        ).toHaveLength(1);
+        expect(statuses.filter((row) => row.status === "pending")).toHaveLength(
+          3
+        );
+      }
+    });
+
+    test("a provider nothing can verify keeps the claim from registration (the second tenant is refused at once), and the basis cannot be rewritten", async () => {
+      if (!handlerReady) return;
+
+      const one = await tenantWithAdmin("claim-sq-one");
+      const two = await tenantWithAdmin("claim-sq-two");
+      const first = await register("squat-id", one.token, {}, one.tenantId);
+      const second = await register("squat-id", two.token, {}, two.tenantId);
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(409);
+      expect((await statusOf(first.body.data!.id)).claim_basis).toBe(
+        "registration"
+      );
+
+      // Immutable for the runtime role (RLS bound), which is the one that
+      // could try it.
+      const runtime = await withTenantOrThrow(
+        getHandlerDatabaseClient(),
+        one.tenantId,
+        async (tx) => {
+          try {
+            await tx.savepoint(async (sp) => {
+              await sp`
+                UPDATE awcms_channel_accounts SET claim_basis = 'verification'
+                WHERE id = ${first.body.data!.id}
+              `;
+            });
+
+            return "accepted";
+          } catch (error) {
+            return String((error as { errno?: unknown }).errno);
+          }
+        }
+      );
+
+      expect(runtime).toBe("23514");
+    });
+
+    test("a verified claim is released when its holder is disconnected: the other tenant can then verify", async () => {
+      if (!handlerReady) return;
+
+      const one = await tenantWithAdmin("claim-rel-one");
+      const two = await tenantWithAdmin("claim-rel-two");
+      const first = (await bot(one, "7200000001")).body.data!.id;
+      const second = (await bot(two, "7200000001")).body.data!.id;
+
+      await verify(one.tenantId, first);
+      expect((await verify(two.tenantId, second)).claim).toBe("lost");
+
+      const disconnected = await call(disconnectAccount, {
+        method: "POST",
+        path: `${BASE}/accounts/${first}/disconnect`,
+        params: { id: first },
+        token: one.token,
+        tenantId: one.tenantId
+      });
+
+      expect(disconnected.status).toBe(200);
+      expect((await verify(two.tenantId, second)).claim).toBeUndefined();
+      expect((await statusOf(second)).status).toBe("connected");
+    });
+
+    test("the global claim index and the per-tenant index are the reviewed ones", async () => {
+      if (!handlerReady) return;
+
+      const rows = (await admin()`
+        SELECT indexname, indexdef FROM pg_indexes
+        WHERE tablename = 'awcms_channel_accounts'
+          AND indexname IN ('awcms_channel_accounts_live_external_key',
+                            'awcms_channel_accounts_tenant_external_key')
+        ORDER BY indexname
+      `) as { indexname: string; indexdef: string }[];
+
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.indexdef).toContain("UNIQUE");
+      expect(rows[0]!.indexdef).toContain("(provider, external_id)");
+      expect(rows[0]!.indexdef).toContain("claim_basis");
+      expect(rows[0]!.indexdef).toContain("'connected'");
+      expect(rows[1]!.indexdef).toContain("(tenant_id, provider, external_id)");
+    });
+  });
+
+  describe("platform release of a contested claim (Issue #1215, ADR-0170 option C)", () => {
+    const releaseBody = (externalId: string) => ({
+      provider: "starsender",
+      externalId,
+      reason: "verified out of band (ticket 1215)"
+    });
+
+    const release = (
+      body: unknown,
+      options: {
+        token?: string | null;
+        key?: string | null;
+        tenantId?: string;
+      } = {}
+    ) =>
+      call<{
+        released: boolean;
+        holderTenantId: string;
+        accountId: string;
+      }>(releaseClaimRoute, {
+        method: "POST",
+        path: `${BASE}/claims/release`,
+        token: options.token,
+        idempotencyKey: options.key,
+        tenantId: options.tenantId,
+        body
+      });
+
+    async function plainTenant(code: string) {
+      const tenantId = crypto.randomUUID();
+
+      await admin()`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenantId}, ${code}, ${code})
+      `;
+
+      const user = await seedUser(tenantId, `adm-${code}`, ALL_PERMISSIONS);
+
+      return { tenantId, ...user };
+    }
+
+    /** A tenant that registered `externalId` and stored a credential for it. */
+    async function holderTenant(code: string, externalId: string) {
+      const tenant = await plainTenant(code);
+      const created = await register(
+        externalId,
+        tenant.token,
+        {},
+        tenant.tenantId
+      );
+
+      expect(created.status).toBe(201);
+
+      const accountId = created.body.data!.id;
+      const ring = resolveChannelSecretsRing({
+        CHANNEL_SECRETS_ENCRYPTION_KEYS: RING
+      } as unknown as NodeJS.ProcessEnv);
+
+      if (!ring.ok) throw new Error(ring.reason);
+
+      const written = await withTenantOrThrow(
+        getHandlerDatabaseClient(),
+        tenant.tenantId,
+        (tx) =>
+          writeAccountCredential(
+            tx,
+            createKeyRingSecretStore(() => ring),
+            tenant.tenantId,
+            tenant.tenantUserId,
+            accountId,
+            CANARY
+          )
+      );
+
+      expect(written.outcome).toBe("written");
+
+      return { ...tenant, accountId };
+    }
+
+    test("the platform operator releases a squatted claim: the holder account ends, its credential is erased, both trails are written, and the real owner can register", async () => {
+      if (!handlerReady) return;
+
+      const squat = await holderTenant("rel-squat", "squat-dev-1");
+      const real = await plainTenant("rel-real");
+
+      // The real owner is refused while the squat holds the id.
+      expect(
+        (await register("squat-dev-1", real.token, {}, real.tenantId)).status
+      ).toBe(409);
+
+      const key = nextKey();
+      const done = await release(releaseBody("squat-dev-1"), { key });
+
+      expect(done.status).toBe(200);
+      expect(done.body.data).toMatchObject({
+        released: true,
+        holderTenantId: squat.tenantId,
+        accountId: squat.accountId
+      });
+
+      const row = (await admin()`
+        SELECT status, status_reason, deleted_at, secret_id
+        FROM awcms_channel_accounts WHERE id = ${squat.accountId}
+      `) as {
+        status: string;
+        status_reason: string;
+        deleted_at: Date | null;
+        secret_id: string | null;
+      }[];
+
+      expect(row[0]!.status).toBe("deleted");
+      expect(row[0]!.status_reason).toBe("CLAIM_RELEASED_BY_PLATFORM");
+      expect(row[0]!.deleted_at).not.toBeNull();
+      expect(row[0]!.secret_id).toBeNull();
+      expect(
+        (
+          (await admin()`
+            SELECT count(*)::int AS n FROM awcms_channel_secrets
+            WHERE tenant_id = ${squat.tenantId}
+          `) as { n: number }[]
+        )[0]!.n
+      ).toBe(0);
+
+      // Audit: the operator's own trail (critical, with the person) and the
+      // holder's trail (warning, WITHOUT the person, naming the platform).
+      const trails = (await admin()`
+        SELECT tenant_id, action, severity, actor_tenant_user_id,
+               actor_tenant_id, attributes::text AS attributes
+        FROM awcms_audit_events
+        WHERE action IN ('channel_accounts.claim.release',
+                         'channel_accounts.account.claim_released')
+        ORDER BY action
+      `) as {
+        tenant_id: string;
+        action: string;
+        severity: string;
+        actor_tenant_user_id: string | null;
+        actor_tenant_id: string | null;
+        attributes: string;
+      }[];
+
+      expect(trails).toHaveLength(2);
+
+      const holderTrail = trails.find(
+        (trail) => trail.action === "channel_accounts.account.claim_released"
+      )!;
+      const platformTrail = trails.find(
+        (trail) => trail.action === "channel_accounts.claim.release"
+      )!;
+
+      expect(holderTrail.tenant_id).toBe(squat.tenantId);
+      expect(holderTrail.severity).toBe("warning");
+      expect(holderTrail.actor_tenant_user_id).toBeNull();
+      expect(holderTrail.actor_tenant_id).toBe(env.tenantId);
+      expect(platformTrail.tenant_id).toBe(env.tenantId);
+      expect(platformTrail.severity).toBe("critical");
+      expect(platformTrail.actor_tenant_user_id).toBe(env.ownerTenantUserId);
+
+      for (const trail of trails) {
+        expect(trail.attributes).not.toContain("squat-dev-1");
+        expect(trail.attributes).not.toContain(CANARY);
+        expect(trail.attributes).toContain("ticket 1215");
+      }
+
+      // The real owner can now register the id, and the second call with the
+      // same key replays without a second release or a second audit row.
+      expect(
+        (await register("squat-dev-1", real.token, {}, real.tenantId)).status
+      ).toBe(201);
+
+      const replay = await release(releaseBody("squat-dev-1"), { key });
+
+      expect(replay.status).toBe(200);
+      expect(replay.body).toEqual(done.body);
+      expect(
+        (
+          (await admin()`
+            SELECT count(*)::int AS n FROM awcms_audit_events
+            WHERE action = 'channel_accounts.claim.release'
+          `) as { n: number }[]
+        )[0]!.n
+      ).toBe(1);
+
+      // The same key with a different request is a conflict.
+      expect((await release(releaseBody("squat-dev-2"), { key })).status).toBe(
+        409
+      );
+
+      // Nothing the response, the audit or the idempotency store holds is the
+      // canary.
+      expect(await everythingPersisted()).not.toContain(CANARY);
+    });
+
+    test("a tenant cannot call it, even one holding the permission row: the answer is the uniform authorization refusal and nothing is released", async () => {
+      if (!handlerReady) return;
+
+      const squat = await holderTenant("rel-deny-squat", "deny-dev-1");
+      const other = await plainTenant("rel-deny-other");
+      const nobody = await seedUser(other.tenantId, "nobody", []);
+      // `other.token` holds EVERY channel_accounts permission, the platform one
+      // included (the fixture seeds the row), in a tenant that is not the
+      // platform tenant.
+      const withRow = await release(releaseBody("deny-dev-1"), {
+        token: other.token,
+        tenantId: other.tenantId
+      });
+      const without = await release(releaseBody("deny-dev-1"), {
+        token: nobody.token,
+        tenantId: other.tenantId
+      });
+      const unknown = await release(releaseBody("not-held-anywhere"), {
+        token: other.token,
+        tenantId: other.tenantId
+      });
+
+      for (const response of [withRow, without, unknown]) {
+        expect(response.status).toBe(403);
+      }
+
+      expect(withRow.body.error?.code).toBe(without.body.error?.code);
+      expect(unknown.body).toEqual(withRow.body);
+      expect(
+        (await release(releaseBody("deny-dev-1"), { token: null })).status
+      ).toBe(401);
+
+      const row = (await admin()`
+        SELECT status FROM awcms_channel_accounts WHERE id = ${squat.accountId}
+      `) as { status: string }[];
+
+      expect(row[0]!.status).toBe("pending");
+    });
+
+    test("a platform operator with an MFA factor needs a fresh step-up; the reason, the key and the body are required", async () => {
+      if (!handlerReady) return;
+
+      await holderTenant("rel-step-squat", "step-dev-1");
+
+      const stale = await seedUser(
+        env.tenantId,
+        "op-stale",
+        ["channel_accounts.account_claims.revoke"],
+        { enrolled: true, steppedUp: false }
+      );
+      const fresh = await seedUser(
+        env.tenantId,
+        "op-fresh",
+        ["channel_accounts.account_claims.revoke"],
+        { enrolled: true, steppedUp: true }
+      );
+      const refused = await release(releaseBody("step-dev-1"), {
+        token: stale.token
+      });
+
+      expect(refused.status).toBe(403);
+      expect(refused.body.error?.code).toBe("STEP_UP_REQUIRED");
+
+      for (const bad of [
+        { provider: "starsender", externalId: "step-dev-1" },
+        { ...releaseBody("step-dev-1"), reason: "short" },
+        { ...releaseBody("step-dev-1"), extra: true },
+        { ...releaseBody("step-dev-1"), provider: "Not-Snake" }
+      ]) {
+        expect((await release(bad, { token: fresh.token })).status).toBe(400);
+      }
+
+      expect(
+        (
+          await release(releaseBody("step-dev-1"), {
+            token: fresh.token,
+            key: null
+          })
+        ).status
+      ).toBe(400);
+      expect(
+        (await release(releaseBody("step-dev-1"), { token: fresh.token }))
+          .status
+      ).toBe(200);
+    });
+
+    test("an id nobody holds is 404, and a holder with live children is refused until they are released", async () => {
+      if (!handlerReady) return;
+
+      expect((await release(releaseBody("held-by-nobody"))).status).toBe(404);
+
+      const tenantId = crypto.randomUUID();
+
+      await admin()`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenantId}, 'rel-kids', 'rel-kids')
+      `;
+
+      const waba = (await admin()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name, auth_mode)
+        VALUES (${tenantId}, 'whatsapp_cloud', 'waba', 'waba-kids-1', 'waba', 'api_token')
+        RETURNING id
+      `) as { id: string }[];
+
+      await admin()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, parent_account_id)
+        VALUES (${tenantId}, 'whatsapp_cloud', 'waba_phone_number',
+                '9990000000001', 'number', 'api_token', ${waba[0]!.id})
+      `;
+
+      const body = (externalId: string) => ({
+        provider: "whatsapp_cloud",
+        externalId,
+        reason: "verified out of band (ticket 1215)"
+      });
+      const blocked = await release(body("waba-kids-1"));
+
+      expect(blocked.status).toBe(409);
+      expect(blocked.body.error?.code).toBe("HAS_CHILD_ACCOUNTS");
+      expect((await release(body("9990000000001"))).status).toBe(200);
+      expect((await release(body("waba-kids-1"))).status).toBe(200);
+    });
+
+    test("a pending claim that holds nothing (verification basis) is not releasable: there is no claim to release", async () => {
+      if (!handlerReady) return;
+
+      const holder = await plainTenant("rel-nothing");
+
+      await register(
+        "7300000001",
+        holder.token,
+        { provider: "telegram", accountKind: "bot", authMode: "bot_token" },
+        holder.tenantId
+      );
+
+      expect(
+        (
+          await release({
+            provider: "telegram",
+            externalId: "7300000001",
+            reason: "verified out of band (ticket 1215)"
+          })
+        ).status
+      ).toBe(404);
     });
   });
 });

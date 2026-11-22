@@ -268,6 +268,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // one-time token display has the same WCAG contract as the website source
   // token); until then they are reachable only through the API.
   "channel_accounts.webhooks.configure",
+  // channel_accounts platform claim release (1) — Issue #1215, ADR-0170 option
+  // C. API-first: a PLATFORM-scoped dispute action (ADR-0053) the operator takes
+  // after verifying the real owner out of band. Its screen is a platform page
+  // (find the holder, state the reason, step up, confirm) and is the recorded
+  // follow-up; until then it is reachable only through
+  // `POST /api/v1/channel-accounts/claims/release`.
+  "channel_accounts.account_claims.revoke",
   "whatsapp_delivery.meta_signals.configure",
   "whatsapp_delivery.meta_templates.configure",
   "whatsapp_delivery.meta_templates.read",
