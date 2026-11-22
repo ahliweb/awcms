@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](realtime-progress-streams.md)
 
-<!-- i18n-source-hash: sha256:1b8ed996b48926f20a9cb351a3b72bfdd28cb6248eb83d1c48858acfe4f5e599 -->
+<!-- i18n-source-hash: sha256:11450276121c7e743791f6840f48ba44db388156b3afe38bbc0a2c07c2d0ea9b -->
 
 # Stream progres real-time — operasional
 
@@ -132,14 +132,15 @@ tunggunya singkat; deployment dengan inbox mati membangunnya di atas nol baris.
 Semua opsional. Tidak di-set atau tidak valid kembali ke default;
 `bun run config:validate` menolak nilai yang salah bentuk.
 
-| Variabel                                    | Default  | Arti                                                             |
-| ------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| `REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR`    | `4`      | Stream terbuka yang boleh dipegang satu orang di satu instance.  |
-| `REALTIME_SSE_MAX_CONNECTIONS_PER_TENANT`   | `100`    | Stream terbuka yang boleh dipegang satu tenant di satu instance. |
-| `REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE` | `500`    | Stream terbuka di satu instance, semua tenant.                   |
-| `REALTIME_SSE_SLOW_CONSUMER_BYTES`          | `262144` | Byte belum-terkirim di atas mana klien dianggap tertinggal.      |
-| `REALTIME_SSE_SLOW_CONSUMER_GRACE_MS`       | `15000`  | Berapa lama klien boleh tertinggal sebelum dikeluarkan.          |
-| `REALTIME_WAKE_HINT_ENABLED`                | `true`   | `false` mematikan petunjuk bangun LISTEN/NOTIFY.                 |
+| Variabel                                    | Default      | Arti                                                                             |
+| ------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR`    | `4`          | Stream terbuka yang boleh dipegang satu orang di satu instance.                  |
+| `REALTIME_SSE_MAX_CONNECTIONS_PER_TENANT`   | `100`        | Stream terbuka yang boleh dipegang satu tenant di satu instance.                 |
+| `REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE` | `500`        | Stream terbuka di satu instance, semua tenant.                                   |
+| `REALTIME_SSE_SLOW_CONSUMER_BYTES`          | `262144`     | Byte belum-terkirim di atas mana klien dianggap tertinggal.                      |
+| `REALTIME_SSE_SLOW_CONSUMER_GRACE_MS`       | `15000`      | Berapa lama klien boleh tertinggal sebelum dikeluarkan.                          |
+| `REALTIME_WAKE_HINT_ENABLED`                | `false`      | `true` menjalankan petunjuk bangun LISTEN/NOTIFY (juga butuh saklar database).   |
+| `REALTIME_LISTEN_DATABASE_URL`              | tidak di-set | String koneksi langsung opsional untuk listener (PgBouncer). Rahasia; hanya web. |
 
 **Setiap batas berlaku per instance.** Dengan N replika, sebuah tenant dapat
 memegang hingga N kali batas tenant. Batas ini membatasi memori dan beban
@@ -175,30 +176,44 @@ umur koneksi yang membatasinya.
 
 ## Bangun lintas-instance
 
+**Mati secara default, di kedua sisi.** Nyalakan hanya setelah mengukur di
+lingkungan target (lihat "Biaya terukur" dan "Menyalakannya").
+
 Sebuah stream membaca ulang PostgreSQL pada tick-nya sendiri, jadi ia sudah
 benar di instance berapa pun. Yang tidak bisa diketahui sebuah replika adalah
 bahwa **instance lain** (atau job worker) baru saja meng-commit perubahan.
-`sql/418` membuat penulis memberi tahu, tanpa layanan baru (tanpa Redis, tanpa
-broker):
+`sql/418` memungkinkan penulis memberi tahu, tanpa layanan baru (tanpa Redis,
+tanpa broker):
 
-- Trigger baris pada `awcms_whatsapp_messages` dan `awcms_inbox_conversations`
+- Trigger baris pada `awcms_whatsapp_messages` (INSERT dan perubahan **status**;
+  pembaruan pembukuan seperti perpanjangan lease tidak memberi tahu) dan
+  `awcms_inbox_conversations` (INSERT dan perubahan kolom yang dibaca counter)
   memanggil `pg_notify('awcms_realtime', '{"t":"<id tenant>","k":"<topik>"}')`.
   Muatannya **hanya id tenant dan nama topik**: tanpa id baris, tanpa field
   baris, tanpa data pribadi, sekitar 90 byte terhadap batas 8000 byte
   PostgreSQL. Notifikasi dikirim **saat commit** (stream yang dibangunkan
   membaca data yang sudah terlihat; tulisan yang di-rollback tidak memberi tahu
-  siapa pun) dan muatan identik dalam satu transaksi menyatu menjadi satu.
+  siapa pun). Muatan identik dalam **satu** transaksi menyatu menjadi satu;
+  **lintas transaksi tidak**.
 - Tiap proses memegang **satu** koneksi `LISTEN` (bukan satu per klien), dimulai
-  saat stream pertama dibuka. Ia tidak diambil dari pool permintaan dan
+  saat stream pertama dibuka, sebagai role aplikasi (atau
+  `REALTIME_LISTEN_DATABASE_URL`). Ia tidak diambil dari pool permintaan dan
   **menolak login SUPERUSER atau BYPASSRLS selamanya** (log keras,
   `realtime_wake_listener_events_total{state="refused"}`; stream tetap polling).
+  Satu backend ber-pool kedua membawa ping liveness di bawah.
 - Sebuah petunjuk hanya membangunkan stream **tenant dan topik yang sama** di
   instance itu; stream yang dibangunkan menjalankan tick biasanya (transaksi
   baru, otorisasi, visibilitas resource, baca dari cursor-nya). Petunjuk tidak
   memberi izin apa pun; filter tenant dan otorisasi tetap di server, bukan di
-  muatan. Paling banyak satu bangun per tenant dan topik per 250 ms (lonjakan
-  menjadi dua tick, dan tulisan terakhir sebuah lonjakan tidak pernah
-  terlewat).
+  muatan.
+- **Bukan kawanan.** Membangunkan N stream dalam satu putaran meminta N transaksi
+  sekaligus ke kelas kerja `realtime_stream` (3 slot, antrean 12), dan penolakan
+  dulu mengakhiri stream (terukur: 485 dari 500 ditolak). Maka hub melepas tiap
+  stream setelah jeda acaknya sendiri dalam jendela 20 ms per stream tambahan,
+  dibatasi 2 s (`wakeAll` setelah reconnect menyebar ke **semua** stream proses),
+  dan tick yang diminta petunjuk lalu ditolak database (antrean penuh, pool,
+  breaker) **turun ke timer** alih-alih mengakhiri stream. Penolakan pada tick
+  timer sendiri tetap mengakhirinya, seperti sebelumnya.
 - **Durabilitas tidak pernah bergantung padanya.** Bila koneksi putus, listener
   menutup klien, tersambung ulang dengan backoff eksponensial berjitter (500 ms
   sampai 30 s) dan, setelah kembali, membangunkan semua stream: masing-masing
@@ -206,23 +221,86 @@ broker):
   petunjuk yang terkirim saat putus hanya menambah latensi, bukan kehilangan
   data. Petunjuk yang hilang, dipalsukan atau ganda hanya berbiaya latensi atau
   satu pembacaan berlebih.
-- **Tidak dicoba** bila `REALTIME_WAKE_HINT_ENABLED=false` atau
-  `DATABASE_PGBOUNCER=true` (`LISTEN` sesi tidak bertahan pada pooling
+- **Liveness.** Soket setengah terbuka tidak mengirim event close. Tiap 15 s
+  proses mem-NOTIFY dirinya sendiri di `awcms_realtime_ping` dan mengharapkan
+  notifikasi terus tiba; setelah 3 interval sunyi ia membangun ulang koneksi
+  (`realtime_wake_listener_events_total{state="down"}`, detail log `liveness`),
+  sehingga `realtime_wake_listener_up` tidak melaporkan soket mati sebagai
+  hidup. Ping yang sama mencuplik `pg_notification_queue_usage()`.
+- **Tidak dicoba** bila `REALTIME_WAKE_HINT_ENABLED` bukan `true`, atau di bawah
+  `DATABASE_PGBOUNCER=true` kecuali `REALTIME_LISTEN_DATABASE_URL` menunjuk
+  koneksi **langsung** (tanpa pool) (`LISTEN` sesi tidak bertahan pada pooling
   transaksi). Stream lalu polling; tidak ada hal lain yang berubah.
-- Ia mengurangi **latensi**, bukan beban: interval tick tidak berubah (ADR-0154
-  bagian 7 menyebut memperpanjang tick saat petunjuk sehat perlu pengukuran
-  lebih dulu, dan belum ada yang diukur).
 
-Uji: `tests/realtime-wake-hub.test.ts` (parse, isolasi, throttle) dan
-`tests/integration/realtime-wake-hint.integration.test.ts` (dua koneksi
-listener sebagai dua instance, balapan bergabung, isolasi tenant, isi muatan,
-rollback, penolakan login istimewa, kill-dan-sambung-ulang dengan tepat satu
-backend).
+### Ia TIDAK mengurangi beban; ia menaikkannya, dengan plafon
+
+Tanpa petunjuk sebuah stream ber-tick tiap `tickIntervalMs` (5 s untuk route
+yang dikirim: 0,2 tick/s). Dengan petunjuk, tiap commit yang memberi tahu dapat
+membangunkannya, dan bangun dibatasi satu per tenant dan topik per 250 ms, jadi
+**stream milik tenant sibuk dapat ber-tick sampai 4 kali per detik** (20 kali
+laju polling), tiap tick adalah transaksi tenant dengan keputusan otorisasi dan
+pembacaan topik. Batas koneksi (default 100 stream per tenant per instance, 500
+per instance) membatasinya: paling banyak sekitar 100 x 4 = 400 tick/s per tenant
+sibuk per instance, tersebar di kelas `realtime_stream`. Memperpanjang tick
+polling saat petunjuk sehat akan memangkas beban saat sepi, tetapi butuh
+pengukuran sendiri dan belum dilakukan. Sesuaikan ukuran pool sebelum menyalakan
+petunjuk untuk tenant sibuk.
+
+### Biaya terukur (satu mesin bersama; indikatif, ulangi di mesinmu)
+
+Tinjauan independen pada PostgreSQL 18.7, pgbench, 16 klien: transaksi yang
+meng-commit NOTIFY berjalan sekitar **2.000 sampai 3.000 commit/s** melawan
+**5.400 sampai 13.000** tanpa NOTIFY, dan biayanya dibayar walau tanpa listener
+(commit antre pada kunci antrean notifikasi). Pada laju tetap 1.500 tx/s,
+latensi rata-rata sekitar 202 ms dengan NOTIFY melawan 4 sampai 37 ms tanpa.
+Angka ini dari satu mesin bersama dan merupakan plafon yang **wajib diukur ulang
+di lingkungan target**, bukan janji. Karena itu trigger **mati secara default**,
+dan biaya sisi penulis saat petunjuk mati terukur setingkat noise (beberapa
+persen) karena klausa `WHEN` trigger dievaluasi sebelum fungsi dimasuki; trigger
+level statement dengan transition table dicoba dan sekitar 39% lebih mahal walau
+mati (PostgreSQL menangkap transition table terlepas dari `WHEN`).
+
+### Menyalakannya
+
+1. Ukur jalur tulis database target dengan dan tanpa
+   `awcms.realtime_wake = 'on'` pada laju tulis yang diharapkan.
+2. `ALTER DATABASE <db> SET awcms.realtime_wake = 'on';` (hanya sesi baru;
+   `ALTER ROLE <role> SET ...` untuk satu role penulis; `RESET` mematikannya,
+   tanpa deploy dan tanpa restart).
+3. Set `REALTIME_WAKE_HINT_ENABLED=true` pada instance web (dan, di balik
+   PgBouncer, `REALTIME_LISTEN_DATABASE_URL`).
+
+Kedua sisi harus menyala; salah satu mati membuat stream polling.
+
+### Catatan operasi
 
 Metrik petunjuk: `realtime_wake_hints_total{result}` (`delivered`,
-`no_subscriber`, `malformed`), `realtime_wake_listener_up` (gauge, 1 saat
-mendengarkan) dan `realtime_wake_listener_events_total{state}` (`connecting`,
-`down`, `refused`).
+`no_subscriber`, `malformed`), `realtime_wake_listener_up` (gauge),
+`realtime_wake_queue_usage` (gauge, 0 sampai 1, alarm pada 0,1) dan
+`realtime_wake_listener_events_total{state}` (`connecting`, `down`, `refused`).
+
+- **Antrean NOTIFY penuh MENGGAGALKAN COMMIT PENULIS.** PostgreSQL berhenti
+  menerima commit yang memberi tahu saat antrean (8 GB) penuh, yang terjadi
+  ketika sebuah listener berhenti mengonsumsi. `realtime_wake_queue_usage`
+  mencuplik `pg_notification_queue_usage()` pada tiap ping dan proses mencatat
+  `realtime.wake.notify_queue_high` (paling banyak sekali semenit) pada 0,1.
+  Pasang alarm pada gauge, cari sesi listener yang macet (`pg_stat_activity`),
+  dan matikan GUC bila penulis mulai gagal.
+- **Jangan beri role non-aplikasi (BI, pelaporan) login ke database ini.**
+  Siapa pun yang dapat `LISTEN` pada `awcms_realtime` melihat id tenant dan nama
+  topik tiap commit yang memberi tahu; petunjuk tidak berisi data baris, tetapi
+  id tenant adalah pengenal.
+- Kanal dapat ditulis role mana pun yang bisa menjalankan `pg_notify`, jadi
+  muatan diparse ketat dan yang dipalsukan hanya berbiaya satu pembacaan
+  berlebih.
+
+Uji: `tests/realtime-wake-hub.test.ts` (parse, isolasi, throttle, sebaran) dan
+`tests/integration/realtime-wake-hint.integration.test.ts` (dua koneksi
+listener sebagai dua instance, balapan bergabung, isolasi tenant, isi muatan,
+rollback, mati-default dan saklar database, tanpa notifikasi untuk perpanjangan
+lease, 100 stream dengan satu petunjuk dan `wakeAll`, kawanan yang dilepas dalam
+satu napas, penolakan login istimewa, kill-dan-sambung-ulang, deteksi setengah
+terbuka).
 
 ## Metrik
 
@@ -256,6 +334,11 @@ Alasan penolakan: `origin`, `auth_denied`, `not_found`, `capped_actor`,
   dalam satu tick (5 dtk). Halaman yang tetap terbuka menampilkan "Akses
   berakhir". Bila tidak, periksa `awcms_audit_events` untuk
   `realtime_stream.revoked`.
+- **Pembaruan hanya tiba pada tick, tidak seketika:** petunjuk MATI secara
+  default (lihat "Menyalakannya"); bila sudah dinyalakan, periksa
+  `realtime_wake_listener_up` (0 berarti listener mati atau ditolak; cari
+  `realtime.wake.listener` di log) dan `realtime_wake_queue_usage`. Stream
+  benar di kedua keadaan.
 - **Tenant lama tidak mendapat permission:** seperti setiap seed permission,
   `sql/360` dan `sql/413` hanya memperluas katalog global; jalankan
   `bun run identity-access:permissions:backfill`.

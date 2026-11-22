@@ -386,6 +386,15 @@ const RULES: readonly Rule[] = [
   // Issue #1171, ADR-0154 section 2 and 7: the LISTEN/NOTIFY wake-up hint.
   // Default on; not attempted under DATABASE_PGBOUNCER=true.
   { name: "REALTIME_WAKE_HINT_ENABLED", required: false, type: "bool" },
+  // Optional DIRECT connection for the wake listener (a session LISTEN does not
+  // survive PgBouncer transaction pooling). The application role, never a
+  // privileged one: the listener refuses SUPERUSER/BYPASSRLS at connect.
+  {
+    name: "REALTIME_LISTEN_DATABASE_URL",
+    required: false,
+    type: "url-postgres",
+    secret: true
+  },
   { name: "PUSH_ENABLED", required: false, type: "bool" },
   {
     name: "PUSH_PROVIDER",

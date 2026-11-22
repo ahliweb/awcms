@@ -49,6 +49,7 @@ import {
   type WakeHub
 } from "../../src/lib/realtime/wake-hub";
 import {
+  defaultCreateClient,
   startWakeListener,
   type WakeListenerHandle
 } from "../../src/lib/realtime/wake-listener";
@@ -72,7 +73,13 @@ type Changes = { changes?: { id: string }[] };
 
 let tenantId = "";
 let counter = 0;
-const admin = () => getHandlerAdminSql();
+/**
+ * The writer pool: a superuser session of the handler database with the wake
+ * hint switched ON for its sessions (the triggers ship OFF, `sql/418`). Until
+ * it exists (role creation) the plain handler admin pool is used.
+ */
+let writer: Bun.SQL | undefined;
+const admin = () => writer ?? getHandlerAdminSql();
 
 async function bootstrap(): Promise<void> {
   const loginIdentifier = "wk-owner@example.com";
@@ -218,7 +225,11 @@ function headersFor(token: string, extra: Record<string, string> = {}) {
 }
 
 /** The production topic and factory; a 30 s tick, so only a hint can make a frame arrive in time. */
-function routeWith(hub: WakeHub, tickIntervalMs = 30_000): APIRoute {
+function routeWith(
+  hub: WakeHub,
+  tickIntervalMs = 30_000,
+  env: NodeJS.ProcessEnv = {}
+): APIRoute {
   return defineProgressSseRoute({
     topic: inboxStatusProgressTopic,
     workClass: "interactive",
@@ -229,7 +240,7 @@ function routeWith(hub: WakeHub, tickIntervalMs = 30_000): APIRoute {
     maxFrameBytes: 65_536,
     retryMs: 1_000,
     connections: createSseConnectionRegistry(),
-    env: { ...process.env, APP_URL: "https://app.example" },
+    env: { ...process.env, APP_URL: "https://app.example", ...env },
     wake: { hub, ensure: () => undefined }
   });
 }
@@ -374,6 +385,7 @@ const ROLES = {
   two: "t1171_instance_two",
   probe: "t1171_probe",
   reconnect: "t1171_reconnect",
+  live: "t1171_live",
   superuser: "t1171_super",
   bypass: "t1171_bypass"
 };
@@ -406,6 +418,14 @@ async function dropRoles(): Promise<void> {
       .unsafe(`DROP ROLE IF EXISTS ${name}`)
       .catch(() => undefined);
   }
+}
+
+function urlWithDatabase(raw: string): string {
+  const url = new URL(raw);
+
+  url.pathname = `/${databaseName}`;
+
+  return url.toString();
 }
 
 function urlFor(role: string): string {
@@ -445,7 +465,8 @@ async function until(
 async function startInstance(
   role: string,
   throttleMs = 20,
-  backoffMs = 25
+  backoffMs = 25,
+  extra: Partial<Parameters<typeof startWakeListener>[0]> = {}
 ): Promise<Instance> {
   const hub = createWakeHub({ knownTopics, throttleMs });
   let wakeAll = 0;
@@ -453,17 +474,29 @@ async function startInstance(
     url: urlFor(role),
     initialBackoffMs: backoffMs,
     maxBackoffMs: backoffMs * 4,
+    // The liveness probe has its own tests; here it would add a second backend.
+    pingIntervalMs: 0,
     onPayload: (raw) => hub.dispatch(raw),
     onReconnected: () => {
       wakeAll += 1;
       hub.wakeAll();
-    }
+    },
+    ...extra
   });
 
   started.push(listener);
   await until(() => listener.state() === "listening");
 
   return { hub, listener, wakeAllCalls: () => wakeAll };
+}
+
+async function listeningBackendsOf(role: string): Promise<number> {
+  const rows = (await admin()`
+    SELECT count(*)::int AS n FROM pg_stat_activity
+    WHERE usename = ${role} AND query ILIKE 'LISTEN%'
+  `) as { n: number }[];
+
+  return rows[0]!.n;
 }
 
 async function backendsOf(role: string): Promise<number> {
@@ -497,7 +530,14 @@ suite("realtime wake-up hint across instances (#1171)", () => {
       savedEnv[name] = process.env[name];
     }
     handlerReady = await ensureHandlerDatabaseReady();
-    if (handlerReady) await createRoles();
+
+    if (handlerReady) {
+      await createRoles();
+      writer = new Bun.SQL(urlWithDatabase(process.env.DATABASE_URL!), {
+        max: 4,
+        connection: { "awcms.realtime_wake": "on" }
+      });
+    }
   });
 
   afterAll(async () => {
@@ -508,6 +548,8 @@ suite("realtime wake-up hint across instances (#1171)", () => {
       else process.env[name] = value;
     }
 
+    await writer?.close({ timeout: 1 });
+    writer = undefined;
     if (handlerReady) await dropRoles();
     await teardownHandlerDatabase();
   });
@@ -741,5 +783,247 @@ suite("realtime wake-up hint across instances (#1171)", () => {
 
     await conversation(tenantId);
     await until(() => woken > before);
+  });
+  test("OFF by default: with no switch, no write notifies; the database-level switch turns it on for NEW sessions and RESET turns it off", async () => {
+    const probe = new Bun.SQL(urlFor(ROLES.probe), { max: 1, prepare: false });
+    const payloads: string[] = [];
+    const bare = () =>
+      new Bun.SQL(urlWithDatabase(process.env.DATABASE_URL!), { max: 1 });
+    const writeAs = async (sql: Bun.SQL) => {
+      await sql`
+        INSERT INTO awcms_inbox_conversations
+          (tenant_id, source_kind, source_ref, first_inbound_at,
+           last_inbound_at, status)
+        VALUES (${tenantId}, 'website', ${crypto.randomUUID()}, now(), now(), 'open')
+      `;
+      await Bun.sleep(250);
+      await sql.close({ timeout: 1 });
+    };
+
+    try {
+      await probe.listen(REALTIME_WAKE_CHANNEL, (raw: string) =>
+        payloads.push(raw)
+      );
+
+      // 1. Nothing set: silent.
+      await writeAs(bare());
+      expect(payloads).toEqual([]);
+
+      // 2. Explicitly 'off' for the session: silent.
+      await writeAs(
+        new Bun.SQL(urlWithDatabase(process.env.DATABASE_URL!), {
+          max: 1,
+          connection: { "awcms.realtime_wake": "off" }
+        })
+      );
+      expect(payloads).toEqual([]);
+
+      // 3. The database-level switch, no deploy: a NEW session notifies.
+      await admin().unsafe(
+        `ALTER DATABASE "${databaseName}" SET awcms.realtime_wake = 'on'`
+      );
+      await writeAs(bare());
+      expect(payloads.length).toBe(1);
+
+      // 4. RESET: silent again.
+      await admin().unsafe(
+        `ALTER DATABASE "${databaseName}" RESET awcms.realtime_wake`
+      );
+      payloads.length = 0;
+      await writeAs(bare());
+      expect(payloads).toEqual([]);
+    } finally {
+      await admin()
+        .unsafe(`ALTER DATABASE "${databaseName}" RESET awcms.realtime_wake`)
+        .catch(() => undefined);
+      await probe.close({ timeout: 0 });
+    }
+  });
+
+  test("a WhatsApp bookkeeping update (lease renewal shape: updated_at alone) notifies nobody; a status change does", async () => {
+    const probe = new Bun.SQL(urlFor(ROLES.probe), { max: 1, prepare: false });
+    const payloads: string[] = [];
+
+    try {
+      await admin()`
+        INSERT INTO awcms_whatsapp_messages
+          (tenant_id, idempotency_key, template_key, purpose, recipient,
+           recipient_hash, recipient_masked, body, status, sender_selection)
+        VALUES (${tenantId}, 'wk-lease', 'it1171.t', 'transactional',
+                '+6281200000000', 'k1:h', '+62*', 'x', 'queued', 'deployment')
+      `;
+      await probe.listen(REALTIME_WAKE_CHANNEL, (raw: string) =>
+        payloads.push(raw)
+      );
+      await admin()`
+        UPDATE awcms_whatsapp_messages SET updated_at = now()
+        WHERE idempotency_key = 'wk-lease'
+      `;
+      await Bun.sleep(300);
+      expect(payloads).toEqual([]);
+
+      await admin()`
+        UPDATE awcms_whatsapp_messages SET status = 'sent', updated_at = now()
+        WHERE idempotency_key = 'wk-lease'
+      `;
+      await until(() => payloads.length === 1);
+    } finally {
+      await probe.close({ timeout: 0 });
+    }
+  });
+
+  test("B1: 100 streams, one hint, then wakeAll: every stream gets the change and none ends in stream-error", async () => {
+    const instance = await startInstance(ROLES.two);
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
+    const route = routeWith(instance.hub, 30_000, {
+      REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR: "1000",
+      REALTIME_SSE_MAX_CONNECTIONS_PER_TENANT: "1000",
+      REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE: "1000"
+    });
+    const streams: Awaited<ReturnType<typeof open>>[] = [];
+
+    for (let i = 0; i < 100; i += 1) {
+      const stream = await open(route, viewer.token);
+
+      expect(stream.response.status).toBe(200);
+      await stream.waitFor((e) => e.event === "progress");
+      streams.push(stream);
+    }
+
+    const id = await conversation(tenantId);
+
+    await Promise.all(
+      streams.map((stream) =>
+        stream.waitFor((e) => changeIds([e]).has(id), 20_000)
+      )
+    );
+
+    // A reconnect-style wake of everything at once, with a new change behind it.
+    const id2 = await conversation(tenantId);
+
+    instance.hub.wakeAll();
+    await Promise.all(
+      streams.map((stream) =>
+        stream.waitFor((e) => changeIds([e]).has(id2), 20_000)
+      )
+    );
+
+    for (const stream of streams) {
+      expect(stream.events.some((e) => e.event === "stream-error")).toBe(false);
+      expect(
+        stream.events.some((e) => e.event === "authorization-revoked")
+      ).toBe(false);
+    }
+
+    for (const stream of streams) stream.close();
+    await Promise.all(streams.map((stream) => stream.ended));
+  });
+
+  test("B1 (route half): a hint-triggered tick the database refuses falls back to the timer; a herd woken in ONE breath ends no stream", async () => {
+    // A hub that releases every subscriber synchronously: the worst herd, with
+    // none of the hub's own spreading in the way.
+    const wakes = new Set<() => void>();
+    const herdHub: WakeHub = {
+      subscribe: (_tenant, _topic, wake) => {
+        wakes.add(wake);
+
+        return () => wakes.delete(wake);
+      },
+      dispatch: () => "delivered",
+      wakeAll: () => undefined,
+      subscriberCount: () => wakes.size
+    };
+    const viewer = await seedUser(tenantId, "viewer", ROWS);
+    const route = routeWith(herdHub, 30_000, {
+      REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR: "1000",
+      REALTIME_SSE_MAX_CONNECTIONS_PER_TENANT: "1000",
+      REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE: "1000"
+    });
+    const streams: Awaited<ReturnType<typeof open>>[] = [];
+
+    for (let i = 0; i < 100; i += 1) {
+      const stream = await open(route, viewer.token);
+
+      await stream.waitFor((e) => e.event === "progress");
+      streams.push(stream);
+    }
+
+    const id = await conversation(tenantId);
+
+    for (const wake of [...wakes]) wake();
+    await Bun.sleep(3_000);
+
+    // Whatever the queue refused, nobody was ended for it.
+    for (const stream of streams) {
+      expect(stream.events.some((e) => e.event === "stream-error")).toBe(false);
+    }
+
+    // Released in small groups the same streams are all alive and catch up
+    // from their cursors: the refused ticks lost nothing.
+    const everyone = [...wakes];
+
+    for (let i = 0; i < everyone.length; i += 5) {
+      for (const wake of everyone.slice(i, i + 5)) wake();
+      await Bun.sleep(60);
+    }
+
+    await Promise.all(
+      streams.map((stream) =>
+        stream.waitFor((e) => changeIds([e]).has(id), 20_000)
+      )
+    );
+
+    for (const stream of streams) stream.close();
+    await Promise.all(streams.map((stream) => stream.ended));
+  });
+
+  test("F4: a connection that goes silent (half-open) is detected by the liveness probe and rebuilt; a queue-usage sample is taken", async () => {
+    const states: { state: string; detail?: string }[] = [];
+    const usages: number[] = [];
+    let built = 0;
+    let wakeAll = 0;
+    const listener = startWakeListener({
+      url: urlFor(ROLES.live),
+      initialBackoffMs: 25,
+      maxBackoffMs: 100,
+      pingIntervalMs: 100,
+      livenessIntervals: 3,
+      onPayload: () => undefined,
+      onReconnected: () => (wakeAll += 1),
+      onQueueUsage: (usage) => usages.push(usage),
+      onStateChange: (state, detail) => states.push({ state, detail }),
+      createClient: (url, onclose) => {
+        built += 1;
+
+        const real = defaultCreateClient(url, onclose);
+
+        if (built !== 2) return real;
+
+        // The 2nd client (the first LISTENING one; #1 is the role check) hears
+        // nothing: a socket that is open but dead.
+        return new Proxy(real, {
+          get(target, property) {
+            if (property === "listen") {
+              return (channel: string) =>
+                target.listen(channel, () => undefined);
+            }
+
+            const value = Reflect.get(target, property);
+
+            return typeof value === "function" ? value.bind(target) : value;
+          }
+        });
+      }
+    });
+
+    started.push(listener);
+    await until(() => states.some((s) => s.detail === "liveness"), 8_000);
+    await until(() => listener.state() === "listening" && wakeAll >= 2, 8_000);
+    // The rebuilt connection hears its own pings: it stays up.
+    await Bun.sleep(600);
+    expect(listener.state()).toBe("listening");
+    expect(usages.length).toBeGreaterThan(0);
+    expect(usages.every((u) => u >= 0 && u <= 1)).toBe(true);
+    expect(await listeningBackendsOf(ROLES.live)).toBe(1);
   });
 });

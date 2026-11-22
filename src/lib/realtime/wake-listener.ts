@@ -21,6 +21,9 @@
  */
 import { REALTIME_WAKE_CHANNEL } from "./wake-hub";
 
+/** The liveness channel: each process pings it and must see notifications keep arriving. */
+export const REALTIME_PING_CHANNEL = "awcms_realtime_ping";
+
 /** An alias, on purpose: the swallow gate reads a `: Bun.SQL` annotation as a transaction handle, and this connection is not one. */
 type SqlClient = Bun.SQL;
 
@@ -33,6 +36,18 @@ export type WakeListenerOptions = {
   /** After a successful (re)connect: wake everything, hints may have been lost. */
   onReconnected: () => void;
   onStateChange?: (state: WakeListenerState, detail?: string) => void;
+  /**
+   * Liveness (audit F4). Every `pingIntervalMs` the process sends itself a
+   * NOTIFY on a second channel and expects to SEE notifications (that one or a
+   * hint) arrive; if none was seen within `livenessIntervals` intervals the
+   * connection is treated as lost and rebuilt. A half-open socket delivers no
+   * `close`, so without this the gauge would say "listening" forever. `0`
+   * disables the probe (tests only).
+   */
+  pingIntervalMs?: number;
+  livenessIntervals?: number;
+  /** Fraction (0..1) of the NOTIFY queue in use, sampled with every ping. A full queue FAILS WRITERS' commits (audit M2). */
+  onQueueUsage?: (usage: number) => void;
   initialBackoffMs?: number;
   maxBackoffMs?: number;
   random?: () => number;
@@ -72,7 +87,7 @@ export async function assertListenerRoleIsUnprivileged(
   if (who.bypass) throw new WakeListenerRoleRefused("the login has BYPASSRLS");
 }
 
-function defaultCreateClient(
+export function defaultCreateClient(
   url: string,
   onclose: (error?: unknown) => void
 ): SqlClient {
@@ -93,12 +108,17 @@ export function startWakeListener(
   const maxBackoffMs = options.maxBackoffMs ?? 30_000;
   const random = options.random ?? Math.random;
   const createClient = options.createClient ?? defaultCreateClient;
+  const pingIntervalMs = options.pingIntervalMs ?? 15_000;
+  const livenessIntervals = options.livenessIntervals ?? 3;
 
   let state: WakeListenerState = "connecting";
   let stopped = false;
   let current: SqlClient | null = null;
   let attempt = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let pinging = false;
+  let lastSeenAt = Date.now();
 
   const setState = (next: WakeListenerState, detail?: string) => {
     state = next;
@@ -125,12 +145,52 @@ export function startWakeListener(
 
     current = null;
 
+    if (pingTimer !== null) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+
     if (old) {
       try {
         await old.close({ timeout: 0 });
       } catch {
         // Already closed.
       }
+    }
+  };
+
+  const lose = (client: SqlClient, detail: string) => {
+    if (stopped || client !== current) return;
+
+    setState("down", detail);
+    void dropCurrent().then(scheduleReconnect);
+  };
+
+  const watchdog = async (client: SqlClient) => {
+    if (stopped || client !== current) return;
+
+    // The check comes BEFORE the re-entry guard: a ping that hangs on a dead
+    // socket must not be able to hide the staleness it causes.
+    if (Date.now() - lastSeenAt > pingIntervalMs * livenessIntervals) {
+      lose(client, "liveness");
+      return;
+    }
+
+    if (pinging) return;
+
+    pinging = true;
+
+    try {
+      const rows = (await client`
+        SELECT pg_notify(${REALTIME_PING_CHANNEL}, '1'),
+               pg_notification_queue_usage() AS usage
+      `) as { usage: number | string }[];
+
+      options.onQueueUsage?.(Number(rows[0]?.usage ?? 0));
+    } catch {
+      lose(client, "ping failed");
+    } finally {
+      pinging = false;
     }
   };
 
@@ -170,7 +230,12 @@ export function startWakeListener(
       client = created;
       current = created;
 
+      await created.listen(REALTIME_PING_CHANNEL, () => {
+        lastSeenAt = Date.now();
+      });
       await created.listen(channel, (payload: string) => {
+        lastSeenAt = Date.now();
+
         try {
           options.onPayload(payload);
         } catch {
@@ -184,6 +249,13 @@ export function startWakeListener(
       }
 
       attempt = 0;
+      lastSeenAt = Date.now();
+      pinging = false;
+
+      if (pingIntervalMs > 0) {
+        pingTimer = setInterval(() => void watchdog(created), pingIntervalMs);
+      }
+
       setState("listening");
       options.onReconnected();
     } catch (error) {

@@ -52,7 +52,12 @@ const ALLOWED_OTHER_GUCS = new Set<string>([
   // A built-in PostgreSQL parameter, not an application GUC: the shift overlap
   // guard (sql/184, Issue #946) refuses to run outside READ COMMITTED because
   // its advisory-lock argument depends on re-reading committed rows.
-  "transaction_isolation"
+  "transaction_isolation",
+  // The writer-side switch of the realtime wake-up hint (sql/418, Issue #1171):
+  // a database/role-level setting an operator flips with `ALTER DATABASE ... SET`,
+  // read by the NOTIFY triggers. It is a feature switch, not a tenant scope, and
+  // it carries no authorization decision.
+  "awcms.realtime_wake"
 ]);
 
 /**

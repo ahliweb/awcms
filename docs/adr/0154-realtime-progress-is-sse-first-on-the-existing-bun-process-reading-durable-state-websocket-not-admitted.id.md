@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md)
 
-<!-- i18n-source-hash: sha256:78bd2f9fd1b11bb23b3927954e5d3df6418dde3da3dd14ba91de0ff36d16db08 -->
+<!-- i18n-source-hash: sha256:508579ead0f28bef1f9f3bc4723c636b1c7239071fd877b2c9160c32f0982c1e -->
 
 # ADR-0154 — Progres realtime memakai SSE lebih dulu di proses Bun yang sudah ada dan membaca state durable; WebSocket belum diadmisi sampai kebutuhan dua arah terbukti
 
@@ -87,7 +87,7 @@ ADR berikutnya yang mengadmisi WebSocket `Bun.serve` minimal harus: membuktikan 
 ### 7. Perilaku multi-instance
 
 - **Hari ini (satu instance):** polling per koneksi, seperti konsekuensi 4 ADR-0075. Ia benar pada berapa pun instance karena setiap tick membaca PostgreSQL; ia tidak menjadi lebih murah.
-- **Saat replika diadmisi:** reconnect dapat mendarat di instance mana pun dan melanjutkan dengan cursor; tidak ada state dalam memori yang otoritatif; sticky session tidak diperlukan. Biayanya beban baca database proporsional dengan koneksi dibagi interval tick, yang dibatasi oleh batas di §5 dan diekspos oleh metrik di §8. Petunjuk bangun (§2) mengurangi latensi, bukan beban, kecuali tick diperpanjang saat kanal petunjuk sehat; optimasi itu butuh pengukuran dulu.
+- **Saat replika diadmisi:** reconnect dapat mendarat di instance mana pun dan melanjutkan dengan cursor; tidak ada state dalam memori yang otoritatif; sticky session tidak diperlukan. Biayanya beban baca database proporsional dengan koneksi dibagi interval tick, yang dibatasi oleh batas di §5 dan diekspos oleh metrik di §8. Petunjuk bangun (§2) mengurangi latensi dan **menaikkan** beban: tiap stream dapat ber-tick pada setiap commit yang memberi tahu, dibatasi satu bangun per tenant dan topik per 250 ms, jadi sampai 4 tick per detik per stream melawan 0,2 pada polling 5 s (sekitar 400 tick/s per tenant sibuk pada batas default 100 stream). Memperpanjang polling saat kanal petunjuk sehat akan memangkas beban saat sepi; optimasi itu butuh pengukuran dulu dan belum dilakukan. Lihat `docs/awcms/realtime-progress-streams.id.md` (biaya NOTIFY terukur: satu mesin bersama, plafon yang diukur ulang).
 - **Ditolak untuk multi-instance:** `server.publish` lokal-proses sebagai satu-satunya fan-out, dan broker yang menyimpan satu-satunya salinan sebuah event.
 
 ### 8. Observabilitas dan privasi envelope
@@ -142,7 +142,7 @@ flowchart LR
 2. **Topik progres kampanye.** Satu topik, permission yang di-seed, snapshot REST-nya, path OpenAPI dan catatan proyeksi AsyncAPI; tes integrasi untuk dua tenant dan dua brand, peran dicabut di tengah stream, id resource berbahaya, Origin salah, sesi kedaluwarsa, gangguan provider, reconnect dengan cursor, pembaca lambat.
 3. **Topik petunjuk inbox** dan **topik status pesan**, masing-masing sebagai perubahan sendiri dengan permission dan tes sendiri.
 4. **Metrik, entri registri env, dokumen dan runbook;** komponen progres yang aksesibel beserta fallback polling-nya; catatan konfigurasi proxy (buffering mati, idle timeout di atas heartbeat).
-5. **Petunjuk bangun (dibangun 22 November 2026, Issue #1171):** lewat `LISTEN/NOTIFY`, tanpa Redis dan tanpa layanan baru. Pemilik memprioritaskannya demi skalabilitas horizontal dan mendelegasikan keputusannya ke orchestrator (komentar di #1171). Ia tetap persis seperti yang dikatakan bagian 2: petunjuk yang membawa id tenant dan topik, bukan durabilitas, bukan otorisasi, dengan satu koneksi `LISTEN` per proses (login SUPERUSER atau BYPASSRLS ditolak), sambung ulang dengan backoff dan bangun-susul, dan `sql/418` sebagai sisi penulis. Ia tidak memperpanjang tick (itu masih perlu pengukuran beban). Operasi: [`realtime-progress-streams.id.md`](../awcms/realtime-progress-streams.id.md#bangun-lintas-instance).
+5. **Petunjuk bangun (dibangun 22 November 2026, Issue #1171):** lewat `LISTEN/NOTIFY`, tanpa Redis dan tanpa layanan baru. Pemilik memprioritaskannya demi skalabilitas horizontal dan mendelegasikan keputusannya ke orchestrator (komentar di #1171). Ia tetap persis seperti yang dikatakan bagian 2: petunjuk yang membawa id tenant dan topik, bukan durabilitas, bukan otorisasi, dengan satu koneksi `LISTEN` per proses (login SUPERUSER atau BYPASSRLS ditolak), sambung ulang dengan backoff dan bangun-susul, dan `sql/418` sebagai sisi penulis. Ia dikirim **MATI** di kedua sisi (GUC database `awcms.realtime_wake` dan `REALTIME_WAKE_HINT_ENABLED`) setelah tinjauan independen mengukur biaya commit NOTIFY; ia tidak memperpanjang tick (itu masih perlu pengukuran beban). Operasi: [`realtime-progress-streams.id.md`](../awcms/realtime-progress-streams.id.md#bangun-lintas-instance).
 
 ## Invarian untuk #1171
 

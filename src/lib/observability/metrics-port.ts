@@ -703,6 +703,15 @@ export const METRIC_DEFINITIONS = {
     approxCardinality: "Exactly 1 — unlabeled, per instance.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
+  realtime_wake_queue_usage: {
+    name: "realtime_wake_queue_usage",
+    type: "gauge",
+    description:
+      "Fraction (0 to 1) of PostgreSQL's NOTIFY queue in use, sampled by the wake listener with each liveness ping. A FULL queue makes writers' commits fail; alert early (0.1).",
+    allowedLabelKeys: [],
+    approxCardinality: "Exactly 1 — unlabeled, per instance.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
   realtime_wake_listener_events_total: {
     name: "realtime_wake_listener_events_total",
     type: "counter",

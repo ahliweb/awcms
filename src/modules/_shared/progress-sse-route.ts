@@ -559,8 +559,19 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
     recordCounter("realtime_stream_opened_total", { topic: topic.topic });
     recordGauge("realtime_stream_open", connections.openCount());
 
+    // Set when the wait that just ended was cut short by a wake-up hint.
+    let wokenByHint = false;
+
     const tick = async (): Promise<ProgressTickOutcome> => {
       const startedAt = performance.now();
+      // A tick a HINT asked for is an optimisation, not a duty: when the
+      // database refuses it (work-class queue full, pool, breaker) it degrades
+      // to the timer instead of ending the stream (audit B1). The cursor in
+      // `state` did not move, so the timer tick reads everything it missed. A
+      // refusal on the timer's own tick still ends the stream (ADR-0154 s5).
+      const viaHint = wokenByHint;
+
+      wokenByHint = false;
 
       try {
         const outcome = await withTenant<ProgressTickOutcome>(
@@ -637,9 +648,13 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
 
         // `withTenant` RETURNS the 503 `Response` when the pool or breaker
         // refuses: load shedding ends the stream, no per-connection retry.
-        return outcome instanceof Response ? { state: "error" } : outcome;
+        if (outcome instanceof Response) {
+          return viaHint ? { state: "ok", events: [] } : { state: "error" };
+        }
+
+        return outcome;
       } catch {
-        return { state: "error" };
+        return viaHint ? { state: "ok", events: [] } : { state: "error" };
       } finally {
         recordHistogram(
           "realtime_stream_tick_duration_ms",
@@ -660,6 +675,8 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
     let wakePending = false;
 
     const wakeHint = () => {
+      wokenByHint = true;
+
       if (wake === null) {
         wakePending = true;
         return;

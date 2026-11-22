@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:03c55c8318530283db47e20e7537d80444087457e04a5aeeb1fe856832725277 -->
+<!-- i18n-source-hash: sha256:83aa2a344d74ea1a0ab77497037f11b31b7a4495ddabd6cdd72a84260f1c3c65 -->
 
 # `omnichannel_inbox`
 
@@ -169,7 +169,7 @@ Telegram: staf disebut "Anda" atau "staf lain".
 
 ## Bangun realtime (sql/418)
 
-Stream `inbox.status.progress` (ADR-0154) dibangunkan lintas instance oleh trigger baris pada `awcms_inbox_conversations` yang memberi tahu `{id tenant, topik}` saat commit (PostgreSQL LISTEN/NOTIFY, tanpa layanan baru). Ia hanya mempersingkat tunggu sebelum tick berikutnya: stream tetap mengotorisasi ulang dan membaca dari cursor-nya, jadi petunjuk yang hilang hanya berbiaya latensi, bukan kebenaran. Lihat `docs/awcms/realtime-progress-streams.id.md`.
+Stream `inbox.status.progress` (ADR-0154) dibangunkan lintas instance oleh trigger baris pada `awcms_inbox_conversations` yang memberi tahu `{id tenant, topik}` saat commit (PostgreSQL LISTEN/NOTIFY, tanpa layanan baru). Ia dikirim MATI (GUC database `awcms.realtime_wake` plus `REALTIME_WAKE_HINT_ENABLED`; commit ber-NOTIFY mengurangi throughput, terukur). Ia hanya mempersingkat tunggu sebelum tick berikutnya: stream tetap mengotorisasi ulang dan membaca dari cursor-nya, jadi petunjuk yang hilang hanya berbiaya latensi, bukan kebenaran. Lihat `docs/awcms/realtime-progress-streams.id.md`.
 
 ## Tindak lanjut
 

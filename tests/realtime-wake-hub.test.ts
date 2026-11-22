@@ -21,17 +21,29 @@ function payload(tenantId: string, topic = TOPIC): string {
 }
 
 /** A hub with a manual clock: `advance` moves time and runs due timers. */
-function fixture(throttleMs = 250) {
+function fixture(
+  throttleMs = 250,
+  extra: {
+    perSubscriberMs?: number;
+    maxSpreadMs?: number;
+    random?: () => number;
+  } = {}
+) {
   let time = 1_000_000;
   const timers: { at: number; run: () => void; id: number }[] = [];
+  const delays: number[] = [];
   let nextId = 1;
   const hub = createWakeHub({
     knownTopics: KNOWN,
     throttleMs,
+    // The older tests assert immediate delivery; the spread has its own block.
+    perSubscriberMs: 0,
+    ...extra,
     now: () => time,
     setTimer: (callback, ms) => {
       const id = nextId++;
 
+      delays.push(ms);
       timers.push({ at: time + ms, run: callback, id });
 
       return id;
@@ -45,6 +57,7 @@ function fixture(throttleMs = 250) {
 
   return {
     hub,
+    delays,
     pendingTimers: () => timers.length,
     advance(ms: number) {
       time += ms;
@@ -226,5 +239,97 @@ describe("wakeAll: the catch-up after a listener reconnect", () => {
     hub.wakeAll();
 
     expect(woken).toEqual(["A", "A", "B"]);
+  });
+});
+
+describe("the herd: one hint must not wake every stream in one breath (audit B1)", () => {
+  /** A deterministic spread of `random()` over [0, 1). */
+  function sweep(count: number) {
+    let k = 0;
+
+    return () => (k++ % count) / count;
+  }
+
+  test("100 streams of one tenant: nobody wakes synchronously, the delays ramp across the window and stay under the cap", () => {
+    const { hub, delays, advance } = fixture(250, {
+      perSubscriberMs: 20,
+      maxSpreadMs: 2000,
+      random: sweep(100)
+    });
+    let woken = 0;
+
+    for (let i = 0; i < 100; i += 1) {
+      hub.subscribe(TENANT_A, TOPIC, () => (woken += 1));
+    }
+
+    hub.dispatch(payload(TENANT_A));
+
+    expect(woken).toBe(0);
+    expect(delays.length).toBe(100);
+    expect(Math.max(...delays)).toBeLessThan(2000);
+
+    // No 25 ms slice of the ramp holds more than a couple of wakes.
+    for (let from = 0; from < 2000; from += 25) {
+      const inSlice = delays.filter((d) => d >= from && d < from + 25).length;
+
+      expect(inSlice).toBeLessThanOrEqual(3);
+    }
+
+    advance(2000);
+    expect(woken).toBe(100);
+  });
+
+  test("the window is capped however many streams there are", () => {
+    const { hub, delays } = fixture(250, {
+      perSubscriberMs: 20,
+      maxSpreadMs: 2000,
+      random: () => 0.999999
+    });
+
+    for (let i = 0; i < 500; i += 1)
+      hub.subscribe(TENANT_A, TOPIC, () => undefined);
+
+    hub.dispatch(payload(TENANT_A));
+
+    expect(Math.max(...delays)).toBeLessThan(2000);
+  });
+
+  test("a lone stream is woken at once (no latency tax when there is no herd)", () => {
+    const { hub } = fixture(250, { perSubscriberMs: 20 });
+    let woken = 0;
+
+    hub.subscribe(TENANT_A, TOPIC, () => (woken += 1));
+    hub.dispatch(payload(TENANT_A));
+
+    expect(woken).toBe(1);
+  });
+
+  test("wakeAll spreads across EVERY stream of the process in one window, not one window per tenant", () => {
+    const { hub, delays, advance } = fixture(250, {
+      perSubscriberMs: 20,
+      maxSpreadMs: 2000,
+      random: () => 0.999999
+    });
+    const tenants = [
+      TENANT_A,
+      TENANT_B,
+      "33333333-3333-4333-8333-333333333333"
+    ];
+    let woken = 0;
+
+    for (const tenant of tenants) {
+      for (let i = 0; i < 20; i += 1) {
+        hub.subscribe(tenant, TOPIC, () => (woken += 1));
+      }
+    }
+
+    hub.wakeAll();
+
+    expect(woken).toBe(0);
+    expect(delays.length).toBe(60);
+    // 60 streams -> a 1180 ms window; per-tenant windows would top out at 380 ms.
+    expect(Math.max(...delays)).toBeGreaterThan(1100);
+    advance(2000);
+    expect(woken).toBe(60);
   });
 });

@@ -20,6 +20,20 @@
  * authenticated session belongs to, so a hint for tenant B simply has no
  * subscriber among tenant A's streams.
  *
+ * ## Why delivery is spread (audit B1, the thundering herd)
+ *
+ * One hint wakes EVERY stream of a tenant and topic, and each woken stream runs
+ * a tick: a tenant transaction in the small `realtime_stream` work class (3
+ * slots, queue 12). Waking 100 streams in one synchronous loop asks for 100
+ * transactions at once; everything past the queue is refused, and a refusal on
+ * the old path ended the stream. The hub therefore hands each woken stream a
+ * random delay inside a window that grows with the number of streams
+ * (`perSubscriberMs` each, capped at `maxSpreadMs`), so the demand arrives as a
+ * ramp the class can serve. The route adds the second half: a tick triggered by
+ * a wake that the database refuses (queue full, breaker) degrades to the timer
+ * instead of ending the stream. The same spread applies to `wakeAll` after a
+ * listener reconnect, across ALL streams of the process.
+ *
  * ## Why it is throttled
  *
  * A burst of writes (a broadcast finalising a thousand rows) emits a hint per
@@ -93,6 +107,11 @@ export type WakeHubOptions = {
   knownTopics: ReadonlySet<string>;
   /** Minimum gap between two wakes of one (tenant, topic). */
   throttleMs?: number;
+  /** Window added per extra subscriber when spreading a wake (default 20 ms). */
+  perSubscriberMs?: number;
+  /** Ceiling of the spreading window (default 2000 ms). */
+  maxSpreadMs?: number;
+  random?: () => number;
   now?: () => number;
   setTimer?: (callback: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -109,6 +128,8 @@ export type WakeHub = {
 };
 
 export const DEFAULT_WAKE_THROTTLE_MS = 250;
+export const DEFAULT_WAKE_PER_SUBSCRIBER_MS = 20;
+export const DEFAULT_WAKE_MAX_SPREAD_MS = 2000;
 
 type KeyState = {
   subscribers: Set<() => void>;
@@ -128,19 +149,40 @@ export function createWakeHub(options: WakeHubOptions): WakeHub {
   const clearTimer =
     options.clearTimer ??
     ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+  const perSubscriberMs =
+    options.perSubscriberMs ?? DEFAULT_WAKE_PER_SUBSCRIBER_MS;
+  const maxSpreadMs = options.maxSpreadMs ?? DEFAULT_WAKE_MAX_SPREAD_MS;
+  const random = options.random ?? Math.random;
   const keys = new Map<string, KeyState>();
+
+  function call(wake: () => void): void {
+    try {
+      wake();
+    } catch {
+      // One broken subscriber must not starve the others.
+    }
+  }
+
+  /** Wakes `wakes`, each after its own random delay inside a window sized by their number. */
+  function release(wakes: (() => void)[]): void {
+    const spread = Math.min(maxSpreadMs, (wakes.length - 1) * perSubscriberMs);
+
+    for (const wake of wakes) {
+      if (spread <= 0) {
+        call(wake);
+      } else {
+        // A late wake of a stream that has since left is harmless: it only
+        // marks a hint pending on a loop that has ended.
+        setTimer(() => call(wake), Math.floor(random() * spread));
+      }
+    }
+  }
 
   function fire(state: KeyState): void {
     state.lastWakeAt = now();
 
     // A copy: a callback may unsubscribe itself.
-    for (const wake of [...state.subscribers]) {
-      try {
-        wake();
-      } catch {
-        // One broken subscriber must not starve the others.
-      }
-    }
+    release([...state.subscribers]);
   }
 
   return {
@@ -206,14 +248,20 @@ export function createWakeHub(options: WakeHubOptions): WakeHub {
     },
 
     wakeAll() {
+      const everyone: (() => void)[] = [];
+
       for (const state of keys.values()) {
         if (state.timer !== null) {
           clearTimer(state.timer);
           state.timer = null;
         }
 
-        fire(state);
+        state.lastWakeAt = now();
+        everyone.push(...state.subscribers);
       }
+
+      // One window across every stream of the process, not one per key.
+      release(everyone);
     },
 
     subscriberCount() {
