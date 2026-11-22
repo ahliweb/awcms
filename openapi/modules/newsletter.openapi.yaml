@@ -52,14 +52,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NewsletterNeutralResult"
+              examples:
+                neutral:
+                  summary: >-
+                    The ONE body this endpoint answers with, whether the address
+                    is new, already active, suppressed, or the host resolves to
+                    no tenant. A client cannot tell the outcomes apart, and
+                    neither can this example.
+                  value:
+                    success: true
+                    data:
+                      message: If that address can be subscribed, a confirmation email is on its way.
+                    meta: {}
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: "`VALIDATION_ERROR`"
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: A valid email address is required.
+                      details:
+                        - field: email
+                          message: email is not an address.
+                    meta:
+                      correlationId: example-correlation-err
         "429":
           description: Too many subscription requests from this source (`RATE_LIMITED`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                rate_limited:
+                  summary: The per-IP limiter refused the request. Carries a `Retry-After` header.
+                  value:
+                    success: false
+                    error:
+                      code: RATE_LIMITED
+                      message: Too many subscription requests from this source. Try again later.
+                    meta: {}
   /api/v1/newsletter/confirm:
     post:
       operationId: newsletterConfirm
@@ -257,12 +295,14 @@ components:
             is handed is an anonymous endpoint that will hash a megabyte.
     NewsletterNeutralResult:
       type: object
+      required: [success, data]
       properties:
         success:
           type: boolean
           enum: [true]
         data:
           type: object
+          required: [message]
           properties:
             message:
               type: string

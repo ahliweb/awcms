@@ -379,8 +379,19 @@ flowchart LR
 
 - **Strict, not lenient.** An unknown keyword, an unknown `format`, `properties: null`, a dangling `$ref`, a non-array `required` and 3.0-style `exclusiveMinimum: true` all fail. OpenAPI keywords that are not JSON Schema are registered one by one: `discriminator` (shape-checked), `xml`, `externalDocs`, `example`, the `x-*` extensions that occur, and the OpenAPI document's own top-level keys. `nullable` is handled by `ajv` itself, which refuses it without a `type`; it is a no-op in 3.1 and is retrofitted gradually (ADR-0167 §6).
 - **Formats are known, not enforced.** Only the JSON Schema and OpenAPI formats are accepted, as names; instances are not validated here, so `ajv-formats` is not needed.
-- **Out of scope.** Examples, a fixtures pack, and validating real handler responses are separate issues (#1391 to #1395).
+- **Out of scope.** A fixtures pack and validating real handler responses are separate issues (#1392 to #1395). Examples are validated here, see the next section.
 - **Cost.** About 2.5 to 3 s for roughly 2,300 schema locations on one developer machine (Bun 1.4.4); a single run, not a benchmark.
 - **Dependency.** `ajv` 8.20.0 is a dev dependency, exact-pinned (MIT; four direct dependencies of its own); it passes `deps:audit:check` and `deps:license:check`.
 
 Tests: `tests/api-contract-lint.test.ts` (the real bundle must compile; deliberately broken contracts must fail).
+
+### Examples are validated too (Issue #1391)
+
+The same command also validates every example of the bundle with the same `ajv`: media-type `example` and `examples.<name>.value` (request and response, inline or through `components`), parameter examples, and schema-level `example`/`examples`. A failure prints the pointer of the example and the first violations, so an example that drifts from its schema (a field added to `required`, an enum value renamed) turns `check` red. `uuid`, `date`, `date-time`, `email` and `uri` are enforced for examples (small in-house checks, no `ajv-formats`); `nullable` is honoured.
+
+- **Synthetic only.** Any e-mail address in an example must use a reserved domain (`example.test`, `example.com|org|net`, or a `.test`, `.example`, `.invalid`, `.localhost` host); a real domain fails the gate.
+- **Where to write them.** `examples` (named) on the media type, in the operation's own fragment. Root `components.responses` (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`) are frozen by `tests/openapi-bundle.test.ts`, so an operation that wants a specific error example declares that response inline instead of `$ref`.
+- **Conditional shapes.** The blog list is `oneOf [BlogPostSummary, BlogPostFeedItem]`; `BlogPostSummary` is `additionalProperties: false` so the `oneOf` stays exclusive and an example of `view=full` cannot pass as a summary. `BlogPostFeedItem` lists the feed fields the handler always returns (`BlogPost` cannot, because the lifecycle responses share it).
+- **Covered so far.** `GET /api/v1/blog/posts` (`summary`, `stable_order`, `full`, plus 400/401/403), `POST /api/v1/newsletter/subscribe` (one neutral 200, which cannot tell a new address from a known one; 400; 429) and `PUT /api/v1/booking/policy` (200, 400 x2, 401, 403, 409, 422). Other operations are not required to carry an example yet (ADR-0167: the requirement applies to new operations).
+
+Tests: `tests/api-contract-examples.test.ts` (the real bundle passes; corrupting one field of a real example, a malformed uuid or a real e-mail domain turns it red).

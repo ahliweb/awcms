@@ -21187,8 +21187,8 @@ At least one field. `null` clears; an omitted field is left alone.
 
 | Field     | Type         | Required | Nullable | Description |
 | --------- | ------------ | -------- | -------- | ----------- |
-| `success` | enum(`true`) | no       | no       |             |
-| `data`    | object       | no       | no       |             |
+| `success` | enum(`true`) | yes      | no       |             |
+| `data`    | object       | yes      | no       |             |
 
 **Example**
 

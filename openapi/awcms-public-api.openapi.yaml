@@ -5185,6 +5185,9 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - success
+                  - data
                 properties:
                   success:
                     type: boolean
@@ -5192,24 +5195,167 @@ paths:
                       - true
                   data:
                     type: object
+                    required:
+                      - posts
                     properties:
                       posts:
                         type: array
-                        description: "`BlogPostSummary` by default; `BlogPost` when `view=full`."
+                        description: "`BlogPostSummary` by default; `BlogPostFeedItem` (a `BlogPost` with the feed fields guaranteed) when `view=full`."
                         items:
                           oneOf:
                             - $ref: "#/components/schemas/BlogPostSummary"
-                            - $ref: "#/components/schemas/BlogPost"
+                            - $ref: "#/components/schemas/BlogPostFeedItem"
                       nextCursor:
                         type: string
                         nullable: true
                         description: Present only with `order=created_at`. Null means the traversal is complete.
+              examples:
+                summary:
+                  summary: Default projection (`BlogPostSummary`), `updated_at` ordering. No `nextCursor` key.
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          status: published
+                          visibility: public
+                          locale: id
+                          publishedAt: 2026-11-20T08:15:30.123Z
+                          createdAt: 2026-11-19T03:02:11.456Z
+                          updatedAt: 2026-11-20T08:15:30.123Z
+                        - id: 9a0d4c7e-1b62-4e85-8f3a-6c5d2e7b1a40
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Draf yang belum terbit
+                          slug: draf-yang-belum-terbit
+                          status: draft
+                          visibility: private
+                          locale: id
+                          publishedAt: null
+                          createdAt: 2026-11-18T10:40:00.000Z
+                          updatedAt: 2026-11-18T10:40:00.000Z
+                    meta:
+                      correlationId: example-correlation-1
+                stable_order:
+                  summary: "`?order=created_at`. `nextCursor` is a string while more rows may follow, and null on the last page."
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          status: published
+                          visibility: public
+                          locale: id
+                          publishedAt: 2026-11-20T08:15:30.123Z
+                          createdAt: 2026-11-20T08:15:30.123Z
+                          updatedAt: 2026-11-20T08:15:30.123Z
+                      nextCursor: MjAyNi0xMS0yMFQwODoxNTozMC4xMjM0NTZafDNmNmIxZDUyLThhNGUtNGMxYi05ZDdlLTJiNWYwYTljNGUxMQ
+                    meta:
+                      correlationId: example-correlation-2
+                full:
+                  summary: "`?view=full&order=created_at`. Each post is a `BlogPostFeedItem`: body, classification and byline included."
+                  value:
+                    success: true
+                    data:
+                      posts:
+                        - id: 3f6b1d52-8a4e-4c1b-9d7e-2b5f0a9c4e11
+                          tenantId: 7c2e9a40-5d1b-4f38-a6c3-1e8b4d70f295
+                          authorTenantUserId: b41e8d03-6a9f-4c27-85d1-0f3e7a2c9b68
+                          title: Contoh berita utama
+                          slug: contoh-berita-utama
+                          excerpt: Ringkasan singkat sebuah berita contoh.
+                          contentJson:
+                            blocks:
+                              - type: paragraph
+                                text: Isi berita contoh.
+                          contentText: Isi berita contoh.
+                          bodyPortableText:
+                            - _type: block
+                              _key: k1
+                              style: normal
+                              children:
+                                - _type: span
+                                  _key: s1
+                                  text: Isi berita contoh.
+                                  marks: []
+                              markDefs: []
+                          status: published
+                          visibility: public
+                          featuredMediaId: null
+                          seoImageMediaId: null
+                          seoTitle: null
+                          metaDescription: Deskripsi meta contoh.
+                          canonicalUrl: null
+                          locale: id
+                          translationGroupId: null
+                          autoInternalTagLinksDisabled: false
+                          regionCode: null
+                          publishedAt: 2026-11-20T08:15:30.123Z
+                          scheduledAt: null
+                          unpublishAt: null
+                          createdAt: 2026-11-20T08:15:30.123Z
+                          updatedAt: 2026-11-20T08:15:30.123Z
+                          version: 3
+                          termIds:
+                            - e5a7c1d9-2f40-4b86-9c13-7d8e0a5b6f21
+                          institutionIds: []
+                          authorByline: null
+                      nextCursor: null
+                    meta:
+                      correlationId: example-correlation-3
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: "`VALIDATION_ERROR`"
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: view must be one of summary, full.
+                    meta:
+                      correlationId: example-correlation-err
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: Missing or invalid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                auth_required:
+                  summary: "`AUTH_REQUIRED`"
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication required.
+                    meta:
+                      correlationId: example-correlation-err
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: Access denied by RBAC/ABAC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                access_denied:
+                  summary: "`ACCESS_DENIED`"
+                  value:
+                    success: false
+                    error:
+                      code: ACCESS_DENIED
+                      message: The permission required for this operation is not granted.
+                    meta:
+                      correlationId: example-correlation-err
     post:
       tags:
         - Blog Content
@@ -7467,6 +7613,10 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - success
+                  - data
+                  - meta
                 properties:
                   success:
                     type: boolean
@@ -7476,33 +7626,129 @@ paths:
                     allOf:
                       - $ref: "#/components/schemas/BookingPolicy"
                       - type: object
+                        required:
+                          - replayed
                         properties:
                           replayed:
                             type: boolean
                   meta:
                     type: object
+              examples:
+                configured:
+                  summary: A policy where the tenant set the hold fields and left the rest at the module default (`null`).
+                  value:
+                    success: true
+                    data:
+                      policy:
+                        defaultHoldSeconds: 900
+                        maxHoldSeconds: 3600
+                        maxActiveHoldsPerCustomer: null
+                        maxActiveHoldsPerTenant: null
+                        minLeadSeconds: 7200
+                        maxHorizonDays: 365
+                        noShowGraceSeconds: null
+                        defaultTimezone: Asia/Pontianak
+                        defaultCheckInTime: 14:00:00
+                        defaultCheckOutTime: 12:00:00
+                      effective:
+                        defaultHoldSeconds: 900
+                        maxHoldSeconds: 3600
+                        maxActiveHoldsPerCustomer: 5
+                        maxActiveHoldsPerTenant: 500
+                        minLeadSeconds: 7200
+                        maxHorizonDays: 365
+                        noShowGraceSeconds: 86400
+                      updatedAt: 2026-11-22T09:30:00.123456Z
+                      replayed: false
+                    meta: {}
         "400":
           description: VALIDATION_ERROR (a missing or out-of-range field) or IDEMPOTENCY_REQUIRED.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: A field is outside its range.
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: Request is invalid.
+                      details:
+                        - field: maxHorizonDays
+                          message: maxHorizonDays must be a whole number from 1 to 3650, or null for the default.
+                    meta: {}
+                idempotency_required:
+                  summary: The `Idempotency-Key` header is missing or longer than 255 characters.
+                  value:
+                    success: false
+                    error:
+                      code: IDEMPOTENCY_REQUIRED
+                      message: Idempotency-Key header is required (at most 255 characters).
+                    meta: {}
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: Missing or invalid session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                auth_required:
+                  summary: "`AUTH_REQUIRED`"
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication required.
+                    meta:
+                      correlationId: example-correlation-err
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: Access denied by RBAC/ABAC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                access_denied:
+                  summary: "`ACCESS_DENIED`"
+                  value:
+                    success: false
+                    error:
+                      code: ACCESS_DENIED
+                      message: The permission required for this operation is not granted.
+                    meta:
+                      correlationId: example-correlation-err
         "409":
           description: IDEMPOTENCY_CONFLICT.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                idempotency_conflict:
+                  summary: The same key was already used with a different request body.
+                  value:
+                    success: false
+                    error:
+                      code: IDEMPOTENCY_CONFLICT
+                      message: Idempotency-Key was already used with a different request.
+                    meta: {}
         "422":
           description: CONSTRAINT_VIOLATED.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                constraint_violated:
+                  summary: A database CHECK the validator did not catch.
+                  value:
+                    success: false
+                    error:
+                      code: CONSTRAINT_VIOLATED
+                      message: The request violates a rule of the booking configuration.
+                    meta: {}
   /api/v1/booking/reports/occupancy:
     get:
       operationId: bookingReportsOccupancy
@@ -22529,14 +22775,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NewsletterNeutralResult"
+              examples:
+                neutral:
+                  summary: The ONE body this endpoint answers with, whether the address is new, already active, suppressed, or the host resolves to no tenant. A client cannot tell the outcomes apart, and neither can this example.
+                  value:
+                    success: true
+                    data:
+                      message: If that address can be subscribed, a confirmation email is on its way.
+                    meta: {}
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              examples:
+                validation_error:
+                  summary: "`VALIDATION_ERROR`"
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: A valid email address is required.
+                      details:
+                        - field: email
+                          message: email is not an address.
+                    meta:
+                      correlationId: example-correlation-err
         "429":
           description: Too many subscription requests from this source (`RATE_LIMITED`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+              examples:
+                rate_limited:
+                  summary: The per-IP limiter refused the request. Carries a `Retry-After` header.
+                  value:
+                    success: false
+                    error:
+                      code: RATE_LIMITED
+                      message: Too many subscription requests from this source. Try again later.
+                    meta: {}
   /api/v1/newsletter/subscribers/{id}/suppress:
     post:
       operationId: newsletterSubscriberSuppress
@@ -38434,12 +38714,60 @@ components:
             message:
               description: Present only when outcome is "rejected" — a human-readable reason no redirect was created.
               type: string
+    BlogPostFeedItem:
+      description: "One element of `GET /api/v1/blog/posts?view=full`: a `BlogPost` whose feed fields are GUARANTEED present (`BlogPost` alone cannot say so, because the lifecycle responses share it and do not carry them). `listBlogPostsFullPage` builds every row from the same projection as the detail endpoint plus `termIds`, `institutionIds` and `authorByline`; `null` and `[]` are values, never a missing key."
+      allOf:
+        - $ref: "#/components/schemas/BlogPost"
+        - type: object
+          required:
+            - authorTenantUserId
+            - excerpt
+            - contentJson
+            - contentText
+            - bodyPortableText
+            - featuredMediaId
+            - seoImageMediaId
+            - seoTitle
+            - metaDescription
+            - canonicalUrl
+            - translationGroupId
+            - autoInternalTagLinksDisabled
+            - regionCode
+            - publishedAt
+            - scheduledAt
+            - unpublishAt
+            - termIds
+            - institutionIds
+            - authorByline
+          properties:
+            authorTenantUserId: {}
+            excerpt: {}
+            contentJson: {}
+            contentText: {}
+            bodyPortableText: {}
+            featuredMediaId: {}
+            seoImageMediaId: {}
+            seoTitle: {}
+            metaDescription: {}
+            canonicalUrl: {}
+            translationGroupId: {}
+            autoInternalTagLinksDisabled: {}
+            regionCode: {}
+            publishedAt: {}
+            scheduledAt: {}
+            unpublishAt: {}
+            termIds: {}
+            institutionIds: {}
+            authorByline: {}
     BlogPostSummary:
       type: object
       description: |
         What the LIST endpoint returns by default — deliberately not a `BlogPost`.
 
         It exists as its own schema because the list used to be documented as returning `BlogPost`, and it never did: no `contentJson`, `excerpt`, `metaDescription`, `canonicalUrl`, or `translationGroupId`. A client that trusted the document read those as `undefined` and published a site with empty articles, with nothing failing. Ask for `?view=full` to get `BlogPost`.
+
+        `additionalProperties: false` is deliberate and truthful: `toBlogPostSummary` copies exactly these ten fields. It is also what keeps the list's `oneOf` exclusive — without it a full post would satisfy this schema as well and match both branches.
+      additionalProperties: false
       required:
         - id
         - tenantId
@@ -38448,6 +38776,7 @@ components:
         - status
         - visibility
         - locale
+        - publishedAt
         - createdAt
         - updatedAt
       properties:
@@ -39308,6 +39637,14 @@ components:
         effective:
           description: What is in force (the tenant value, or the module default where it is null).
           type: object
+          required:
+            - defaultHoldSeconds
+            - maxHoldSeconds
+            - maxActiveHoldsPerCustomer
+            - maxActiveHoldsPerTenant
+            - minLeadSeconds
+            - maxHorizonDays
+            - noShowGraceSeconds
           properties:
             defaultHoldSeconds:
               type: integer
@@ -46038,6 +46375,9 @@ components:
           type: integer
     NewsletterNeutralResult:
       type: object
+      required:
+        - success
+        - data
       properties:
         success:
           type: boolean
@@ -46045,6 +46385,8 @@ components:
             - true
         data:
           type: object
+          required:
+            - message
           properties:
             message:
               type: string
