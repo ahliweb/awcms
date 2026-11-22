@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0164-descriptor-declared-email-categories-whatsapp-templates-and-a-data-driven-worker-category-allow-list.md)
 
-<!-- i18n-source-hash: sha256:1a4effa858d342e88da7a6f70c6d72bfdc861501960fcea4e5cdf8d4d785b74b -->
+<!-- i18n-source-hash: sha256:30418927cece85078312f3a780dd0f36b295c0958e84718cc8cfd0aed4bc868f -->
 
 # ADR-0164 — Kategori e-mail dan template WhatsApp dideklarasikan di descriptor modul, dan allow-list kategori worker adalah data
 
-- **Status:** Proposed (menunggu tinjauan maintainer)
+- **Status:** Diterima (22 November 2026). Dasar: sudah diimplementasikan dan digerbangi sejak #1361 (`sql/410`, `bun run extension-points:check`); status menyusul kenyataan.
 - **Tanggal:** 2026-11-15
 - **Pengambil keputusan:** ahliweb (pemilik), untuk dikonfirmasi
 - **Menyelesaikan:** Issue #1277.
@@ -79,3 +79,7 @@ Ditolak: sesi worker dapat menyetelnya sendiri, sehingga guard tak melindungi ap
 ### E. Guard `SECURITY DEFINER` yang membaca tabel yang tak dapat dibaca worker
 
 Ditolak: di dalam fungsi definer `current_user` adalah pemilik, dan pengecualian superuser (`rolsuper` dari `current_user`) akan membebaskan setiap pemanggil bila pemiliknya superuser. Memberi worker `SELECT` atas daftar read-only lebih sederhana dan hanya membocorkan nama kategori.
+
+## Catatan keputusan (22 November 2026)
+
+Diterima. Keputusan didelegasikan pemilik kepada orchestrator ("pilihkan yang terbaik sesuai rekomendasi dan praktek profesional, prioritas skalabilitas, performa dan security"). Dasarnya faktual: field descriptor, `awcms_email_worker_categories` (`sql/410`) dan gerbang `extension-points:check` sudah diimplementasikan dan ditegakkan CI sejak #1361, sehingga ADR ini mencatat apa yang sudah benar. Teks di atas tidak diubah.

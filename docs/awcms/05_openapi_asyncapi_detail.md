@@ -372,3 +372,15 @@ flowchart LR
 - The event envelope is complete.
 - The event payload matches the schema.
 - Events do not carry raw sensitive data.
+
+## Contract lint gate (`api:contract:lint`)
+
+`bun run api:contract:lint` (Issue #1390, [ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.md)) is in the `check` chain right after `api:spec:check`. `api:spec:check` compares path templates and operation shape; it does not look inside a schema. This gate compiles, with `ajv` (draft 2020-12, `strict: true`, run by Bun), every schema of the bundle: all of `components.schemas`, every `requestBody`, and every response (success **and** error, inline or through `components.responses`). A failure prints the operation (`METHOD /path -> status`) and the JSON pointer of the schema, for example `/paths/~1x/post/responses/201/content/application~1json/schema`.
+
+- **Strict, not lenient.** An unknown keyword, an unknown `format`, `properties: null`, a dangling `$ref`, a non-array `required` and 3.0-style `exclusiveMinimum: true` all fail. OpenAPI keywords that are not JSON Schema are registered one by one: `discriminator` (shape-checked), `xml`, `externalDocs`, `example`, the `x-*` extensions that occur, and the OpenAPI document's own top-level keys. `nullable` is handled by `ajv` itself, which refuses it without a `type`; it is a no-op in 3.1 and is retrofitted gradually (ADR-0167 §6).
+- **Formats are known, not enforced.** Only the JSON Schema and OpenAPI formats are accepted, as names; instances are not validated here, so `ajv-formats` is not needed.
+- **Out of scope.** Examples, a fixtures pack, and validating real handler responses are separate issues (#1391 to #1395).
+- **Cost.** About 2.5 to 3 s for roughly 2,300 schema locations on one developer machine (Bun 1.4.4); a single run, not a benchmark.
+- **Dependency.** `ajv` 8.20.0 is a dev dependency, exact-pinned (MIT; four direct dependencies of its own); it passes `deps:audit:check` and `deps:license:check`.
+
+Tests: `tests/api-contract-lint.test.ts` (the real bundle must compile; deliberately broken contracts must fail).

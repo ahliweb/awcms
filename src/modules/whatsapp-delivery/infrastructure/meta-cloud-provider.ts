@@ -216,7 +216,7 @@ export function createMetaCloudWhatsappProvider(
     },
 
     async healthCheck(): Promise<WhatsappHealthResult> {
-      return breaker.canAttempt(now())
+      return breaker.wouldAllowAttempt(now())
         ? { ok: true }
         : { ok: false, error: "Circuit breaker is open." };
     }

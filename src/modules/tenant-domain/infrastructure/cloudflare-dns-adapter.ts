@@ -484,7 +484,7 @@ export function createCloudflareDnsProvider(
         return { ok: false, error: validationError, retryable: false };
       }
 
-      if (!breaker.canAttempt(attemptedAt)) {
+      if (!breaker.tryAcquire(attemptedAt)) {
         return {
           ok: false,
           error: "Cloudflare DNS circuit breaker is open; skipping attempt.",
@@ -563,7 +563,7 @@ export function createCloudflareDnsProvider(
         return { ok: false, error: validationError, retryable: false };
       }
 
-      if (!breaker.canAttempt(attemptedAt)) {
+      if (!breaker.tryAcquire(attemptedAt)) {
         return {
           ok: false,
           error: "Cloudflare DNS circuit breaker is open; skipping attempt.",
@@ -612,7 +612,7 @@ export function createCloudflareDnsProvider(
         return { ok: false, error: validationError, retryable: false };
       }
 
-      if (!breaker.canAttempt(attemptedAt)) {
+      if (!breaker.tryAcquire(attemptedAt)) {
         return {
           ok: false,
           error: "Cloudflare DNS circuit breaker is open; skipping attempt.",

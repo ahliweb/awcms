@@ -292,9 +292,9 @@ paths:
                     type: object
                     properties:
                       binding:
-                        allOf:
+                        oneOf:
                           - $ref: "#/components/schemas/TelegramBinding"
-                        nullable: true
+                          - type: "null"
                       available:
                         type: boolean
                   meta:

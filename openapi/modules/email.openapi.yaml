@@ -44,9 +44,9 @@ paths:
                   description: "Issue #1160 - send AS this tenant-owned, provider-verified Mailketing sender (a channel account id of the caller's tenant; never a token or an address). Without it the prospective default sender of the scope or the tenant (routing enabled and a policy set) or the deployment sender is used. Whenever the result is a TENANT sender (named or chosen by a policy, tenant-wide included), the caller needs `email.senders.use` and the channel-account access rules on that sender. The chosen sender is snapshotted on every queued row and never changes; one that cannot send is refused (422 SENDER_UNAVAILABLE, or 409 SENDER_ROUTING_DISABLED when tenant senders are off), never swapped. Security mail (auth.*, system.security_notice) always uses the deployment sender."
                 businessScope:
                   description: "Issue #1160 - the business scope (brand) this announcement speaks for; selects that scope's default sender. Requires `email.senders.use`."
-                  allOf:
+                  oneOf:
                     - $ref: "#/components/schemas/EmailBusinessScope"
-                  nullable: true
+                    - type: "null"
       responses:
         "200":
           description: Recipients enqueued.
@@ -169,9 +169,9 @@ paths:
                 - defaultSenderAccountId
               properties:
                 businessScope:
-                  allOf:
+                  oneOf:
                     - $ref: "#/components/schemas/EmailBusinessScope"
-                  nullable: true
+                    - type: "null"
                 defaultSenderAccountId:
                   type: string
                   format: uuid
@@ -1451,9 +1451,9 @@ components:
           type: string
           format: uuid
         businessScope:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/EmailBusinessScope"
-          nullable: true
+            - type: "null"
         defaultSenderAccountId:
           type: string
           format: uuid

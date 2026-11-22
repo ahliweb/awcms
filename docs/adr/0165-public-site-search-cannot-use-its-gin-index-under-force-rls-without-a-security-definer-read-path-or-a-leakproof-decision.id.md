@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0165-public-site-search-cannot-use-its-gin-index-under-force-rls-without-a-security-definer-read-path-or-a-leakproof-decision.md)
 
-<!-- i18n-source-hash: sha256:5fa4800f59dd129f94bd92a1a2bd63b12b0c3c6d5807f7b9c2c6db6f529cc4c2 -->
+<!-- i18n-source-hash: sha256:71a5d2aa9c887dd04136275441985de5ac2380bb2ddee45a2028551c57ec7213 -->
 
 # ADR-0165 — Pencarian situs publik tidak bisa memakai indeks GIN-nya di bawah FORCE RLS tanpa jalur baca SECURITY DEFINER atau keputusan LEAKPROOF
 
-- **Status:** Diusulkan (menunggu keputusan pemilik, pertanyaan Q1)
+- **Status:** Diterima (22 November 2026) dengan keputusan K1: opsi 0 tetap; opsi 2 pra-disetujui di balik pemicu terukur; opsi 3 ditolak permanen.
 - **Tanggal:** 2026-11-15
 - **Pengambil keputusan:** ahliweb (pemilik)
 - **Menyelesaikan (bila diterima):** Issue #1321.
@@ -62,3 +62,11 @@ Opsi 0 sekarang (dibatasi rate limit dan timeout) dan, bila korpus satu tenant t
 ## Konsekuensi
 
 Bila diterima sebagai opsi 0: `tests/integration/site-search-prefix-plan.integration.test.ts` tetap menjadi patok dan ADR ini alasan tercatatnya. Bila opsi 2: migrasi menambah fungsi dan grant, service pencarian memanggilnya, probe RLS dan tes rencana diperbarui dalam perubahan yang sama, dan ADR menjadi Diterima dengan tinjauan keamanannya sendiri.
+
+## Keputusan (22 November 2026, K1)
+
+Keputusan didelegasikan pemilik kepada orchestrator ("pilihkan yang terbaik sesuai rekomendasi dan praktek profesional, prioritas skalabilitas, performa dan security"). Jawaban **Q1**:
+
+1. **Opsi 0 menjadi keputusan tetap.** Issue #1321 ditutup sebagai "diterima, terukur, dipatok". RLS tidak dilemahkan tanpa kebutuhan terukur.
+2. **Opsi 2 (fungsi baca `SECURITY DEFINER`) pra-disetujui**, dibangun hanya bila pemicu terpenuhi di produksi: korpus publik tenant terbesar melebihi **100.000 dokumen**, ATAU p95 pencarian publik melebihi **50 ms**. Pembangunannya memerlukan gerbang yang disebut di atas (predikat tenant di dalam fungsi, `search_path` dipatok, grant EXECUTE-only, pengecualian eksplisit pada probe RLS) dan review keamanan. Dilacak di #1433.
+3. **Opsi 3 (`LEAKPROOF`) ditolak permanen.**

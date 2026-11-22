@@ -1351,9 +1351,9 @@ components:
         onHand:
           $ref: "#/components/schemas/InventoryQuantity"
         lowStockThreshold:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/InventoryQuantity"
-          nullable: true
+            - type: "null"
         isLow:
           type: boolean
         movementCount:

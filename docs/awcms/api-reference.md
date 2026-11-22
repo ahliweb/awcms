@@ -20213,7 +20213,7 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 | `source`         | enum(`self`, `supervisor`, `kiosk`, `import`)             | yes      | no       |                                                                                                                                                                                    |
 | `clientEventKey` | string                                                    | yes      | no       |                                                                                                                                                                                    |
 | `officeId`       | string (uuid)                                             | no       | no       |                                                                                                                                                                                    |
-| `positionSample` | [`HrPositionSample`](#schema-hrpositionsample)            | no       | yes      | Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the server in the request and discarded (ADR-0138). `null` or absent is a declined fix. |
+| `positionSample` | [`HrPositionSample`](#schema-hrpositionsample) \\\| null  | no       | no       | Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the server in the request and discarded (ADR-0138). `null` or absent is a declined fix. |
 
 **Example**
 
@@ -21946,15 +21946,15 @@ Enum values: `tax_id`, `business_id`, `payment_ref`, `contact_ref`, `other`.
 
 ### Schema: ProcurementLineInput
 
-| Field      | Type                                                           | Required | Nullable | Description                                                                                |
-| ---------- | -------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------ |
-| `itemType` | string                                                         | yes      | no       |                                                                                            |
-| `itemRef`  | string                                                         | yes      | no       | Opaque ledger reference, `A-Za-z0-9_.:-`, never credential-shaped.                         |
-| `sku`      | string                                                         | yes      | no       | Snapshot of the SKU.                                                                       |
-| `itemName` | string                                                         | yes      | no       | Snapshot of the item name.                                                                 |
-| `unitCode` | string                                                         | no       | no       | Unit of measure; defaults to `unit`. The ledger refuses a mismatch rather than converting. |
-| `quantity` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number | yes      | no       |                                                                                            |
-| `unitCost` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number | no       | yes      | Required for `receive` and `supplier_return` (the approval threshold is cost-based).       |
+| Field      | Type                                                                     | Required | Nullable | Description                                                                                |
+| ---------- | ------------------------------------------------------------------------ | -------- | -------- | ------------------------------------------------------------------------------------------ |
+| `itemType` | string                                                                   | yes      | no       |                                                                                            |
+| `itemRef`  | string                                                                   | yes      | no       | Opaque ledger reference, `A-Za-z0-9_.:-`, never credential-shaped.                         |
+| `sku`      | string                                                                   | yes      | no       | Snapshot of the SKU.                                                                       |
+| `itemName` | string                                                                   | yes      | no       | Snapshot of the item name.                                                                 |
+| `unitCode` | string                                                                   | no       | no       | Unit of measure; defaults to `unit`. The ledger refuses a mismatch rather than converting. |
+| `quantity` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number           | yes      | no       |                                                                                            |
+| `unitCost` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number \\\| null | no       | no       | Required for `receive` and `supplier_return` (the approval threshold is cost-based).       |
 
 **Example**
 

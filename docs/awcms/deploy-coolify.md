@@ -182,6 +182,19 @@ Consider splitting off (external/managed database, or a separate VPS) once any o
 - One application's build/deploy process starts hurting the performance of other applications on the same VPS.
 - You need harder blast-radius isolation between clients/applications (e.g. a client SLA contract requires separate infrastructure).
 
+## Build host: CPU without AVX (`@astrojs/compiler-rs` pin)
+
+The prebuilt native binding `@astrojs/compiler-binding-linux-x64-gnu` **0.5.3**
+(pulled in by `@astrojs/compiler-rs` 0.5.3, which astro 7.4.12 resolves) executes
+AVX instructions and dies with `SIGILL` during `astro build` on x86-64 CPUs that
+lack AVX (older Xeon/Opteron VPS, some emulated or nested-virtualisation CPU
+models). The template therefore pins `@astrojs/compiler-rs` to **0.5.2** through
+`package.json` `overrides` (astro accepts `^0.5.2`), and records the pin in the
+"Pinned transitive overrides" table in `dependency-governance.md` (Issue #1367) with
+its release condition: a binding release that runs on the x86-64 baseline. Do not
+remove the override or run `bun update` on it while the build host has no AVX.
+Check a host with `grep -c avx /proc/cpuinfo` (0 means no AVX).
+
 ## Minimum environment variables
 
 The following values must be injected through Coolify environment variables (not baked into the image) for every application/deployment. See `.env.example` (to follow) for the full list and per-variable comments:

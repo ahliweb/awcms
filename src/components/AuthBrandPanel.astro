@@ -30,6 +30,7 @@
  * `locale` (`/register`, `/accept-invitation` — still literal English) gets
  * English, so the panel never speaks a language its page does not.
  */
+import { resolveRequestHost } from "../lib/http/site-origin";
 import { getTranslatorFor } from "../lib/i18n";
 import type { Locale } from "../lib/i18n/locales";
 
@@ -81,7 +82,7 @@ const CAPABILITIES = [
  * typing a password. A literal string would be wrong on every deployment but
  * one.
  */
-const host = Astro.url.host;
+const host = resolveRequestHost(Astro.url, Astro.request);
 ---
 
 <aside class="auth-brand-panel" aria-hidden="true">

@@ -114,7 +114,7 @@ function openTheBreaker(): void {
     breaker.recordFailure(new Date());
   }
 
-  expect(breaker.canAttempt(new Date())).toBe(false);
+  expect(breaker.wouldAllowAttempt(new Date())).toBe(false);
 }
 
 beforeAll(() => {

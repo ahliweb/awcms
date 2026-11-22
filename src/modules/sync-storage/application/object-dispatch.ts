@@ -207,7 +207,7 @@ export async function dispatchObjectSyncQueue(
   const correlationId = options.correlationId ?? crypto.randomUUID();
   const resolveUploader = options.resolveUploader ?? resolveObjectUploader;
   const breaker = getProviderCircuitBreaker(PROVIDER_KEY);
-  const uploadBreakerOpen = !breaker.canAttempt(now);
+  const uploadBreakerOpen = !breaker.wouldAllowAttempt(now);
 
   const claimed = await claimEligibleEntries(
     sql,

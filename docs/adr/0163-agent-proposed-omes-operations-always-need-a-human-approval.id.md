@@ -1,13 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0163-agent-proposed-omes-operations-always-need-a-human-approval.md)
 
-<!-- i18n-source-hash: sha256:d5b2261bde92c728a11766e39fb2e96fa55a089124f3c10f85487f6c16ced79e -->
+<!-- i18n-source-hash: sha256:061541001072ce30a53022dd1456c5b19a89de00d44340f0ec0f3f3f451912af -->
 
 # ADR-0163 — Operasi OMES yang diusulkan agen selalu memerlukan persetujuan manusia
 
-- **Status:** Diusulkan
+- **Status:** Diterima (22 November 2026) dengan jawaban Q1 sampai Q4 di bawah (keputusan K5)
 - **Tinjauan:** memerlukan keputusan pemilik atas pertanyaan di §Pertanyaan terbuka. Hanya dokumen; tidak ada yang dibangun sebelum ADR ini Diterima dan dipecah menjadi issue.
 - **Tanggal:** 2026-11-14
-- **Pengambil keputusan:** @ahliweb (diusulkan, belum diputuskan)
+- **Pengambil keputusan:** @ahliweb (diputuskan 22 November 2026 lewat delegasi ke orchestrator, lihat Keputusan)
 - **Terkait:** Issue [#1336](https://github.com/ahliweb/awcms/issues/1336); prasyarat [#1335](https://github.com/ahliweb/awcms/issues/1335); [ADR-0122](0122-omes-control-center-domain-module-admission.id.md) (admisi `omes_control` dan kontrak yang dipin), [ADR-0031](0031-segregation-of-duties-conflict-enforcement.id.md) (SoD), [ADR-0049](0049-machine-credentials-and-session-introspection.id.md) dan [ADR-0092](0092-machine-credentials-may-write.id.md) (kredensial mesin dan batas tulisnya), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md) (consumer domain event), [ADR-0143](0143-reporting-quantity-metrics-tie-safe-pages-and-booking-projections.id.md) (metrik reporting), [ADR-0144](0144-workflow-decisions-append-only-and-terminal-instances-immutable.id.md) (keputusan workflow imutabel), [ADR-0145](0145-idempotency-keys-are-scoped-per-actor-and-the-request-hash-is-keyed.id.md) (idempotensi); `ahliweb/omes` ADR-0029 (batas data AI), ADR-0032 (batas kendali multi-agen), `contracts/observability/v1/policy-decision.schema.json` (#274)
 
 **Hanya dokumen.** ADR ini tidak mengubah modul, migrasi, path API, permission, kontrak, atau dependensi.
@@ -109,3 +109,14 @@ Diverifikasi terhadap teks lengkap makalah melalui alphaXiv pada 2026-11-14. But
 - [R8] Turan, "Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.08919>
 - [R9] Shahriar dkk., "A Survey on Agentic Security: Applications, Threats and Defenses," 2025. <https://www.alphaxiv.org/abs/2510.06445>
 - [R10] Weng, "What You Approve Is What Executes: Consent Integrity for Black-Box LLM Agents," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.02668>
+
+## Keputusan (22 November 2026, K5)
+
+Keputusan didelegasikan pemilik kepada orchestrator ("pilihkan yang terbaik sesuai rekomendasi dan praktek profesional, prioritas skalabilitas, performa dan security"). Jawaban atas pertanyaan terbuka:
+
+- **Q1.** Peminta yang bertanggung jawab adalah **manusia pemilik kredensial mesin** (satu pemilik bernama). Bila pemilik dinonaktifkan, kredensial dicabut.
+- **Q2.** Agen **tidak boleh** mengusulkan `rollback` atau restore backup.
+- **Q3.** Usulan agen yang mengganggu (`stop`, `restart`, `update`) memerlukan **kuorum dua** penyetuju; `status`, `preflight`, `backup` dan `start` cukup satu.
+- **Q4.** Usulan agen yang tidak dijawab **kedaluwarsa setelah 24 jam**, fail-closed.
+
+Catatan cakupan: keputusan D7 memerlukan perubahan kontrak di repo `ahliweb/omes`, di luar repo ini. Implementasi dipecah menjadi isu; ADR ini tidak membangun apa pun.

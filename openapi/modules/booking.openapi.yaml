@@ -2989,9 +2989,9 @@ components:
         quantity:
           type: integer
         stay:
-          nullable: true
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/BookingReservationStay"
+            - type: "null"
     BookingReservation:
       type: object
       description: A reservation. There is no price, deposit, balance or payment state anywhere in this module, and the customer note is never returned here.
@@ -4207,47 +4207,37 @@ components:
             - defaultCheckInTime
             - defaultCheckOutTime
           properties:
-          defaultHoldSeconds:
-            type: integer
-            nullable: true
-            minimum: 60
-            maximum: 86400
-          maxHoldSeconds:
-            type: integer
-            nullable: true
-            minimum: 60
-            maximum: 86400
-          maxActiveHoldsPerCustomer:
-            type: integer
-            nullable: true
-            minimum: 1
-          maxActiveHoldsPerTenant:
-            type: integer
-            nullable: true
-            minimum: 1
-          minLeadSeconds:
-            type: integer
-            nullable: true
-            minimum: 0
-          maxHorizonDays:
-            type: integer
-            nullable: true
-            minimum: 1
-            maximum: 3650
-          noShowGraceSeconds:
-            type: integer
-            nullable: true
-            minimum: 0
-            maximum: 2592000
-          defaultTimezone:
-            type: string
-            nullable: true
-          defaultCheckInTime:
-            type: string
-            nullable: true
-          defaultCheckOutTime:
-            type: string
-            nullable: true
+            defaultHoldSeconds:
+              type: [integer, "null"]
+              minimum: 60
+              maximum: 86400
+            maxHoldSeconds:
+              type: [integer, "null"]
+              minimum: 60
+              maximum: 86400
+            maxActiveHoldsPerCustomer:
+              type: [integer, "null"]
+              minimum: 1
+            maxActiveHoldsPerTenant:
+              type: [integer, "null"]
+              minimum: 1
+            minLeadSeconds:
+              type: [integer, "null"]
+              minimum: 0
+            maxHorizonDays:
+              type: [integer, "null"]
+              minimum: 1
+              maximum: 3650
+            noShowGraceSeconds:
+              type: [integer, "null"]
+              minimum: 0
+              maximum: 2592000
+            defaultTimezone:
+              type: [string, "null"]
+            defaultCheckInTime:
+              type: [string, "null"]
+            defaultCheckOutTime:
+              type: [string, "null"]
         effective:
           description: What is in force (the tenant value, or the module default where it is null).
           type: object

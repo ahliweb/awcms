@@ -685,7 +685,9 @@ describe("Fonnte adapter", () => {
     }
 
     expect(
-      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).canAttempt(NOW)
+      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).wouldAllowAttempt(
+        NOW
+      )
     ).toBe(false);
   });
 
@@ -715,7 +717,9 @@ describe("Fonnte adapter", () => {
 
     // And a per-message rejection never trips the breaker.
     expect(
-      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).canAttempt(NOW)
+      getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY).wouldAllowAttempt(
+        NOW
+      )
     ).toBe(true);
   });
 

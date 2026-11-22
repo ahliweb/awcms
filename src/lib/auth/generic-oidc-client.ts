@@ -108,7 +108,7 @@ export async function discoverOidcConfiguration(
   const breaker = getProviderCircuitBreaker(`sso-oidc-discovery:${key}`);
   const attemptedAt = new Date();
 
-  if (!breaker.canAttempt(attemptedAt)) {
+  if (!breaker.tryAcquire(attemptedAt)) {
     discoveryFailureCache.set(key, now);
     return { ok: false };
   }
@@ -191,7 +191,7 @@ export async function fetchProviderJwks(
   const breaker = getProviderCircuitBreaker(`sso-oidc-jwks:${key}`);
   const attemptedAt = new Date();
 
-  if (!breaker.canAttempt(attemptedAt)) {
+  if (!breaker.tryAcquire(attemptedAt)) {
     jwksFailureCache.set(key, now);
     return { ok: false };
   }
@@ -261,7 +261,7 @@ export async function exchangeAuthorizationCode(
   const breaker = getProviderCircuitBreaker(`sso-oidc-token:${key}`);
   const attemptedAt = new Date();
 
-  if (!breaker.canAttempt(attemptedAt)) {
+  if (!breaker.tryAcquire(attemptedAt)) {
     return { ok: false, retryable: true };
   }
 

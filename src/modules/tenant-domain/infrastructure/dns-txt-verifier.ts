@@ -118,7 +118,7 @@ export async function resolveVerificationTxtRecords(
   const timeoutMs = deps.timeoutMs ?? DNS_VERIFY_TIMEOUT_MS;
   const breaker = getProviderCircuitBreaker(PROVIDER_KEY);
 
-  if (!breaker.canAttempt(now)) {
+  if (!breaker.tryAcquire(now)) {
     return { outcome: "unavailable", reason: "circuit_open" };
   }
 

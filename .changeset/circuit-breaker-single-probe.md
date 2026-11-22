@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(resilience): the circuit breaker's half-open state now admits exactly ONE probe per process (#1409). `canAttempt` only read the state, so every caller that asked before the probe reported back got through; it is removed. `tryAcquire(now)` reserves the probe synchronously and returns a permit (`release()` for a call that ends with no verdict; an abandoned probe expires after `probeTimeoutMs`, default `openDurationMs`), and `wouldAllowAttempt(now)` is the honestly read-only check for dispatcher gates and health checks. Every caller was migrated explicitly: adapter guards (R2, Cloudflare DNS, DNS TXT, object upload, Mailketing v1/v2, OIDC, Turnstile) use `tryAcquire`, and `withTenant` hands the probe back on queue rejection, idempotency race and client-input errors. A refused attempt is still `skipped` and spends no delivery retry. Per process only: single-flight across replicas is not claimed. WhatsApp/Telegram/push batch dispatchers still only peek. `docs/awcms/database-pooling` (EN and ID) updated.
