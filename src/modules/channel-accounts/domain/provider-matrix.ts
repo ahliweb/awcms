@@ -569,16 +569,39 @@ const EXTERNAL_ID_SHAPES: Readonly<
       /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/
   },
   whatsapp_cloud: {
-    waba: /^[0-9]{5,25}$/,
-    waba_phone_number: /^[0-9]{5,25}$/
+    // No leading zero: `0123` and `123` must not be two spellings of one id.
+    waba: /^[1-9][0-9]{4,24}$/,
+    waba_phone_number: /^[1-9][0-9]{4,24}$/
   },
-  facebook: { page: /^[0-9]{1,32}$/ },
-  instagram: { professional_account: /^[0-9]{1,32}$/ },
+  facebook: { page: /^[1-9][0-9]{0,31}$/ },
+  instagram: { professional_account: /^[1-9][0-9]{0,31}$/ },
   starsender: { device: /^[A-Za-z0-9._:-]{1,128}$/ }
 };
 
 /** A telegram `channel` is `-100<digits>` or `@username`; never a bare integer (that is a bot id). */
 const TELEGRAM_CHANNEL_ID = /^(-100[0-9]{5,16}|@[A-Za-z][A-Za-z0-9_]{4,31})$/;
+
+/**
+ * The ONE spelling an id is stored (and looked up) under, applied BEFORE the
+ * claim index sees it (audit L-d). A Telegram username is case-insensitive, so
+ * `@VictimChannel` and `@victimchannel` are one channel and must be one claim;
+ * numeric ids refuse a leading zero in their shape instead of being rewritten.
+ * Left as written, because the provider's semantics are not documented: the
+ * Mailketing ESP login label, the StarSender device id, and every provider with
+ * an open shape. Mailketing senders are REFUSED unless already lowercase
+ * (`sender_identity` shape), not rewritten.
+ */
+export function normalizeExternalId(
+  provider: string,
+  kind: string,
+  externalId: string
+): string {
+  return provider === "telegram" &&
+    kind === "channel" &&
+    externalId.startsWith("@")
+    ? externalId.toLowerCase()
+    : externalId;
+}
 
 export function externalIdShapeOk(
   provider: string,

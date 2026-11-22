@@ -23,7 +23,8 @@ import type {
 import {
   checkAccountShape,
   claimBasisFor,
-  externalIdShapeOk
+  externalIdShapeOk,
+  normalizeExternalId
 } from "../domain/provider-matrix";
 import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import type {
@@ -316,6 +317,13 @@ export async function createAccount(
 
   if (!shape.ok) return { outcome: "refused", code: shape.code };
 
+  // One spelling before the claim index sees the id (audit L-d).
+  const externalId = normalizeExternalId(
+    input.provider,
+    input.accountKind,
+    input.externalId
+  );
+
   if (input.authMode === "oauth2") {
     // `FOR SHARE`: a revocation (which locks the row `FOR UPDATE`) cannot
     // commit between this check and the insert below.
@@ -401,7 +409,7 @@ export async function createAccount(
        parent_account_id, claim_basis, created_by, updated_by)
     VALUES (${tenantId}, ${input.businessScope?.type ?? null},
             ${input.businessScope?.id ?? null}, ${input.provider},
-            ${input.accountKind}, ${input.externalId}, ${input.displayName},
+            ${input.accountKind}, ${externalId}, ${input.displayName},
             ${input.authMode}, ${input.connectionId}, ${input.parentAccountId},
             ${claimBasisFor(input.provider, input.accountKind)},
             ${actorTenantUserId}, ${actorTenantUserId})

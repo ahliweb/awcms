@@ -621,12 +621,60 @@ suite("telegram_engagement against PostgreSQL (Issue #1156)", () => {
         { state: "failing", reason_code: "ACCOUNT_ALREADY_REGISTERED" }
       ]);
 
+      // Audit L-b: the loser's endpoint never set a webhook, so revoking it
+      // must not schedule a deleteWebhook that would switch off the WINNER's
+      // webhook (Telegram has one webhook per bot).
+      const deleteCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "deleteWebhook" && c.token.startsWith(`${BOT_IDS.a}:`)
+        ).length;
+      const deletesBefore = deleteCalls();
+
+      await inTenant(T2, (tx) => revokeBot(tx, T2, U2, second));
+      await dispatch(T2);
+
+      expect(deleteCalls()).toBe(deletesBefore);
+
+      const loserEndpoint = (await getAdminSql()`
+        SELECT state, provider_action FROM awcms_telegram_engagement_endpoints
+        WHERE account_id = ${second}
+      `) as { state: string; provider_action: string | null }[];
+
+      expect(loserEndpoint[0]).toEqual({
+        state: "revoked",
+        provider_action: null
+      });
+
       // The winner is untouched.
       const winner = (await getAdminSql()`
         SELECT status FROM awcms_channel_accounts WHERE id = ${fx.accounts.a}
       `) as { status: string }[];
 
       expect(winner[0]!.status).toBe("connected");
+    });
+
+    test("ADR-0170 L-b: revoking an endpoint that never set a webhook schedules no deleteWebhook, even for an account that holds the claim", async () => {
+      const deleteCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "deleteWebhook" && c.token.startsWith(`${BOT_IDS.c}:`)
+        ).length;
+
+      // Rotation inserts a NEW pending endpoint (never activated) for a bot
+      // whose account is connected and so holds the claim.
+      const rotated = await inTenant(T1, (tx) =>
+        rotateBot(tx, T1, U1, fx.accounts.c, ENV)
+      );
+
+      expect(rotated.outcome).toBe("rotated");
+
+      const before = deleteCalls();
+
+      await inTenant(T1, (tx) => revokeBot(tx, T1, U1, fx.accounts.c));
+      await dispatch(T1);
+
+      expect(deleteCalls()).toBe(before);
     });
 
     test("another tenant's account is not found, never registered", async () => {

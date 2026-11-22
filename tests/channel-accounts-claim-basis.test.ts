@@ -12,8 +12,10 @@ import { readdir, readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "bun:test";
 
+import { validateReleaseClaim } from "../src/modules/channel-accounts/domain/channel-accounts-validation";
 import {
   externalIdShapeOk,
+  normalizeExternalId,
   PROVIDER_MATRIX,
   VERIFIED_CLAIM_KINDS,
   claimBasisFor
@@ -227,5 +229,68 @@ describe("external id shapes (audit H1)", () => {
       externalIdShapeOk("tiktok", "creator_account", "anything goes here")
     ).toBe(true);
     expect(externalIdShapeOk("__proto__", "x", "y")).toBe(true);
+  });
+});
+
+describe("one spelling per id (audit L-d)", () => {
+  test("a Telegram username is lowercased, nothing else is rewritten", () => {
+    expect(normalizeExternalId("telegram", "channel", "@VictimChannel")).toBe(
+      "@victimchannel"
+    );
+    expect(normalizeExternalId("telegram", "channel", "-1001234567890")).toBe(
+      "-1001234567890"
+    );
+    expect(normalizeExternalId("telegram", "bot", "7000000001")).toBe(
+      "7000000001"
+    );
+    expect(normalizeExternalId("starsender", "device", "Dev-A")).toBe("Dev-A");
+    expect(normalizeExternalId("mailketing", "esp_account", "Acct-1")).toBe(
+      "Acct-1"
+    );
+  });
+
+  test("numeric ids refuse a leading zero, so `0123` and `123` cannot be two spellings", () => {
+    expect(externalIdShapeOk("whatsapp_cloud", "waba", "0123456")).toBe(false);
+    expect(externalIdShapeOk("whatsapp_cloud", "waba", "123456")).toBe(true);
+    expect(externalIdShapeOk("facebook", "page", "0123")).toBe(false);
+    expect(externalIdShapeOk("instagram", "professional_account", "0")).toBe(
+      false
+    );
+    expect(externalIdShapeOk("facebook", "page", "10000000001")).toBe(true);
+  });
+});
+
+describe("the release body's ticket reference (audit L-a)", () => {
+  const base = {
+    provider: "starsender",
+    accountKind: "device",
+    externalId: "dev-1",
+    reasonCode: "ownership_dispute_resolved",
+    reason: "verified out of band basis"
+  };
+
+  test("only a short uppercase prefix, a hyphen and a number fits: no phone number, no email-shaped token", () => {
+    for (const ok of ["TKT-1215", "AB-1", "SUPPORT-9999999999"]) {
+      expect(validateReleaseClaim({ ...base, ticketRef: ok }).valid).toBe(true);
+    }
+
+    for (const bad of [
+      "081234567890",
+      "+6281234567890",
+      "budi_example_com",
+      "budi@example.com",
+      "tkt-1215",
+      "TKT-1215-2",
+      "T-1",
+      "TKT-12345678901",
+      "has space!"
+    ]) {
+      expect(validateReleaseClaim({ ...base, ticketRef: bad }).valid).toBe(
+        false
+      );
+    }
+
+    // absent is fine
+    expect(validateReleaseClaim(base).valid).toBe(true);
   });
 });

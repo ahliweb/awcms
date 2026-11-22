@@ -3949,6 +3949,12 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         },
         { ...releaseBody("step-dev-1"), reasonCode: "because" },
         { ...releaseBody("step-dev-1"), ticketRef: "has space!" },
+        // audit L-a: the ticket reference reaches the holder's trail, so a phone
+        // number or an email-shaped token must not fit it
+        { ...releaseBody("step-dev-1"), ticketRef: "081234567890" },
+        { ...releaseBody("step-dev-1"), ticketRef: "budi_example_com" },
+        { ...releaseBody("step-dev-1"), ticketRef: "tkt-1215" },
+        { ...releaseBody("step-dev-1"), ticketRef: "TKT-1215-2" },
         // audit M2: free text may not carry an email address or a phone number
         {
           ...releaseBody("step-dev-1"),

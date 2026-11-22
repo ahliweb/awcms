@@ -2473,6 +2473,51 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         expect((await verify(T1, sender.account.id)).claim).toBeUndefined();
       });
 
+      test("L-d: a Telegram username is one claim whatever its case, and an id has one spelling (no leading zero); the refusal is the ordinary one", async () => {
+        const first = await create(
+          T1,
+          U1,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@VictimChannel"
+        );
+
+        expect(first.outcome).toBe("created");
+        if (first.outcome !== "created") return;
+        // stored under ONE spelling
+        expect(first.account.externalId).toBe("@victimchannel");
+
+        const second = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@victimchannel"
+        );
+        const third = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@VICTIMCHANNEL"
+        );
+
+        expect(second).toEqual({
+          outcome: "refused",
+          code: "ACCOUNT_ALREADY_REGISTERED"
+        });
+        expect(third).toEqual(second);
+
+        for (const id of ["0123456", "00001"]) {
+          expect(
+            await create(T1, U1, "whatsapp_cloud", "waba", "api_token", id)
+          ).toEqual({ outcome: "refused", code: "EXTERNAL_ID_INVALID" });
+        }
+      });
+
       test("shapes: the documented formats are enforced and the unverified providers are left open", async () => {
         const cases: [
           string,
@@ -2600,6 +2645,14 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         expect(trails.map((t) => t.resource_id).sort()).toEqual(
           [esp.account.id, child.account.id].sort()
         );
+
+        // The erased-ciphertext flag must stay READABLE: a key named after a
+        // credential is redacted by name, so the attribute is `ciphertextErased`.
+        const erased = trails
+          .map((t) => JSON.parse(t.attributes) as Record<string, unknown>)
+          .map((a) => a.ciphertextErased);
+
+        expect(erased.sort()).toEqual([false, true]);
 
         // M2: the holder (opposing party) sees the closed code and the ticket
         // reference, never the operator's text; the platform trail has it.

@@ -723,8 +723,13 @@ export const CLAIM_RELEASE_REASON_CODES = [
 export type ClaimReleaseReasonCode =
   (typeof CLAIM_RELEASE_REASON_CODES)[number];
 
-/** A ticket reference as the operator's tracker spells it: letters, digits, `_` and `-`. */
-const TICKET_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$/;
+/**
+ * A ticket reference as the operator's tracker spells it: a SHORT UPPERCASE
+ * PREFIX, a hyphen and a number (`TKT-1215`). Deliberately narrow, because it
+ * reaches the holder's trail: a looser pattern let a phone number or an
+ * email-shaped token through.
+ */
+const TICKET_REF_PATTERN = /^[A-Z]{2,10}-[0-9]{1,10}$/;
 const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const PHONE_LIKE = /\+?\d[\d\s().-]{7,}\d/;
 
@@ -796,7 +801,8 @@ export function validateReleaseClaim(
     ) {
       errors.push({
         field: "ticketRef",
-        message: "Must be 3 to 32 letters, digits, underscores or hyphens."
+        message:
+          "Must be an uppercase prefix, a hyphen and a number, like TKT-1215."
       });
     } else {
       ticketRef = raw.ticketRef;

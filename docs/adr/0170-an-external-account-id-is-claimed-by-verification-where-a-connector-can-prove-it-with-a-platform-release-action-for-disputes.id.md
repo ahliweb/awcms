@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0170-an-external-account-id-is-claimed-by-verification-where-a-connector-can-prove-it-with-a-platform-release-action-for-disputes.md)
 
-<!-- i18n-source-hash: sha256:59c6af2048d87dd456ba9c120cb7aa14b742268dc50c829aa1edb082cfeb0556 -->
+<!-- i18n-source-hash: sha256:58f1dd8c3071cebdd6ca2c1fb1587c3a29f08d9a83518349f39e9a395c9cbf1a -->
 
 # ADR-0170 — Id akun eksternal diklaim lewat verifikasi bila konektor dapat membuktikannya, dengan aksi pelepasan oleh platform untuk sengketa
 
@@ -68,6 +68,10 @@ Mengunci klaim per jenis menghapus squat lintas jenis; memvalidasi bentuk id per
 - `mailketing` `esp_account`: label yang tidak pernah berupa alamat (tanpa `@`); `sender_identity`: alamat huruf kecil.
 - `whatsapp_cloud` `waba` dan `waba_phone_number`: digit (5 sampai 25), seperti yang sudah dituntut konektor; `facebook` `page` dan `instagram` `professional_account`: digit; `starsender` `device`: pola id perangkat yang sudah dituntut konektor.
 - Penyedia dan jenis lain (TikTok, YouTube, LinkedIn, Threads) dibiarkan terbuka: repositori ini belum memverifikasi format id resmi untuk mereka, dan tebakan yang terlalu ketat akan menolak akun yang sah.
+
+Satu ejaan per id (audit L-d): username Telegram tidak membedakan huruf besar-kecil, sehingga `@VictimChannel` disimpan (dan dicari oleh aksi pelepasan) sebagai `@victimchannel` dan dua ejaan adalah satu klaim; id numerik menolak nol di depan dalam bentuknya alih-alih ditulis ulang (`0123` dan `123` tidak dapat menjadi dua klaim); pengirim Mailketing ditolak kecuali sudah huruf kecil. Dibiarkan apa adanya karena semantik penyedia tidak didokumentasikan di sini: label `esp_account` Mailketing dan id perangkat StarSender (label deployment yang peka huruf, bukan identitas publik milik korban).
+
+Revoke endpoint bot Telegram tidak menjadwalkan `deleteWebhook` untuk pihak yang kalah (audit L-b): penghapusan di sisi penyedia hanya dijadwalkan bila endpoint itu pernah diaktifkan DAN akunnya masih memegang klaim, karena Telegram punya satu webhook per bot dan endpoint yang tak pernah memasangnya tidak boleh dapat mematikan webhook pemenang. Referensi tiket adalah `^[A-Z]{2,10}-[0-9]{1,10}$` (audit L-a), sehingga tak dapat membawa nomor telepon atau token berbentuk email ke jejak pemegang; flag ciphertext-terhapus di baris audit bernama `ciphertextErased` karena redaksi berdasar nama key mencetak atribut `credential...` atau `secret...` sebagai `[REDACTED]`.
 
 ### 4. Yang dilihat pihak yang kalah
 

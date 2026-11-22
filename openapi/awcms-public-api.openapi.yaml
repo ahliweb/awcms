@@ -10699,7 +10699,7 @@ paths:
                   description: The only reason that reaches the holder tenant's audit trail.
                 ticketRef:
                   type: string
-                  pattern: ^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$
+                  pattern: ^[A-Z]{2,10}-[0-9]{1,10}$
                   description: Optional ticket reference; also reaches the holder tenant's audit trail.
                 externalId:
                   type: string

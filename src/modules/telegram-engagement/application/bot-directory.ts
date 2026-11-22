@@ -230,6 +230,7 @@ type LiveEndpoint = {
   id: string;
   secret_id: string | null;
   daily_send_ceiling: number;
+  activated_at: Date | null;
 };
 
 async function lockLiveEndpoint(
@@ -238,7 +239,7 @@ async function lockLiveEndpoint(
   accountId: string
 ): Promise<LiveEndpoint | null> {
   const rows = (await tx`
-    SELECT id, secret_id, daily_send_ceiling
+    SELECT id, secret_id, daily_send_ceiling, activated_at
     FROM awcms_telegram_engagement_endpoints
     WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
       AND state <> 'revoked'
@@ -342,6 +343,22 @@ export async function rotateBot(
   };
 }
 
+/** The account holds the global claim on its bot id (the same predicate as the claim index). */
+async function accountHoldsClaim(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string
+): Promise<boolean> {
+  const rows = (await tx`
+    SELECT 1 FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId}
+      AND deleted_at IS NULL
+      AND (claim_basis = 'registration' OR status IN ('connected', 'degraded'))
+  `) as unknown[];
+
+  return rows.length > 0;
+}
+
 export type RevokeOutcome =
   { outcome: "revoked"; cancelledMessages: number } | { outcome: "not_found" };
 
@@ -356,7 +373,23 @@ export async function revokeBot(
 
   if (!live) return { outcome: "not_found" };
 
-  await revokeEndpointRow(tx, tenantId, live, actor, reason, "delete");
+  // `deleteWebhook` only when THIS tenant's endpoint ever set the webhook AND
+  // its account still holds the claim on the bot (ADR-0170, audit L-b). Telegram
+  // has one webhook per bot: the loser of a claim (an endpoint that failed
+  // before `setWebhook`, or whose account never held the claim) must not be able
+  // to switch off the winner's webhook by revoking its own endpoint.
+  const mayDelete =
+    live.activated_at !== null &&
+    (await accountHoldsClaim(tx, tenantId, accountId));
+
+  await revokeEndpointRow(
+    tx,
+    tenantId,
+    live,
+    actor,
+    reason,
+    mayDelete ? "delete" : null
+  );
 
   const cancelledMessages = await cancelQueuedMessages(
     tx,

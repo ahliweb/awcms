@@ -63,10 +63,10 @@
 -- the lock is held for milliseconds. Neither index can fail on existing data:
 -- the old index already made every live `(provider, external_id)` unique, and
 -- both new keys are finer than it (they add the kind) over a subset of its rows
--- or a per-tenant refinement of them. `SET LOCAL lock_timeout` bounds the wait for
--- the table lock: the repository has no lock_timeout convention in `sql/`, so this
--- follows the nearest one (the deploy note above) and fails the migration loudly
--- instead of queueing every writer of the table behind a blocked DROP.
+-- or a per-tenant refinement of them. The wait for the table lock is already
+-- bounded by the runner (`scripts/db-migrate.ts` sets `lock_timeout = 5s` for every
+-- migration session), so this file sets none: a longer value here would only
+-- loosen that bound.
 -- The old index is dropped and recreated under the SAME name inside this one
 -- transaction, so no instant exists in which the claim is unprotected.
 --
@@ -105,8 +105,6 @@ CREATE TRIGGER awcms_channel_accounts_claim_basis_guard
 -- I1 (amended): a live external account is held by exactly ONE tenant, where
 -- "holds" is registration for the providers that cannot be verified and
 -- verification for those that can. NOT scoped by tenant_id on purpose.
-SET LOCAL lock_timeout = '10s';
-
 DROP INDEX IF EXISTS awcms_channel_accounts_live_external_key;
 
 CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key

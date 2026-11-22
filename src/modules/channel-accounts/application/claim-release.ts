@@ -38,6 +38,7 @@ import {
 } from "./account-directory";
 import type { SecretStorePort } from "./secret-store";
 import { CHANNEL_ACCOUNTS_MODULE_KEY } from "../domain/channel-accounts-constants";
+import { normalizeExternalId } from "../domain/provider-matrix";
 import type { ClaimReleaseReasonCode } from "../domain/channel-accounts-validation";
 
 export type ClaimHolder = {
@@ -57,7 +58,7 @@ export async function findClaimHolder(
 ): Promise<ClaimHolder | null> {
   const rows = (await tx`
     SELECT tenant_id, account_id, account_kind, status, claim_basis
-    FROM awcms_find_channel_account_claim_holder(${provider}, ${accountKind}, ${externalId})
+    FROM awcms_find_channel_account_claim_holder(${provider}, ${accountKind}, ${normalizeExternalId(provider, accountKind, externalId)})
   `) as {
     tenant_id: string;
     account_id: string;
@@ -178,7 +179,10 @@ export async function releaseContestedClaim(
           ...holderAttributes(child.accountId),
           accountKind: child.accountKind,
           parentAccountId: holder.accountId,
-          credentialErased: child.credentialErased
+          // Not named `credential...`: the redaction by key name would print
+          // the boolean as [REDACTED] (the audit pattern list catches
+          // credential, secret, token, ...).
+          ciphertextErased: child.credentialErased
         },
         ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
       });
@@ -197,7 +201,7 @@ export async function releaseContestedClaim(
       attributes: {
         ...holderAttributes(holder.accountId),
         accountKind: released.accountKind,
-        credentialErased: released.credentialErased
+        ciphertextErased: released.credentialErased
       },
       ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
     });
@@ -228,7 +232,7 @@ export async function releaseContestedClaim(
       releaseReason: input.reasonCode,
       ...(input.ticketRef ? { ticketRef: input.ticketRef } : {}),
       reason: input.reason,
-      credentialErased: released.credentialErased,
+      ciphertextErased: released.credentialErased,
       releasedChildren: released.children.length
     },
     ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
