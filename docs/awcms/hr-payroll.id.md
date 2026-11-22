@@ -1116,7 +1116,12 @@ deployment.
   notifikasi mengikuti hasil O5.
 - **Penilaian dampak.** Fase 1 (tanpa bukti) adalah pemrosesan data kepegawaian
   rutin; fase 3 dan fitur bukti apa pun membutuhkan penilaian dampak terdokumentasi
-  sebelum implementasi.
+  sebelum implementasi. **Sebuah DRAF untuk fase 3 sudah ada:
+  [`dpia-hr-payroll-phase-3.id.md`](dpia-hr-payroll-phase-3.id.md) (Issue #976). Draf
+  itu belum disetujui atau ditandatangani**, sehingga persyaratan ini masih belum
+  terpenuhi; draf itu juga mencatat bahwa data keuangan pribadi kemungkinan data
+  pribadi spesifik, yang belum dinyatakan bagian ini (menunggu konfirmasi penasihat
+  hukum).
 
 ### 13.3 Pembacaan, salinan turunan, dan ekspor (PS-18, Issue #978)
 

@@ -1081,7 +1081,11 @@ assessment.
   follow the O5 outcome.
 - **Impact assessment.** Phase 1 (no evidence) is a routine employment-data
   processing; phase 3 and any evidence feature require a documented impact
-  assessment before implementation.
+  assessment before implementation. **A DRAFT for phase 3 exists:
+  [`dpia-hr-payroll-phase-3.md`](dpia-hr-payroll-phase-3.md) (Issue #976). It is
+  not approved or signed**, so this requirement is still unmet; it also records
+  that personal financial data is probably specific personal data, which this
+  section does not yet say (pending counsel's confirmation).
 
 ### 13.3 Reads, derived copies and exports (PS-18, Issue #978)
 
