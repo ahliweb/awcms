@@ -423,10 +423,12 @@ describe("the module descriptor", () => {
     ]);
   });
 
-  test("the credential permission requires MFA enrolment, the others do not", () => {
+  test("the credential permission and the platform claim release require MFA enrolment, the others do not", () => {
     for (const permission of module.permissions ?? []) {
       expect(permission.requiresMfaEnrolment === true).toBe(
-        permission.activityCode === "credentials"
+        permission.activityCode === "credentials" ||
+          // ADR-0170 audit L3: the destructive cross-tenant release.
+          permission.activityCode === "account_claims"
       );
     }
   });

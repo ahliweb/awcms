@@ -38,6 +38,7 @@ import {
 } from "./account-directory";
 import type { SecretStorePort } from "./secret-store";
 import { CHANNEL_ACCOUNTS_MODULE_KEY } from "../domain/channel-accounts-constants";
+import type { ClaimReleaseReasonCode } from "../domain/channel-accounts-validation";
 
 export type ClaimHolder = {
   tenantId: string;
@@ -47,15 +48,16 @@ export type ClaimHolder = {
   claimBasis: string;
 };
 
-/** The ONE caller of the locator function. `tests/channel-accounts-claim-release.test.ts` keeps it that way. */
+/** The ONE caller of the locator function. `tests/channel-accounts-claim-basis.test.ts` keeps it that way. */
 export async function findClaimHolder(
   tx: Bun.SQL,
   provider: string,
+  accountKind: string,
   externalId: string
 ): Promise<ClaimHolder | null> {
   const rows = (await tx`
     SELECT tenant_id, account_id, account_kind, status, claim_basis
-    FROM awcms_find_channel_account_claim_holder(${provider}, ${externalId})
+    FROM awcms_find_channel_account_claim_holder(${provider}, ${accountKind}, ${externalId})
   `) as {
     tenant_id: string;
     account_id: string;
@@ -78,8 +80,13 @@ export async function findClaimHolder(
 
 export type ReleaseClaimInput = {
   provider: string;
+  accountKind: string;
   externalId: string;
-  /** Mandatory, free text, trimmed and bounded by the route. Lands in both audit trails. */
+  /** Closed enum. The ONLY reason that reaches the holder's trail. */
+  reasonCode: ClaimReleaseReasonCode;
+  /** Optional ticket reference of a narrow pattern; also reaches the holder's trail. */
+  ticketRef: string | null;
+  /** Mandatory free text, bounded and screened by the route. The PLATFORM operator's trail ONLY. */
   reason: string;
 };
 
@@ -97,6 +104,7 @@ export type ReleaseClaimOutcome =
       accountId: string;
       accountKind: string;
       credentialErased: boolean;
+      releasedChildren: number;
     }
   | { outcome: "not_found" }
   | { outcome: "refused"; code: "HAS_CHILD_ACCOUNTS" };
@@ -108,8 +116,9 @@ async function bindTenant(tx: Bun.SQL, tenantId: string): Promise<void> {
 
 /**
  * Locates the holder, ends its account in its own tenant context, writes the
- * audit row to the HOLDER's trail (the tenant is entitled to see that its
- * account was ended by the platform, and why), rebinds the platform tenant, and
+ * audit rows to the HOLDER's trail (the tenant is entitled to see that its
+ * account and its childless-of-claim children were ended by the platform, and the
+ * closed reason code, never the operator's free text), rebinds the platform tenant, and
  * writes the operator-side audit row. All in the caller's one transaction.
  */
 export async function releaseContestedClaim(
@@ -118,7 +127,12 @@ export async function releaseContestedClaim(
   actor: ReleaseClaimActor,
   input: ReleaseClaimInput
 ): Promise<ReleaseClaimOutcome> {
-  const holder = await findClaimHolder(tx, input.provider, input.externalId);
+  const holder = await findClaimHolder(
+    tx,
+    input.provider,
+    input.accountKind,
+    input.externalId
+  );
 
   if (!holder) return { outcome: "not_found" };
 
@@ -137,6 +151,39 @@ export async function releaseContestedClaim(
     // it; `actorTenantId` says the platform did it. The operator-side row below
     // keeps the individual. The external id is not an attribute (an audit log
     // is read by more people than the screen); the account id identifies it.
+    //
+    // The HOLDER is the opposing party of the dispute (audit M2): its trail
+    // carries only the closed reason code and the ticket reference of a narrow
+    // pattern, never the operator's free text, which stays in the platform trail.
+    const holderAttributes = (accountId: string) => ({
+      provider: input.provider,
+      reasonCode: CLAIM_RELEASED_REASON_CODE,
+      releaseReason: input.reasonCode,
+      ...(input.ticketRef ? { ticketRef: input.ticketRef } : {}),
+      accountId
+    });
+
+    for (const child of released.children) {
+      await recordAuditEvent(tx, {
+        tenantId: holder.tenantId,
+        actorTenantId: actor.platformTenantId,
+        moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+        action: "channel_accounts.account.claim_released",
+        resourceType: "channel_account",
+        resourceId: child.accountId,
+        severity: "warning",
+        message:
+          "Channel account ended with its container by the platform operator (it held no claim of its own).",
+        attributes: {
+          ...holderAttributes(child.accountId),
+          accountKind: child.accountKind,
+          parentAccountId: holder.accountId,
+          credentialErased: child.credentialErased
+        },
+        ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
+      });
+    }
+
     await recordAuditEvent(tx, {
       tenantId: holder.tenantId,
       actorTenantId: actor.platformTenantId,
@@ -148,10 +195,8 @@ export async function releaseContestedClaim(
       message:
         "Channel account ended by the platform operator to release a contested external-account claim.",
       attributes: {
-        provider: input.provider,
+        ...holderAttributes(holder.accountId),
         accountKind: released.accountKind,
-        reasonCode: CLAIM_RELEASED_REASON_CODE,
-        reason: input.reason,
         credentialErased: released.credentialErased
       },
       ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
@@ -180,8 +225,11 @@ export async function releaseContestedClaim(
       accountKind: released.accountKind,
       holderTenantId: holder.tenantId,
       reasonCode: CLAIM_RELEASED_REASON_CODE,
+      releaseReason: input.reasonCode,
+      ...(input.ticketRef ? { ticketRef: input.ticketRef } : {}),
       reason: input.reason,
-      credentialErased: released.credentialErased
+      credentialErased: released.credentialErased,
+      releasedChildren: released.children.length
     },
     ...(actor.correlationId ? { correlationId: actor.correlationId } : {})
   });
@@ -191,6 +239,7 @@ export async function releaseContestedClaim(
     holderTenantId: holder.tenantId,
     accountId: holder.accountId,
     accountKind: released.accountKind,
-    credentialErased: released.credentialErased
+    credentialErased: released.credentialErased,
+    releasedChildren: released.children.length
   };
 }

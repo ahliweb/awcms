@@ -21,7 +21,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const describeOrSkip = DATABASE_URL ? describe : describe.skip;
 
 const REVIEWED_GLOBAL = `CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
-  ON awcms_channel_accounts (provider, external_id)
+  ON awcms_channel_accounts (provider, account_kind, external_id)
   WHERE deleted_at IS NULL
     AND (claim_basis = 'registration' OR status IN ('connected', 'degraded'))`;
 
@@ -78,7 +78,7 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
     const result = await mutated(async (sql) => {
       await sql`DROP INDEX awcms_channel_accounts_live_external_key`;
       await sql`CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
-          ON awcms_channel_accounts (provider, external_id) WHERE deleted_at IS NULL`;
+          ON awcms_channel_accounts (provider, account_kind, external_id) WHERE deleted_at IS NULL`;
     }, restoreGlobalIndex);
 
     expect(result.pins.join(" ")).toContain(
@@ -91,7 +91,7 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
     const result = await mutated(async (sql) => {
       await sql`DROP INDEX awcms_channel_accounts_live_external_key`;
       await sql`CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
-          ON awcms_channel_accounts (provider, external_id)
+          ON awcms_channel_accounts (provider, account_kind, external_id)
           WHERE deleted_at IS NULL
             AND (claim_basis = 'registration'
                  OR status IN ('pending', 'connected', 'degraded'))`;
@@ -107,7 +107,7 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
     const result = await mutated(async (sql) => {
       await sql`DROP INDEX awcms_channel_accounts_live_external_key`;
       await sql`CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
-          ON awcms_channel_accounts (provider, external_id)
+          ON awcms_channel_accounts (provider, account_kind, external_id)
           WHERE deleted_at IS NULL AND status IN ('connected', 'degraded')`;
     }, restoreGlobalIndex);
 
@@ -124,7 +124,7 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
       },
       async (sql) => {
         await sql`CREATE UNIQUE INDEX awcms_channel_accounts_tenant_external_key
-          ON awcms_channel_accounts (tenant_id, provider, external_id)
+          ON awcms_channel_accounts (tenant_id, provider, account_kind, external_id)
           WHERE deleted_at IS NULL`;
       }
     );
@@ -209,10 +209,10 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
   test("EXECUTE for PUBLIC is a finding", async () => {
     const result = await mutated(
       async (sql) => {
-        await sql`GRANT EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text) TO PUBLIC`;
+        await sql`GRANT EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text, text) TO PUBLIC`;
       },
       async (sql) => {
-        await sql`REVOKE EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text) FROM PUBLIC`;
+        await sql`REVOKE EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text, text) FROM PUBLIC`;
       }
     );
 
@@ -225,7 +225,7 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
       async (sql) => {
         original = (
           (await sql`
-            SELECT pg_get_functiondef(to_regprocedure('awcms_find_channel_account_claim_holder(text,text)')) AS def
+            SELECT pg_get_functiondef(to_regprocedure('awcms_find_channel_account_claim_holder(text,text,text)')) AS def
           `) as { def: string }[]
         )[0]!.def;
         await sql.unsafe(
@@ -243,6 +243,47 @@ describeOrSkip("security:readiness — channel account claim guards", () => {
     expect(original).toContain("a.claim_basis = 'registration'");
     expect(result.pins.join(" ")).toContain("its body is no longer");
     expect(result.probe.join(" ")).toContain("holding a claim");
+  });
+
+  test("a global index keyed WITHOUT the account kind (audit H1: a channel could squat a bot) is a finding of both halves", async () => {
+    const result = await mutated(async (sql) => {
+      await sql`DROP INDEX awcms_channel_accounts_live_external_key`;
+      await sql`CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
+          ON awcms_channel_accounts (provider, external_id)
+          WHERE deleted_at IS NULL
+            AND (claim_basis = 'registration'
+                 OR status IN ('connected', 'degraded'))`;
+    }, restoreGlobalIndex);
+
+    expect(result.pins.join(" ")).toContain(
+      "awcms_channel_accounts_live_external_key differs"
+    );
+    expect(result.probe.join(" ")).toContain("registration-basis channel");
+  });
+
+  test("a locator that ignores the account kind is caught by the body pin and the probe", async () => {
+    let original = "";
+    const result = await mutated(
+      async (sql) => {
+        original = (
+          (await sql`
+            SELECT pg_get_functiondef(to_regprocedure('awcms_find_channel_account_claim_holder(text,text,text)')) AS def
+          `) as { def: string }[]
+        )[0]!.def;
+        await sql.unsafe(
+          original.replace("AND a.account_kind = p_account_kind", "")
+        );
+      },
+      async (sql) => {
+        if (original) await sql.unsafe(original);
+      }
+    );
+
+    expect(original).toContain("a.account_kind = p_account_kind");
+    expect(result.pins.join(" ")).toContain("its body is no longer");
+    expect(result.probe.join(" ")).toMatch(
+      /did not answer|crossed account kinds/
+    );
   });
 
   test("the schema is whole again after the mutations", async () => {

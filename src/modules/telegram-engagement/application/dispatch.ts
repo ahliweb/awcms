@@ -9,10 +9,11 @@
  *
  * For an endpoint that owes Telegram a `set`: `getMe` (the bot id must equal
  * the account's external id, which registration already refused for the staff
- * bot, so the TOKEN is bound to that id), then `setWebhook` with the per-bot
- * URL, the derived secret token and the minimal `allowed_updates`. Only then is
- * the endpoint `active` and the account reported healthy (which moves it to
- * `connected`). For a revoked endpoint that owes a `delete`: `deleteWebhook`.
+ * bot, so the TOKEN is bound to that id), then the CLAIM (the account is
+ * reported healthy, which moves it to `connected` and takes the bot id globally,
+ * ADR-0170; the loser fails the endpoint and never calls Telegram again), then
+ * `setWebhook` with the per-bot URL, the derived secret token and the minimal
+ * `allowed_updates`. Only then is the endpoint `active`. For a revoked endpoint that owes a `delete`: `deleteWebhook`.
  * A `401` from Telegram (token revoked at BotFather) is terminal for the
  * endpoint and reported as failing health; a `429` waits `retry_after`.
  *
@@ -156,6 +157,44 @@ type ClaimedEndpoint = {
   connector_attempts: number;
 };
 
+/**
+ * The CLAIM step (ADR-0170, audit L1): after `getMe` proved the token belongs to
+ * the account's bot and BEFORE `setWebhook`, report the account healthy, which
+ * is the moment a `verification`-basis account claims its bot id globally. Only
+ * the winner goes on to `setWebhook`; the loser (another tenant verified the
+ * same bot first) never calls Telegram again, so it cannot overwrite the
+ * winner's webhook with its own. An endpoint revoked or rotated while `getMe`
+ * was in flight is `skipped`: nothing is claimed for it.
+ */
+async function connectorClaim(
+  sql: Bun.SQL,
+  tenantId: string,
+  endpoint: ClaimedEndpoint
+): Promise<"won" | "lost" | "skipped"> {
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const live = (await tx`
+        SELECT 1 FROM awcms_telegram_engagement_endpoints
+        WHERE tenant_id = ${tenantId} AND id = ${endpoint.id}
+          AND state = 'pending'
+        FOR UPDATE
+      `) as unknown[];
+
+      if (live.length === 0) return "skipped";
+
+      const health = await recordBotHealth(tx, tenantId, endpoint.account_id, {
+        state: "ok",
+        reasonCode: null
+      });
+
+      return health.claim === "lost" ? "lost" : "won";
+    },
+    { workClass: "background_sync" }
+  );
+}
+
 async function connectorFinalize(
   sql: Bun.SQL,
   tenantId: string,
@@ -173,7 +212,7 @@ async function connectorFinalize(
       if (patch.kind === "activated") {
         // Only a still-pending endpoint activates: one revoked or rotated while
         // the call was in flight stays revoked (its successor's setWebhook wins).
-        const rows = (await tx`
+        await tx`
           UPDATE awcms_telegram_engagement_endpoints
           SET state = 'active', provider_action = NULL,
               verified_bot_id = ${patch.botId}, bot_username = ${patch.username},
@@ -181,32 +220,7 @@ async function connectorFinalize(
               connector_lease_until = NULL, updated_at = now()
           WHERE tenant_id = ${tenantId} AND id = ${endpoint.id}
             AND state = 'pending'
-          RETURNING id
-        `) as { id: string }[];
-
-        if (rows.length > 0) {
-          const health = await recordBotHealth(
-            tx,
-            tenantId,
-            endpoint.account_id,
-            { state: "ok", reasonCode: null }
-          );
-
-          // ADR-0170: the bot's id proved (getMe) but ANOTHER tenant verified
-          // the same bot first. The account stays `pending`, so the endpoint
-          // must not serve: it fails with the one code a refused registration
-          // answers (the operator rotates to retry once the dispute is
-          // resolved through the platform release action).
-          if (health.claim === "lost") {
-            await tx`
-              UPDATE awcms_telegram_engagement_endpoints
-              SET state = 'failed', last_error_code = 'ACCOUNT_ALREADY_REGISTERED',
-                  updated_at = now()
-              WHERE tenant_id = ${tenantId} AND id = ${endpoint.id}
-                AND state = 'active'
-            `;
-          }
-        }
+        `;
 
         return;
       }
@@ -426,6 +440,22 @@ async function runConnector(
         kind: "failed",
         code: "BOT_IDENTITY_MISMATCH",
         health: true
+      });
+      result.endpointsFailed += 1;
+      continue;
+    }
+
+    const claim = await connectorClaim(sql, tenantId, endpoint);
+
+    if (claim === "skipped") continue;
+
+    if (claim === "lost") {
+      // The health row already says `failing` / ACCOUNT_ALREADY_REGISTERED; the
+      // endpoint fails with the same code and `setWebhook` is never called.
+      await connectorFinalize(sql, tenantId, endpoint, {
+        kind: "failed",
+        code: "ACCOUNT_ALREADY_REGISTERED",
+        health: false
       });
       result.endpointsFailed += 1;
       continue;

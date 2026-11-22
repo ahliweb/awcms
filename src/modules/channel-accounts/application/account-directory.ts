@@ -20,7 +20,11 @@ import type {
   ChannelHealthState,
   ChannelSecretPurpose
 } from "../domain/channel-accounts-constants";
-import { checkAccountShape, claimBasisFor } from "../domain/provider-matrix";
+import {
+  checkAccountShape,
+  claimBasisFor,
+  externalIdShapeOk
+} from "../domain/provider-matrix";
 import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import type {
   AccessModeInput,
@@ -250,6 +254,7 @@ export type CreateAccountOutcome =
         | "CONNECTION_REQUIRED"
         | "PARENT_REQUIRED"
         | "PARENT_INVALID"
+        | "EXTERNAL_ID_INVALID"
         | "ACCOUNT_ALREADY_REGISTERED";
     };
 
@@ -265,7 +270,7 @@ export type CreateAccountOutcome =
 export function checkRegistrationShape(
   input: Pick<
     CreateAccountInput,
-    "provider" | "accountKind" | "authMode" | "connectionId"
+    "provider" | "accountKind" | "authMode" | "connectionId" | "externalId"
   >
 ):
   | { ok: true; parentKind: string | null }
@@ -277,6 +282,13 @@ export function checkRegistrationShape(
   );
 
   if (!shape.ok) return { ok: false, code: shape.code };
+
+  // ADR-0170 (audit H1): the id must have the shape of its kind, so the id
+  // namespaces of two kinds cannot be made to overlap. Input-only, so the same
+  // answer for every caller and no oracle on other tenants' data.
+  if (!externalIdShapeOk(input.provider, input.accountKind, input.externalId)) {
+    return { ok: false, code: "EXTERNAL_ID_INVALID" };
+  }
 
   // OAuth accounts hang off a connection (the token holder); the other modes
   // carry their own credential and may not claim one.
@@ -930,8 +942,20 @@ export async function deleteAccount(
 
 export const CLAIM_RELEASED_REASON_CODE = "CLAIM_RELEASED_BY_PLATFORM";
 
+export type ReleasedChild = {
+  accountId: string;
+  accountKind: string;
+  credentialErased: boolean;
+};
+
 export type ReleaseHeldAccountOutcome =
-  | { outcome: "released"; accountKind: string; credentialErased: boolean }
+  | {
+      outcome: "released";
+      accountKind: string;
+      credentialErased: boolean;
+      /** Live children that held NO claim and were ended with the container (audit M1). */
+      children: ReleasedChild[];
+    }
   | { outcome: "not_found" }
   | { outcome: "refused"; code: "HAS_CHILD_ACCOUNTS" };
 
@@ -949,7 +973,8 @@ export type ReleaseHeldAccountOutcome =
  * Returns `not_found` when the account is gone or no longer holds the claim (it
  * became `pending` and `verification`-basis, was deleted, ...): there is nothing
  * to release, and the platform route answers the same as for an unknown id.
- * A container with live children is refused: release the children first.
+ * A container whose live child HOLDS a claim is refused (release that child by
+ * its own id); children that hold none are ended with it.
  */
 export async function releaseHeldAccount(
   tx: Bun.SQL,
@@ -981,24 +1006,67 @@ export async function releaseHeldAccount(
     return { outcome: "not_found" };
   }
 
+  // The children, locked. A child that HOLDS a claim of its own blocks the
+  // release (its holder is a different dispute and the operator releases it by
+  // its own id). A child that holds none (a `pending` verification-basis row) is
+  // invisible to the locator, so it could never be released by itself: it is
+  // ended with its container (audit M1), with its own credential erased.
   const children = (await tx`
-    SELECT 1 FROM awcms_channel_accounts
+    SELECT id, account_kind, secret_id, status, claim_basis
+    FROM awcms_channel_accounts
     WHERE tenant_id = ${tenantId} AND parent_account_id = ${accountId}
       AND deleted_at IS NULL
-    LIMIT 1
-  `) as unknown[];
+    ORDER BY id
+    FOR UPDATE
+  `) as {
+    id: string;
+    account_kind: string;
+    secret_id: string | null;
+    status: string;
+    claim_basis: string;
+  }[];
 
-  if (children.length > 0) {
+  if (
+    children.some(
+      (child) =>
+        child.claim_basis === "registration" ||
+        child.status === "connected" ||
+        child.status === "degraded"
+    )
+  ) {
     return { outcome: "refused", code: "HAS_CHILD_ACCOUNTS" };
   }
 
-  await eraseAccountCredential(
-    tx,
-    store,
-    tenantId,
-    accountId,
-    account.secret_id
-  );
+  const releasedChildren: ReleasedChild[] = [];
+
+  for (const child of children) {
+    await endHeldAccount(tx, store, tenantId, child.id, child.secret_id);
+    releasedChildren.push({
+      accountId: child.id,
+      accountKind: child.account_kind,
+      credentialErased: child.secret_id !== null
+    });
+  }
+
+  await endHeldAccount(tx, store, tenantId, accountId, account.secret_id);
+
+  return {
+    outcome: "released",
+    accountKind: account.account_kind,
+    credentialErased: account.secret_id !== null,
+    children: releasedChildren
+  };
+}
+
+/** Credential erased, webhook subscriptions revoked, soft delete with the fixed release reason. */
+async function endHeldAccount(
+  tx: Bun.SQL,
+  store: SecretStorePort,
+  tenantId: string,
+  accountId: string,
+  secretId: string | null
+): Promise<void> {
+  await eraseAccountCredential(tx, store, tenantId, accountId, secretId);
   await revokeAccountWebhookSubscriptions(tx, store, tenantId, accountId);
   await tx`
     UPDATE awcms_channel_accounts
@@ -1007,12 +1075,6 @@ export async function releaseHeldAccount(
         version = version + 1
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
   `;
-
-  return {
-    outcome: "released",
-    accountKind: account.account_kind,
-    credentialErased: account.secret_id !== null
-  };
 }
 
 // ---------------------------------------------------------------------------

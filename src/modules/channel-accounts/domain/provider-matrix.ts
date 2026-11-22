@@ -537,3 +537,62 @@ export function claimBasisFor(provider: string, kind: string): ClaimBasis {
     ? "verification"
     : "registration";
 }
+
+/**
+ * The SHAPE an external id must have, per `(provider, kind)` (ADR-0170, audit
+ * H1). The claim index is keyed by kind, and this keeps the id namespaces of
+ * two kinds from being made to overlap on purpose: a Telegram channel cannot be
+ * named with a bot's integer id, a Mailketing ESP login cannot be named like a
+ * sender's address, a sender is always the lowercase address.
+ *
+ * Only shapes the provider documents are enforced, and the ones the repository's
+ * own connectors already enforce at use time (`FACEBOOK_PAGE_ID`, the WhatsApp
+ * phone number id, the StarSender device id). Everything else is left open on
+ * purpose (TikTok, LinkedIn, Threads and so on have no id format this repository
+ * has verified): an over-tight guess would refuse a real account.
+ *
+ * Pure and independent of any stored data, so a refusal here is the same for
+ * every caller and reveals nothing about other tenants.
+ */
+const EXTERNAL_ID_SHAPES: Readonly<
+  Record<string, Readonly<Record<string, RegExp>>>
+> = {
+  telegram: {
+    // A bot's id is a positive integer. (Proven at connect time by getMe.)
+    bot: /^[1-9][0-9]{0,19}$/
+  },
+  mailketing: {
+    // An ESP login is a label, NEVER an address: addresses are sender ids.
+    esp_account: /^[^@\s]{1,256}$/,
+    // A sender is its normalised (lowercase) address.
+    sender_identity:
+      /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/
+  },
+  whatsapp_cloud: {
+    waba: /^[0-9]{5,25}$/,
+    waba_phone_number: /^[0-9]{5,25}$/
+  },
+  facebook: { page: /^[0-9]{1,32}$/ },
+  instagram: { professional_account: /^[0-9]{1,32}$/ },
+  starsender: { device: /^[A-Za-z0-9._:-]{1,128}$/ }
+};
+
+/** A telegram `channel` is `-100<digits>` or `@username`; never a bare integer (that is a bot id). */
+const TELEGRAM_CHANNEL_ID = /^(-100[0-9]{5,16}|@[A-Za-z][A-Za-z0-9_]{4,31})$/;
+
+export function externalIdShapeOk(
+  provider: string,
+  kind: string,
+  externalId: string
+): boolean {
+  if (provider === "telegram" && kind === "channel") {
+    return TELEGRAM_CHANNEL_ID.test(externalId);
+  }
+
+  const byKind = Object.hasOwn(EXTERNAL_ID_SHAPES, provider)
+    ? EXTERNAL_ID_SHAPES[provider]!
+    : null;
+  const shape = byKind && Object.hasOwn(byKind, kind) ? byKind[kind]! : null;
+
+  return shape === null || shape.test(externalId);
+}

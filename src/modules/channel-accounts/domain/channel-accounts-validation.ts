@@ -708,17 +708,43 @@ export function validateAcknowledgeRisk(
   };
 }
 
+/**
+ * The CLOSED set of reasons a platform release may state. Only the code (and an
+ * optional ticket reference) reaches the HOLDER tenant's audit trail: the holder
+ * is the opposing party of the dispute, and free text written about a claimant
+ * must not be copied into its records (audit M2).
+ */
+export const CLAIM_RELEASE_REASON_CODES = [
+  "ownership_dispute_resolved",
+  "registered_in_error",
+  "abuse_confirmed"
+] as const;
+
+export type ClaimReleaseReasonCode =
+  (typeof CLAIM_RELEASE_REASON_CODES)[number];
+
+/** A ticket reference as the operator's tracker spells it: letters, digits, `_` and `-`. */
+const TICKET_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$/;
+const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+const PHONE_LIKE = /\+?\d[\d\s().-]{7,}\d/;
+
 export type ReleaseClaimBodyInput = {
   provider: string;
+  accountKind: string;
   externalId: string;
+  reasonCode: ClaimReleaseReasonCode;
+  ticketRef: string | null;
+  /** Free text; written ONLY to the platform operator's own trail. */
   reason: string;
 };
 
 /**
- * The platform release of a contested claim (ADR-0170 option C). All three
- * fields are required: the exact pair that names the claim, and a reason of at
- * least 10 printable characters (the operator's out-of-band basis), which lands
- * in both audit trails.
+ * The platform release of a contested claim (ADR-0170 option C). The exact
+ * `(provider, accountKind, externalId)` that names the claim, a closed reason
+ * code, an optional ticket reference, and a reason of at least 10 printable
+ * characters (the operator's out-of-band basis). The reason may not contain an
+ * email address or a phone number: it is a free-text field read by people other
+ * than the one who wrote it.
  */
 export function validateReleaseClaim(
   raw: unknown
@@ -730,19 +756,71 @@ export function validateReleaseClaim(
     };
   }
 
-  const errors = unknownFields(raw, ["provider", "externalId", "reason"]);
+  const errors = unknownFields(raw, [
+    "provider",
+    "accountKind",
+    "externalId",
+    "reasonCode",
+    "ticketRef",
+    "reason"
+  ]);
   const provider = text(raw, "provider", errors, { min: 2, max: 32 });
+  const accountKind = text(raw, "accountKind", errors, { min: 2, max: 48 });
   const externalId = text(raw, "externalId", errors, { min: 1, max: 256 });
   const reason = text(raw, "reason", errors, { min: 10, max: 500 });
+  const reasonCode = raw.reasonCode;
+  let ticketRef: string | null = null;
 
   if (provider !== null && !PROVIDER_PATTERN.test(provider)) {
     errors.push({ field: "provider", message: "Must be lower snake case." });
+  }
+
+  if (accountKind !== null && !KIND_PATTERN.test(accountKind)) {
+    errors.push({ field: "accountKind", message: "Must be lower snake case." });
+  }
+
+  if (
+    typeof reasonCode !== "string" ||
+    !(CLAIM_RELEASE_REASON_CODES as readonly string[]).includes(reasonCode)
+  ) {
+    errors.push({
+      field: "reasonCode",
+      message: `Must be one of ${CLAIM_RELEASE_REASON_CODES.join(", ")}.`
+    });
+  }
+
+  if (raw.ticketRef !== undefined && raw.ticketRef !== null) {
+    if (
+      typeof raw.ticketRef !== "string" ||
+      !TICKET_REF_PATTERN.test(raw.ticketRef)
+    ) {
+      errors.push({
+        field: "ticketRef",
+        message: "Must be 3 to 32 letters, digits, underscores or hyphens."
+      });
+    } else {
+      ticketRef = raw.ticketRef;
+    }
+  }
+
+  if (reason !== null && (EMAIL_LIKE.test(reason) || PHONE_LIKE.test(reason))) {
+    errors.push({
+      field: "reason",
+      message: "Must not contain an email address or a phone number."
+    });
   }
 
   if (errors.length > 0) return { valid: false, errors };
 
   return {
     valid: true,
-    value: { provider: provider!, externalId: externalId!, reason: reason! }
+    value: {
+      provider: provider!,
+      accountKind: accountKind!,
+      externalId: externalId!,
+      reasonCode: reasonCode as ClaimReleaseReasonCode,
+      ticketRef,
+      reason: reason!
+    }
   };
 }

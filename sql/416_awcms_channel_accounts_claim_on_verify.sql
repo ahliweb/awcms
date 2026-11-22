@@ -31,13 +31,20 @@
 --    migration runs becomes `registration` (the column default): a claim is
 --    never released by a migration.
 --
--- 2. The global unique index is rebuilt PARTIAL: live rows that hold the claim.
+-- 2. The global unique index is rebuilt PARTIAL: live rows that hold the claim,
+--    keyed `(provider, account_kind, external_id)`. The KIND is part of the key
+--    (audit H1): without it a `telegram` `channel` registered with a bot's id (a
+--    registration-basis row) would hold the claim that the real owner's `bot`
+--    verification then loses, and a `mailketing` `esp_account` named after a
+--    sender address would block that `sender_identity`. The application also
+--    validates the SHAPE of an external id per kind, so the namespaces of two
+--    kinds cannot be made to overlap.
 --    The first row of a verification-basis id to become `connected` wins; the
 --    other is refused by the index (23505) at the moment it would verify, which
 --    is race-safe without any application lock.
 --
 -- 3. A per-tenant unique index over ALL live rows of `(tenant_id, provider,
---    external_id)`: one tenant cannot register the same id twice, whatever the
+--    account_kind, external_id)`: one tenant cannot register the same id twice, whatever the
 --    status or basis (the duplicate answer for "yours" is unchanged).
 --
 -- 4. The platform release action (option C): a PLATFORM-scoped permission
@@ -55,7 +62,11 @@
 -- per tenant at most) and the module ships OFF (`CHANNEL_ACCOUNTS_ENABLED`), so
 -- the lock is held for milliseconds. Neither index can fail on existing data:
 -- the old index already made every live `(provider, external_id)` unique, and
--- both new predicates select a subset of it or a per-tenant refinement of it.
+-- both new keys are finer than it (they add the kind) over a subset of its rows
+-- or a per-tenant refinement of them. `SET LOCAL lock_timeout` bounds the wait for
+-- the table lock: the repository has no lock_timeout convention in `sql/`, so this
+-- follows the nearest one (the deploy note above) and fails the migration loudly
+-- instead of queueing every writer of the table behind a blocked DROP.
 -- The old index is dropped and recreated under the SAME name inside this one
 -- transaction, so no instant exists in which the claim is unprotected.
 --
@@ -94,15 +105,17 @@ CREATE TRIGGER awcms_channel_accounts_claim_basis_guard
 -- I1 (amended): a live external account is held by exactly ONE tenant, where
 -- "holds" is registration for the providers that cannot be verified and
 -- verification for those that can. NOT scoped by tenant_id on purpose.
+SET LOCAL lock_timeout = '10s';
+
 DROP INDEX IF EXISTS awcms_channel_accounts_live_external_key;
 
 CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key
-  ON awcms_channel_accounts (provider, external_id)
+  ON awcms_channel_accounts (provider, account_kind, external_id)
   WHERE deleted_at IS NULL
     AND (claim_basis = 'registration' OR status IN ('connected', 'degraded'));
 
 CREATE UNIQUE INDEX IF NOT EXISTS awcms_channel_accounts_tenant_external_key
-  ON awcms_channel_accounts (tenant_id, provider, external_id)
+  ON awcms_channel_accounts (tenant_id, provider, account_kind, external_id)
   WHERE deleted_at IS NULL;
 
 -- ---------------------------------------------------------------------------
@@ -111,8 +124,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS awcms_channel_accounts_tenant_external_key
 
 -- PLATFORM-scoped (ADR-0053): releasing a claim ends ANOTHER tenant's account,
 -- so no tenant may hold it however its roles are arranged. Granted to the owner
--- of the SETUP tenant only (the pattern of sql/092); a deployment whose platform
--- tenant is not the setup tenant runs `identity-access:permissions:backfill`.
+-- of the SETUP tenant only (the pattern of sql/092). That is the ONLY grant path:
+-- `identity-access:permissions:backfill` filters `scope = 'tenant'` and never
+-- grants a platform permission, so a deployment whose platform tenant is not the
+-- setup tenant must grant it with an explicit role-permission row in the platform
+-- tenant. The permission also `requiresMfaEnrolment` (descriptor, not a column):
+-- an operator with no active factor is refused at the chokepoint.
 INSERT INTO awcms_permissions (module_key, activity_code, action, description, scope)
 VALUES
   ('channel_accounts', 'account_claims', 'revoke',
@@ -144,7 +161,7 @@ WHERE NOT EXISTS (
 --   3. a FIXED column list: the boundary is the columns, not the RLS;
 --   4. EXECUTE revoked from PUBLIC and granted to `awcms_app` only.
 --
--- It REQUIRES both the provider and the external id (equality, no pattern) and
+-- It REQUIRES the provider, the account kind and the external id (equality, no pattern) and
 -- returns at most the single row the unique index allows: it is a lookup, not a
 -- directory. It never returns the display name, the credential reference, the
 -- connection or any person.
@@ -175,6 +192,7 @@ CREATE POLICY awcms_channel_accounts_claim_locator_read
 
 CREATE OR REPLACE FUNCTION awcms_find_channel_account_claim_holder(
   p_provider text,
+  p_account_kind text,
   p_external_id text
 )
 RETURNS TABLE (
@@ -192,17 +210,18 @@ AS $function$
   SELECT a.tenant_id, a.id, a.account_kind, a.status, a.claim_basis
   FROM awcms_channel_accounts AS a
   WHERE a.provider = p_provider
+    AND a.account_kind = p_account_kind
     AND a.external_id = p_external_id
     AND a.deleted_at IS NULL
     AND (a.claim_basis = 'registration' OR a.status IN ('connected', 'degraded'))
   LIMIT 1;
 $function$;
 
-COMMENT ON FUNCTION awcms_find_channel_account_claim_holder(text, text) IS
-  'Issue #1215 / ADR-0170 option C. Which live row holds the global (provider, external_id) claim: the same predicate as awcms_channel_accounts_live_external_key. SECURITY DEFINER with the four sql/048 safeguards: NOLOGIN memberless owner awcms_channel_claim_locator, a SELECT policy for that role only, a fixed column list, EXECUTE for awcms_app only. Requires both arguments (equality), returns at most one row and never the display name, credential reference or any person. Called only by the platform release action, whose permission is platform-scoped.';
+COMMENT ON FUNCTION awcms_find_channel_account_claim_holder(text, text, text) IS
+  'Issue #1215 / ADR-0170 option C. Which live row holds the global (provider, account_kind, external_id) claim: the same predicate as awcms_channel_accounts_live_external_key. SECURITY DEFINER with the four sql/048 safeguards: NOLOGIN memberless owner awcms_channel_claim_locator, a SELECT policy for that role only, a fixed column list, EXECUTE for awcms_app only. Requires all three arguments (equality), returns at most one row and never the display name, credential reference or any person. Called only by the platform release action, whose permission is platform-scoped.';
 
-REVOKE ALL ON FUNCTION awcms_find_channel_account_claim_holder(text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text) TO awcms_app;
+REVOKE ALL ON FUNCTION awcms_find_channel_account_claim_holder(text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION awcms_find_channel_account_claim_holder(text, text, text) TO awcms_app;
 
-ALTER FUNCTION awcms_find_channel_account_claim_holder(text, text)
+ALTER FUNCTION awcms_find_channel_account_claim_holder(text, text, text)
   OWNER TO awcms_channel_claim_locator;

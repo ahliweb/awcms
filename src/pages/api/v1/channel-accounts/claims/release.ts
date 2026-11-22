@@ -1,10 +1,10 @@
 import { fail } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
+import { requireStepUp } from "../../../../../modules/identity-access/application/mfa-session-assurance";
 import {
   commonRefusal,
   readIdempotencyKey,
   readValidatedBody,
-  requireConditionalStepUp,
   runIdempotent
 } from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { releaseContestedClaim } from "../../../../../modules/channel-accounts/application/claim-release";
@@ -20,7 +20,7 @@ type Prepared = { idempotencyKey: string; input: ReleaseClaimBodyInput };
 /**
  * `POST /api/v1/channel-accounts/claims/release` (Issue #1215, ADR-0170 option
  * C) — the PLATFORM dispute path for an external-account claim. Body:
- * `{ provider, externalId, reason }`. It ends the account of ANOTHER tenant that
+ * `{ provider, accountKind, externalId, reasonCode, ticketRef?, reason }`. It ends the account of ANOTHER tenant that
  * holds the claim for that exact pair (soft delete, credential ciphertext and
  * webhook secrets erased, fixed reason `CLAIM_RELEASED_BY_PLATFORM`), so the
  * real owner can register and verify it. It does not decide who is right: the
@@ -31,10 +31,13 @@ type Prepared = { idempotencyKey: string; input: ReleaseClaimBodyInput };
  * unless the acting tenant IS the platform tenant, and it is in no catalogue
  * seeded to a tenant role, so a tenant owner is refused like anyone without the
  * grant (one uniform 403 from the chokepoint). A machine credential is refused.
- * A person who has an MFA factor must present a fresh step-up; `Idempotency-Key`
- * is required; the reason (10 to 500 characters) is mandatory. Audited twice:
- * `critical` in the platform tenant's trail (with the operator) and `warning`
- * in the holder tenant's own trail (without the operator, ADR-0091).
+ * The permission requires an ENROLLED MFA factor (`requiresMfaEnrolment`) and the
+ * route a fresh step-up, unconditionally (audit L3); `Idempotency-Key` is
+ * required; the reason (10 to 500 characters, no email or phone) is mandatory.
+ * Audited twice: `critical` in the platform tenant's trail (with the operator
+ * and the free-text reason) and `warning` in the holder tenant's own trail
+ * (without the operator, ADR-0091, and with only the closed reason code and the
+ * ticket reference, audit M2).
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -55,9 +58,18 @@ export const POST = defineTenantRoute<Prepared>({
 
     const { tx, tenantId, auth, prepared, locals } = context;
     const actor = auth.context.tenantUserId;
-    const stepUp = await requireConditionalStepUp(context);
+    // UNCONDITIONAL step-up (audit L3). This is safe here, unlike on a route a
+    // person without a factor may reach: the permission declares
+    // `requiresMfaEnrolment`, so the chokepoint already refused every operator
+    // with no active factor (`MFA_ENROLMENT_REQUIRED`) before this line.
+    const stepUp = await requireStepUp(
+      tx,
+      tenantId,
+      context.tokenHash,
+      context.now
+    );
 
-    if (stepUp) return stepUp;
+    if (!stepUp.ok) return stepUp.denied;
 
     return runIdempotent(
       tx,
@@ -92,7 +104,7 @@ export const POST = defineTenantRoute<Prepared>({
           return fail(
             409,
             result.code,
-            "The holder account has live child accounts; release those first."
+            "A child account of the holder still holds a claim of its own; release that one by its own id first."
           );
         }
 
@@ -100,6 +112,7 @@ export const POST = defineTenantRoute<Prepared>({
           status: 200,
           body: {
             released: true,
+            releasedChildren: result.releasedChildren,
             holderTenantId: result.holderTenantId,
             accountId: result.accountId,
             accountKind: result.accountKind,

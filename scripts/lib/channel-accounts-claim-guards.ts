@@ -39,13 +39,13 @@ const CLAIM_INDEXES: readonly { name: string; def: string }[] = [
   {
     name: "awcms_channel_accounts_live_external_key",
     def: normalise(
-      "CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key ON public.awcms_channel_accounts USING btree (provider, external_id) WHERE ((deleted_at IS NULL) AND ((claim_basis = 'registration'::text) OR (status = ANY (ARRAY['connected'::text, 'degraded'::text]))))"
+      "CREATE UNIQUE INDEX awcms_channel_accounts_live_external_key ON public.awcms_channel_accounts USING btree (provider, account_kind, external_id) WHERE ((deleted_at IS NULL) AND ((claim_basis = 'registration'::text) OR (status = ANY (ARRAY['connected'::text, 'degraded'::text]))))"
     )
   },
   {
     name: "awcms_channel_accounts_tenant_external_key",
     def: normalise(
-      "CREATE UNIQUE INDEX awcms_channel_accounts_tenant_external_key ON public.awcms_channel_accounts USING btree (tenant_id, provider, external_id) WHERE (deleted_at IS NULL)"
+      "CREATE UNIQUE INDEX awcms_channel_accounts_tenant_external_key ON public.awcms_channel_accounts USING btree (tenant_id, provider, account_kind, external_id) WHERE (deleted_at IS NULL)"
     )
   }
 ];
@@ -58,6 +58,7 @@ const LOCATOR_BODY = normalise(`
   SELECT a.tenant_id, a.id, a.account_kind, a.status, a.claim_basis
   FROM awcms_channel_accounts AS a
   WHERE a.provider = p_provider
+    AND a.account_kind = p_account_kind
     AND a.external_id = p_external_id
     AND a.deleted_at IS NULL
     AND (a.claim_basis = 'registration' OR a.status IN ('connected', 'degraded'))
@@ -232,7 +233,7 @@ export async function pinChannelAccountsClaimGuards(
              WHERE x.privilege_type = 'EXECUTE'
              ORDER BY 1) AS executors
     FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang
-    WHERE p.oid = to_regprocedure('awcms_find_channel_account_claim_holder(text,text)')
+    WHERE p.oid = to_regprocedure('awcms_find_channel_account_claim_holder(text,text,text)')
   `) as {
     definer: boolean;
     volatility: string;
@@ -247,7 +248,7 @@ export async function pinChannelAccountsClaimGuards(
 
   if (!fnRow) {
     findings.push(
-      "awcms_find_channel_account_claim_holder(text, text) is missing"
+      "awcms_find_channel_account_claim_holder(text, text, text) is missing"
     );
   } else {
     const differences: string[] = [];
@@ -407,10 +408,14 @@ export async function probeChannelAccountsClaimGuards(
           );
         }
       };
-      const holder = async (provider: string, externalId: string) =>
+      const holder = async (
+        provider: string,
+        kind: string,
+        externalId: string
+      ) =>
         (await tx`
           SELECT tenant_id, account_id
-          FROM awcms_find_channel_account_claim_holder(${provider}, ${externalId})
+          FROM awcms_find_channel_account_claim_holder(${provider}, ${kind}, ${externalId})
         `) as { tenant_id: string; account_id: string }[];
       const bot = `9${seed.replace(/\D/g, "").padEnd(6, "1")}`;
       const sender = `probe-${seed}@claim.invalid`;
@@ -440,7 +445,7 @@ export async function probeChannelAccountsClaimGuards(
         }
       );
 
-      if ((await holder("telegram", bot)).length !== 0) {
+      if ((await holder("telegram", "bot", bot)).length !== 0) {
         findings.push(
           "a pending verification-basis row is reported as holding a claim"
         );
@@ -455,7 +460,7 @@ export async function probeChannelAccountsClaimGuards(
         () => connect(tenantB, botB)
       );
 
-      const held = await holder("telegram", bot);
+      const held = await holder("telegram", "bot", bot);
 
       if (
         held.length !== 1 ||
@@ -499,18 +504,78 @@ export async function probeChannelAccountsClaimGuards(
           )
       );
 
-      if ((await holder("starsender", sender))[0]?.account_id !== device) {
+      if (
+        (await holder("starsender", "device", sender))[0]?.account_id !== device
+      ) {
         findings.push(
           "the locator does not answer the holder of a registration-basis claim"
         );
       }
-      if ((await holder("facebook", sender)).length !== 0) {
+      if ((await holder("facebook", "device", sender)).length !== 0) {
         findings.push("the locator answered for another provider");
       }
-      if ((await holder("starsender", sender.toUpperCase())).length !== 0) {
+      if (
+        (await holder("starsender", "device", sender.toUpperCase())).length !==
+        0
+      ) {
         findings.push(
           "the locator matched a different external id (it must be an exact equality)"
         );
+      }
+
+      // The KIND is part of the claim key (audit H1): a registration-basis row
+      // of ANOTHER kind with the same external id neither blocks a verification
+      // of the bot nor is blocked by it, and the locator does not cross kinds.
+      const crossId = `8${bot}`;
+      const channel = await insert(
+        tenantB,
+        "telegram",
+        "channel",
+        "bot_token",
+        crossId,
+        "registration"
+      );
+      const crossBot = await insert(
+        tenantA,
+        "telegram",
+        "bot",
+        "bot_token",
+        crossId,
+        "verification"
+      );
+
+      await allows(
+        "verifying a bot whose id another tenant used for a registration-basis channel",
+        () => connect(tenantA, crossBot)
+      );
+      await allows(
+        "registering a channel with the id of a bot another tenant already verified",
+        () =>
+          insert(
+            tenantB,
+            "telegram",
+            "channel",
+            "bot_token",
+            bot,
+            "registration"
+          )
+      );
+
+      if (
+        (await holder("telegram", "bot", crossId))[0]?.account_id !== crossBot
+      ) {
+        findings.push("the locator did not answer the bot for a bot id");
+      }
+      if (
+        (await holder("telegram", "channel", crossId))[0]?.account_id !==
+        channel
+      ) {
+        findings.push(
+          "the locator did not answer the channel for a channel id"
+        );
+      }
+      if ((await holder("mailketing", "esp_account", crossId)).length !== 0) {
+        findings.push("the locator crossed account kinds");
       }
 
       // The basis is immutable.

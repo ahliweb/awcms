@@ -584,7 +584,18 @@ suite("telegram_engagement against PostgreSQL (Issue #1156)", () => {
       // ...and the connector's getMe proves the id, but the claim is already
       // T1's: the endpoint FAILS with the registration-refusal code, the account
       // stays pending, and nothing is served for it.
+      const webhookCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "setWebhook" && c.token.startsWith(`${BOT_IDS.a}:`)
+        ).length;
+      const before = webhookCalls();
+
       await dispatch(T2);
+
+      // Audit L1: the claim comes BEFORE setWebhook, and the loser never calls
+      // it, so it cannot overwrite the winner's webhook with its own.
+      expect(webhookCalls()).toBe(before);
 
       const endpoint = (await getAdminSql()`
         SELECT state, last_error_code FROM awcms_telegram_engagement_endpoints

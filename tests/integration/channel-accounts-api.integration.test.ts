@@ -308,6 +308,15 @@ function call<T = unknown>(
 
 const BASE = "/api/v1/channel-accounts";
 
+/** A stable all-digit id for a fixture name (the shape a Facebook page id has). */
+function numericId(name: string): string {
+  let hash = 7;
+
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+
+  return String(Math.abs(hash)).padStart(8, "1");
+}
+
 /**
  * Registers an account through the API and, unless `open: false`, switches it
  * to `tenant_wide` (#1215 M-c). A new account starts `assigned` to its creator,
@@ -603,30 +612,16 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             token,
             body: { appSecret: "0123456789abcdef0123456789abcdef" }
           })
-      ],
-      [
-        // ADR-0170 option C. PLATFORM-scoped: `env.tenantId` is the setup tenant
-        // and therefore the platform tenant, which is the only tenant it can be
-        // exercised from.
-        "channel_accounts.account_claims.revoke",
-        (_id, token) =>
-          call(releaseClaimRoute, {
-            method: "POST",
-            path: `${BASE}/claims/release`,
-            token,
-            body: {
-              provider: "starsender",
-              externalId: "no-such-claim",
-              reason: "guard probe: nothing is held for this id"
-            }
-          })
       ]
     ];
 
     test("the table covers every permission but the credential one (tested below)", () => {
       expect(actions.map(([key]) => key).sort()).toEqual(
         ALL_PERMISSIONS.filter(
-          (key) => key !== "channel_accounts.credentials.manage"
+          (key) =>
+            key !== "channel_accounts.credentials.manage" &&
+            // PLATFORM + MFA enrolment (ADR-0170, audit L3): its own test below.
+            key !== "channel_accounts.account_claims.revoke"
         ).sort()
       );
     });
@@ -677,7 +672,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       INSERT INTO awcms_channel_accounts
         (tenant_id, provider, account_kind, external_id, display_name,
          auth_mode, status)
-      VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba', 'waba-t3-1', 'waba',
+      VALUES (${env.tenantId}, 'whatsapp_cloud', 'waba', '3000000003', 'waba',
               'api_token', 'connected')
       RETURNING id
     `) as { id: string }[];
@@ -1135,7 +1130,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         INSERT INTO awcms_channel_accounts
           (tenant_id, provider, account_kind, external_id, display_name,
            auth_mode, connection_id, access_mode)
-        VALUES (${env.tenantId}, 'facebook', 'page', 'pg-1', 'Page 1',
+        VALUES (${env.tenantId}, 'facebook', 'page', '10000001', 'Page 1',
                 'oauth2', ${connection[0]!.id}, 'tenant_wide') RETURNING id
       `) as { id: string }[];
       const fresh = await holder({ enrolled: true, steppedUp: true });
@@ -1525,8 +1520,8 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       const operator = await seedUser(env.tenantId, "op", OPERATOR_KEYS);
       const connection = await seedConnection();
-      const mine = await seedBoundAccount(connection, "page-mine");
-      const theirs = await seedBoundAccount(connection, "page-theirs");
+      const mine = await seedBoundAccount(connection, "10000021");
+      const theirs = await seedBoundAccount(connection, "10000022");
 
       expect((await assign(mine, operator.tenantUserId, "owner")).status).toBe(
         200
@@ -1658,7 +1653,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       await seedBoundAccount(
         connection,
-        "page-scoped",
+        "10000023",
         { officeId: office },
         "tenant_wide"
       );
@@ -1856,7 +1851,8 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       provider: "facebook",
       accountKind: "page",
       authMode: "oauth2",
-      externalId,
+      // A Facebook page id is numeric (ADR-0170 shape check).
+      externalId: numericId(externalId),
       displayName: `Page ${externalId}`,
       connectionId,
       businessScope: officeId ? { type: "office", id: officeId } : null
@@ -2208,7 +2204,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
           provider: "instagram",
           accountKind: "professional_account",
           authMode: "oauth2",
-          externalId: "l2-mismatch",
+          externalId: "20000000123",
           displayName: "Page l2",
           connectionId: connection
         }
@@ -2220,7 +2216,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
           provider: "instagram",
           accountKind: "professional_account",
           authMode: "oauth2",
-          externalId: "l2-mismatch",
+          externalId: "20000000123",
           displayName: "Page l2",
           connectionId: crypto.randomUUID()
         }
@@ -2301,7 +2297,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       const audit = (await admin()`
         SELECT attributes FROM awcms_audit_events
         WHERE action = 'channel_accounts.account.create'
-          AND resource_id = (SELECT id::text FROM awcms_channel_accounts WHERE external_id = 'cont-b-on-b')
+          AND resource_id = (SELECT id::text FROM awcms_channel_accounts WHERE external_id = ${numericId("cont-b-on-b")})
       `) as { attributes: Record<string, unknown> }[];
 
       expect(audit[0]!.attributes.connectionId).toBe(scopedB);
@@ -2461,7 +2457,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             provider: "facebook",
             accountKind: "page",
             authMode: "oauth2",
-            externalId: `low1-second-${key}`,
+            externalId: numericId(`low1-second-${key}`),
             displayName: "Page low1 second",
             connectionId
           }
@@ -3644,18 +3640,40 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       expect(rows).toHaveLength(2);
       expect(rows[0]!.indexdef).toContain("UNIQUE");
-      expect(rows[0]!.indexdef).toContain("(provider, external_id)");
+      expect(rows[0]!.indexdef).toContain(
+        "(provider, account_kind, external_id)"
+      );
       expect(rows[0]!.indexdef).toContain("claim_basis");
       expect(rows[0]!.indexdef).toContain("'connected'");
-      expect(rows[1]!.indexdef).toContain("(tenant_id, provider, external_id)");
+      expect(rows[1]!.indexdef).toContain(
+        "(tenant_id, provider, account_kind, external_id)"
+      );
     });
   });
 
   describe("platform release of a contested claim (Issue #1215, ADR-0170 option C)", () => {
     const releaseBody = (externalId: string) => ({
       provider: "starsender",
+      accountKind: "device",
       externalId,
-      reason: "verified out of band (ticket 1215)"
+      reasonCode: "ownership_dispute_resolved",
+      ticketRef: "TKT-1215",
+      reason: "verified out of band: SECRET-FREE-TEXT basis"
+    });
+
+    // The platform operator: an ENROLLED MFA factor is required by the permission
+    // (audit L3), and a fresh step-up by the route.
+    let operator: { token: string; tenantUserId: string };
+
+    beforeEach(async () => {
+      if (!handlerReady) return;
+
+      operator = await seedUser(
+        env.tenantId,
+        "op-claims",
+        ["channel_accounts.account_claims.revoke"],
+        { enrolled: true, steppedUp: true }
+      );
     });
 
     const release = (
@@ -3673,13 +3691,13 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       }>(releaseClaimRoute, {
         method: "POST",
         path: `${BASE}/claims/release`,
-        token: options.token,
+        token: options.token === undefined ? operator.token : options.token,
         idempotencyKey: options.key,
         tenantId: options.tenantId,
         body
       });
 
-    async function plainTenant(code: string) {
+    async function plainTenant(code: string, enrolled = false) {
       const tenantId = crypto.randomUUID();
 
       await admin()`
@@ -3687,7 +3705,10 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         VALUES (${tenantId}, ${code}, ${code})
       `;
 
-      const user = await seedUser(tenantId, `adm-${code}`, ALL_PERMISSIONS);
+      const user = await seedUser(tenantId, `adm-${code}`, ALL_PERMISSIONS, {
+        enrolled,
+        steppedUp: enrolled
+      });
 
       return { tenantId, ...user };
     }
@@ -3807,13 +3828,19 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect(holderTrail.actor_tenant_id).toBe(env.tenantId);
       expect(platformTrail.tenant_id).toBe(env.tenantId);
       expect(platformTrail.severity).toBe("critical");
-      expect(platformTrail.actor_tenant_user_id).toBe(env.ownerTenantUserId);
+      expect(platformTrail.actor_tenant_user_id).toBe(operator.tenantUserId);
 
       for (const trail of trails) {
         expect(trail.attributes).not.toContain("squat-dev-1");
         expect(trail.attributes).not.toContain(CANARY);
-        expect(trail.attributes).toContain("ticket 1215");
+        expect(trail.attributes).toContain("TKT-1215");
+        expect(trail.attributes).toContain("ownership_dispute_resolved");
       }
+
+      // M2: the free text is the OPERATOR's trail only; the holder, the opposing
+      // party, sees the closed code and the ticket reference.
+      expect(holderTrail.attributes).not.toContain("SECRET-FREE-TEXT");
+      expect(platformTrail.attributes).toContain("SECRET-FREE-TEXT");
 
       // The real owner can now register the id, and the second call with the
       // same key replays without a second release or a second audit row.
@@ -3848,7 +3875,8 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       if (!handlerReady) return;
 
       const squat = await holderTenant("rel-deny-squat", "deny-dev-1");
-      const other = await plainTenant("rel-deny-other");
+      // Enrolled and stepped up, so it is the PLATFORM gate that refuses.
+      const other = await plainTenant("rel-deny-other", true);
       const nobody = await seedUser(other.tenantId, "nobody", []);
       // `other.token` holds EVERY channel_accounts permission, the platform one
       // included (the fixture seeds the row), in a tenant that is not the
@@ -3911,7 +3939,25 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         { provider: "starsender", externalId: "step-dev-1" },
         { ...releaseBody("step-dev-1"), reason: "short" },
         { ...releaseBody("step-dev-1"), extra: true },
-        { ...releaseBody("step-dev-1"), provider: "Not-Snake" }
+        { ...releaseBody("step-dev-1"), provider: "Not-Snake" },
+        // audit H1: the kind is part of the claim key and required
+        {
+          provider: "starsender",
+          externalId: "step-dev-1",
+          reasonCode: "ownership_dispute_resolved",
+          reason: "verified out of band basis"
+        },
+        { ...releaseBody("step-dev-1"), reasonCode: "because" },
+        { ...releaseBody("step-dev-1"), ticketRef: "has space!" },
+        // audit M2: free text may not carry an email address or a phone number
+        {
+          ...releaseBody("step-dev-1"),
+          reason: "claimant is someone@example.org per our call"
+        },
+        {
+          ...releaseBody("step-dev-1"),
+          reason: "claimant phoned from +62 812 3456 7890 yesterday"
+        }
       ]) {
         expect((await release(bad, { token: fresh.token })).status).toBe(400);
       }
@@ -3930,7 +3976,68 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       ).toBe(200);
     });
 
-    test("an id nobody holds is 404, and a holder with live children is refused until they are released", async () => {
+    test("L3: an operator with NO active MFA factor is refused at the chokepoint, even holding the platform permission", async () => {
+      if (!handlerReady) return;
+
+      await holderTenant("rel-nomfa-squat", "nomfa-dev-1");
+
+      const bare = await seedUser(env.tenantId, "op-nomfa", [
+        "channel_accounts.account_claims.revoke"
+      ]);
+      const refused = await release(releaseBody("nomfa-dev-1"), {
+        token: bare.token
+      });
+
+      expect(refused.status).toBe(403);
+      expect(refused.body.error?.code).toBe("MFA_ENROLMENT_REQUIRED");
+      expect(
+        (
+          (await admin()`
+            SELECT status FROM awcms_channel_accounts WHERE external_id = 'nomfa-dev-1'
+          `) as { status: string }[]
+        )[0]!.status
+      ).toBe("pending");
+
+      // The permission alone is not enough either: without it, the enrolled
+      // operator is refused too (default-deny).
+      const noPermission = await seedUser(env.tenantId, "op-noperm", [], {
+        enrolled: true,
+        steppedUp: true
+      });
+
+      expect(
+        (
+          await release(releaseBody("nomfa-dev-1"), {
+            token: noPermission.token
+          })
+        ).status
+      ).toBe(403);
+    });
+
+    test("an external id must have the shape of its kind (audit H1): the refusal is the same for a held and a free id", async () => {
+      if (!handlerReady) return;
+
+      const holder = await plainTenant("rel-shape");
+      const bot = (id: string) =>
+        register(
+          id,
+          holder.token,
+          {
+            provider: "telegram",
+            accountKind: "channel",
+            authMode: "bot_token"
+          },
+          holder.tenantId
+        );
+      const bare = await bot("7000000777");
+      const channel = await bot("-1007000000777");
+
+      expect(bare.status).toBe(422);
+      expect(bare.body.error?.code).toBe("EXTERNAL_ID_INVALID");
+      expect(channel.status).toBe(201);
+    });
+
+    test("an id nobody holds is 404, and a holder with a child that holds a claim is refused until that child is released", async () => {
       if (!handlerReady) return;
 
       expect((await release(releaseBody("held-by-nobody"))).status).toBe(404);
@@ -3945,7 +4052,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       const waba = (await admin()`
         INSERT INTO awcms_channel_accounts
           (tenant_id, provider, account_kind, external_id, display_name, auth_mode)
-        VALUES (${tenantId}, 'whatsapp_cloud', 'waba', 'waba-kids-1', 'waba', 'api_token')
+        VALUES (${tenantId}, 'whatsapp_cloud', 'waba', '5550000001', 'waba', 'api_token')
         RETURNING id
       `) as { id: string }[];
 
@@ -3957,17 +4064,21 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
                 '9990000000001', 'number', 'api_token', ${waba[0]!.id})
       `;
 
-      const body = (externalId: string) => ({
+      const body = (externalId: string, accountKind: string) => ({
         provider: "whatsapp_cloud",
+        accountKind,
         externalId,
+        reasonCode: "ownership_dispute_resolved",
         reason: "verified out of band (ticket 1215)"
       });
-      const blocked = await release(body("waba-kids-1"));
+      const blocked = await release(body("5550000001", "waba"));
 
       expect(blocked.status).toBe(409);
       expect(blocked.body.error?.code).toBe("HAS_CHILD_ACCOUNTS");
-      expect((await release(body("9990000000001"))).status).toBe(200);
-      expect((await release(body("waba-kids-1"))).status).toBe(200);
+      expect(
+        (await release(body("9990000000001", "waba_phone_number"))).status
+      ).toBe(200);
+      expect((await release(body("5550000001", "waba"))).status).toBe(200);
     });
 
     test("a pending claim that holds nothing (verification basis) is not releasable: there is no claim to release", async () => {
@@ -3986,7 +4097,9 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         (
           await release({
             provider: "telegram",
+            accountKind: "bot",
             externalId: "7300000001",
+            reasonCode: "ownership_dispute_resolved",
             reason: "verified out of band (ticket 1215)"
           })
         ).status

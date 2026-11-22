@@ -13,6 +13,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 
 import {
+  externalIdShapeOk,
   PROVIDER_MATRIX,
   VERIFIED_CLAIM_KINDS,
   claimBasisFor
@@ -147,7 +148,8 @@ describe("the platform release action", () => {
       "src/pages/api/v1/channel-accounts/claims/release.ts"
     ]);
     expect(route).toContain("CHANNEL_ACCOUNTS_GUARDS.releaseClaim");
-    expect(route).toContain("requireConditionalStepUp");
+    expect(route).toContain("requireStepUp(");
+    expect(route).not.toContain("requireConditionalStepUp");
     expect(route).toContain("runIdempotent");
     expect(constants).toMatch(
       /releaseClaim:\s*\{[^}]*activityCode: ACCOUNT_CLAIMS_ACTIVITY_CODE,[^}]*action: "revoke"/
@@ -175,5 +177,55 @@ describe("the platform release action", () => {
     }
 
     expect(seeding).toEqual(["416_awcms_channel_accounts_claim_on_verify.sql"]);
+  });
+});
+
+describe("external id shapes (audit H1)", () => {
+  test("the namespaces of two kinds of one provider cannot overlap", () => {
+    // a bot is a positive integer; a channel is -100... or @name, never an integer
+    expect(externalIdShapeOk("telegram", "bot", "7000000001")).toBe(true);
+    expect(externalIdShapeOk("telegram", "bot", "-1001234567890")).toBe(false);
+    expect(externalIdShapeOk("telegram", "bot", "@name_bot")).toBe(false);
+    expect(externalIdShapeOk("telegram", "bot", "0123")).toBe(false);
+    expect(externalIdShapeOk("telegram", "channel", "7000000001")).toBe(false);
+    expect(externalIdShapeOk("telegram", "channel", "-1001234567890")).toBe(
+      true
+    );
+    expect(externalIdShapeOk("telegram", "channel", "@mychannel")).toBe(true);
+    // an ESP login is never an address; a sender is always the lowercase one
+    expect(
+      externalIdShapeOk("mailketing", "esp_account", "ops@victim.test")
+    ).toBe(false);
+    expect(externalIdShapeOk("mailketing", "esp_account", "victim-esp-1")).toBe(
+      true
+    );
+    expect(
+      externalIdShapeOk("mailketing", "sender_identity", "ops@victim.test")
+    ).toBe(true);
+    expect(
+      externalIdShapeOk("mailketing", "sender_identity", "Ops@Victim.test")
+    ).toBe(false);
+    expect(
+      externalIdShapeOk("mailketing", "sender_identity", "victim-esp-1")
+    ).toBe(false);
+  });
+
+  test("documented ids are enforced, unknown providers and kinds are left open", () => {
+    expect(
+      externalIdShapeOk(
+        "whatsapp_cloud",
+        "waba_phone_number",
+        "123456789012345"
+      )
+    ).toBe(true);
+    expect(
+      externalIdShapeOk("whatsapp_cloud", "waba_phone_number", "not-a-number")
+    ).toBe(false);
+    expect(externalIdShapeOk("facebook", "page", "10000000001")).toBe(true);
+    expect(externalIdShapeOk("facebook", "page", "page-1")).toBe(false);
+    expect(
+      externalIdShapeOk("tiktok", "creator_account", "anything goes here")
+    ).toBe(true);
+    expect(externalIdShapeOk("__proto__", "x", "y")).toBe(true);
   });
 });

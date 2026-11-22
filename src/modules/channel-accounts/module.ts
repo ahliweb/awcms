@@ -137,6 +137,9 @@ export const channelAccountsModule = defineModule({
       activityCode: ACCOUNT_CLAIMS_ACTIVITY_CODE,
       action: "revoke",
       scope: "platform",
+      // A destructive, cross-tenant, `critical` action (audit L3): no operator
+      // may exercise it on a password alone.
+      requiresMfaEnrolment: true,
       description:
         "PLATFORM: release a contested external-account claim held by another tenant (soft-deletes the holder account and erases its credential; critical audit in both tenants' trails)"
     }
