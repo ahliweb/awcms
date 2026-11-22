@@ -410,6 +410,84 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
+- **KEPUTUSAN 22 NOVEMBER 2026 (K1-K14), DIDELEGASIKAN KE ORCHESTRATOR.**
+  Pemilik (ahliweb) mendelegasikan keputusan yang terbuka kepada orchestrator
+  dengan instruksi "pilihkan yang terbaik sesuai rekomendasi dan praktek
+  profesional, prioritas skalabilitas, performa dan security". Ini keputusan
+  agen di bawah delegasi itu, dicatat apa adanya, bukan keputusan yang
+  dibuat pemilik satu per satu. Perubahan status ADR: **ADR-0164 Diterima**
+  (sudah diimplementasikan dan digerbangi sejak #1361), **ADR-0165 Diterima**
+  (K1), **ADR-0163 Diterima** (K5), **ADR-0158 Diterima sebagai syarat** (K4).
+  **SENGAJA tidak diputuskan agen** (akuntabilitas hukum, tidak bisa
+  didelegasikan): (a) persetujuan DPIA payroll fase 3 (#976; pengendali data
+  menandatangani, UU PDP; agen hanya menyusun draf), dan (b) teks pengakuan
+  risiko StarSender (ADR-0158 Q4; pemilik atau penasihat hukum yang menyetujui,
+  teks dikirim dengan `approval: null`). Hanya dokumen; tanpa migrasi. Keputusan:
+  K1 (#1321, ADR-0165 Q1) opsi 0 menjadi keputusan tetap dan #1321 ditutup;
+  opsi 2 (`SECURITY DEFINER`) pra-disetujui begitu korpus publik tenant terbesar
+  melebihi 100.000 dokumen atau p95 pencarian publik melebihi 50 ms di produksi,
+  dengan gerbangnya dan review keamanan (dilacak di #1433); opsi 3 (`LEAKPROOF`)
+  ditolak permanen.
+  K2 (#1215, squatting external_id) A + C, B ditolak: ADR-0170 akan
+  mengamandemen I1 ADR-0148 menjadi "unik per id terverifikasi"; klaim `pending`
+  ganda diterima per tenant tanpa oracle, yang pertama terverifikasi menang
+  (indeks unik parsial, race-safe) dan yang kalah mendapat 409 saat verifikasi;
+  provider tanpa verifikasi (StarSender) tetap memegang klaim plus jalur
+  sengketa C (platform-scoped, step-up, audit, tidak di-seed ke role tenant);
+  M1 dan M3 sudah diperbaiki oleh PR #1218/#1219 (diverifikasi ulang 22 Nov
+  dengan mutasi: jumlah baris decision log satu GET tetap paling banyak 6 untuk
+  4 maupun 24 koneksi).
+  K3 (#1095) rute mutasi payroll mengembalikan bentuk ber-masking (nilai penuh
+  hanya dari endpoint baca yang diaudit); `payroll:catalog-boundary:check`
+  dijadwalkan harian terhadap DB terpasang dengan role khusus minimal (CONNECT
+  plus katalog, tanpa SELECT tabel), operator menyediakan kredensial, dan
+  `PAYROLL_EXPECTED_OWNERS` wajib di split-role; arah allow-list diterima sebagai
+  isu terpisah.
+  K4 (#1142, ADR-0158) Q1 sampai Q3 ya; Q4 draf agen menunggu pemilik atau
+  penasihat hukum; adapter tetap OFF, produksi hanya setelah Q4 plus checklist
+  runbook bagian 6 dengan perangkat uji; Meta Cloud API resmi (#1143)
+  didahulukan.
+  K5 (ADR-0163) Q1 manusia pemilik kredensial mesin (satu pemilik bernama; pemilik
+  dinonaktifkan = kredensial dicabut), Q2 agen tidak boleh mengusulkan
+  `rollback` atau restore backup, Q3 kuorum dua untuk usulan yang mengganggu
+  (`stop`, `restart`, `update`) dan satu penyetuju untuk `status`/`preflight`/
+  `backup`/`start`, Q4 kedaluwarsa 24 jam, fail-closed; D7 butuh perubahan
+  kontrak di `ahliweb/omes` (di luar repo ini).
+  K6 (ADR-0164) Diterima.
+  K7 (#1391-#1395) buka blokir #1391, lalu #1392, lalu #1393 dan #1395, berurutan
+  setelah #1390 merge; #1394 tetap diblokir sampai ada konsumen (awcms-astro)
+  yang meminta fixture terpatok.
+  K8 (#1405-#1407) ADR-0168 direview `awcms-security-auditor` setelah #1417
+  merge, lalu Diterima, lalu #1405 dibangun; #1406 lanjut (ADR native OIDC +
+  PKCE, refresh berotasi dengan deteksi reuse); #1407 setelah #1405.
+  K9 (#1353) lanjut: seam off-by-default, fail-closed, Turnstile yang sudah ada
+  sebagai provider pertama di belakangnya, registrasi lewat deskriptor; rate
+  limit tetap kontrol utama.
+  K10 (#1356) lanjut bertahap, satu child issue per item, urut frekuensi konflik
+  sync; deskriptor hanya boleh MENAMBAH ekspektasi di bawah plafon pusat, dan
+  deny-list global tetap pusat; item privilege DB terakhir, dengan review
+  keamanan.
+  K11 (sosial S1-S4) S1 A (Hermes pengusul, ADR dulu); S2 A (bekukan DM Meta di
+  Hermes, inbound di awcms, WABA pindah setelah #1143 terbukti); S3 A (Instagram,
+  lalu Telegram channel, lalu Threads, lalu YouTube/TikTok); S4 B (app Meta baru
+  khusus publikasi, terpisah). Syarat admisi #1145 (retensi bukti, role DB
+  khusus worker, review jalur kredensial) mendahului konektor mana pun keluar
+  dari flag.
+  K12 (#1171) diprioritaskan demi skalabilitas: fan-out lintas-instance lewat
+  PostgreSQL LISTEN/NOTIFY (tanpa layanan baru), payload hanya id/topik tanpa
+  PII, uji race multi-instance.
+  K13 (kegiatan manusia) #976 agen menyusun draf DPIA dan pemilik
+  menandatangani; #968 separuh generik diotomasi (gladi restore di DB sekali
+  pakai), drill produksi oleh operator; #1283 harness plus baseline lokal,
+  baseline mirip-produksi menunggu #1281; #1150 agen menulis dokumen dari
+  dokumentasi resmi LinkedIn, review hukum oleh pemilik; #1159 verifikasi live
+  butuh kredensial dan kirim uji oleh operator.
+  K14 (lainnya) #1185 dikerjakan (uji konsumen terhadap kontrak terpatok di repo
+  ini); #1186 setelah implementasi ADR-0163; CRM #1164-#1166 setelah gelombang 2;
+  #1173 tetap terbuka sebagai tugas berulang bulanan. Gelombang: G1 adalah PR
+  keputusan ini, #1095 masking plus job harian, dan fan-out #1171;
+  G2 dan G3 mengikuti urutan di atas.
+
 - **KEPUTUSAN 22 NOVEMBER 2026 (K16): ADR-0168 (passkey, WebAuthn) DITERIMA
   DENGAN AMANDEMEN (#1405, #1406, #1407).** Melaksanakan K8: pemilik
   mendelegasikan keputusan ke orchestrator, diambil setelah tinjauan
