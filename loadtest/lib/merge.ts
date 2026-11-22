@@ -40,12 +40,32 @@ export type Saturation = {
   netPeakMbps: number;
   /** NIC speed in Mbit/s when the kernel reports it, else null. */
   linkMbps: number | null;
+  /** Logical CPUs of the generator host (absent in older records). */
+  cpus?: number;
+  /**
+   * CPU used by the k6 processes of this run alone, as a percentage of the
+   * whole host's capacity. null: could not be attributed (no k6 process found).
+   * Absent in records written before this field existed.
+   */
+  procCpuAvgPct?: number | null;
+  procCpuPeakPct?: number | null;
+  /** 1-minute load average at the end of the run: how contended the host was. */
+  loadAvg1End?: number;
 };
+
+/**
+ * "host" (default, strict): judge the generator by whole-host CPU, so any
+ * neighbour on the machine counts against it. "process": judge it by the k6
+ * processes' own CPU. Only meaningful on a shared development machine; the
+ * report then says so, because neighbours may still have starved the app.
+ */
+export type CpuBasis = "host" | "process";
 
 export type SaturationLimits = {
   maxCpuPct: number;
   maxNetPct: number;
   maxDroppedRatio: number;
+  cpuBasis?: CpuBasis;
 };
 
 export const DEFAULT_LIMITS: SaturationLimits = {
@@ -66,6 +86,9 @@ export type MergedReport = {
   requests: number;
   durationSec: number;
   meanRps: number;
+  /** Completed iterations (page views or API calls), not HTTP requests: a locale redirect makes one iteration two requests. */
+  iterations: number;
+  requestsPerIteration: number;
   serverErrorRate: number;
   rateLimitedResponses: number;
   droppedIterations: number;
@@ -74,6 +97,14 @@ export type MergedReport = {
   thresholdsOk: boolean;
   saturation: {
     ok: boolean;
+    cpuBasis: CpuBasis;
+    /** Context for a shared host; never a reason by itself in process basis. */
+    hostContention: Array<{
+      generatorId: string;
+      hostCpuPeakPct: number;
+      procCpuPeakPct: number | null;
+      loadAvg1End: number | null;
+    }>;
     perGenerator: Array<{
       generatorId: string;
       ok: boolean;
@@ -94,7 +125,17 @@ export function evaluateSaturation(
   limits: SaturationLimits
 ): { ok: boolean; reasons: string[] } {
   const reasons: string[] = [];
-  if (sat.cpuPeakPct > limits.maxCpuPct) {
+  if (limits.cpuBasis === "process") {
+    if (sat.procCpuPeakPct === undefined || sat.procCpuPeakPct === null) {
+      reasons.push(
+        "generator process CPU could not be attributed: cannot judge saturation"
+      );
+    } else if (sat.procCpuPeakPct > limits.maxCpuPct) {
+      reasons.push(
+        `generator process CPU peak ${sat.procCpuPeakPct.toFixed(0)}% of host > ${limits.maxCpuPct}%`
+      );
+    }
+  } else if (sat.cpuPeakPct > limits.maxCpuPct) {
     reasons.push(
       `generator CPU peak ${sat.cpuPeakPct.toFixed(0)}% > ${limits.maxCpuPct}%`
     );
@@ -243,13 +284,25 @@ export function mergeResults(
     requests,
     durationSec,
     meanRps: durationSec === 0 ? 0 : requests / durationSec,
+    iterations,
+    requestsPerIteration: iterations === 0 ? 0 : requests / iterations,
     serverErrorRate,
     rateLimitedResponses,
     droppedIterations: dropped,
     droppedRatio,
     latencyMs,
     thresholdsOk,
-    saturation: { ok: saturationOk, perGenerator },
+    saturation: {
+      ok: saturationOk,
+      cpuBasis: limits.cpuBasis ?? "host",
+      hostContention: saturations.map((s) => ({
+        generatorId: s.generatorId,
+        hostCpuPeakPct: s.cpuPeakPct,
+        procCpuPeakPct: s.procCpuPeakPct ?? null,
+        loadAvg1End: s.loadAvg1End ?? null
+      })),
+      perGenerator
+    },
     accepted,
     problems
   };
@@ -260,6 +313,7 @@ export function renderReport(report: MergedReport): string {
     `run ${report.runId}  scenario ${report.scenario}  profile ${report.profile}`,
     `generators ${report.generators}/${report.expectedGenerators}  target ${report.targetRpsAggregate} rps (aggregate)`,
     `requests ${report.requests}  duration ${report.durationSec.toFixed(0)} s  mean ${report.meanRps.toFixed(1)} rps`,
+    `iterations ${report.iterations}  requests per iteration ${report.requestsPerIteration.toFixed(2)} (above 1 means redirects are counted as requests)`,
     `5xx rate ${(report.serverErrorRate * 100).toFixed(2)}%  HTTP 429 ${report.rateLimitedResponses}  dropped iterations ${report.droppedIterations} (${(report.droppedRatio * 100).toFixed(2)}%)`,
     "latency ms (weighted mean of generators / worst generator):"
   ];
@@ -270,10 +324,20 @@ export function renderReport(report: MergedReport): string {
   }
   lines.push(
     `k6 thresholds (p95, 5xx): ${report.thresholdsOk ? "PASS" : "FAIL"}`,
-    `client saturation: ${report.saturation.ok ? "OK" : "SATURATED"}`
+    `client saturation (CPU basis ${report.saturation.cpuBasis}): ${report.saturation.ok ? "OK" : "SATURATED"}`
   );
   for (const g of report.saturation.perGenerator) {
     lines.push(`  ${g.generatorId}: ${g.ok ? "ok" : g.reasons.join("; ")}`);
+  }
+  for (const c of report.saturation.hostContention) {
+    lines.push(
+      `  ${c.generatorId}: host CPU peak ${c.hostCpuPeakPct.toFixed(0)}%, k6 own CPU peak ${c.procCpuPeakPct === null ? "unknown" : `${c.procCpuPeakPct.toFixed(1)}%`}, load1 at end ${c.loadAvg1End === null ? "unknown" : c.loadAvg1End.toFixed(1)}`
+    );
+  }
+  if (report.saturation.cpuBasis === "process") {
+    lines.push(
+      "note: process CPU basis judges only the generators; neighbours on a shared host may still have limited the app. Local, not an NFR measurement."
+    );
   }
   for (const p of report.problems) lines.push(`problem: ${p}`);
   lines.push(

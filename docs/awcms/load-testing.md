@@ -60,6 +60,11 @@ id>`, which it wrote itself. Anything else aborts.
 - `loadtest:run` refuses to start unless `LOADTEST_TARGET_APPROVED` equals the
   run id, and the k6 `setup()` aborts unless the tenant seeded **for this run**
   answers on the target. A mistyped URL fails there, before any load.
+- `loadtest:run` refuses any `--base-url` whose host is not loopback or a
+  private address (RFC 1918, `localhost`, `*.localhost`, `::1`) unless the host
+  is repeated with `--confirm-remote-target <host>`. The tool cannot know which
+  host is production, so anything routable needs that second, explicit step.
+  Never aim it at production.
 - The app runs as `APP_ENV=production` with the least-privilege `awcms_app` and
   `awcms_setup` roles activated, so RLS is exercised as in production rather
   than bypassed by a superuser.
@@ -135,6 +140,18 @@ there was no HTTP 429. An unknown NIC speed counts as not accepted (pass
 a VM). **A run that is not accepted is not a baseline**: add generators or lower
 the target until the limit visibly sits on the application side.
 
+**Shared development host.** The CPU check reads whole-host CPU, so on a
+machine with neighbours it rejects every run for reasons unrelated to the
+generators. `loadtest:merge --cpu-basis process` judges instead the CPU of the
+k6 processes of the run (matched by the binary name `k6` and the run id, read
+from `/proc`; a percentage of the whole host's capacity) and prints the host
+CPU peak and load average beside it. It is strictly opt-in, an unattributable
+figure counts as not accepted, and the report is then labelled "Local, not an
+NFR measurement": neighbours may still have starved the app. Use the default
+`host` basis for any run that is meant to count. The report also shows
+iterations next to requests: a locale redirect makes one public page view two
+requests.
+
 Application CPU and database connections are **not** collected by the harness.
 Read them from the host and from PostgreSQL during the run (for example
 `docker stats` and `pg_stat_activity`) and write them next to the report. The
@@ -165,7 +182,11 @@ separate decision under ADR-0083.
 ## Measured baseline
 
 **No accepted baseline.** The approved-environment baseline (issue #1283 steps 3
-and 4) has not been run.
+and 4) has not been run. A second local run, on 22 November 2026, used the
+process CPU basis and measured the first limit of an uncached origin (the
+interactive database pool); see
+[`capacity-baseline-2026-11-22.md`](capacity-baseline-2026-11-22.md). It is
+labelled local and is not NFR evidence.
 
 ### Local dry run, 15 November 2026 (NOT an NFR measurement)
 
