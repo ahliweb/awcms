@@ -41,10 +41,7 @@
 import "./public-form-challenge-bindings";
 import { log } from "../logging/logger";
 import { fail } from "../../modules/_shared/api-response";
-import {
-  isExtensionPointSourceInstalled,
-  requireExtensionPointModules
-} from "../../modules/_shared/extension-point-source";
+import { requireExtensionPointModules } from "../../modules/_shared/extension-point-source";
 import type {
   ModulePublicFormChallengeProvider,
   PublicFormChallenge,
@@ -94,7 +91,7 @@ export type PublicFormCaptchaOptions = {
 
 type ActiveProvider =
   | { kind: "none" }
-  | { kind: "ambiguous" }
+  | { kind: "ambiguous"; provider: ModulePublicFormChallengeProvider }
   | { kind: "one"; provider: ModulePublicFormChallengeProvider };
 
 function declaredProviders(): readonly ModulePublicFormChallengeProvider[] {
@@ -104,18 +101,18 @@ function declaredProviders(): readonly ModulePublicFormChallengeProvider[] {
 }
 
 /**
- * Which provider is switched on in `env`. A process that installed no
- * extension-point source has no providers (the web entry always installs it;
- * `extension-points:check` keeps that true), so route handlers invoked without
- * the middleware, as unit tests do, are unchanged.
+ * Which provider is switched on in `env`. THROWS
+ * (`ExtensionPointSourceNotInstalledError`, ADR-0164) in a process that
+ * installed no extension-point source: such a process cannot know whether a
+ * challenge is required, and "no providers" would be fail-OPEN (a Turnstile
+ * deployment whose composition root forgot the install would stop challenging).
+ * `enforcePublicFormCaptcha` turns that into a refusal. The web entry installs
+ * the source and `extension-points:check` keeps that true; a test that calls a
+ * route handler directly gets it from the `bunfig.toml` test preload.
  */
 export function resolveActivePublicFormChallengeProvider(
   env: NodeJS.ProcessEnv = process.env
 ): ActiveProvider {
-  if (!isExtensionPointSourceInstalled()) {
-    return { kind: "none" };
-  }
-
   const enabled: ModulePublicFormChallengeProvider[] = [];
 
   for (const provider of declaredProviders()) {
@@ -129,7 +126,7 @@ export function resolveActivePublicFormChallengeProvider(
       log("warning", "public_form_challenge.is_enabled_threw", {
         provider: provider.key
       });
-      return { kind: "ambiguous" };
+      return { kind: "ambiguous", provider };
     }
 
     if (on) {
@@ -145,7 +142,10 @@ export function resolveActivePublicFormChallengeProvider(
     log("warning", "public_form_challenge.multiple_providers_enabled", {
       providers: enabled.map((provider) => provider.key)
     });
-    return { kind: "ambiguous" };
+    return {
+      kind: "ambiguous",
+      provider: enabled[0] as ModulePublicFormChallengeProvider
+    };
   }
 
   return {
@@ -161,9 +161,12 @@ const burned = new Map<string, number>();
 function burnKey(parts: readonly string[]): string {
   const hasher = new Bun.CryptoHasher("sha256");
 
+  // Length-prefixed: a separator byte alone would let a value that CONTAINS the
+  // separator collide with a different split of the same bytes, and the fields
+  // are attacker-supplied JSON strings.
   for (const part of parts) {
+    hasher.update(`${part.length}:`);
     hasher.update(part);
-    hasher.update("\0");
   }
 
   return hasher.digest("hex");
@@ -269,14 +272,25 @@ export async function enforcePublicFormCaptcha(
   options: PublicFormCaptchaOptions = {}
 ): Promise<Response | null> {
   const env = options.env ?? process.env;
-  const active = resolveActivePublicFormChallengeProvider(env);
+  let active: ActiveProvider;
+
+  try {
+    active = resolveActivePublicFormChallengeProvider(env);
+  } catch {
+    // No extension-point source (a composition root that forgot to install it):
+    // fail closed. Which provider would have applied is unknowable here.
+    log("error", "public_form_challenge.source_not_installed", { formName });
+    return refusal(null, "invalid");
+  }
 
   if (active.kind === "none") {
     return null;
   }
 
   if (active.kind === "ambiguous") {
-    return refusal(null, "invalid");
+    // The refusal text of the provider that triggered it, so a caller cannot
+    // tell a configuration fault from an ordinary refusal by its wording.
+    return refusal(active.provider, "invalid");
   }
 
   const { provider } = active;
@@ -390,9 +404,39 @@ export async function issuePublicFormChallenge(
   };
 }
 
+type TestSolver = (
+  formName: string,
+  tenantId: string | null
+) => Promise<PublicFormChallengeFields>;
+
+const testSolvers = new Map<string, TestSolver>();
+
+/**
+ * TEST-ONLY: registers the solver the integration harness uses to supply a
+ * solved challenge for `providerKey`. It lives here, not on the provider, so it
+ * can never ride along in a production descriptor; it refuses to register
+ * outside `NODE_ENV=test`, and `extension-points:check` rejects any call from
+ * `src/` or `scripts/`.
+ */
+export function registerPublicFormChallengeTestSolver(
+  providerKey: string,
+  solver: TestSolver
+): void {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("A challenge test solver can only be registered in tests.");
+  }
+
+  testSolvers.set(providerKey, solver);
+}
+
+/** Test seam only. */
+export function clearPublicFormChallengeTestSolversForTests(): void {
+  testSolvers.clear();
+}
+
 /**
  * TEST-ONLY (the integration harness): the fields a solved challenge for
- * `formName` carries, or `null` when no provider is on or it offers no solver.
+ * `formName` carries, or `null` when no provider is on or none has a solver.
  */
 export async function solvePublicFormChallengeForTests(
   formName: string,
@@ -401,11 +445,10 @@ export async function solvePublicFormChallengeForTests(
 ): Promise<PublicFormChallengeFields | null> {
   const active = resolveActivePublicFormChallengeProvider(env);
 
-  if (active.kind !== "one" || !active.provider.solveForTests) {
-    return null;
-  }
+  const solver =
+    active.kind === "one" ? testSolvers.get(active.provider.key) : undefined;
 
-  return active.provider.solveForTests(formName, normaliseTenant(tenantId));
+  return solver ? solver(formName, normaliseTenant(tenantId)) : null;
 }
 
 /** Path of each platform pre-session form's API route, to the form name; the harness uses it to pick the form for a request. */

@@ -13,7 +13,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  clearPublicFormChallengeTestSolversForTests,
   enforcePublicFormCaptcha,
+  registerPublicFormChallengeTestSolver,
   issuePublicFormChallenge,
   PUBLIC_FORM_CHALLENGE_BURN_CAPACITY,
   PUBLIC_FORM_NAMES,
@@ -26,7 +28,7 @@ import {
 } from "../src/modules/_shared/extension-point-source";
 import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 import type { ModulePublicFormChallengeProvider } from "../src/modules/_shared/public-form-challenge-contract";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { stripComments } from "../scripts/lib/source-text";
 import {
   isTurnstileChallengeEnabled,
@@ -38,7 +40,11 @@ import {
   requirePublicFormChallengeVerifier,
   unbindPublicFormChallengeVerifierForTests
 } from "../src/modules/_shared/public-form-challenge-verifier-slot";
-import { findDirectTurnstileCalls } from "../scripts/extension-points-check";
+import {
+  findDirectTurnstileCalls,
+  TURNSTILE_ENTRY_IMPORT_ALLOW_LIST,
+  findTestSolverRegistrations
+} from "../scripts/extension-points-check";
 import { invoke } from "./integration/harness";
 import { validatePublicFormChallengeProviderDeclarations } from "../src/modules/_shared/extension-point-declarations";
 import { listModules } from "../src/modules";
@@ -100,11 +106,6 @@ function makeFixture(key = "fixture_captcha"): Fixture {
 
       row.used = true;
       return { ok: true };
-    },
-    async solveForTests(formName, tenantId) {
-      const challenge = await fixture.issue(formName, tenantId);
-
-      return { challengeToken: challenge.challengeId };
     }
   };
 
@@ -142,6 +143,15 @@ beforeEach(() => {
   resetPublicFormChallengeForTests();
   fixture = makeFixture();
   installExtensionPointSource(() => [moduleWith(fixture)]);
+  clearPublicFormChallengeTestSolversForTests();
+  registerPublicFormChallengeTestSolver(
+    fixture.key,
+    async (formName, tenantId) => {
+      const challenge = await fixture.issue(formName, tenantId);
+
+      return { challengeToken: challenge.challengeId };
+    }
+  );
 });
 
 afterEach(() => {
@@ -154,9 +164,30 @@ async function solved(formName: string, tenantId: string | null = TENANT_A) {
 }
 
 describe("off by default", () => {
-  test("no source installed: no-op", async () => {
+  test("no source installed + Turnstile flags on: REFUSED, never a no-op (fail-closed, ADR-0164)", async () => {
     uninstallExtensionPointSourceForTests();
-    expect(await enforcePublicFormCaptcha(request(), "f", {})).toBeNull();
+
+    const response = await enforcePublicFormCaptcha(
+      request(),
+      "password_reset",
+      { loginIdentifier: "a" },
+      {
+        env: {
+          AUTH_ONLINE_SECURITY_ENABLED: "true",
+          AUTH_ONLINE_SECURITY_PROFILE: "full_online",
+          TURNSTILE_ENABLED: "true"
+        } as NodeJS.ProcessEnv
+      }
+    );
+
+    expect(response?.status).toBe(400);
+  });
+
+  test("no source installed at all: refused too (a process that cannot tell must not skip)", async () => {
+    uninstallExtensionPointSourceForTests();
+    expect((await enforcePublicFormCaptcha(request(), "f", {}))?.status).toBe(
+      400
+    );
   });
 
   test("a declared provider that is not enabled is invisible", async () => {
@@ -292,6 +323,70 @@ describe("fail-closed", () => {
     ).toBe(400);
   });
 
+  test("a configuration fault is refused with the provider's own refusal text (no config oracle)", async () => {
+    fixture.refusal = {
+      invalidCode: "PROVIDER_INVALID",
+      invalidMessage: "Provider says no."
+    };
+    const second = makeFixture("second_captcha");
+    installExtensionPointSource(() => [moduleWith(fixture, second)]);
+    const ambiguous = await body(
+      await enforcePublicFormCaptcha(request(), "f", await solved("f"))
+    );
+
+    installExtensionPointSource(() => [moduleWith(fixture)]);
+    const ordinary = await body(
+      await enforcePublicFormCaptcha(request(), "f", {
+        challengeToken: "not-issued"
+      })
+    );
+
+    expect(ambiguous).toEqual(ordinary);
+    expect((ordinary as { error: { code: string } }).error.code).toBe(
+      "PROVIDER_INVALID"
+    );
+  });
+
+  test("a missing token on an ambiguous configuration is also the invalid refusal, not 'required'", async () => {
+    const second = makeFixture("second_captcha");
+    installExtensionPointSource(() => [moduleWith(fixture, second)]);
+
+    expect(
+      (
+        (await body(await enforcePublicFormCaptcha(request(), "f", {}))) as {
+          error: { code: string };
+        }
+      ).error.code
+    ).toBe("CHALLENGE_INVALID");
+  });
+
+  test("burn keys cannot collide through the separator byte", async () => {
+    fixture.verify = async () => ({ ok: true });
+
+    // Old key = provider \0 id \0 token \0: both of these were "x\0y\0z".
+    expect(
+      await enforcePublicFormCaptcha(request(), "f", {
+        challengeId: "x\u0000y",
+        challengeToken: "z"
+      })
+    ).toBeNull();
+    expect(
+      await enforcePublicFormCaptcha(request(), "f", {
+        challengeId: "x",
+        challengeToken: "y\u0000z"
+      })
+    ).toBeNull();
+    // ... and the genuine replay is still refused.
+    expect(
+      (
+        await enforcePublicFormCaptcha(request(), "f", {
+          challengeId: "x",
+          challengeToken: "y\u0000z"
+        })
+      )?.status
+    ).toBe(400);
+  });
+
   test("a provider whose isEnabled throws is not trusted to be off", async () => {
     fixture.isEnabled = () => {
       throw new Error("config");
@@ -401,12 +496,12 @@ describe("issue / harness solver", () => {
     expect(await solvePublicFormChallengeForTests("f", TENANT_A)).toBeNull();
   });
 
-  test("the seam never calls solveForTests", async () => {
+  test("the seam never calls the test solver", async () => {
     let called = 0;
-    fixture.solveForTests = async () => {
+    registerPublicFormChallengeTestSolver(fixture.key, async () => {
       called += 1;
       return {};
-    };
+    });
     await enforcePublicFormCaptcha(request(), "f", {});
     expect(called).toBe(0);
   });
@@ -454,28 +549,150 @@ describe("platform forms", () => {
   });
 });
 
-describe("no second path around the seam", () => {
-  test("a direct enforceTurnstileIfRequired call outside the two allowed files is reported", () => {
+describe("test solvers cannot ride along in production", () => {
+  test("a descriptor that carries solveForTests fails validation", () => {
+    const smuggled = {
+      ...makeFixture("smuggler"),
+      solveForTests: async () => ({ challengeToken: "free" })
+    } as unknown as ModulePublicFormChallengeProvider;
+
     expect(
-      findDirectTurnstileCalls([
+      validatePublicFormChallengeProviderDeclarations([
+        moduleWith(smuggled)
+      ]).map((issue) => issue.message)
+    ).toEqual([expect.stringContaining("solveForTests")]);
+  });
+
+  test("registering a solver outside NODE_ENV=test throws", () => {
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      expect(() =>
+        registerPublicFormChallengeTestSolver("k", async () => ({}))
+      ).toThrow();
+    } finally {
+      process.env.NODE_ENV = saved;
+    }
+  });
+
+  test("a registration call from src/ or scripts/ is reported", () => {
+    expect(
+      findTestSolverRegistrations([
         {
-          path: "src/pages/api/v1/auth/x.ts",
-          text: "await enforceTurnstileIfRequired(t, ip, {})"
+          path: "src/modules/x/module.ts",
+          text: "registerPublicFormChallengeTestSolver('k', f)"
         },
         {
-          path: "src/pages/api/v1/auth/y.ts",
-          text: "// enforceTurnstileIfRequired( is only mentioned here"
+          path: "src/lib/security/public-form-challenge.ts",
+          text: "export function registerPublicFormChallengeTestSolver() {}"
         },
         {
-          path: "src/lib/security/turnstile.ts",
-          text: "export async function enforceTurnstileIfRequired(x) {}"
-        },
-        {
-          path: "src/lib/security/public-form-challenge-bindings.ts",
-          text: "await enforceTurnstileIfRequired(a, b, c)"
+          path: "scripts/y.ts",
+          text: "// registerPublicFormChallengeTestSolver"
         }
       ])
-    ).toEqual(["src/pages/api/v1/auth/x.ts"]);
+    ).toEqual(["src/modules/x/module.ts"]);
+  });
+});
+
+describe("no second path around the seam", () => {
+  const offending = (text: string) =>
+    findDirectTurnstileCalls([{ path: "src/pages/api/v1/auth/x.ts", text }]);
+
+  test("a plain import of either entry point is reported", () => {
+    expect(
+      offending(
+        'import { enforceTurnstileIfRequired } from "../../lib/security/turnstile";'
+      )
+    ).toHaveLength(1);
+    expect(
+      offending(
+        'import {\n  verifyTurnstileToken\n} from "../../lib/security/turnstile";'
+      )
+    ).toHaveLength(1);
+  });
+
+  test("the three evasions of the probe are reported: alias, namespace + string access, dynamic import", () => {
+    expect(
+      offending(
+        'import { enforceTurnstileIfRequired as quiet } from "../lib/security/turnstile";'
+      )
+    ).toHaveLength(1);
+    expect(
+      offending(
+        'import * as t from "../lib/security/turnstile";\nawait t["verifyTurnstileToken"](a, b, c);'
+      )
+    ).toHaveLength(1);
+    expect(
+      offending('const m = await import("../lib/security/turnstile");')
+    ).toHaveLength(1);
+    expect(
+      offending('const m = require("../lib/security/turnstile.ts");')
+    ).toHaveLength(1);
+    expect(
+      offending(
+        'export { verifyTurnstileToken } from "../lib/security/turnstile";'
+      )
+    ).toHaveLength(1);
+  });
+
+  test("importing the other exports, a comment, or an unrelated module is not", () => {
+    expect(
+      offending(
+        'import { isTurnstileRequired, TURNSTILE_ORIGIN } from "../lib/security/turnstile";'
+      )
+    ).toEqual([]);
+    expect(
+      offending("// import { verifyTurnstileToken } from './turnstile'")
+    ).toEqual([]);
+    expect(
+      offending('import { verifyTurnstileToken } from "./not-the-module";')
+    ).toEqual([]);
+    expect(
+      offending(
+        'import "../styles/a.css";\nimport { x } from "../lib/security/turnstile";'
+      )
+    ).toEqual([]);
+  });
+
+  test("the allow-listed files are exempt, with a reason each; website-engagement is the recorded exception", () => {
+    for (const path of Object.keys(TURNSTILE_ENTRY_IMPORT_ALLOW_LIST)) {
+      expect(TURNSTILE_ENTRY_IMPORT_ALLOW_LIST[path]!.length).toBeGreaterThan(
+        20
+      );
+      expect(
+        findDirectTurnstileCalls([
+          {
+            path,
+            text: 'import { verifyTurnstileToken } from "./turnstile";'
+          }
+        ])
+      ).toEqual([]);
+    }
+
+    expect(
+      TURNSTILE_ENTRY_IMPORT_ALLOW_LIST[
+        "src/modules/website-engagement/application/submission-intake.ts"
+      ]
+    ).toContain("per SOURCE");
+  });
+
+  test("the real source tree has no other importer", () => {
+    const files: { path: string; text: string }[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+
+        if (entry.isDirectory()) walk(full);
+        else if (/\.(ts|astro)$/.test(entry.name))
+          files.push({ path: full, text: readFileSync(full, "utf8") });
+      }
+    };
+    walk("src");
+    walk("scripts");
+
+    expect(findDirectTurnstileCalls(files)).toEqual([]);
   });
 });
 

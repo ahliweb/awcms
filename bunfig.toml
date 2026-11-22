@@ -1,0 +1,4 @@
+[test]
+# Every test process is a composition root of the descriptor-declared extension
+# points (ADR-0164), like `src/middleware.ts` is for the web process.
+preload = ["./tests/preload-extension-point-source.ts"]

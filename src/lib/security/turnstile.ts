@@ -334,17 +334,35 @@ export async function verifyTurnstileToken(
       }
     }
 
-    // Only a transport-level problem with Cloudflare itself (non-2xx status, or
-    // a 2xx we could not parse / that overflowed the size cap) counts as a
-    // PROVIDER failure for the shared circuit breaker. A well-formed 2xx with
-    // `success: false` is Cloudflare correctly telling us the token was bad —
-    // the normal, attacker-repeatable outcome for a garbage/expired/reused
-    // token. Feeding THAT into `recordFailure` would let anyone trip this
-    // shared, cross-tenant breaker (and, since enforcement fails closed while
-    // it is open, lock out login/setup for every tenant) with a handful of junk
-    // tokens (mini PR #596 security review). The same reasoning applies to the
-    // hostname/action/freshness rejections below.
-    if (response.status < 200 || response.status >= 300 || !body) {
+    // Only a problem on CLOUDFLARE'S side counts as a provider failure for the
+    // shared, cross-tenant circuit breaker: a 5xx, a 408/429 (it timed out or
+    // is shedding us), a 2xx we could not parse or that overflowed the size
+    // cap, and the documented `internal-error` code. Everything the CALLER
+    // controls must not: `success: false` for a garbage/expired/reused token
+    // (`invalid-input-response`, `timeout-or-duplicate`, `missing-input-response`,
+    // `bad-request`), and any other 4xx. Cloudflare documents HTTP 200 for a
+    // bad token, but a 4xx on a malformed one must not become a lever either:
+    // since enforcement fails closed while the breaker is open, anyone able to
+    // trip it would lock login/setup out for every tenant (mini PR #596 review).
+    // `invalid-input-secret` is OUR misconfiguration, not a per-token event: it
+    // is logged as an error and never counted, so a wrong secret does not open
+    // the breaker once per attacker-supplied token (it fails closed regardless).
+    const errorCodes: string[] = Array.isArray(body?.["error-codes"])
+      ? (body?.["error-codes"] as string[])
+      : [];
+    const providerSideStatus =
+      response.status >= 500 ||
+      response.status === 408 ||
+      response.status === 429 ||
+      response.status < 200;
+    const unusable2xx =
+      response.status >= 200 && response.status < 300 && !body;
+
+    if (
+      providerSideStatus ||
+      unusable2xx ||
+      errorCodes.includes("internal-error")
+    ) {
       breaker.recordFailure(now);
       log("warning", "turnstile.provider_call_failed", {
         httpStatus: response.status
@@ -358,6 +376,34 @@ export async function verifyTurnstileToken(
           secrets
         ),
         retryable: response.status >= 500 || response.status === 0
+      };
+    }
+
+    if (errorCodes.includes("invalid-input-secret")) {
+      breaker.recordSuccess(now);
+      log("error", "turnstile.invalid_input_secret");
+
+      return {
+        ok: false,
+        reason: "provider_error",
+        detail: "Turnstile rejected the configured secret key.",
+        retryable: false
+      };
+    }
+
+    if (!body) {
+      // A non-2xx, non-provider-side status with no readable body: the caller's
+      // request was refused. Not a provider outage.
+      breaker.recordSuccess(now);
+
+      return {
+        ok: false,
+        reason: "rejected",
+        detail: redactTruncate(
+          `Turnstile request refused (HTTP ${response.status}).`,
+          secrets
+        ),
+        retryable: false
       };
     }
 

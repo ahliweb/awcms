@@ -72,25 +72,102 @@ export function findManualRegistrations(
 }
 
 /**
- * The only source files that may call `enforceTurnstileIfRequired`: its own
- * file and the web-only binding that adapts it to the public-form challenge seam
- * (Issue #1353). Any other caller is a SECOND path around the seam: it would
- * skip the single-use burn, the deadline, the one-provider rule and the uniform
- * refusal. A form calls `enforcePublicFormCaptcha` instead. Tests are not scanned.
+ * The ONLY files that may import the Turnstile verification entry points
+ * (`enforceTurnstileIfRequired`, `verifyTurnstileToken`) from `turnstile.ts`,
+ * with the reason each one may (Issue #1353). Any other importer is a SECOND
+ * path around the public-form challenge seam: it would skip the single-use
+ * burn, the deadline, the one-provider rule and the uniform refusal. A public
+ * form calls `enforcePublicFormCaptcha` instead.
+ *
+ * The rule is on IMPORTS, not on call text, so an alias
+ * (`import { verifyTurnstileToken as v }`), a namespace import
+ * (`t["verifyTurnstileToken"]`), a re-export and a dynamic `import()` or
+ * `require()` of the module are all caught. Importing anything else from
+ * `turnstile.ts` (the origin constant, `isTurnstileRequired`, the site key) is
+ * allowed. Tests are not scanned.
  */
-export const DIRECT_TURNSTILE_ALLOWED_FILES: readonly string[] = [
-  "src/lib/security/turnstile.ts",
-  "src/lib/security/public-form-challenge-bindings.ts"
+export const TURNSTILE_ENTRY_IMPORT_ALLOW_LIST: Readonly<
+  Record<string, string>
+> = {
+  "src/lib/security/turnstile.ts":
+    "the module itself: it defines these entry points and their own tests",
+  "src/lib/security/public-form-challenge-bindings.ts":
+    "binds Turnstile as the first provider behind the seam",
+  "src/modules/website-engagement/application/submission-intake.ts":
+    "the sources registry verifies Turnstile per SOURCE (its own action and the source's allowed hostnames), a different shape from a pre-session form; its tokens are not a pre-session form's, so the seam's one-provider/burn model does not apply. Recorded exception (Issue #1353)."
+};
+
+const TURNSTILE_ENTRY_POINTS = [
+  "enforceTurnstileIfRequired",
+  "verifyTurnstileToken"
 ];
+const TURNSTILE_SPECIFIER = /(?:^|\/)turnstile(?:\.[cm]?[jt]s)?$/;
+const STATIC_MODULE_REFERENCE =
+  /\b(?:import|export)\s+(?:type\s+)?([^;"'`]*?)\s*from\s*(["'])([^"'\n]+)\2/g;
+const DYNAMIC_MODULE_REFERENCE =
+  /\b(?:import|require)\s*\(\s*(["'`])([^"'`\n]*)\1/g;
 
 export function findDirectTurnstileCalls(
+  files: readonly { path: string; text: string }[]
+): string[] {
+  const offenders = new Set<string>();
+
+  for (const file of files) {
+    if (file.path in TURNSTILE_ENTRY_IMPORT_ALLOW_LIST) {
+      continue;
+    }
+
+    const code = stripComments(file.text);
+
+    for (const match of code.matchAll(STATIC_MODULE_REFERENCE)) {
+      const clause = match[1] ?? "";
+      const specifier = match[3] ?? "";
+
+      if (!TURNSTILE_SPECIFIER.test(specifier)) {
+        continue;
+      }
+
+      if (
+        /\*\s*as\b/.test(clause) ||
+        TURNSTILE_ENTRY_POINTS.some((name) =>
+          new RegExp(`\\b${name}\\b`).test(clause)
+        )
+      ) {
+        offenders.add(file.path);
+      }
+    }
+
+    for (const match of code.matchAll(DYNAMIC_MODULE_REFERENCE)) {
+      if (TURNSTILE_SPECIFIER.test(match[2] ?? "")) {
+        offenders.add(file.path);
+      }
+    }
+  }
+
+  return [...offenders].sort();
+}
+
+/**
+ * The seam's test-only solver registration may not be called from `src/` or
+ * `scripts/`: a solver registered in production code would hand out solved
+ * challenges. Tests are not scanned; the function also refuses to run outside
+ * `NODE_ENV=test`.
+ */
+export const TEST_SOLVER_REGISTRATION_ALLOWED_FILES: readonly string[] = [
+  "src/lib/security/public-form-challenge.ts",
+  "scripts/extension-points-check.ts"
+];
+
+export function findTestSolverRegistrations(
   files: readonly { path: string; text: string }[]
 ): string[] {
   return files
     .filter(
       (file) =>
-        !DIRECT_TURNSTILE_ALLOWED_FILES.includes(file.path) &&
-        /\benforceTurnstileIfRequired\s*\(/.test(stripComments(file.text))
+        !TEST_SOLVER_REGISTRATION_ALLOWED_FILES.includes(file.path) &&
+        /\bregisterPublicFormChallengeTestSolver\b/.test(
+          stripComments(file.text)
+        )
     )
     .map((file) => file.path)
     .sort();
@@ -791,7 +868,13 @@ function main(): void {
 
   for (const file of findDirectTurnstileCalls(files)) {
     failures.push(
-      `${file} calls enforceTurnstileIfRequired directly. A public form calls enforcePublicFormCaptcha (src/lib/security/public-form-challenge.ts, Issue #1353); a direct call is a second path that skips the single-use burn, the deadline and the uniform refusal.`
+      `${file} imports enforceTurnstileIfRequired / verifyTurnstileToken from turnstile.ts. A public form calls enforcePublicFormCaptcha (src/lib/security/public-form-challenge.ts, Issue #1353); a direct import is a second path that skips the single-use burn, the deadline and the uniform refusal. A real exception goes in TURNSTILE_ENTRY_IMPORT_ALLOW_LIST with its reason.`
+    );
+  }
+
+  for (const file of findTestSolverRegistrations(files)) {
+    failures.push(
+      `${file} calls registerPublicFormChallengeTestSolver. A test solver is registered from a test, never from src/ or scripts/.`
     );
   }
 

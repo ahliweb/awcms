@@ -27,7 +27,10 @@ import {
 } from "bun:test";
 
 import { verifyTurnstileToken } from "../src/lib/security/turnstile";
-import { resetProviderCircuitBreakersForTests } from "../src/lib/database/circuit-breaker";
+import {
+  getProviderCircuitBreaker,
+  resetProviderCircuitBreakersForTests
+} from "../src/lib/database/circuit-breaker";
 import { setLogSink, type LogEntry } from "../src/lib/logging/logger";
 
 function randomOpaque(prefix: string): string {
@@ -215,6 +218,76 @@ describe("verifyTurnstileToken — provider failures", () => {
     expect(
       logs.some((e) => e.message === "turnstile.circuit_breaker_open")
     ).toBe(true);
+  });
+});
+
+describe("verifyTurnstileToken — the shared breaker is not an attacker lever", () => {
+  const state = () =>
+    getProviderCircuitBreaker("turnstile").getState(FIXED_NOW);
+
+  async function attempts(n: number) {
+    for (let i = 0; i < n; i += 1) {
+      await verifyTurnstileToken(`${TOKEN}_${i}`, config(), expectations());
+    }
+  }
+
+  test("many garbage tokens (HTTP 200, success:false) leave the breaker closed", async () => {
+    behavior = {
+      kind: "json",
+      body: { success: false, "error-codes": ["invalid-input-response"] }
+    };
+    await attempts(25);
+    expect(state()).toBe("closed");
+    expect(requestCount).toBe(25);
+  });
+
+  test("duplicate/expired tokens and a malformed request leave it closed, even as HTTP 400", async () => {
+    for (const code of ["timeout-or-duplicate", "bad-request"]) {
+      behavior = {
+        kind: "json",
+        status: 400,
+        body: { success: false, "error-codes": [code] }
+      };
+      await attempts(12);
+    }
+    expect(state()).toBe("closed");
+  });
+
+  test("a 4xx with an unreadable body is the caller's problem, not an outage", async () => {
+    behavior = { kind: "text", status: 403, body: "<html>no</html>" };
+    await attempts(12);
+    expect(state()).toBe("closed");
+  });
+
+  test("invalid-input-secret is logged as an error and never opens the breaker", async () => {
+    behavior = {
+      kind: "json",
+      body: { success: false, "error-codes": ["invalid-input-secret"] }
+    };
+    await attempts(12);
+    expect(state()).toBe("closed");
+    expect(
+      logs.some(
+        (e) =>
+          e.level === "error" && e.message === "turnstile.invalid_input_secret"
+      )
+    ).toBe(true);
+  });
+
+  test("repeated provider-side failures DO open it: 5xx, 429, internal-error", async () => {
+    for (const next of [
+      { status: 500, body: {} },
+      { status: 429, body: {} },
+      {
+        status: 200,
+        body: { success: false, "error-codes": ["internal-error"] }
+      }
+    ]) {
+      resetProviderCircuitBreakersForTests();
+      behavior = { kind: "json", ...next };
+      await attempts(5);
+      expect(state()).toBe("open");
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](turnstile-bot-protection.md)
 
-<!-- i18n-source-hash: sha256:d2c689bcfd32b56ac339c67c075ff469723127394cef9de899ab031de1603bd1 -->
+<!-- i18n-source-hash: sha256:5c33dcd769a1c1e242c04803540d067848ae45f94877d7a0726c1b4001654faf -->
 
 # Cloudflare Turnstile — bot protection sadar deployment-profile
 
@@ -103,6 +103,8 @@ Secret **tidak pernah** disimpan di DB/source/log/audit — hanya di env/secret 
 ## 5. Incident / fallback SOP (Turnstile unavailable)
 
 Pada profil full-online, kegagalan Cloudflare **fail-closed**: login/setup ditolak `TURNSTILE_INVALID` selama outage (circuit breaker `turnstile` membuka setelah kegagalan transport beruntun dan menolak cepat). Ini disengaja — bukan bug.
+
+**Apa yang membuka breaker bersama.** Hanya kegagalan di sisi Cloudflare: 5xx, 408/429, 2xx yang tak bisa di-parse atau melebihi batas ukuran, dan kode `internal-error`. Token sampah, kedaluwarsa atau ganda (`invalid-input-response`, `timeout-or-duplicate`, `missing-input-response`, `bad-request`), `success:false`, dan 4xx lain adalah ulah pemanggil dan tak pernah dihitung, sehingga tak ada yang bisa mengunci login semua tenant dengan token sampah. `invalid-input-secret` adalah salah konfigurasi kita sendiri: dicatat di level `error` dan tak pernah dihitung (setiap permintaan tetap fail-closed). `tests/turnstile-verifier.test.ts` membuktikan kedua arah.
 
 Opsi mitigasi, dari paling aman:
 

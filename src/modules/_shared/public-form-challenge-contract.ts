@@ -81,13 +81,4 @@ export type ModulePublicFormChallengeProvider = {
   legacyTokenField?: string;
   /** Per-provider refusal code/message, for a provider whose codes are an already-published contract (Turnstile: ADR-0029). Defaults: `CHALLENGE_REQUIRED` / `CHALLENGE_INVALID`. */
   refusal?: PublicFormChallengeRefusalText;
-  /**
-   * TEST-ONLY: returns the fields a solved challenge would carry, so the
-   * integration harness can supply one by default (`invoke`'s `challenge`
-   * option opts out). The seam never calls it.
-   */
-  solveForTests?(
-    formName: string,
-    tenantId: string | null
-  ): Promise<PublicFormChallengeFields>;
 };

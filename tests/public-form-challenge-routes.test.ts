@@ -169,9 +169,16 @@ describe("Turnstile through the seam keeps its published contract", () => {
   test("Turnstile off: forgot is not challenged at all (it proceeds to the database step, which this suite has none of)", async () => {
     process.env.TURNSTILE_ENABLED = "false";
 
-    await expect(
-      call(forgotPOST, { loginIdentifier: "someone@example.test" })
-    ).rejects.toThrow(/DATABASE_URL/);
+    // Past the challenge the route needs a database: with none it throws, with
+    // one it answers (or fails on the unknown tenant). Either way it must not
+    // be a challenge refusal, and Cloudflare was never asked.
+    const outcome = await call(forgotPOST, {
+      loginIdentifier: "someone@example.test"
+    }).catch(() => null);
+
+    expect(outcome?.body?.error?.code ?? "").not.toMatch(
+      /^(TURNSTILE|CHALLENGE)_/
+    );
     expect(fetchCalls).toBe(0);
   });
 });

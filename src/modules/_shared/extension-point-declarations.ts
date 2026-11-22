@@ -273,6 +273,13 @@ export function validatePublicFormChallengeProviderDeclarations(
         }
       }
 
+      if ("solveForTests" in provider) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} carries a solveForTests: a test solver is registered from a test (see the seam), never declared in a production descriptor.`
+        });
+      }
+
       if (provider.legacyTokenField !== undefined) {
         if (
           !CHALLENGE_LEGACY_FIELD_PATTERN.test(provider.legacyTokenField) ||
