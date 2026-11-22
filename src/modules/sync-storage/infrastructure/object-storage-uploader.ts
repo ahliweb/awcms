@@ -24,12 +24,16 @@
  * `withTenant`/`sql.begin` (ADR-0006).
  */
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
+import { parseRetryAfterClamped } from "../../../lib/integration/retry-after";
 import { withTimeout } from "../../../lib/integration/timeout";
 import {
   confinedPathRefusalMessage,
   resolveConfinedPath
 } from "../../../lib/security/confined-path";
 import {
+  OBJECT_SYNC_BREAKER_HOLD_MS,
+  OBJECT_SYNC_MAX_RETRY_AFTER_MS,
+  OBJECT_SYNC_MIN_RETRY_AFTER_MS,
   isSafeObjectKey,
   objectSyncStorageKey,
   verifyObjectChecksum
@@ -49,7 +53,24 @@ export type ObjectUploadInput = {
   tenantId: string;
 };
 
-export type UploadResult = { ok: true } | { ok: false; error: string };
+/**
+ * Outcomes of one upload attempt (Issue #1432).
+ *
+ * - `ok: true` — the provider accepted the object.
+ * - `ok: false` — the attempt FAILED and a retry is spent. `retryAfterMs` is
+ *   the provider's own `Retry-After` (429/503), already clamped; the dispatcher
+ *   never shortens its own backoff with it. Local faults (missing file,
+ *   checksum drift, unconfined path) also land here but never touch the
+ *   provider breaker.
+ * - `ok: false, skipped: true` — NOTHING reached the provider (breaker open, or
+ *   the half-open probe is held). No attempt happened, so no retry is spent;
+ *   the dispatcher holds the row for `holdMs` and moves on. Same contract as
+ *   email/WhatsApp/Telegram/push (#1409).
+ */
+export type UploadResult =
+  | { ok: true }
+  | { ok: false; skipped?: false; error: string; retryAfterMs?: number }
+  | { ok: false; skipped: true; error: string; holdMs: number };
 
 export type ObjectUploader = (
   input: ObjectUploadInput
@@ -114,20 +135,19 @@ export function createR2ObjectUploader(
   const breaker = getProviderCircuitBreaker(PROVIDER_KEY);
 
   return async (input) => {
-    const attemptedAt = new Date();
-
-    if (!breaker.tryAcquire(attemptedAt)) {
-      return {
-        ok: false,
-        error: "Object storage circuit breaker is open; skipping attempt."
-      };
-    }
+    // Local validation FIRST, before the breaker is asked for a permit. A local
+    // fault says nothing about R2's health, so it must neither trip the shared
+    // `object-storage` breaker (five broken rows would open it for every
+    // tenant) nor hold the half-open probe while it fails (Issue #1432).
+    //
+    // Finding A7, second line of defence. The enqueue route already refuses an
+    // unconfined `localPath`, but rows queued BEFORE that check exists are
+    // still in the table, and this is the process that actually opens the
+    // file. The check that matters is the one next to the syscall.
+    let bytes: ArrayBuffer;
+    let storageKey: string;
 
     try {
-      // Finding A7, second line of defence. The enqueue route already refuses an
-      // unconfined `localPath`, but rows queued BEFORE that check exists are
-      // still in the table, and this is the process that actually opens the
-      // file. The check that matters is the one next to the syscall.
       const confined = resolveConfinedPath(
         resolveObjectSyncConfig().localRootPath,
         input.localPath
@@ -155,7 +175,7 @@ export function createR2ObjectUploader(
         throw new Error("Local object file is missing or unreadable.");
       }
 
-      const bytes = await file.arrayBuffer();
+      bytes = await file.arrayBuffer();
       const hasher = new Bun.CryptoHasher("sha256");
       hasher.update(bytes);
       const actualChecksum = hasher.digest("hex");
@@ -171,20 +191,82 @@ export function createR2ObjectUploader(
       // name another tenant's key and replace its object. Applied here so no
       // migration is needed and the key a node reads back from
       // `GET /sync/objects/status` is still the one it sent.
-      const storageKey = objectSyncStorageKey(input.tenantId, input.objectKey);
+      storageKey = objectSyncStorageKey(input.tenantId, input.objectKey);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
 
-      await withTimeout(
-        client.write(storageKey, bytes),
+      return { ok: false, error: truncateError(message) };
+    }
+
+    const permit = breaker.tryAcquire(new Date());
+
+    if (!permit) {
+      return {
+        ok: false,
+        skipped: true,
+        holdMs: OBJECT_SYNC_BREAKER_HOLD_MS,
+        error: "Object storage circuit breaker is open; skipping attempt."
+      };
+    }
+
+    const controller = new AbortController();
+
+    try {
+      // A presigned PUT through `fetch`, not `client.write`: `Bun.S3Client`
+      // throws an `S3Error` that carries neither the HTTP status nor the
+      // response headers, so `Retry-After` would be unreachable. The signature
+      // is the same SigV4 one, the bytes are the same, and the destination is
+      // still the configured endpoint only (SSRF-safe, see `R2UploaderConfig`).
+      const url = client.presign(storageKey, {
+        method: "PUT",
+        expiresIn: Math.max(60, Math.ceil(timeoutMs / 1000) + 30)
+      });
+      const response = await withTimeout(
+        fetch(url, {
+          method: "PUT",
+          body: bytes,
+          signal: controller.signal
+        }),
         timeoutMs,
         `object-storage upload ${storageKey}`
       );
 
+      // The body is never read (it can echo request details); free the socket.
+      await response.body?.cancel();
+
+      if (!response.ok) {
+        const now = new Date();
+
+        breaker.recordFailure(now);
+
+        const retryAfterMs =
+          response.status === 429 || response.status === 503
+            ? parseRetryAfterClamped(
+                response.headers.get("retry-after"),
+                now,
+                OBJECT_SYNC_MIN_RETRY_AFTER_MS,
+                OBJECT_SYNC_MAX_RETRY_AFTER_MS
+              )
+            : undefined;
+
+        return {
+          ok: false,
+          error: `Object storage responded with HTTP ${response.status}.`,
+          ...(retryAfterMs !== undefined ? { retryAfterMs } : {})
+        };
+      }
+
       breaker.recordSuccess(new Date());
       return { ok: true };
     } catch (error) {
+      controller.abort();
       breaker.recordFailure(new Date());
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: truncateError(message) };
+    } finally {
+      // Idempotent: a no-op once recordSuccess/recordFailure moved the state.
+      // Guards any path that leaves without a verdict.
+      permit.release();
     }
   };
 }
@@ -216,7 +298,7 @@ export function resolveObjectUploader(requiresUpload: boolean): ObjectUploader {
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
     return async () => ({
-      ok: false,
+      ok: false as const,
       error:
         "R2 credentials are not configured (requires R2_ACCOUNT_ID, " +
         "R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET)."

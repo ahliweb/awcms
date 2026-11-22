@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0bc5fc8505dd4d7b0296fa2c7ddc176c324629659a942e216e7e993a33dbf4ea -->
+<!-- i18n-source-hash: sha256:b962cab53169747ed35dcfbbf6bf183ac422c38ee8fc1ffdf146dfbdfb7ef33b -->
 
 # Sync Storage
 
@@ -215,8 +215,15 @@ provider di dalam transaksi):
    (`infrastructure/object-storage-uploader.ts`): `createNoopObjectUploader`
    (requires_upload=false — R2 mati / `STORAGE_DRIVER=local`, tanpa jaringan/I/O,
    selalu sukses) atau `createR2ObjectUploader` (requires_upload=true — unggahan
-   nyata lewat `Bun.S3Client` native milik Bun, tanpa SDK npm; memverifikasi sha256
-   sebenarnya dari berkas lokal terhadap checksum yang tercatat sebelum mengunggah).
+   nyata lewat PUT presigned SigV4 dari `Bun.S3Client` native milik Bun, tanpa SDK npm; memverifikasi sha256
+   sebenarnya dari berkas lokal terhadap checksum yang tercatat sebelum mengunggah,
+   dan SEBELUM meminta izin ke breaker). Hasilnya: `ok`; `ok:false` (satu
+   percobaan, satu retry terpakai; `Retry-After` provider pada 429/503
+   memperpanjang, tak pernah memperpendek, backoff, dibatasi 60 menit);
+   `ok:false, skipped:true` (breaker menolak, tak ada yang sampai ke provider:
+   retry tidak terpakai, baris ditahan 30 dtk, dihitung `deferred`, #1432).
+   Kesalahan lokal (berkas hilang, checksum melenceng, path tak terkurung)
+   menggagalkan baris tetapi tak pernah menyentuh breaker `object-storage`.
 3. **FINALIZE** — transaksi pendek kedua per baris membalik `sending` menjadi
    `sent`, atau kembali ke `pending` dengan backoff (`evaluateObjectRetry`), atau
    menjadi `failed` begitu retry habis.

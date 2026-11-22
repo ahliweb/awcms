@@ -202,8 +202,15 @@ inside a transaction):
    (`infrastructure/object-storage-uploader.ts`): `createNoopObjectUploader`
    (requires_upload=false — R2 off / `STORAGE_DRIVER=local`, no network/I/O,
    always succeeds) or `createR2ObjectUploader` (requires_upload=true — real
-   upload via Bun's native `Bun.S3Client`, no npm SDK; verifies the local
-   file's actual sha256 against the recorded checksum before uploading).
+   upload through a SigV4-presigned PUT from Bun's native `Bun.S3Client`, no
+   npm SDK; verifies the local file's actual sha256 against the recorded
+   checksum before uploading, and BEFORE asking the breaker for a permit).
+   Outcomes: `ok`; `ok:false` (an attempt, one retry spent; a provider
+   `Retry-After` on 429/503 lengthens, never shortens, the backoff, clamped to
+   60 minutes); `ok:false, skipped:true` (the breaker refused, nothing reached
+   the provider: no retry spent, row held 30 s, counted as `deferred`, #1432).
+   Local faults (missing file, checksum drift, unconfined path) fail the row but
+   never touch the shared `object-storage` breaker.
 3. **FINALIZE** — a second short transaction per row flips `sending` to `sent`,
    or back to `pending` with backoff (`evaluateObjectRetry`), or to `failed`
    once retries are exhausted.
