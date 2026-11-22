@@ -2,10 +2,10 @@
 
 # ADR-0163 — Agent-proposed OMES operations always need a human approval
 
-- **Status:** Proposed
+- **Status:** Accepted (22 November 2026) with the answers to Q1 to Q4 below (decision K5)
 - **Review:** needs the owner's decision on the questions in §Open questions. Docs only; nothing here is built until it is Accepted and split into issues.
 - **Date:** 2026-11-14
-- **Decision maker:** @ahliweb (proposed, not yet decided)
+- **Decision maker:** @ahliweb (decided 22 November 2026 by delegation to the orchestrator, see Decision)
 - **Related:** Issue [#1336](https://github.com/ahliweb/awcms/issues/1336); prerequisite [#1335](https://github.com/ahliweb/awcms/issues/1335); [ADR-0122](0122-omes-control-center-domain-module-admission.md) (`omes_control` admission and pinned contracts), [ADR-0031](0031-segregation-of-duties-conflict-enforcement.md) (SoD), [ADR-0049](0049-machine-credentials-and-session-introspection.md) and [ADR-0092](0092-machine-credentials-may-write.md) (machine credentials and their write ceiling), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md) (domain-event consumers), [ADR-0143](0143-reporting-quantity-metrics-tie-safe-pages-and-booking-projections.md) (reporting metrics), [ADR-0144](0144-workflow-decisions-append-only-and-terminal-instances-immutable.md) (immutable workflow decisions), [ADR-0145](0145-idempotency-keys-are-scoped-per-actor-and-the-request-hash-is-keyed.md) (idempotency); `ahliweb/omes` ADR-0029 (AI data boundary), ADR-0032 (multi-agent control boundary), `contracts/observability/v1/policy-decision.schema.json` (#274)
 
 **Docs only.** No module, migration, API path, permission, contract or dependency changes in this ADR.
@@ -107,3 +107,14 @@ Verified against the papers' full text through alphaXiv on 2026-11-14. Items mar
 - [R8] Turan, "Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.08919>
 - [R9] Shahriar et al., "A Survey on Agentic Security: Applications, Threats and Defenses," 2025. <https://www.alphaxiv.org/abs/2510.06445>
 - [R10] Weng, "What You Approve Is What Executes: Consent Integrity for Black-Box LLM Agents," 2026, _preprint_. <https://www.alphaxiv.org/abs/2606.02668>
+
+## Decision (22 November 2026, K5)
+
+The decision was delegated by the owner to the orchestrator ("choose the best per recommendation and professional practice, priority on scalability, performance and security"). Answers to the open questions:
+
+- **Q1.** The accountable requester is the **human who owns the machine credential** (one named owner). If that owner is deactivated, the credential is revoked.
+- **Q2.** An agent may **not** propose `rollback` or a backup restore.
+- **Q3.** Disruptive agent proposals (`stop`, `restart`, `update`) need a **quorum of two** approvers; `status`, `preflight`, `backup` and `start` need one.
+- **Q4.** An unanswered agent proposal **expires after 24 hours**, fail-closed.
+
+Scope note: decision D7 needs a contract change in the `ahliweb/omes` repository, which is outside this repository. Implementation is split into issues; nothing here is built by this ADR.

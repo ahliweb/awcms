@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](starsender-adapter-runbook.md)
 
-<!-- i18n-source-hash: sha256:77d7ab450d21b153e93bc1febc66430cea3077362256a2ed4a8cf01f2501d71b -->
+<!-- i18n-source-hash: sha256:41fa77b91a3bf73ee029e4c454d54baf511127bef36e45295ed80fc13a764d61 -->
 
 # Adapter StarSender — runbook operasional (Issue #1142)
 
-Pembaca: operator yang menyalakan adapter WhatsApp StarSender opsional untuk sebuah deployment, dan petugas jaga yang menemukan perangkat StarSender bermasalah. Catatan keputusan: [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) bagian 4 dan 7, ditambah [ADR-0158](../adr/0158-starsender-adapter-conditions-that-differ-from-adr-0148-operator-attested-device-state-held-lanes-and-an-unapproved-acknowledgement-text.id.md) yang **Diusulkan**, yang mencatat di mana adapter ini melampaui ADR-0148 (status perangkat diatestasi operator, lane ditahan, hasil tak diketahui) dan butuh keputusan pemilik. Sebelum diterima tidak ada yang dapat mengirim di sini: teks pernyataan belum disetujui dan flag mati. Modul: [`whatsapp_delivery`](../../src/modules/whatsapp-delivery/README.id.md) (adapter) dan [`channel_accounts`](../../src/modules/channel-accounts/README.id.md) (akun, pernyataan risiko, atestasi).
+Pembaca: operator yang menyalakan adapter WhatsApp StarSender opsional untuk sebuah deployment, dan petugas jaga yang menemukan perangkat StarSender bermasalah. Catatan keputusan: [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) bagian 4 dan 7, ditambah [ADR-0158](../adr/0158-starsender-adapter-conditions-that-differ-from-adr-0148-operator-attested-device-state-held-lanes-and-an-unapproved-acknowledgement-text.id.md) yang mencatat di mana adapter ini melampaui ADR-0148 (status perangkat diatestasi operator, lane ditahan, hasil tak diketahui) dan diterima sebagai syarat pada 22 November 2026 (Q4, teks pernyataan, tetap terbuka untuk pemilik atau penasihat hukum). Sebelum Q4 disetujui tidak ada yang dapat mengirim di sini: teks pernyataan belum disetujui dan flag mati. Modul: [`whatsapp_delivery`](../../src/modules/whatsapp-delivery/README.id.md) (adapter) dan [`channel_accounts`](../../src/modules/channel-accounts/README.id.md) (akun, pernyataan risiko, atestasi).
 
 ## 0. Apa yang Anda nyalakan
 
