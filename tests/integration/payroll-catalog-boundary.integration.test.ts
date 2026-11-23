@@ -28,17 +28,18 @@ import {
 } from "./harness";
 import {
   analysePayrollCatalog,
-  functionBodySha256,
+  functionDefinitionSha256,
   functionSignature,
   isPayrollFamily,
   loadPayrollCatalogSnapshot,
-  multisetDistance,
+  multisetMissing,
   staleCatalogExemptions,
   staleSecurityDefinerAllowlist,
   type CatalogFinding,
   type CatalogSnapshot
 } from "../../scripts/lib/payroll-catalog-boundary";
 import { PAYROLL_REQUIRED_TABLE_FINGERPRINTS } from "../../src/modules/_shared/payroll-data-boundary";
+import { evaluatePayrollCatalog } from "../../scripts/lib/payroll-catalog-check-run";
 import { findPayrollSqlLeaks } from "../../scripts/payroll-sql-boundary-check";
 import { splitSqlStatements } from "../../scripts/lib/sql-statements";
 import {
@@ -243,7 +244,10 @@ suite("payroll catalog boundary (Issue #1015)", () => {
           ...snapshot.columns
             .filter((entry) => entry.relation !== `public.${table}`)
             .map((entry) =>
-              multisetDistance(types(fingerprint.columns), types(entry.columns))
+              multisetMissing(
+                types(fingerprint.columns),
+                types(entry.baseColumns ?? entry.columns)
+              )
             )
         );
 
@@ -283,7 +287,13 @@ GRANT awcms_app TO awcms_probe_reviewer;
 CREATE OR REPLACE FUNCTION awcms_probe_reviewed() RETURNS integer
   LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
   AS $$ SELECT 1 $$;
-ALTER FUNCTION awcms_probe_reviewed() OWNER TO awcms_probe_reviewer;`
+ALTER FUNCTION awcms_probe_reviewed() OWNER TO awcms_probe_reviewer;`,
+        // Audit M4: the reviewed body, owner back, then RESET search_path.
+        `ALTER FUNCTION awcms_probe_reviewed() OWNER TO CURRENT_USER;
+ALTER FUNCTION awcms_probe_reviewed() RESET search_path;`,
+        // ... and the search_path back, then GRANT EXECUTE TO PUBLIC.
+        `ALTER FUNCTION awcms_probe_reviewed() SET search_path = public, pg_temp;
+GRANT EXECUTE ON FUNCTION awcms_probe_reviewed() TO PUBLIC, awcms_app;`
       ]);
       const reviewed = snapshots[0]!.functions.find(
         (fn) => fn.name === "public.awcms_probe_reviewed"
@@ -294,7 +304,8 @@ ALTER FUNCTION awcms_probe_reviewed() OWNER TO awcms_probe_reviewer;`
             "probe: a reviewed SECURITY DEFINER function owned by the payroll owner",
           approvedIn: "#1436",
           owner: me,
-          bodySha256: functionBodySha256(reviewed.source)
+          definitionSha256: functionDefinitionSha256(reviewed),
+          executeGrantees: reviewed.executeGrantees
         }
       };
       const definerCodes = (snapshot: CatalogSnapshot) =>
@@ -330,6 +341,77 @@ ALTER FUNCTION awcms_probe_reviewed() OWNER TO awcms_probe_reviewer;`
       // The original body, a different owner.
       expect(definerCodes(snapshots[2]!)).toEqual([
         "security-definer-allowlist-drift"
+      ]);
+      // RESET search_path (audit M4).
+      expect(definerCodes(snapshots[3]!)).toEqual([
+        "security-definer-allowlist-drift"
+      ]);
+      // GRANT EXECUTE TO PUBLIC (audit M4); the definition is back as pinned.
+      expect(
+        functionDefinitionSha256(
+          snapshots[4]!.functions.find(
+            (fn) => fn.name === "public.awcms_probe_reviewed"
+          )!
+        )
+      ).toBe(functionDefinitionSha256(reviewed));
+      expect(definerCodes(snapshots[4]!)).toEqual([
+        "security-definer-allowlist-drift"
+      ]);
+    });
+
+    test("the run verdict fails on a stale allow-list entry against the real catalog (audit L2)", async () => {
+      const snapshot = await loadPayrollCatalogSnapshot(
+        getAdminSql() as unknown as Tag
+      );
+      const stale = {
+        "public.awcms_probe_gone()": {
+          reason:
+            "probe: an entry whose function does not exist in the catalog",
+          approvedIn: "#1436",
+          owner: "awcms_probe_owner",
+          definitionSha256: "a".repeat(64),
+          executeGrantees: ["awcms_probe_owner"]
+        }
+      };
+
+      expect(evaluatePayrollCatalog(snapshot, {}).ok).toBe(true);
+
+      const result = evaluatePayrollCatalog(
+        snapshot,
+        {},
+        {
+          securityDefinerAllowlist: stale
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.staleExemptions).toEqual(["public.awcms_probe_gone()"]);
+    });
+
+    test("split-role: a definer owned by the MIGRATION role reaches payroll although payroll is owned by another role (audit L3)", async () => {
+      const { snapshots } = await snapshotsAfter([
+        `CREATE ROLE awcms_probe_migrator NOLOGIN;
+ALTER TABLE awcms_schema_migrations OWNER TO awcms_probe_migrator;
+CREATE FUNCTION awcms_probe_split() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+ALTER FUNCTION awcms_probe_split() OWNER TO awcms_probe_migrator;`
+      ]);
+      const snapshot = snapshots[0]!;
+      const payrollOwner = snapshot.relations.find(
+        (relation) => relation.name === "public.awcms_hr_commission_accruals"
+      )!.owner;
+
+      // The premise: the migration owner is no longer the payroll owner and
+      // holds nothing else that reaches payroll.
+      expect(snapshot.migrationOwner).toBe("awcms_probe_migrator");
+      expect(payrollOwner).not.toBe("awcms_probe_migrator");
+      expect(
+        analysePayrollCatalog(snapshot, { expectedOwners: [payrollOwner] })
+          .filter((finding) => finding.code.startsWith("security-definer-"))
+          .map((finding) => `${finding.code} ${finding.object}`)
+      ).toEqual([
+        "security-definer-not-allow-listed public.awcms_probe_split()"
       ]);
     });
 

@@ -264,13 +264,21 @@ export const PAYROLL_OWNER_REFERENCE_TABLE = "awcms_schema_migrations";
  *   a set. A migration that adds, drops, renames or retypes a column of a
  *   required table updates this list in the same PR; the catalog check fails
  *   (`payroll-fingerprint-drift`) until it does.
- * - `triggers`: every required trigger with the function it runs and its
- *   `pg_trigger.tgtype` bitmask (timing, level, events).
- * - `foreignKeys`: every foreign key the table declares, by target table and
- *   referencing columns, in order.
- * - `nameFreeTolerance`: how many columns a NON-family relation may differ by,
- *   counting column TYPES only (a multiset, names ignored), and still be this
- *   table under another name (`payroll-fingerprint-match`). A rebuild that
+ * - `triggers`: every required trigger with the function it runs, its
+ *   `pg_trigger.tgtype` bitmask (timing, level, events) and `functionSha256`,
+ *   the digest of the trigger function's whole definition (body, language,
+ *   SECURITY DEFINER, `SET` clauses, volatility; `functionDefinitionSha256` in
+ *   `scripts/lib/payroll-catalog-boundary.ts`). A required trigger must also
+ *   have no `WHEN` clause, no `UPDATE OF` list, no arguments, and not be
+ *   deferrable or a constraint trigger (Issue #1436 audit, H1).
+ * - `foreignKeys`: every foreign key the table declares, by target table,
+ *   referencing and referenced columns, and `ON UPDATE` / `ON DELETE` action;
+ *   it must be enforced, validated and not deferrable (audit, M1).
+ * - `nameFreeTolerance`: how many of this table's column TYPES (a multiset,
+ *   names ignored, a DOMAIN counted as its base type) a NON-family relation
+ *   may lack and still be this table under another name
+ *   (`payroll-fingerprint-match`). One-sided: extra columns on the candidate do
+ *   not count, so padding a copy does not hide it (audit, M2). A rebuild that
  *   renames every column keeps every type. `null` means the shape is not
  *   distinctive enough to match without names: the transition log's nine
  *   generic columns sit within one column of ordinary status logs, so it is
@@ -283,8 +291,19 @@ export const PAYROLL_OWNER_REFERENCE_TABLE = "awcms_schema_migrations";
  */
 export type PayrollTableFingerprint = {
   columns: readonly string[];
-  triggers: readonly { name: string; function: string; type: number }[];
-  foreignKeys: readonly { to: string; columns: readonly string[] }[];
+  triggers: readonly {
+    name: string;
+    function: string;
+    type: number;
+    functionSha256: string;
+  }[];
+  foreignKeys: readonly {
+    to: string;
+    columns: readonly string[];
+    refColumns: readonly string[];
+    onUpdate: string;
+    onDelete: string;
+  }[];
   nameFreeTolerance: number | null;
 };
 
@@ -335,39 +354,98 @@ export const PAYROLL_REQUIRED_TABLE_FINGERPRINTS: Readonly<
       {
         name: "awcms_hr_commission_accruals_born_valid",
         function: "awcms_hr_commission_accruals_insert_guard",
-        type: 7
+        type: 7,
+        functionSha256:
+          "688e0d055bbe7c700e6e3caed308ffa770f050f71d57950d70cc61571e0a0a62"
       },
       {
         name: "awcms_hr_commission_accruals_immutable",
         function: "awcms_hr_commission_accruals_guard",
-        type: 27
+        type: 27,
+        functionSha256:
+          "4fc2026c8babba44e29669054f036f6c36f0e6d19a9a49eb1ad677efa807010c"
       },
       {
         name: "awcms_hr_commission_accruals_log_birth",
         function: "awcms_hr_commission_accruals_log",
-        type: 5
+        type: 5,
+        functionSha256:
+          "c8fbcc476817f21008af7521fc1cad0843e18744724af0d4aea718c04d562911"
       },
       {
         name: "awcms_hr_commission_accruals_log_change",
         function: "awcms_hr_commission_accruals_log",
-        type: 17
+        type: 17,
+        functionSha256:
+          "c8fbcc476817f21008af7521fc1cad0843e18744724af0d4aea718c04d562911"
       }
     ],
     foreignKeys: [
-      { to: "awcms_tenants", columns: ["tenant_id"] },
-      { to: "awcms_tenant_users", columns: ["tenant_id", "approved_by"] },
+      {
+        to: "awcms_tenants",
+        columns: ["tenant_id"],
+        refColumns: ["id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
       {
         to: "awcms_tenant_users",
-        columns: ["tenant_id", "beneficiary_tenant_user_id"]
+        columns: ["tenant_id", "approved_by"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
       },
-      { to: "awcms_tenant_users", columns: ["tenant_id", "created_by"] },
-      { to: "awcms_tenant_users", columns: ["tenant_id", "paid_by"] },
-      { to: "awcms_tenant_users", columns: ["tenant_id", "released_by"] },
-      { to: "awcms_tenant_users", columns: ["tenant_id", "voided_by"] },
-      { to: "awcms_hr_employments", columns: ["tenant_id", "employment_id"] },
-      { to: "awcms_hr_commission_rules", columns: ["tenant_id", "rule_id"] }
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "beneficiary_tenant_user_id"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "created_by"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "paid_by"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "released_by"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "voided_by"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_hr_employments",
+        columns: ["tenant_id", "employment_id"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
+      {
+        to: "awcms_hr_commission_rules",
+        columns: ["tenant_id", "rule_id"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
+      }
     ],
-    nameFreeTolerance: 3
+    nameFreeTolerance: 2
   },
   awcms_hr_commission_transitions: {
     columns: [
@@ -385,18 +463,32 @@ export const PAYROLL_REQUIRED_TABLE_FINGERPRINTS: Readonly<
       {
         name: "awcms_hr_commission_transitions_guard",
         function: "awcms_hr_commission_transitions_guard",
-        type: 31
+        type: 31,
+        functionSha256:
+          "e34f7cef48593fbfdede86530a5fdb5c57384ff5be8b9c68126bc00ed5b29080"
       }
     ],
     foreignKeys: [
-      { to: "awcms_tenants", columns: ["tenant_id"] },
+      {
+        to: "awcms_tenants",
+        columns: ["tenant_id"],
+        refColumns: ["id"],
+        onUpdate: "a",
+        onDelete: "a"
+      },
       {
         to: "awcms_tenant_users",
-        columns: ["tenant_id", "actor_tenant_user_id"]
+        columns: ["tenant_id", "actor_tenant_user_id"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
       },
       {
         to: "awcms_hr_commission_accruals",
-        columns: ["tenant_id", "accrual_id"]
+        columns: ["tenant_id", "accrual_id"],
+        refColumns: ["tenant_id", "id"],
+        onUpdate: "a",
+        onDelete: "a"
       }
     ],
     nameFreeTolerance: null
@@ -433,7 +525,8 @@ export const PAYROLL_REQUIRED_FOREIGN_KEYS: readonly {
  * membership, a role that owns a payroll relation or family function, the
  * migration-ledger owner, an expected owner, a grantee on a payroll relation,
  * an EXECUTE grantee of a family SECURITY DEFINER function, a privileged
- * predefined role, a superuser or a BYPASSRLS role. Such a function that is not
+ * predefined role, a superuser, a BYPASSRLS or a REPLICATION role. Extension
+ * members are held to the same rule. Such a function that is not
  * listed here fails the catalog check (`security-definer-not-allow-listed`).
  * The repository's convention is the way out that needs no entry: own the
  * function with a dedicated `NOLOGIN` role that holds no payroll privilege
@@ -441,10 +534,16 @@ export const PAYROLL_REQUIRED_FOREIGN_KEYS: readonly {
  *
  * Key: `schema.name(identity arguments)` exactly as
  * `pg_get_function_identity_arguments` prints them. Each entry pins the
- * reviewed object: `owner` and `bodySha256` (SHA-256 of the body the catalog
- * returns: `prosrc`, or the deparsed `BEGIN ATOMIC` body). A changed owner or
- * body is `security-definer-allowlist-drift`; an entry whose function is gone
- * is reported stale. `PAYROLL_CATALOG_EXEMPTIONS` does NOT cover these two
+ * reviewed object: `owner`, `definitionSha256` (`functionDefinitionSha256`:
+ * body as the catalog returns it, `prosrc` or the deparsed `BEGIN ATOMIC`
+ * body, plus language, kind, volatility, strictness, leakproofness, SECURITY
+ * DEFINER, return type, arguments and every `SET` clause) and
+ * `executeGrantees` (who may EXECUTE it, `PUBLIC` included). Any difference is
+ * `security-definer-allowlist-drift` (audit M4: `RESET search_path` or
+ * `GRANT EXECUTE ... TO PUBLIC` on a reviewed function); an entry whose
+ * function is gone is reported stale. A deparsed atomic body depends on the
+ * server's deparser, so a major-version upgrade can turn such an entry into
+ * drift (fail-closed; re-pin it). `PAYROLL_CATALOG_EXEMPTIONS` does NOT cover these two
  * codes: this list is the only route.
  *
  * Who may add an entry is ADR-0173 (Q1). EMPTY today.
@@ -456,8 +555,10 @@ export type PayrollSecurityDefinerAllowEntry = {
   approvedIn: string;
   /** The owner role the review saw. */
   owner: string;
-  /** Lower-case hex SHA-256 of the body the review saw. */
-  bodySha256: string;
+  /** Lower-case hex `functionDefinitionSha256` of the definition the review saw. */
+  definitionSha256: string;
+  /** Roles that may EXECUTE it (`PUBLIC` spelled so), as the review saw them. */
+  executeGrantees: readonly string[];
 };
 
 export const PAYROLL_SECURITY_DEFINER_ALLOWLIST: Readonly<
@@ -496,8 +597,16 @@ export function validatePayrollSecurityDefinerAllowlist(
         `${key}: owner must be named and must not be a runtime role (${PAYROLL_FORBIDDEN_OWNERS.join(", ")})`
       );
     }
-    if (!/^[0-9a-f]{64}$/.test(entry.bodySha256 ?? "")) {
-      problems.push(`${key}: bodySha256 must be 64 lower-case hex characters`);
+    if (!/^[0-9a-f]{64}$/.test(entry.definitionSha256 ?? "")) {
+      problems.push(
+        `${key}: definitionSha256 must be 64 lower-case hex characters`
+      );
+    }
+    if (
+      !Array.isArray(entry.executeGrantees) ||
+      entry.executeGrantees.length === 0
+    ) {
+      problems.push(`${key}: executeGrantees must list who may EXECUTE it`);
     }
   }
 
@@ -516,12 +625,18 @@ export const PAYROLL_LOOKALIKE_MIN_COLUMNS = 5;
 /**
  * Predefined roles that read or write every table without an ACL entry (Issue
  * #1077 audit, M4). A member of one reads payroll; so is a member of any
- * superuser or BYPASSRLS role (computed from `pg_roles`).
+ * superuser, BYPASSRLS or REPLICATION role (computed from `pg_roles`).
  */
 export const PAYROLL_PRIVILEGED_PREDEFINED_ROLES: readonly string[] = [
   "pg_read_all_data",
   "pg_write_all_data",
-  "pg_maintain"
+  "pg_maintain",
+  // Read or write any file the server can, or run a program as the server
+  // (`COPY ... FROM PROGRAM`): every payroll row through the data directory
+  // (Issue #1436 audit, M3).
+  "pg_execute_server_program",
+  "pg_read_server_files",
+  "pg_write_server_files"
 ];
 
 /**

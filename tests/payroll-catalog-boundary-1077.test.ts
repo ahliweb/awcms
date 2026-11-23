@@ -22,11 +22,11 @@ import {
   type PayrollReadFunctionImport
 } from "../src/modules/_shared/sensitive-reads";
 import {
-  analysePayrollCatalog,
   staleCatalogExemptions,
   type CatalogSnapshot
 } from "../scripts/lib/payroll-catalog-boundary";
 import {
+  analysePayrollCatalog,
   HEALTHY_PAYROLL_COLUMNS,
   HEALTHY_PAYROLL_FOREIGN_KEYS,
   HEALTHY_PAYROLL_TRIGGERS
@@ -1200,7 +1200,8 @@ describe("re-verification audit of #1077", () => {
           }
         ])
       )
-    ).toEqual(["payroll-lookalike"]);
+      // It also lacks only 2 of the ledger's column types (Issue #1436).
+    ).toEqual(["payroll-lookalike", "payroll-fingerprint-match"]);
     // An ordinary table, a family table, and a table with a few shared names are fine.
     expect(
       codes(

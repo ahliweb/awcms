@@ -50,11 +50,11 @@
  *
  * | Code                                | Source of truth                                  | Fails when                                                                                                   |
  * | ----------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
- * | `security-definer-not-allow-listed` | `pg_proc.prosecdef` + owner reach                | a non-family SECURITY DEFINER function's owner reaches payroll and it is not in `PAYROLL_SECURITY_DEFINER_ALLOWLIST` |
- * | `security-definer-allowlist-drift`  | same + SHA-256 of the body                       | an allow-listed function's owner or body is not the one pinned                                                |
+ * | `security-definer-not-allow-listed` | `pg_proc.prosecdef` + owner reach                | a non-family SECURITY DEFINER function (extension members included) whose owner reaches payroll is not in `PAYROLL_SECURITY_DEFINER_ALLOWLIST` |
+ * | `security-definer-allowlist-drift`  | same + `functionDefinitionSha256` + `proacl`     | an allow-listed function's owner, definition (body, SET clauses, language, volatility...) or EXECUTE grantees are not the ones pinned |
  * | `function-body-unreadable`          | `pg_proc.prosqlbody`                             | a SQL-standard (BEGIN ATOMIC) body came back empty (fail closed); otherwise its deparsed text and its `pg_depend` calls feed every body rule |
- * | `payroll-fingerprint-drift`         | `PAYROLL_REQUIRED_TABLE_FINGERPRINTS`            | a required table's columns, required triggers (function, tgtype) or foreign keys differ from the pin        |
- * | `payroll-fingerprint-match`         | same, column types only                          | a non-family relation's column types are within the fingerprint's name-free tolerance                       |
+ * | `payroll-fingerprint-drift`         | `PAYROLL_REQUIRED_TABLE_FINGERPRINTS`            | a required table's columns, required triggers (function and its definition digest, tgtype, no WHEN / UPDATE OF / arguments / deferral) or foreign keys (columns, referenced columns, actions, enforced, validated) differ from the pin |
+ * | `payroll-fingerprint-match`         | same, column types only (domains as base types)  | a non-family relation lacks at most the fingerprint's name-free tolerance of its column types (extra columns not counted) |
  *
  * Findings of the first four function codes are about objects that exist; the
  * check makes no judgement about intent. The fix is always the same: name the
@@ -172,6 +172,16 @@ export type CatalogFunction = {
   atomicBody?: boolean;
   /** Functions the function depends on in `pg_depend` (recorded for `BEGIN ATOMIC` bodies; Issue #1436). */
   dependsOnFunctions?: Qualified[];
+  /** `proconfig` (`SET` clauses, e.g. `search_path=public, pg_temp`), in order (Issue #1436 audit, M4). */
+  config?: string[];
+  /** `prokind`: `f` function, `p` procedure, `w` window. */
+  kind?: string;
+  /** `provolatile`: `i`, `s` or `v`. */
+  volatility?: string;
+  strict?: boolean;
+  leakproof?: boolean;
+  /** An extension member (only read for SECURITY DEFINER, rule 1 of ADR-0173). */
+  extensionMember?: boolean;
 };
 
 export type CatalogTrigger = {
@@ -182,6 +192,15 @@ export type CatalogTrigger = {
   enabled?: string;
   /** `pg_trigger.tgtype`: timing, level and events as a bitmask (Issue #1436 fingerprint). */
   type?: number;
+  /** A `WHEN (...)` clause is present (`tgqual IS NOT NULL`; Issue #1436 audit, H1). */
+  hasWhen?: boolean;
+  /** `UPDATE OF` columns (`tgattr`), by name. */
+  updateOf?: string[];
+  /** `tgnargs`: arguments passed to the function. */
+  argumentCount?: number;
+  deferrable?: boolean;
+  /** A constraint trigger (`tgconstraint <> 0`). */
+  constraintTrigger?: boolean;
 };
 
 export type CatalogGrant = {
@@ -239,6 +258,8 @@ export type CatalogRole = {
   name: string;
   superuser: boolean;
   bypassRls: boolean;
+  /** `rolreplication`: can stream every row through a replication connection (Issue #1436 audit, M3). */
+  replication?: boolean;
 };
 
 /** An index, constraint or policy, with the relation it sits on (Issue #1077 audit, H1). */
@@ -249,13 +270,27 @@ export type CatalogNamedObject = {
 };
 
 /** The columns of a relation, `name:type`, in order (Issue #1077 audit, HIGH-1). */
-export type CatalogColumns = { relation: Qualified; columns: string[] };
+export type CatalogColumns = {
+  relation: Qualified;
+  columns: string[];
+  /** The same columns with every DOMAIN reduced to its base type (Issue #1436 audit, M2). */
+  baseColumns?: string[];
+};
 
 /** A foreign key between two relations, with its referencing columns in order (Issue #1436). */
 export type CatalogForeignKey = {
   from: Qualified;
   to: Qualified;
   columns?: string[];
+  /** Referenced columns (`confkey`), in order (Issue #1436 audit, M1). */
+  refColumns?: string[];
+  /** `confupdtype` / `confdeltype`: `a` no action, `r` restrict, `c` cascade, `n` set null, `d` set default. */
+  onUpdate?: string;
+  onDelete?: string;
+  /** `conenforced` (PostgreSQL 18; true before) and `convalidated`. */
+  enforced?: boolean;
+  validated?: boolean;
+  deferrable?: boolean;
 };
 
 export type CatalogSnapshot = {
@@ -275,6 +310,8 @@ export type CatalogSnapshot = {
   publications: CatalogPublication[];
   foreignTables: CatalogForeignTable[];
   dependencies: CatalogDependency[];
+  /** SECURITY DEFINER functions that are extension members (Issue #1436 audit, L1). */
+  extensionDefiners?: CatalogFunction[];
 };
 
 export type CatalogFinding = {
@@ -384,17 +421,32 @@ export async function loadPayrollCatalogSnapshot(
              SELECT jsonb_agg(DISTINCT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee)::text END)
              FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
              WHERE a.privilege_type = 'EXECUTE'
-           ), '[]'::jsonb) AS execute_grantees
+           ), '[]'::jsonb) AS execute_grantees,
+           COALESCE(p.proconfig, '{}'::text[]) AS config,
+           p.prokind::text AS kind,
+           p.provolatile::text AS volatility,
+           p.proisstrict AS strict,
+           p.proleakproof AS leakproof,
+           EXISTS (
+             SELECT 1 FROM pg_depend e
+             WHERE e.classid = 'pg_proc'::regclass AND e.objid = p.oid
+               AND e.deptype = 'e'
+           ) AS extension_member
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     JOIN pg_language l ON l.oid = p.prolang
     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
       AND n.nspname !~ '^pg_(toast|temp)'
       AND p.prokind <> 'a'
-      AND NOT EXISTS (
-        SELECT 1 FROM pg_depend e
-        WHERE e.classid = 'pg_proc'::regclass AND e.objid = p.oid
-          AND e.deptype = 'e'
+      -- Extension members are read only when SECURITY DEFINER: rule 1 of
+      -- ADR-0173 holds them to the allow-list too (Issue #1436 audit, L1).
+      AND (
+        p.prosecdef
+        OR NOT EXISTS (
+          SELECT 1 FROM pg_depend e
+          WHERE e.classid = 'pg_proc'::regclass AND e.objid = p.oid
+            AND e.deptype = 'e'
+        )
       )
   `) as {
     name: string;
@@ -411,6 +463,12 @@ export async function loadPayrollCatalogSnapshot(
     atomic_body: boolean;
     identity: string;
     depends_on_functions: string[];
+    config: string[];
+    kind: string;
+    volatility: string;
+    strict: boolean;
+    leakproof: boolean;
+    extension_member: boolean;
   }[];
 
   const triggers = (await sql`
@@ -418,7 +476,17 @@ export async function loadPayrollCatalogSnapshot(
            t.tgname::text AS name,
            fn.nspname || '.' || p.proname AS function,
            t.tgenabled::text AS enabled,
-           t.tgtype::integer AS type
+           t.tgtype::integer AS type,
+           (t.tgqual IS NOT NULL) AS has_when,
+           ARRAY(
+             SELECT a.attname::text
+             FROM unnest(t.tgattr::int2[]) WITH ORDINALITY AS k(attnum, ord)
+             JOIN pg_attribute a ON a.attrelid = t.tgrelid AND a.attnum = k.attnum
+             ORDER BY k.ord
+           ) AS update_of,
+           t.tgnargs::integer AS argument_count,
+           t.tgdeferrable AS deferrable,
+           (t.tgconstraint <> 0) AS constraint_trigger
     FROM pg_trigger t
     JOIN pg_class c ON c.oid = t.tgrelid
     JOIN pg_namespace cn ON cn.oid = c.relnamespace
@@ -432,6 +500,11 @@ export async function loadPayrollCatalogSnapshot(
     function: string;
     enabled: string;
     type: number;
+    has_when: boolean;
+    update_of: string[];
+    argument_count: number;
+    deferrable: boolean;
+    constraint_trigger: boolean;
   }[];
 
   const grants = (await sql`
@@ -493,9 +566,15 @@ export async function loadPayrollCatalogSnapshot(
   }[];
 
   const roles = (await sql`
-    SELECT rolname::text AS name, rolsuper AS superuser, rolbypassrls AS bypass_rls
+    SELECT rolname::text AS name, rolsuper AS superuser, rolbypassrls AS bypass_rls,
+           rolreplication AS replication
     FROM pg_roles
-  `) as { name: string; superuser: boolean; bypass_rls: boolean }[];
+  `) as {
+    name: string;
+    superuser: boolean;
+    bypass_rls: boolean;
+    replication: boolean;
+  }[];
 
   const namedObjects = (await sql`
     SELECT 'index' AS kind, i.relname::text AS name, n.nspname || '.' || c.relname AS relation
@@ -515,18 +594,33 @@ export async function loadPayrollCatalogSnapshot(
     JOIN pg_namespace n ON n.oid = c.relnamespace
   `) as { kind: string; name: string; relation: string }[];
 
+  // A DOMAIN over a pinned type is the pinned type for name-free matching
+  // (Issue #1436 audit, M2): resolve domains over domains to the base type.
   const columns = (await sql`
+    WITH RECURSIVE dom AS (
+      SELECT t.oid AS domain, t.typbasetype AS base
+      FROM pg_type t WHERE t.typtype = 'd'
+      UNION ALL
+      SELECT dom.domain, t.typbasetype
+      FROM dom JOIN pg_type t ON t.oid = dom.base AND t.typtype = 'd'
+    ), base AS (
+      SELECT dom.domain, dom.base
+      FROM dom JOIN pg_type t ON t.oid = dom.base AND t.typtype <> 'd'
+    )
     SELECT n.nspname || '.' || c.relname AS relation,
            array_agg(a.attname::text || ':' || format_type(a.atttypid, NULL)
-                     ORDER BY a.attnum) AS columns
+                     ORDER BY a.attnum) AS columns,
+           array_agg(a.attname::text || ':' || format_type(COALESCE(b.base, a.atttypid), NULL)
+                     ORDER BY a.attnum) AS base_columns
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+    LEFT JOIN base b ON b.domain = a.atttypid
     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
       AND n.nspname NOT IN ('pg_catalog', 'information_schema')
       AND n.nspname !~ '^pg_(toast|temp)'
     GROUP BY n.nspname, c.relname
-  `) as { relation: string; columns: string[] }[];
+  `) as { relation: string; columns: string[]; base_columns: string[] }[];
 
   const foreignKeys = (await sql`
     SELECT fn.nspname || '.' || f.relname AS "from",
@@ -536,14 +630,36 @@ export async function loadPayrollCatalogSnapshot(
              FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
              JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
              ORDER BY k.ord
-           ) AS columns
+           ) AS columns,
+           ARRAY(
+             SELECT a.attname::text
+             FROM unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord)
+             JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.attnum
+             ORDER BY k.ord
+           ) AS ref_columns,
+           con.confupdtype::text AS on_update,
+           con.confdeltype::text AS on_delete,
+           -- conenforced exists from PostgreSQL 18; before it every FK is enforced.
+           COALESCE((to_jsonb(con) ->> 'conenforced')::boolean, true) AS enforced,
+           con.convalidated AS validated,
+           con.condeferrable AS deferrable
     FROM pg_constraint con
     JOIN pg_class f ON f.oid = con.conrelid
     JOIN pg_namespace fn ON fn.oid = f.relnamespace
     JOIN pg_class t ON t.oid = con.confrelid
     JOIN pg_namespace tn ON tn.oid = t.relnamespace
     WHERE con.contype = 'f'
-  `) as { from: string; to: string; columns: string[] }[];
+  `) as {
+    from: string;
+    to: string;
+    columns: string[];
+    ref_columns: string[];
+    on_update: string;
+    on_delete: string;
+    enforced: boolean;
+    validated: boolean;
+    deferrable: boolean;
+  }[];
 
   const migrationOwnerRows = (await sql`
     SELECT pg_get_userbyid(c.relowner)::text AS owner
@@ -703,14 +819,53 @@ export async function loadPayrollCatalogSnapshot(
     referenced: string;
   }[];
 
+  const mappedFunctions: CatalogFunction[] = functions.map((row) => ({
+    name: row.name,
+    language: row.language,
+    securityDefiner: row.security_definer,
+    returnsTrigger: row.returns_trigger,
+    returnsSet: row.returns_set,
+    returnType: row.return_type,
+    owner: row.owner,
+    source: row.source,
+    rowTypeRelations: row.row_type_relations,
+    dependsOnRelations: row.depends_on_relations,
+    executeGrantees: row.execute_grantees,
+    identity: row.identity,
+    atomicBody: row.atomic_body,
+    dependsOnFunctions: row.depends_on_functions,
+    config: row.config,
+    kind: row.kind,
+    volatility: row.volatility,
+    strict: row.strict,
+    leakproof: row.leakproof,
+    extensionMember: row.extension_member
+  }));
+
   return {
-    columns,
-    foreignKeys,
+    columns: columns.map((row) => ({
+      relation: row.relation,
+      columns: row.columns,
+      baseColumns: row.base_columns
+    })),
+    foreignKeys: foreignKeys.map((row) => ({
+      from: row.from,
+      to: row.to,
+      columns: row.columns,
+      refColumns: row.ref_columns,
+      onUpdate: row.on_update,
+      onDelete: row.on_delete,
+      enforced: row.enforced,
+      validated: row.validated,
+      deferrable: row.deferrable
+    })),
+    extensionDefiners: mappedFunctions.filter((fn) => fn.extensionMember),
     migrationOwner: migrationOwnerRows[0]?.owner ?? null,
     roles: roles.map((row) => ({
       name: row.name,
       superuser: row.superuser,
-      bypassRls: row.bypass_rls
+      bypassRls: row.bypass_rls,
+      replication: row.replication
     })),
     namedObjects,
     relations,
@@ -733,23 +888,19 @@ export async function loadPayrollCatalogSnapshot(
       dependsOnRelations: row.depends_on_relations,
       dependsOnFunctions: row.depends_on_functions
     })),
-    functions: functions.map((row) => ({
+    functions: mappedFunctions.filter((fn) => !fn.extensionMember),
+    triggers: triggers.map((row) => ({
+      relation: row.relation,
       name: row.name,
-      language: row.language,
-      securityDefiner: row.security_definer,
-      returnsTrigger: row.returns_trigger,
-      returnsSet: row.returns_set,
-      returnType: row.return_type,
-      owner: row.owner,
-      source: row.source,
-      rowTypeRelations: row.row_type_relations,
-      dependsOnRelations: row.depends_on_relations,
-      executeGrantees: row.execute_grantees,
-      identity: row.identity,
-      atomicBody: row.atomic_body,
-      dependsOnFunctions: row.depends_on_functions
+      function: row.function,
+      enabled: row.enabled,
+      type: row.type,
+      hasWhen: row.has_when,
+      updateOf: row.update_of,
+      argumentCount: row.argument_count,
+      deferrable: row.deferrable,
+      constraintTrigger: row.constraint_trigger
     })),
-    triggers,
     grants,
     inheritance
   };
@@ -851,9 +1002,63 @@ export function functionBodySha256(source: string): string {
   return new Bun.CryptoHasher("sha256").update(source).digest("hex");
 }
 
+/**
+ * Lower-case hex SHA-256 of a function's whole definition, owner and ACL
+ * excluded (Issue #1436 audit, H1 and M4): the body as the catalog returns it
+ * plus language, kind, volatility, strictness, leakproofness, SECURITY
+ * DEFINER, return type, identity arguments and every `SET` clause. The owner
+ * and the EXECUTE grantees are pinned beside it, not in it.
+ */
+export function functionDefinitionSha256(fn: CatalogFunction): string {
+  return functionBodySha256(
+    JSON.stringify({
+      language: fn.language,
+      kind: fn.kind ?? null,
+      volatility: fn.volatility ?? null,
+      strict: fn.strict ?? null,
+      leakproof: fn.leakproof ?? null,
+      securityDefiner: fn.securityDefiner,
+      returnType: fn.returnType,
+      returnsSet: fn.returnsSet,
+      identity: fn.identity ?? "",
+      config: fn.config ?? null,
+      source: fn.source
+    })
+  );
+}
+
+/** Sorted, de-duplicated EXECUTE grantees (the ACL half of an allow-list pin). */
+function sortedGrantees(grantees: readonly string[]): string {
+  return [...new Set(grantees)].sort().join(",");
+}
+
 /** Column types of `name:type` entries (the name-free part of a fingerprint). */
 function columnTypes(columns: readonly string[]): string[] {
   return columns.map((column) => column.slice(column.indexOf(":") + 1));
+}
+
+/** How many items of the multiset `pinned` are absent from `candidate`. */
+export function multisetMissing(
+  pinned: readonly string[],
+  candidate: readonly string[]
+): number {
+  const counts = new Map<string, number>();
+
+  for (const item of candidate) counts.set(item, (counts.get(item) ?? 0) + 1);
+
+  let missing = 0;
+
+  for (const item of pinned) {
+    const left = counts.get(item) ?? 0;
+
+    if (left > 0) {
+      counts.set(item, left - 1);
+    } else {
+      missing += 1;
+    }
+  }
+
+  return missing;
 }
 
 /** Size of the symmetric difference of two multisets. */
@@ -1381,20 +1586,22 @@ export function analysePayrollCatalog(
     ...familyOwners,
     ...privilegedRoles,
     ...snapshot.roles
-      .filter((role) => role.superuser || role.bypassRls)
+      .filter(
+        (role) => role.superuser || role.bypassRls || role.replication === true
+      )
       .map((role) => role.name)
   ]);
 
   // A runtime role that skips row-level security reads every tenant's payroll.
   for (const role of snapshot.roles) {
     if (
-      (role.superuser || role.bypassRls) &&
+      (role.superuser || role.bypassRls || role.replication === true) &&
       (allowed.includes(role.name) || workers.includes(role.name))
     ) {
       add(
         "payroll-role-bypass",
         `role:${role.name}`,
-        `runtime role ${role.name} is ${role.superuser ? "a superuser" : "BYPASSRLS"}: it ignores every row-level policy and every grant on payroll.`
+        `runtime role ${role.name} is ${role.superuser ? "a superuser" : role.bypassRls ? "BYPASSRLS" : "REPLICATION (it can stream every row)"}: it ignores every row-level policy and every grant on payroll.`
       );
     }
   }
@@ -1508,9 +1715,16 @@ export function analysePayrollCatalog(
     }
   }
 
-  for (const fn of outside) {
-    if (!fn.securityDefiner) continue;
+  // Extension members are held to the same rule (Issue #1436 audit, L1): an
+  // `ALTER EXTENSION ... ADD FUNCTION` must not take a definer out of view.
+  const definers = [
+    ...outside,
+    ...(snapshot.extensionDefiners ?? []).filter(
+      (fn) => !isPayrollFamily(fn.name)
+    )
+  ].filter((fn) => fn.securityDefiner);
 
+  for (const fn of definers) {
     const signature = functionSignature(fn);
     const entry = Object.hasOwn(definerAllowlist, signature)
       ? definerAllowlist[signature]
@@ -1518,13 +1732,21 @@ export function analysePayrollCatalog(
     const inReach = everyoneReaches || reach.has(fn.owner);
 
     if (entry !== undefined) {
-      const digest = functionBodySha256(fn.source);
+      // Owner, whole definition (body, SET clauses, language, volatility...)
+      // and who may EXECUTE it: the object the review saw (audit, M4).
+      const digest = functionDefinitionSha256(fn);
+      const grantees = sortedGrantees(fn.executeGrantees);
+      const pinnedGrantees = sortedGrantees(entry.executeGrantees ?? []);
 
-      if (entry.owner !== fn.owner || entry.bodySha256 !== digest) {
+      if (
+        entry.owner !== fn.owner ||
+        entry.definitionSha256 !== digest ||
+        pinnedGrantees !== grantees
+      ) {
         add(
           "security-definer-allowlist-drift",
           signature,
-          `${signature} is in PAYROLL_SECURITY_DEFINER_ALLOWLIST (${entry.approvedIn}) but is no longer the object that was reviewed: owner ${fn.owner} (pinned ${entry.owner}), body sha256 ${digest} (pinned ${entry.bodySha256}). Review it again and update the entry in the same PR (ADR-0173).`
+          `${signature} is in PAYROLL_SECURITY_DEFINER_ALLOWLIST (${entry.approvedIn}) but is no longer the object that was reviewed: owner ${fn.owner} (pinned ${entry.owner}), definition sha256 ${digest} (pinned ${entry.definitionSha256}), EXECUTE ${grantees} (pinned ${pinnedGrantees}). Review it again and update the entry in the same PR (ADR-0173).`
         );
       }
 
@@ -1580,20 +1802,65 @@ export function analysePayrollCatalog(
           `trigger ${pin.name} has tgtype ${trigger.type ?? "unknown"}, pinned ${pin.type}`
         );
       }
+      // A WHEN clause, an UPDATE OF list, arguments, DEFERRABLE or a
+      // constraint trigger can each silence a guard without touching its
+      // name, function or events (audit, H1). Unknown is drift (fail closed).
+      if (trigger.hasWhen !== false) {
+        drift.push(`trigger ${pin.name} has a WHEN clause (or it is unknown)`);
+      }
+      if (trigger.updateOf === undefined || trigger.updateOf.length > 0) {
+        drift.push(
+          `trigger ${pin.name} fires only on UPDATE OF ${trigger.updateOf?.join(", ") ?? "unknown"}`
+        );
+      }
+      if (trigger.argumentCount !== 0) {
+        drift.push(
+          `trigger ${pin.name} passes ${trigger.argumentCount ?? "unknown"} argument(s)`
+        );
+      }
+      if (trigger.deferrable !== false || trigger.constraintTrigger !== false) {
+        drift.push(
+          `trigger ${pin.name} is deferrable or a constraint trigger (or it is unknown)`
+        );
+      }
+
+      // The trigger FUNCTION is part of what the trigger is: a guard whose
+      // body was replaced by a no-op still has its name (audit, H1).
+      const guard = snapshot.functions.find(
+        (fn) =>
+          fn.name === `public.${pin.function}` &&
+          fn.returnsTrigger &&
+          (fn.identity ?? "") === ""
+      );
+      const digest = guard ? functionDefinitionSha256(guard) : "absent";
+
+      if (digest !== pin.functionSha256) {
+        drift.push(
+          `trigger function public.${pin.function} has definition sha256 ${digest}, pinned ${pin.functionSha256}`
+        );
+      }
     }
 
     for (const pin of fingerprint.foreignKeys) {
+      // Same edge, same referenced columns and actions, and still a real
+      // constraint: enforced, validated, not deferrable (audit, M1).
       const found = snapshot.foreignKeys.some(
         (fk) =>
           fk.from === qualified &&
           fk.to === `public.${pin.to}` &&
           fk.columns !== undefined &&
-          fk.columns.join(",") === pin.columns.join(",")
+          fk.columns.join(",") === pin.columns.join(",") &&
+          (fk.refColumns ?? []).join(",") === pin.refColumns.join(",") &&
+          fk.onUpdate === pin.onUpdate &&
+          fk.onDelete === pin.onDelete &&
+          fk.enforced === true &&
+          fk.validated === true &&
+          fk.deferrable === false
       );
 
       if (!found) {
         drift.push(
-          `no foreign key (${pin.columns.join(", ")}) -> public.${pin.to}`
+          `no enforced, validated foreign key (${pin.columns.join(", ")}) -> public.${pin.to} (${pin.refColumns.join(", ")}) ON UPDATE ${pin.onUpdate} ON DELETE ${pin.onDelete}`
         );
       }
     }
@@ -1613,16 +1880,19 @@ export function analysePayrollCatalog(
     for (const entry of snapshot.columns) {
       if (isPayrollFamily(entry.relation)) continue;
 
-      const distance = multisetDistance(
+      // One-sided (audit, M2): how many of the pinned types the candidate
+      // LACKS. Extra columns do not count, so padding a copy does not hide it;
+      // a DOMAIN counts as its base type.
+      const missingTypes = multisetMissing(
         pinnedTypes,
-        columnTypes(entry.columns)
+        columnTypes(entry.baseColumns ?? entry.columns)
       );
 
-      if (distance <= fingerprint.nameFreeTolerance) {
+      if (missingTypes <= fingerprint.nameFreeTolerance) {
         add(
           "payroll-fingerprint-match",
           entry.relation,
-          `${entry.relation} is not in the payroll family but its column types are within ${distance} of the ${pinnedTypes.length}-column fingerprint of ${qualified} (tolerance ${fingerprint.nameFreeTolerance}, names ignored): it is that table under another name, with its columns renamed (ADR-0173).`
+          `${entry.relation} is not in the payroll family but lacks only ${missingTypes} of the ${pinnedTypes.length} column types of ${qualified} (tolerance ${fingerprint.nameFreeTolerance}, names ignored, extra columns not counted, domains as their base type): it is that table under another name (ADR-0173).`
         );
       }
     }
@@ -1643,7 +1913,7 @@ export function staleSecurityDefinerAllowlist(
   > = PAYROLL_SECURITY_DEFINER_ALLOWLIST
 ): string[] {
   const known = new Set(
-    snapshot.functions
+    [...snapshot.functions, ...(snapshot.extensionDefiners ?? [])]
       .filter((fn) => fn.securityDefiner)
       .map((fn) => functionSignature(fn))
   );

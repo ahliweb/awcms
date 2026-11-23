@@ -417,6 +417,26 @@ function analyseStatement(
     }
   }
 
+  // CREATE OR REPLACE TRIGGER swaps a trigger in place, so a required
+  // trigger can gain `WHEN (false)` or `UPDATE OF one_column` without any DROP
+  // (Issue #1436 audit, H1).
+  const replaceTrigger = new RegExp(
+    String.raw`${start}CREATE\s+OR\s+REPLACE\s+(?:CONSTRAINT\s+)?TRIGGER\s+(${IDENT})[\s\S]*?\bON\s+(${NAME})`,
+    "i"
+  ).exec(text);
+
+  if (
+    replaceTrigger &&
+    (isPayrollTable(bareName(replaceTrigger[2]!)) ||
+      Object.values(PAYROLL_REQUIRED_TRIGGERS).some((names) =>
+        names.includes(bareName(replaceTrigger[1]!))
+      ))
+  ) {
+    ctx.immediate.push(
+      `${file}: CREATE OR REPLACE TRIGGER ${bareName(replaceTrigger[1]!)} on ${bareName(replaceTrigger[2]!)} replaces a trigger of a payroll table in place (a WHEN clause or an UPDATE OF list can silence it). (Issue #1436 audit, H1).`
+    );
+  }
+
   if (triggerTarget && isPayrollTable(bareName(triggerTarget))) {
     ctx.immediate.push(
       `${file}: a trigger is dropped or disabled on payroll table ${bareName(triggerTarget)}. The immutability and audit triggers are what make the ledger a ledger (Issue #1077 audit, H1).`

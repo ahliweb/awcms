@@ -25,6 +25,8 @@ import {
 import type { CommissionAccrual } from "../src/modules/hr-commission/application/hr-commission-accrual-ledger";
 import type { CatalogSnapshot } from "../scripts/lib/payroll-catalog-boundary";
 import {
+  TEST_PAYROLL_FINGERPRINTS,
+  healthyPayrollTriggerFunctions,
   HEALTHY_PAYROLL_COLUMNS,
   HEALTHY_PAYROLL_FOREIGN_KEYS,
   HEALTHY_PAYROLL_TRIGGERS
@@ -270,7 +272,7 @@ describe("the scheduled catalog check, verdict", () => {
     roles: [],
     namedObjects: [],
     rules: [],
-    functions: [],
+    functions: healthyPayrollTriggerFunctions("migrator"),
     triggers: HEALTHY_PAYROLL_TRIGGERS,
     grants: [],
     inheritance: [],
@@ -285,16 +287,23 @@ describe("the scheduled catalog check, verdict", () => {
     foreignTables: [],
     dependencies: []
   });
+  // The hand-built trigger functions carry test bodies: use the fingerprints
+  // re-pinned to them (tests/fixtures/payroll-fingerprint-snapshot.ts).
+  const evaluate: typeof evaluatePayrollCatalog = (s, env, options = {}) =>
+    evaluatePayrollCatalog(s, env, {
+      fingerprints: TEST_PAYROLL_FINGERPRINTS,
+      ...options
+    });
 
   test("a clean catalog passes", () => {
-    const result = evaluatePayrollCatalog(snapshot("migrator"), {}, {});
+    const result = evaluate(snapshot("migrator"), {}, {});
 
     expect(result.ok).toBe(true);
     expect(result.lines).toHaveLength(1);
   });
 
   test("a split-role deployment without PAYROLL_EXPECTED_OWNERS fails LOUDLY, naming the variable", () => {
-    const result = evaluatePayrollCatalog(
+    const result = evaluate(
       snapshot("payroll_owner"),
       {},
       { requireOwnersOnSplitRole: true }
@@ -306,7 +315,7 @@ describe("the scheduled catalog check, verdict", () => {
   });
 
   test("the same deployment passes once PAYROLL_EXPECTED_OWNERS names the owner", () => {
-    const result = evaluatePayrollCatalog(
+    const result = evaluate(
       snapshot("payroll_owner"),
       { PAYROLL_EXPECTED_OWNERS: " payroll_owner , other " },
       { requireOwnersOnSplitRole: true }
@@ -317,7 +326,7 @@ describe("the scheduled catalog check, verdict", () => {
   });
 
   test("a runtime role as owner still fails even with PAYROLL_EXPECTED_OWNERS set to something else", () => {
-    const result = evaluatePayrollCatalog(
+    const result = evaluate(
       snapshot("awcms_app"),
       { PAYROLL_EXPECTED_OWNERS: "payroll_owner" },
       { requireOwnersOnSplitRole: true }
@@ -330,7 +339,7 @@ describe("the scheduled catalog check, verdict", () => {
 
   test("an empty catalog with no ledger and no owners is a finding, never a pass", () => {
     const empty = { ...snapshot("migrator"), migrationOwner: null };
-    const result = evaluatePayrollCatalog(
+    const result = evaluate(
       empty,
       {},
       {

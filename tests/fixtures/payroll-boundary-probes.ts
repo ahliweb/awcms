@@ -874,6 +874,114 @@ CREATE TRIGGER ${PAYROLL}_immutable BEFORE DELETE OR UPDATE ON ${PAYROLL}
     staticCaught: true,
     catalogCodes: ["payroll-fingerprint-drift"]
   },
+  // Independent audit of #1436 (H1, M1, M2, M3, L1).
+  {
+    id: "audit1436-h1-replace-trigger-when-false",
+    evasion:
+      "audit H1: CREATE OR REPLACE TRIGGER gives the ledger's immutability trigger WHEN (false); name, function and events unchanged",
+    sql: `CREATE OR REPLACE TRIGGER ${PAYROLL}_immutable BEFORE DELETE OR UPDATE ON ${PAYROLL}
+  FOR EACH ROW WHEN (false) EXECUTE FUNCTION awcms_hr_commission_accruals_guard();`,
+    staticCaught: true,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "audit1436-h1-replace-log-guard-when-false",
+    evasion:
+      "audit H1: the transition log's guard trigger replaced with WHEN (false)",
+    sql: `CREATE OR REPLACE TRIGGER awcms_hr_commission_transitions_guard BEFORE INSERT OR DELETE OR UPDATE ON awcms_hr_commission_transitions
+  FOR EACH ROW WHEN (false) EXECUTE FUNCTION awcms_hr_commission_transitions_guard();`,
+    staticCaught: true,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "audit1436-h1-log-trigger-update-of-one-column",
+    evasion:
+      "audit H1: the change-log trigger narrowed to UPDATE OF one column",
+    sql: `CREATE OR REPLACE TRIGGER ${PAYROLL}_log_change AFTER UPDATE OF payment_reference ON ${PAYROLL}
+  FOR EACH ROW EXECUTE FUNCTION awcms_hr_commission_accruals_log();`,
+    staticCaught: true,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "audit1436-h1-guard-function-no-op",
+    evasion:
+      "audit H1: the immutability guard FUNCTION replaced with a no-op body; the trigger itself untouched",
+    sql: `CREATE OR REPLACE FUNCTION awcms_hr_commission_accruals_guard() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = public, pg_temp
+  AS $$ BEGIN RETURN COALESCE(NEW, OLD); END $$;`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "audit1436-m1-foreign-key-not-enforced",
+    evasion:
+      "audit M1: the transition log's foreign key to the ledger made NOT ENFORCED (it still exists, on the same columns)",
+    sql: `ALTER TABLE awcms_hr_commission_transitions ALTER CONSTRAINT awcms_hr_commission_transitions_accrual_fkey NOT ENFORCED;`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "audit1436-m2-padded-copy",
+    evasion:
+      "audit M2: the ledger's shape with every column renamed and four integer columns of padding",
+    sql: `CREATE TABLE awcms_probe_padded (${LEDGER_TYPES.map(
+      (type, index) => `c${String(index).padStart(2, "0")} ${type}`
+    ).join(", ")}, p1 int, p2 int, p3 int, p4 int);`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-match"]
+  },
+  {
+    id: "audit1436-m2-domain-wrapped-copy",
+    evasion:
+      "audit M2: the renamed copy with its uuid columns wrapped in a DOMAIN",
+    sql: `CREATE DOMAIN awcms_probe_dom AS uuid;
+CREATE TABLE awcms_probe_wrapped (${LEDGER_TYPES.map(
+      (type, index) =>
+        `c${String(index).padStart(2, "0")} ${type === "uuid" ? "awcms_probe_dom" : type}`
+    ).join(", ")});`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-match"]
+  },
+  {
+    id: "audit1436-m3-owner-runs-server-programs",
+    evasion:
+      "audit M3: a definer owned by a role that can run programs as the server (COPY ... FROM PROGRAM)",
+    sql: `CREATE ROLE awcms_probe_prog NOLOGIN;
+GRANT pg_execute_server_program TO awcms_probe_prog;
+CREATE FUNCTION awcms_probe_prog_fn() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+ALTER FUNCTION awcms_probe_prog_fn() OWNER TO awcms_probe_prog;`,
+    staticCaught: false,
+    catalogCodes: [
+      "payroll-role-membership",
+      "security-definer-not-allow-listed"
+    ]
+  },
+  {
+    id: "audit1436-m3-owner-has-replication",
+    evasion:
+      "audit M3: a definer owned by a REPLICATION role (it can stream every row over a replication connection)",
+    sql: `CREATE ROLE awcms_probe_repl NOLOGIN REPLICATION;
+CREATE FUNCTION awcms_probe_repl_fn() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+ALTER FUNCTION awcms_probe_repl_fn() OWNER TO awcms_probe_repl;`,
+    staticCaught: false,
+    catalogCodes: ["security-definer-not-allow-listed"]
+  },
+  {
+    id: "audit1436-l1-definer-hidden-in-an-extension",
+    evasion:
+      "audit L1: a definer owned by the payroll owner made an extension member, which the catalog used to skip",
+    sql: `CREATE EXTENSION IF NOT EXISTS isn;
+CREATE FUNCTION awcms_probe_extdef() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+ALTER EXTENSION isn ADD FUNCTION awcms_probe_extdef();`,
+    staticCaught: true,
+    catalogCodes: ["security-definer-not-allow-listed"]
+  },
   {
     id: "adr0173-fingerprint-foreign-key-dropped",
     evasion:

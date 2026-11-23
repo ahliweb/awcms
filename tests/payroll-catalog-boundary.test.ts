@@ -17,12 +17,12 @@ import { describe, expect, test } from "bun:test";
 import { PAYROLL_WORKER_EXECUTE_ALLOWLIST } from "../src/modules/_shared/payroll-data-boundary";
 import { findPayrollSqlLeaks } from "../scripts/payroll-sql-boundary-check";
 import {
-  analysePayrollCatalog,
   isPayrollFamily,
   staleCatalogExemptions,
   type CatalogSnapshot
 } from "../scripts/lib/payroll-catalog-boundary";
 import {
+  analysePayrollCatalog,
   HEALTHY_PAYROLL_COLUMNS,
   HEALTHY_PAYROLL_FOREIGN_KEYS,
   HEALTHY_PAYROLL_TRIGGERS

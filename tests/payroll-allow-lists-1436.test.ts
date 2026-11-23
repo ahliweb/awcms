@@ -29,15 +29,21 @@ import {
 } from "../src/modules/_shared/payroll-data-boundary";
 import {
   PAYROLL_ALLOWLIST_FINDING_CODES,
-  analysePayrollCatalog,
-  functionBodySha256,
+  analysePayrollCatalog as analyseWithoutFixture,
+  functionDefinitionSha256,
   functionSignature,
   multisetDistance,
+  multisetMissing,
   staleSecurityDefinerAllowlist,
   type AnalyseOptions,
   type CatalogSnapshot
 } from "../scripts/lib/payroll-catalog-boundary";
+import { evaluatePayrollCatalog } from "../scripts/lib/payroll-catalog-check-run";
+import { findPayrollSqlLeaks } from "../scripts/payroll-sql-boundary-check";
 import {
+  TEST_PAYROLL_FINGERPRINTS,
+  healthyPayrollTriggerFunctions,
+  analysePayrollCatalog,
   HEALTHY_PAYROLL_COLUMNS,
   HEALTHY_PAYROLL_FOREIGN_KEYS,
   HEALTHY_PAYROLL_TRIGGERS
@@ -162,6 +168,51 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
     ],
     ["a member of pg_read_all_data", {}, {}, "pg_read_all_data"],
     [
+      "a member of pg_execute_server_program (audit M3)",
+      {},
+      {
+        memberships: [
+          { role: "pg_execute_server_program", member: "awcms_probe_prog" }
+        ]
+      },
+      "awcms_probe_prog"
+    ],
+    [
+      "a member of pg_read_server_files (audit M3)",
+      {},
+      {
+        memberships: [
+          { role: "pg_read_server_files", member: "awcms_probe_files" }
+        ]
+      },
+      "awcms_probe_files"
+    ],
+    [
+      "a member of pg_write_server_files (audit M3)",
+      {},
+      {
+        memberships: [
+          { role: "pg_write_server_files", member: "awcms_probe_wfiles" }
+        ]
+      },
+      "awcms_probe_wfiles"
+    ],
+    [
+      "a REPLICATION role (audit M3)",
+      {},
+      {
+        roles: [
+          {
+            name: "awcms_probe_repl",
+            superuser: false,
+            bypassRls: false,
+            replication: true
+          }
+        ]
+      },
+      "awcms_probe_repl"
+    ],
+    [
       "a member of the request role (through another role)",
       {},
       {
@@ -214,6 +265,41 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
     }
   );
 
+  test("an extension member is held to the same rule (audit L1)", () => {
+    const hidden = { ...definer("owner"), extensionMember: true };
+
+    expect(codes(snapshot({ extensionDefiners: [hidden] }))).toEqual([
+      "security-definer-not-allow-listed"
+    ]);
+    expect(
+      codes(
+        snapshot({
+          extensionDefiners: [{ ...hidden, owner: "awcms_probe_dedicated" }]
+        })
+      )
+    ).toEqual([]);
+  });
+
+  test("split-role: payroll owned by one role, migrations by another; a definer owned by the MIGRATION role still reaches (audit L3)", () => {
+    const split = snapshot({
+      migrationOwner: "awcms_probe_migrator",
+      relations: [ACCRUALS, TRANSITIONS].map((name) => ({
+        name,
+        relkind: "r",
+        owner: "awcms_probe_payroll_owner",
+        comment: "payroll-boundary: test"
+      })),
+      functions: [
+        ...healthyPayrollTriggerFunctions("awcms_probe_payroll_owner"),
+        definer("awcms_probe_migrator")
+      ]
+    });
+
+    expect(
+      codes(split, { expectedOwners: ["awcms_probe_payroll_owner"] })
+    ).toEqual(["security-definer-not-allow-listed"]);
+  });
+
   test("PUBLIC executing a family SECURITY DEFINER function puts every owner in reach", () => {
     const found = codes(
       snapshot({
@@ -239,7 +325,8 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
           "probe: reviewed SECURITY DEFINER function owned by the payroll owner",
         approvedIn: "#1436",
         owner: "owner",
-        bodySha256: functionBodySha256("SELECT 1"),
+        definitionSha256: functionDefinitionSha256(definer("owner")),
+        executeGrantees: ["owner"],
         ...overrides
       }
     });
@@ -258,6 +345,71 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
           securityDefinerAllowlist: entry()
         })
       ).toEqual(["security-definer-allowlist-drift"]);
+    });
+
+    test("a SET clause removed (RESET search_path) is drift (audit M4)", () => {
+      const pinned = entry({
+        definitionSha256: functionDefinitionSha256({
+          ...definer("owner"),
+          config: ["search_path=pg_catalog, public"]
+        })
+      });
+
+      expect(
+        codes(
+          snapshot({
+            functions: [
+              {
+                ...definer("owner"),
+                config: ["search_path=pg_catalog, public"]
+              }
+            ]
+          }),
+          { securityDefinerAllowlist: pinned }
+        )
+      ).toEqual([]);
+      expect(
+        codes(snapshot({ functions: [{ ...definer("owner"), config: [] }] }), {
+          securityDefinerAllowlist: pinned
+        })
+      ).toEqual(["security-definer-allowlist-drift"]);
+    });
+
+    test.each([
+      ["volatility", { volatility: "i" }],
+      ["language", { language: "plpgsql" }],
+      ["kind", { kind: "p" }],
+      ["leakproof", { leakproof: true }]
+    ] as const)("a changed %s is drift (audit M4)", (_label, patch) => {
+      expect(
+        codes(snapshot({ functions: [{ ...definer("owner"), ...patch }] }), {
+          securityDefinerAllowlist: entry()
+        })
+      ).toEqual(["security-definer-allowlist-drift"]);
+    });
+
+    test("GRANT EXECUTE to PUBLIC (or another role) is drift (audit M4)", () => {
+      expect(
+        codes(
+          snapshot({
+            functions: [
+              { ...definer("owner"), executeGrantees: ["owner", "PUBLIC"] }
+            ]
+          }),
+          { securityDefinerAllowlist: entry() }
+        )
+      ).toEqual(["security-definer-allowlist-drift"]);
+      // Order and duplicates do not matter.
+      expect(
+        codes(
+          snapshot({
+            functions: [
+              { ...definer("owner"), executeGrantees: ["owner", "owner"] }
+            ]
+          }),
+          { securityDefinerAllowlist: entry() }
+        )
+      ).toEqual([]);
     });
 
     test("a changed owner is drift", () => {
@@ -320,7 +472,8 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
       reason: "a reviewed SECURITY DEFINER function, with the reason why",
       approvedIn: "ADR-0173",
       owner: "awcms_probe_definer_owner",
-      bodySha256: "a".repeat(64)
+      definitionSha256: "a".repeat(64),
+      executeGrantees: ["awcms_probe_definer_owner"]
     };
 
     test("the registered list is valid and EMPTY", () => {
@@ -348,7 +501,8 @@ describe("rule 1: non-family SECURITY DEFINER functions in payroll's reach are a
       ["no review reference", "public.awcms_probe_fn()", { approvedIn: "me" }],
       ["a runtime owner", "public.awcms_probe_fn()", { owner: "awcms_app" }],
       ["a worker owner", "public.awcms_probe_fn()", { owner: "awcms_worker" }],
-      ["a bad digest", "public.awcms_probe_fn()", { bodySha256: "abc" }]
+      ["a bad digest", "public.awcms_probe_fn()", { definitionSha256: "abc" }],
+      ["no grantees", "public.awcms_probe_fn()", { executeGrantees: [] }]
     ] as const)("%s is refused", (_label, key, overrides) => {
       expect(
         validatePayrollSecurityDefinerAllowlist({
@@ -506,6 +660,141 @@ describe("rule 3: required payroll tables are pinned by a fingerprint", () => {
     ]);
   });
 
+  describe("a required trigger silenced without changing its name, function or events (audit H1)", () => {
+    const patchTrigger = (
+      name: string,
+      patch: Partial<CatalogSnapshot["triggers"][number]>
+    ) =>
+      snapshot({
+        triggers: HEALTHY_PAYROLL_TRIGGERS.map((trigger) =>
+          trigger.name === name ? { ...trigger, ...patch } : trigger
+        )
+      });
+
+    test.each([
+      [
+        "WHEN (false) on the ledger guard",
+        "awcms_hr_commission_accruals_immutable",
+        { hasWhen: true }
+      ],
+      [
+        "WHEN (false) on the log guard",
+        "awcms_hr_commission_transitions_guard",
+        { hasWhen: true }
+      ],
+      [
+        "UPDATE OF one column on the change log",
+        "awcms_hr_commission_accruals_log_change",
+        { updateOf: ["payment_reference"] }
+      ],
+      [
+        "arguments",
+        "awcms_hr_commission_accruals_born_valid",
+        { argumentCount: 1 }
+      ],
+      [
+        "DEFERRABLE",
+        "awcms_hr_commission_accruals_log_birth",
+        { deferrable: true }
+      ],
+      [
+        "a constraint trigger",
+        "awcms_hr_commission_accruals_log_birth",
+        { constraintTrigger: true }
+      ],
+      [
+        "unknown shape",
+        "awcms_hr_commission_accruals_immutable",
+        { hasWhen: undefined }
+      ]
+    ] as const)("%s is drift", (_label, name, patch) => {
+      expect(
+        codes(
+          patchTrigger(
+            name,
+            patch as unknown as Partial<CatalogSnapshot["triggers"][number]>
+          )
+        )
+      ).toEqual(["payroll-fingerprint-drift"]);
+    });
+
+    test("a guard FUNCTION with a no-op body, or another SET clause, is drift", () => {
+      const replace = (patch: Partial<CatalogSnapshot["functions"][number]>) =>
+        snapshot({
+          functions: healthyPayrollTriggerFunctions().map((fn) =>
+            fn.name === "public.awcms_hr_commission_accruals_guard"
+              ? { ...fn, ...patch }
+              : fn
+          )
+        });
+
+      expect(codes(replace({}))).toEqual([]);
+      expect(
+        codes(replace({ source: "BEGIN RETURN COALESCE(NEW, OLD); END" }))
+      ).toEqual(["payroll-fingerprint-drift"]);
+      expect(codes(replace({ config: [] }))).toEqual([
+        "payroll-fingerprint-drift"
+      ]);
+      expect(codes(replace({ securityDefiner: true }))).toEqual([
+        "payroll-fingerprint-drift"
+      ]);
+      // Gone from the catalog entirely (the real analyser: the fixture
+      // wrapper would add the healthy function back).
+      expect(
+        analyseWithoutFixture(
+          snapshot({
+            functions: healthyPayrollTriggerFunctions().filter(
+              (fn) => fn.name !== "public.awcms_hr_commission_accruals_guard"
+            )
+          }),
+          { fingerprints: TEST_PAYROLL_FINGERPRINTS }
+        ).map((finding) => finding.code)
+      ).toEqual(["payroll-fingerprint-drift"]);
+    });
+
+    test("the registered digests are not the test ones (the real bodies are pinned)", () => {
+      expect(
+        LEDGER.triggers.every(
+          (trigger) =>
+            /^[0-9a-f]{64}$/.test(trigger.functionSha256) &&
+            trigger.functionSha256 !==
+              TEST_PAYROLL_FINGERPRINTS.awcms_hr_commission_accruals!.triggers.find(
+                (entry) => entry.name === trigger.name
+              )!.functionSha256
+        )
+      ).toBe(true);
+    });
+  });
+
+  test.each([
+    ["NOT ENFORCED", { enforced: false }],
+    ["NOT VALID", { validated: false }],
+    ["DEFERRABLE", { deferrable: true }],
+    ["ON DELETE CASCADE", { onDelete: "c" }],
+    ["ON UPDATE SET NULL", { onUpdate: "n" }],
+    ["other referenced columns", { refColumns: ["id", "tenant_id"] }]
+  ] as const)(
+    "a required foreign key made %s is drift (audit M1)",
+    (_label, patch) => {
+      expect(
+        codes(
+          snapshot({
+            foreignKeys: HEALTHY_PAYROLL_FOREIGN_KEYS.map((fk) =>
+              fk.from === TRANSITIONS && fk.to === ACCRUALS
+                ? {
+                    ...fk,
+                    ...(patch as unknown as Partial<
+                      CatalogSnapshot["foreignKeys"][number]
+                    >)
+                  }
+                : fk
+            )
+          })
+        )
+      ).toEqual(["payroll-fingerprint-drift"]);
+    }
+  );
+
   test("a foreign key gone, or on other columns, is drift", () => {
     const paidBy = (fk: CatalogSnapshot["foreignKeys"][number]) =>
       fk.from === ACCRUALS && fk.columns?.join(",") === "tenant_id,paid_by";
@@ -541,12 +830,16 @@ describe("rule 3: required payroll tables are pinned by a fingerprint", () => {
     const types = LEDGER.columns.map((column) =>
       column.slice(column.indexOf(":") + 1)
     );
-    const shadow = (columns: string[]) =>
+    const shadow = (columns: string[], baseColumns?: string[]) =>
       codes(
         snapshot({
           columns: [
             ...HEALTHY_PAYROLL_COLUMNS,
-            { relation: "public.awcms_probe_shadow", columns }
+            {
+              relation: "public.awcms_probe_shadow",
+              columns,
+              ...(baseColumns ? { baseColumns } : {})
+            }
           ]
         })
       );
@@ -557,18 +850,31 @@ describe("rule 3: required payroll tables are pinned by a fingerprint", () => {
       expect(shadow(renamed(types))).toEqual(["payroll-fingerprint-match"]);
     });
 
-    test("up to the tolerance of changes is still the ledger; one more is not", () => {
+    test("up to the tolerance of missing types is still the ledger; one more is not", () => {
       const tolerance = LEDGER.nameFreeTolerance!;
 
-      expect(tolerance).toBe(3);
-      // Drop one column and add another: distance 2 (it counts both sides).
-      expect(shadow(renamed([...types.slice(1), "bytea"]))).toEqual([
+      expect(tolerance).toBe(2);
+      expect(shadow(renamed(types.slice(2)))).toEqual([
         "payroll-fingerprint-match"
       ]);
-      expect(shadow(renamed(types.slice(3)))).toEqual([
+      expect(shadow(renamed(types.slice(3)))).toEqual([]);
+    });
+
+    test("padding a copy with extra columns does not hide it (one-sided, audit M2)", () => {
+      expect(
+        shadow(renamed([...types, "integer", "integer", "integer", "integer"]))
+      ).toEqual(["payroll-fingerprint-match"]);
+    });
+
+    test("a DOMAIN over a pinned type counts as that type (audit M2)", () => {
+      const wrapped = renamed(types).map((column, index) =>
+        index < 5 ? column.replace(/:.*/, ":public.awcms_probe_dom") : column
+      );
+
+      // As loaded: `columns` shows the domain, `baseColumns` the base type.
+      expect(shadow(wrapped, renamed(types))).toEqual([
         "payroll-fingerprint-match"
       ]);
-      expect(shadow(renamed(types.slice(4)))).toEqual([]);
     });
 
     test("the same shape INSIDE the family is not a finding", () => {
@@ -599,15 +905,84 @@ describe("rule 3: required payroll tables are pinned by a fingerprint", () => {
     });
   });
 
+  test("multisetMissing counts only what the candidate lacks", () => {
+    expect(multisetMissing(["a", "a", "b"], ["a", "b", "b", "c"])).toBe(1);
+    expect(multisetMissing(["a"], [])).toBe(1);
+    expect(multisetMissing(["a", "b"], ["b", "a", "z", "z"])).toBe(0);
+  });
+
   test("multisetDistance counts the symmetric difference", () => {
     expect(multisetDistance(["a", "a", "b"], ["a", "b", "b"])).toBe(2);
     expect(multisetDistance(["a"], [])).toBe(1);
     expect(multisetDistance(["a", "b"], ["b", "a"])).toBe(0);
   });
 
+  test("evaluatePayrollCatalog fails on a stale allow-list entry and passes without it (audit L2)", () => {
+    const base = snapshot({
+      functions: healthyPayrollTriggerFunctions("owner")
+    });
+    const allowlist = {
+      "public.awcms_probe_gone()": {
+        reason: "probe: an entry whose function no longer exists anywhere",
+        approvedIn: "#1436",
+        owner: "awcms_probe_definer_owner",
+        definitionSha256: "a".repeat(64),
+        executeGrantees: ["awcms_probe_definer_owner"]
+      }
+    };
+    const clean = evaluatePayrollCatalog(
+      base,
+      {},
+      {
+        fingerprints: TEST_PAYROLL_FINGERPRINTS
+      }
+    );
+    const stale = evaluatePayrollCatalog(
+      base,
+      {},
+      {
+        fingerprints: TEST_PAYROLL_FINGERPRINTS,
+        securityDefinerAllowlist: allowlist
+      }
+    );
+
+    expect(clean.ok).toBe(true);
+    expect(stale.ok).toBe(false);
+    expect(stale.staleExemptions).toEqual(["public.awcms_probe_gone()"]);
+    expect(stale.lines.join("\n")).toContain(
+      "stale PAYROLL_SECURITY_DEFINER_ALLOWLIST entry: public.awcms_probe_gone()"
+    );
+  });
+
   test("fingerprints cover exactly the required tables", () => {
     expect(Object.keys(PAYROLL_REQUIRED_TABLE_FINGERPRINTS).sort()).toEqual(
       ["awcms_hr_commission_accruals", "awcms_hr_commission_transitions"].sort()
     );
+  });
+});
+
+describe("static layer: CREATE OR REPLACE TRIGGER (audit H1)", () => {
+  const leaks = (sql: string) =>
+    findPayrollSqlLeaks([{ name: "999_probe.sql", sql }]);
+
+  test("on a payroll table, or reusing a required trigger's name, it is refused", () => {
+    expect(
+      leaks(
+        `CREATE OR REPLACE TRIGGER awcms_hr_commission_accruals_immutable BEFORE UPDATE ON awcms_hr_commission_accruals FOR EACH ROW WHEN (false) EXECUTE FUNCTION awcms_hr_commission_accruals_guard();`
+      ).join("\n")
+    ).toContain("CREATE OR REPLACE TRIGGER");
+    expect(
+      leaks(
+        `CREATE OR REPLACE CONSTRAINT TRIGGER awcms_probe_t AFTER INSERT ON public."awcms_hr_payroll_runs" FOR EACH ROW EXECUTE FUNCTION awcms_probe_fn();`
+      ).length
+    ).toBeGreaterThan(0);
+  });
+
+  test("on an ordinary table it is not this rule's business", () => {
+    expect(
+      leaks(
+        `CREATE OR REPLACE TRIGGER awcms_probe_t BEFORE UPDATE ON awcms_probe_ok FOR EACH ROW EXECUTE FUNCTION awcms_probe_fn();`
+      )
+    ).toEqual([]);
   });
 });

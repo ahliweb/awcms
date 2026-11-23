@@ -16,12 +16,20 @@ import {
   loadPayrollCatalogSnapshot,
   staleCatalogExemptions,
   staleSecurityDefinerAllowlist,
+  type AnalyseOptions,
   type CatalogSnapshot
 } from "./payroll-catalog-boundary";
 
 export type PayrollCatalogRunOptions = {
   /** Fail loudly (with its own message) when owners cannot be accounted for and `PAYROLL_EXPECTED_OWNERS` is empty. */
   requireOwnersOnSplitRole?: boolean;
+  /**
+   * The ADR-0173 registries, defaulting to the registered ones. A parameter so
+   * a test can prove the stale-entry verdict without registering a function
+   * (Issue #1436 audit, L2).
+   */
+  securityDefinerAllowlist?: AnalyseOptions["securityDefinerAllowlist"];
+  fingerprints?: AnalyseOptions["fingerprints"];
 };
 
 export type PayrollCatalogRunResult = {
@@ -57,11 +65,23 @@ export function evaluatePayrollCatalog(
   // migration ledger (docs/awcms/hr-payroll.md section 13.3).
   const configuredOwners = parseExpectedOwners(env.PAYROLL_EXPECTED_OWNERS);
   const findings = analysePayrollCatalog(snapshot, {
-    expectedOwners: [...PAYROLL_EXPECTED_OWNERS, ...configuredOwners]
+    expectedOwners: [...PAYROLL_EXPECTED_OWNERS, ...configuredOwners],
+    ...(options.securityDefinerAllowlist === undefined
+      ? {}
+      : { securityDefinerAllowlist: options.securityDefinerAllowlist }),
+    ...(options.fingerprints === undefined
+      ? {}
+      : { fingerprints: options.fingerprints })
   });
   const stale = staleCatalogExemptions(snapshot);
   // ADR-0173: an allow-list entry for a function that is gone is stale too.
-  const staleDefiners = staleSecurityDefinerAllowlist(snapshot);
+  const staleDefiners =
+    options.securityDefinerAllowlist === undefined
+      ? staleSecurityDefinerAllowlist(snapshot)
+      : staleSecurityDefinerAllowlist(
+          snapshot,
+          options.securityDefinerAllowlist
+        );
 
   if (
     findings.length === 0 &&

@@ -410,6 +410,24 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
+- **ADR-0173 DITERIMA — 24 November 2026 (#1436, keputusan pemilik Q1 = A,
+  Q2 = A).** Pemeriksaan katalog payroll pindah dari pemindaian deny-list ke
+  allow-list: fungsi `SECURITY DEFINER` non-keluarga (termasuk anggota
+  ekstensi) yang pemiliknya menjangkau payroll adalah entri
+  `PAYROLL_SECURITY_DEFINER_ALLOWLIST` (kosong) yang dipatok pada pemilik,
+  digest definisi, dan penerima EXECUTE, atau temuan; badan `BEGIN ATOMIC`
+  dibaca dan panggilan `pg_depend`-nya dihitung; tabel payroll wajib dipatok
+  oleh `PAYROLL_REQUIRED_TABLE_FINGERPRINTS` (kolom, trigger dengan digest
+  fungsi dan bentuk netral, foreign key enforced dan tervalidasi). Q1 = A:
+  entri ditambahkan lewat PR yang disetujui satu maintainer di bawah security
+  review GOVERNANCE.md, dengan nomor issue di `approvedIn`. Q2 = A: hanya
+  definer yang pemiliknya menjangkau payroll yang dicatat. Audit keamanan
+  independen (PASS-WITH-FOLLOWUPS: H1, M1 sampai M4, L1 sampai L4) ditutup di
+  PR yang sama; celah di luar cakupan (definer bernama keluarga,
+  `SET ON PARAMETER session_replication_role`, RLS/FORCE mati) dicatat di ADR,
+  bukan sebagai issue publik. Migrasi yang mengubah tabel payroll wajib atau
+  salah satu fungsi trigger-nya harus memperbarui sidik jarinya di PR yang
+  sama.
 - **`email:senders:verify` DIJADWALKAN — 14 November 2026 (#1160, ADR-0162).**
   Melaksanakan keputusan pemilik 11 November 2026 (entri ADR-0159 di bawah).
   Job kini ada di crontab ter-generate per jam (`0 * * * *`), sebagai job

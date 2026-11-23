@@ -406,6 +406,23 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **ADR-0173 ACCEPTED — 24 November 2026 (#1436, owner decisions Q1 = A,
+  Q2 = A).** The payroll catalog check moved from deny-list scanning to
+  allow-lists: a non-family `SECURITY DEFINER` function (extension members
+  included) whose owner reaches payroll is an entry of
+  `PAYROLL_SECURITY_DEFINER_ALLOWLIST` (empty) pinned to owner, definition
+  digest and EXECUTE grantees, or a finding; `BEGIN ATOMIC` bodies are read
+  and their `pg_depend` calls count; the required payroll tables are pinned by
+  `PAYROLL_REQUIRED_TABLE_FINGERPRINTS` (columns, triggers with function digest
+  and neutral shape, enforced and validated foreign keys). Q1 = A: an entry is
+  added in a PR approved by one maintainer under the security review of
+  GOVERNANCE.md, naming the issue in `approvedIn`. Q2 = A: only definers whose
+  owner reaches payroll are listed. The independent security audit
+  (PASS-WITH-FOLLOWUPS: H1, M1 to M4, L1 to L4) was closed in the same PR;
+  the out-of-scope gaps (family-named definers, `SET ON PARAMETER
+session_replication_role`, RLS/FORCE off) are recorded in the ADR, not as
+  public issues. A migration that changes a required payroll table or one of
+  its trigger functions must update the fingerprint in the same PR.
 - **DECISIONS OF 22 NOVEMBER 2026 (K1-K14), DELEGATED TO THE ORCHESTRATOR.** The
   owner (ahliweb) delegated the open decisions to the orchestrator with the
   instruction "choose the best per recommendation and professional practice,
