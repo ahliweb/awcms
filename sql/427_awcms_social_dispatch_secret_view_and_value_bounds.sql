@@ -39,11 +39,31 @@
 --     no delegated grant, a uuid-shaped (or no) correlation id, one of the six
 --     fixed messages, and attributes that are an object whose keys are among
 --     seven, each with its value shape (uuids, a provider key, an attempt number
---     of at most four digits, two failure codes, a boolean). No column the role
---     writes into these three tables can carry free text.
+--     of at most four digits, two failure codes, a boolean);
+--   * every failure code (`failure_code`, `error_code`, the audit `code` and
+--     `failureCode`, the `job.failed` payload) is one of an ENUMERATED list,
+--     not a shape (a 64-character upper-case string can carry an encoded
+--     token);
+--   * `external_post_id` has the admitted adapter's shape (Facebook
+--     `<page>_<post>`) and `external_post_url` is NULL or exactly
+--     `https://www.facebook.com/` followed by that id (no query, no fragment,
+--     no other host);
+--   * the two domain events the role emits carry exactly their documented
+--     envelope and payload (`order_key` derived from the aggregate, no actor,
+--     no causation, payload keys and value shapes per event type).
+--
+-- What this does NOT remove (stated, the re-audit of #1483): a role that may
+-- choose AMONG valid values (which code, which attempt number, which valid
+-- post id, when to write) can still encode a few bits per row. The bound
+-- removes free text, not every covert channel.
 --
 -- `security:readiness` builds its exact pins from the same vocabulary file, so
--- a phrase added in code without a migration fails readiness (and the reverse).
+-- a phrase or code added in code without a migration fails readiness (and the
+-- reverse).
+--
+-- sql/427 was revised before it was applied anywhere (#1483 was not merged):
+-- one definition per policy is easier to review and to pin than a second
+-- migration that drops and re-creates the same four policies.
 --
 -- No explicit BEGIN/COMMIT: the migration runner wraps each file.
 
@@ -121,6 +141,47 @@ CREATE POLICY awcms_social_publish_jobs_social_dispatch_update
         'The attempt did not succeed.'
       )
     )
+    AND (
+      failure_code IS NULL
+      OR failure_code IN (
+        'ACCOUNT_ACCOUNT_DEGRADED', 'ACCOUNT_ACCOUNT_DISABLED',
+        'ACCOUNT_ACCOUNT_NOT_FOUND', 'ACCOUNT_ACCOUNT_PENDING',
+        'ACCOUNT_ACCOUNT_REVOKED', 'ACCOUNT_CAPABILITY_DENIED',
+        'ACCOUNT_CHANNEL_ACCOUNTS_DISABLED', 'ACCOUNT_CONNECTION_EXPIRED',
+        'ACCOUNT_CONNECTION_NOT_ACTIVE', 'ACCOUNT_CONTAINER_BINDING_INVALID',
+        'ACCOUNT_CREDENTIAL_UNAVAILABLE', 'ACCOUNT_NOT_A_PUBLISHER',
+        'ACCOUNT_NOT_A_WHATSAPP_SENDER', 'ACCOUNT_PROVIDER_ADAPTER_DISABLED',
+        'ACCOUNT_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'ACCOUNT_SECRET_STORE_UNAVAILABLE', 'ADAPTER_ERROR', 'CIRCUIT_OPEN',
+        'CREDENTIAL_UNAVAILABLE', 'FB_ANSWER_LOST', 'FB_DUPLICATE_POST',
+        'FB_INVALID_PARAMETER', 'FB_MEDIA_INVALID', 'FB_MEDIA_REJECTED',
+        'FB_NETWORK_NOT_SENT', 'FB_PAGE_ID_INVALID', 'FB_PERMISSION_DENIED',
+        'FB_POLICY_BLOCK', 'FB_RATE_LIMITED', 'FB_REQUEST_REJECTED',
+        'FB_RESPONSE_UNREADABLE', 'FB_TEMPORARY_OUTAGE', 'FB_TOKEN_INVALID',
+        'FB_UPSTREAM_UNKNOWN', 'FB_VARIANT_UNSUPPORTED',
+        'HELD_ACCOUNT_DEGRADED', 'HELD_ACCOUNT_DISABLED',
+        'HELD_ACCOUNT_NOT_FOUND', 'HELD_ACCOUNT_PENDING',
+        'HELD_ACCOUNT_REVOKED', 'HELD_CAPABILITY_DENIED',
+        'HELD_CHANNEL_ACCOUNTS_DISABLED', 'HELD_CONNECTION_EXPIRED',
+        'HELD_CONNECTION_NOT_ACTIVE', 'HELD_CONTAINER_BINDING_INVALID',
+        'HELD_CREDENTIAL_UNAVAILABLE', 'HELD_NOT_A_PUBLISHER',
+        'HELD_NOT_A_WHATSAPP_SENDER', 'HELD_PROVIDER_ADAPTER_DISABLED',
+        'HELD_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'HELD_SECRET_STORE_UNAVAILABLE', 'HOLD_EXHAUSTED', 'INVALID_POST_ID',
+        'LEASE_EXPIRED_UNKNOWN', 'MEDIA_RIGHTS_REVOKED', 'MEDIA_UNAVAILABLE',
+        'NEEDS_REAUTH', 'OUTCOME_UNKNOWN', 'PROVIDER_ADAPTER_UNAVAILABLE',
+        'PROVIDER_TIMEOUT', 'RATE_LIMITED', 'REJECTED', 'RETRIES_EXHAUSTED',
+        'SOURCE_CHECK_UNAVAILABLE', 'SOURCE_RETRACTED'
+      )
+    )
+    AND (
+      external_post_id IS NULL
+      OR external_post_id ~ '^[0-9]{1,32}_[0-9]{1,32}$'
+    )
+    AND (
+      external_post_url IS NULL
+      OR external_post_url = 'https://www.facebook.com/' || external_post_id
+    )
   );
 
 -- ---------------------------------------------------------------------------
@@ -135,26 +196,61 @@ CREATE POLICY awcms_social_publish_attempts_social_dispatch_insert
   FOR INSERT
   TO awcms_social_dispatch
   WITH CHECK (
-    error_message IS NULL
-    OR error_message IN (
-      'Published.',
-      'No adapter is registered for this provider.',
-      'The provider adapter failed unexpectedly.',
-      'The provider did not answer in time.',
-      'The provider reported a post this adapter cannot identify: the post may exist. An operator must check before it is sent again.',
-      'The outcome is unknown: the post may already exist. An operator must check before it is sent again.',
-      'The provider was failing; the attempt was not made.',
-      'The retry budget is spent.',
-      'The account stayed unavailable for too long.',
-      'The account must be re-authorised.',
-      'The provider refused this content.',
-      'The source article is no longer published; nothing was sent.',
-      'The media object is no longer available; nothing was sent.',
-      'The media object''s rights no longer clear it; nothing was sent.',
-      'Whether the source may still be published could not be checked; nothing was sent.',
-      'The account cannot publish.',
-      'Waiting for the account to be usable.',
-      'The attempt did not succeed.'
+    (
+      error_code IS NULL
+      OR error_code IN (
+        'ACCOUNT_ACCOUNT_DEGRADED', 'ACCOUNT_ACCOUNT_DISABLED',
+        'ACCOUNT_ACCOUNT_NOT_FOUND', 'ACCOUNT_ACCOUNT_PENDING',
+        'ACCOUNT_ACCOUNT_REVOKED', 'ACCOUNT_CAPABILITY_DENIED',
+        'ACCOUNT_CHANNEL_ACCOUNTS_DISABLED', 'ACCOUNT_CONNECTION_EXPIRED',
+        'ACCOUNT_CONNECTION_NOT_ACTIVE', 'ACCOUNT_CONTAINER_BINDING_INVALID',
+        'ACCOUNT_CREDENTIAL_UNAVAILABLE', 'ACCOUNT_NOT_A_PUBLISHER',
+        'ACCOUNT_NOT_A_WHATSAPP_SENDER', 'ACCOUNT_PROVIDER_ADAPTER_DISABLED',
+        'ACCOUNT_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'ACCOUNT_SECRET_STORE_UNAVAILABLE', 'ADAPTER_ERROR', 'CIRCUIT_OPEN',
+        'CREDENTIAL_UNAVAILABLE', 'FB_ANSWER_LOST', 'FB_DUPLICATE_POST',
+        'FB_INVALID_PARAMETER', 'FB_MEDIA_INVALID', 'FB_MEDIA_REJECTED',
+        'FB_NETWORK_NOT_SENT', 'FB_PAGE_ID_INVALID', 'FB_PERMISSION_DENIED',
+        'FB_POLICY_BLOCK', 'FB_RATE_LIMITED', 'FB_REQUEST_REJECTED',
+        'FB_RESPONSE_UNREADABLE', 'FB_TEMPORARY_OUTAGE', 'FB_TOKEN_INVALID',
+        'FB_UPSTREAM_UNKNOWN', 'FB_VARIANT_UNSUPPORTED',
+        'HELD_ACCOUNT_DEGRADED', 'HELD_ACCOUNT_DISABLED',
+        'HELD_ACCOUNT_NOT_FOUND', 'HELD_ACCOUNT_PENDING',
+        'HELD_ACCOUNT_REVOKED', 'HELD_CAPABILITY_DENIED',
+        'HELD_CHANNEL_ACCOUNTS_DISABLED', 'HELD_CONNECTION_EXPIRED',
+        'HELD_CONNECTION_NOT_ACTIVE', 'HELD_CONTAINER_BINDING_INVALID',
+        'HELD_CREDENTIAL_UNAVAILABLE', 'HELD_NOT_A_PUBLISHER',
+        'HELD_NOT_A_WHATSAPP_SENDER', 'HELD_PROVIDER_ADAPTER_DISABLED',
+        'HELD_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'HELD_SECRET_STORE_UNAVAILABLE', 'HOLD_EXHAUSTED', 'INVALID_POST_ID',
+        'LEASE_EXPIRED_UNKNOWN', 'MEDIA_RIGHTS_REVOKED', 'MEDIA_UNAVAILABLE',
+        'NEEDS_REAUTH', 'OUTCOME_UNKNOWN', 'PROVIDER_ADAPTER_UNAVAILABLE',
+        'PROVIDER_TIMEOUT', 'RATE_LIMITED', 'REJECTED', 'RETRIES_EXHAUSTED',
+        'SOURCE_CHECK_UNAVAILABLE', 'SOURCE_RETRACTED'
+      )
+    )
+    AND (
+      error_message IS NULL
+      OR error_message IN (
+        'Published.',
+        'No adapter is registered for this provider.',
+        'The provider adapter failed unexpectedly.',
+        'The provider did not answer in time.',
+        'The provider reported a post this adapter cannot identify: the post may exist. An operator must check before it is sent again.',
+        'The outcome is unknown: the post may already exist. An operator must check before it is sent again.',
+        'The provider was failing; the attempt was not made.',
+        'The retry budget is spent.',
+        'The account stayed unavailable for too long.',
+        'The account must be re-authorised.',
+        'The provider refused this content.',
+        'The source article is no longer published; nothing was sent.',
+        'The media object is no longer available; nothing was sent.',
+        'The media object''s rights no longer clear it; nothing was sent.',
+        'Whether the source may still be published could not be checked; nothing was sent.',
+        'The account cannot publish.',
+        'Waiting for the account to be usable.',
+        'The attempt did not succeed.'
+      )
     )
   );
 
@@ -213,7 +309,9 @@ CREATE POLICY awcms_audit_events_social_dispatch_insert
     )
     AND (
       NOT attributes ? 'provider'
-      OR (attributes ->> 'provider') ~ '^[a-z][a-z0-9_]{1,31}$'
+      OR (attributes ->> 'provider') IN (
+        'facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin'
+      )
     )
     AND (
       NOT attributes ? 'attemptNo'
@@ -224,14 +322,163 @@ CREATE POLICY awcms_audit_events_social_dispatch_insert
     )
     AND (
       NOT attributes ? 'code'
-      OR (attributes ->> 'code') ~ '^[A-Z][A-Z0-9_]{2,63}$'
+      OR (attributes ->> 'code') IN (
+        'ACCOUNT_ACCOUNT_DEGRADED', 'ACCOUNT_ACCOUNT_DISABLED',
+        'ACCOUNT_ACCOUNT_NOT_FOUND', 'ACCOUNT_ACCOUNT_PENDING',
+        'ACCOUNT_ACCOUNT_REVOKED', 'ACCOUNT_CAPABILITY_DENIED',
+        'ACCOUNT_CHANNEL_ACCOUNTS_DISABLED', 'ACCOUNT_CONNECTION_EXPIRED',
+        'ACCOUNT_CONNECTION_NOT_ACTIVE', 'ACCOUNT_CONTAINER_BINDING_INVALID',
+        'ACCOUNT_CREDENTIAL_UNAVAILABLE', 'ACCOUNT_NOT_A_PUBLISHER',
+        'ACCOUNT_NOT_A_WHATSAPP_SENDER', 'ACCOUNT_PROVIDER_ADAPTER_DISABLED',
+        'ACCOUNT_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'ACCOUNT_SECRET_STORE_UNAVAILABLE', 'ADAPTER_ERROR', 'CIRCUIT_OPEN',
+        'CREDENTIAL_UNAVAILABLE', 'FB_ANSWER_LOST', 'FB_DUPLICATE_POST',
+        'FB_INVALID_PARAMETER', 'FB_MEDIA_INVALID', 'FB_MEDIA_REJECTED',
+        'FB_NETWORK_NOT_SENT', 'FB_PAGE_ID_INVALID', 'FB_PERMISSION_DENIED',
+        'FB_POLICY_BLOCK', 'FB_RATE_LIMITED', 'FB_REQUEST_REJECTED',
+        'FB_RESPONSE_UNREADABLE', 'FB_TEMPORARY_OUTAGE', 'FB_TOKEN_INVALID',
+        'FB_UPSTREAM_UNKNOWN', 'FB_VARIANT_UNSUPPORTED',
+        'HELD_ACCOUNT_DEGRADED', 'HELD_ACCOUNT_DISABLED',
+        'HELD_ACCOUNT_NOT_FOUND', 'HELD_ACCOUNT_PENDING',
+        'HELD_ACCOUNT_REVOKED', 'HELD_CAPABILITY_DENIED',
+        'HELD_CHANNEL_ACCOUNTS_DISABLED', 'HELD_CONNECTION_EXPIRED',
+        'HELD_CONNECTION_NOT_ACTIVE', 'HELD_CONTAINER_BINDING_INVALID',
+        'HELD_CREDENTIAL_UNAVAILABLE', 'HELD_NOT_A_PUBLISHER',
+        'HELD_NOT_A_WHATSAPP_SENDER', 'HELD_PROVIDER_ADAPTER_DISABLED',
+        'HELD_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'HELD_SECRET_STORE_UNAVAILABLE', 'HOLD_EXHAUSTED', 'INVALID_POST_ID',
+        'LEASE_EXPIRED_UNKNOWN', 'MEDIA_RIGHTS_REVOKED', 'MEDIA_UNAVAILABLE',
+        'NEEDS_REAUTH', 'OUTCOME_UNKNOWN', 'PROVIDER_ADAPTER_UNAVAILABLE',
+        'PROVIDER_TIMEOUT', 'RATE_LIMITED', 'REJECTED', 'RETRIES_EXHAUSTED',
+        'SOURCE_CHECK_UNAVAILABLE', 'SOURCE_RETRACTED'
+      )
     )
     AND (
       NOT attributes ? 'failureCode'
-      OR (attributes ->> 'failureCode') ~ '^[A-Z][A-Z0-9_]{2,63}$'
+      OR (attributes ->> 'failureCode') IN (
+        'ACCOUNT_ACCOUNT_DEGRADED', 'ACCOUNT_ACCOUNT_DISABLED',
+        'ACCOUNT_ACCOUNT_NOT_FOUND', 'ACCOUNT_ACCOUNT_PENDING',
+        'ACCOUNT_ACCOUNT_REVOKED', 'ACCOUNT_CAPABILITY_DENIED',
+        'ACCOUNT_CHANNEL_ACCOUNTS_DISABLED', 'ACCOUNT_CONNECTION_EXPIRED',
+        'ACCOUNT_CONNECTION_NOT_ACTIVE', 'ACCOUNT_CONTAINER_BINDING_INVALID',
+        'ACCOUNT_CREDENTIAL_UNAVAILABLE', 'ACCOUNT_NOT_A_PUBLISHER',
+        'ACCOUNT_NOT_A_WHATSAPP_SENDER', 'ACCOUNT_PROVIDER_ADAPTER_DISABLED',
+        'ACCOUNT_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'ACCOUNT_SECRET_STORE_UNAVAILABLE', 'ADAPTER_ERROR', 'CIRCUIT_OPEN',
+        'CREDENTIAL_UNAVAILABLE', 'FB_ANSWER_LOST', 'FB_DUPLICATE_POST',
+        'FB_INVALID_PARAMETER', 'FB_MEDIA_INVALID', 'FB_MEDIA_REJECTED',
+        'FB_NETWORK_NOT_SENT', 'FB_PAGE_ID_INVALID', 'FB_PERMISSION_DENIED',
+        'FB_POLICY_BLOCK', 'FB_RATE_LIMITED', 'FB_REQUEST_REJECTED',
+        'FB_RESPONSE_UNREADABLE', 'FB_TEMPORARY_OUTAGE', 'FB_TOKEN_INVALID',
+        'FB_UPSTREAM_UNKNOWN', 'FB_VARIANT_UNSUPPORTED',
+        'HELD_ACCOUNT_DEGRADED', 'HELD_ACCOUNT_DISABLED',
+        'HELD_ACCOUNT_NOT_FOUND', 'HELD_ACCOUNT_PENDING',
+        'HELD_ACCOUNT_REVOKED', 'HELD_CAPABILITY_DENIED',
+        'HELD_CHANNEL_ACCOUNTS_DISABLED', 'HELD_CONNECTION_EXPIRED',
+        'HELD_CONNECTION_NOT_ACTIVE', 'HELD_CONTAINER_BINDING_INVALID',
+        'HELD_CREDENTIAL_UNAVAILABLE', 'HELD_NOT_A_PUBLISHER',
+        'HELD_NOT_A_WHATSAPP_SENDER', 'HELD_PROVIDER_ADAPTER_DISABLED',
+        'HELD_RISK_ACKNOWLEDGEMENT_REQUIRED',
+        'HELD_SECRET_STORE_UNAVAILABLE', 'HOLD_EXHAUSTED', 'INVALID_POST_ID',
+        'LEASE_EXPIRED_UNKNOWN', 'MEDIA_RIGHTS_REVOKED', 'MEDIA_UNAVAILABLE',
+        'NEEDS_REAUTH', 'OUTCOME_UNKNOWN', 'PROVIDER_ADAPTER_UNAVAILABLE',
+        'PROVIDER_TIMEOUT', 'RATE_LIMITED', 'REJECTED', 'RETRIES_EXHAUSTED',
+        'SOURCE_CHECK_UNAVAILABLE', 'SOURCE_RETRACTED'
+      )
     )
     AND (
       NOT attributes ? 'accountDegraded'
       OR jsonb_typeof(attributes -> 'accountDegraded') = 'boolean'
+    )
+  );
+
+-- ---------------------------------------------------------------------------
+-- L1 (the re-audit of #1483): the two domain events the role emits. sql/373
+-- bounded only `producer_module` and `event_type`; the payload (up to 64 KiB,
+-- into the outbox) and `order_key` were free.
+-- ---------------------------------------------------------------------------
+DROP POLICY IF EXISTS awcms_domain_events_social_dispatch_insert
+  ON awcms_domain_events;
+
+CREATE POLICY awcms_domain_events_social_dispatch_insert
+  ON awcms_domain_events
+  AS RESTRICTIVE
+  FOR INSERT
+  TO awcms_social_dispatch
+  WITH CHECK (
+    producer_module = 'social_publishing'
+    AND event_type IN (
+      'awcms.social_publishing.job.published',
+      'awcms.social_publishing.job.failed'
+    )
+    AND event_version = '1.0'
+    AND aggregate_type = 'social_publish_job'
+    AND aggregate_version IS NULL
+    AND order_key = 'social_publish_job:' || aggregate_id::text
+    AND (
+      correlation_id IS NULL
+      OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    )
+    AND causation_id IS NULL
+    AND schema_ref IS NULL
+    AND actor_tenant_user_id IS NULL
+    AND actor_profile_id IS NULL
+    AND jsonb_typeof(payload) = 'object'
+    AND (
+      payload - ARRAY[
+        'jobId', 'publicationId', 'accountId', 'provider', 'attemptNo',
+        'failureCode'
+      ]
+    ) = '{}'::jsonb
+    AND (payload ->> 'jobId') = aggregate_id::text
+    AND (payload ->> 'publicationId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    AND (payload ->> 'accountId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    AND (payload ->> 'provider') IN (
+      'facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin'
+    )
+    AND jsonb_typeof(payload -> 'attemptNo') = 'number'
+    AND (payload ->> 'attemptNo') ~ '^[0-9]{1,4}$'
+    AND (
+      (
+        event_type = 'awcms.social_publishing.job.published'
+        AND NOT payload ? 'failureCode'
+      )
+      OR (
+        event_type = 'awcms.social_publishing.job.failed'
+        AND (payload ->> 'failureCode') IN (
+          'ACCOUNT_ACCOUNT_DEGRADED', 'ACCOUNT_ACCOUNT_DISABLED',
+          'ACCOUNT_ACCOUNT_NOT_FOUND', 'ACCOUNT_ACCOUNT_PENDING',
+          'ACCOUNT_ACCOUNT_REVOKED', 'ACCOUNT_CAPABILITY_DENIED',
+          'ACCOUNT_CHANNEL_ACCOUNTS_DISABLED', 'ACCOUNT_CONNECTION_EXPIRED',
+          'ACCOUNT_CONNECTION_NOT_ACTIVE',
+          'ACCOUNT_CONTAINER_BINDING_INVALID',
+          'ACCOUNT_CREDENTIAL_UNAVAILABLE', 'ACCOUNT_NOT_A_PUBLISHER',
+          'ACCOUNT_NOT_A_WHATSAPP_SENDER',
+          'ACCOUNT_PROVIDER_ADAPTER_DISABLED',
+          'ACCOUNT_RISK_ACKNOWLEDGEMENT_REQUIRED',
+          'ACCOUNT_SECRET_STORE_UNAVAILABLE', 'ADAPTER_ERROR',
+          'CIRCUIT_OPEN', 'CREDENTIAL_UNAVAILABLE', 'FB_ANSWER_LOST',
+          'FB_DUPLICATE_POST', 'FB_INVALID_PARAMETER', 'FB_MEDIA_INVALID',
+          'FB_MEDIA_REJECTED', 'FB_NETWORK_NOT_SENT', 'FB_PAGE_ID_INVALID',
+          'FB_PERMISSION_DENIED', 'FB_POLICY_BLOCK', 'FB_RATE_LIMITED',
+          'FB_REQUEST_REJECTED', 'FB_RESPONSE_UNREADABLE',
+          'FB_TEMPORARY_OUTAGE', 'FB_TOKEN_INVALID', 'FB_UPSTREAM_UNKNOWN',
+          'FB_VARIANT_UNSUPPORTED', 'HELD_ACCOUNT_DEGRADED',
+          'HELD_ACCOUNT_DISABLED', 'HELD_ACCOUNT_NOT_FOUND',
+          'HELD_ACCOUNT_PENDING', 'HELD_ACCOUNT_REVOKED',
+          'HELD_CAPABILITY_DENIED', 'HELD_CHANNEL_ACCOUNTS_DISABLED',
+          'HELD_CONNECTION_EXPIRED', 'HELD_CONNECTION_NOT_ACTIVE',
+          'HELD_CONTAINER_BINDING_INVALID', 'HELD_CREDENTIAL_UNAVAILABLE',
+          'HELD_NOT_A_PUBLISHER', 'HELD_NOT_A_WHATSAPP_SENDER',
+          'HELD_PROVIDER_ADAPTER_DISABLED',
+          'HELD_RISK_ACKNOWLEDGEMENT_REQUIRED',
+          'HELD_SECRET_STORE_UNAVAILABLE', 'HOLD_EXHAUSTED',
+          'INVALID_POST_ID', 'LEASE_EXPIRED_UNKNOWN', 'MEDIA_RIGHTS_REVOKED',
+          'MEDIA_UNAVAILABLE', 'NEEDS_REAUTH', 'OUTCOME_UNKNOWN',
+          'PROVIDER_ADAPTER_UNAVAILABLE', 'PROVIDER_TIMEOUT', 'RATE_LIMITED',
+          'REJECTED', 'RETRIES_EXHAUSTED', 'SOURCE_CHECK_UNAVAILABLE',
+          'SOURCE_RETRACTED'
+        )
+      )
     )
   );

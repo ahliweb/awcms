@@ -97,6 +97,7 @@ const publishers = createChannelAccountPortAdapter({
 });
 
 let roleLogin: Bun.SQL | undefined;
+let databaseName = "";
 let telegramLogin: Bun.SQL | undefined;
 
 function loginUrl(user: string, password: string, database: string): string {
@@ -303,6 +304,7 @@ suite("the #1145 credential-path review fixes against PostgreSQL", () => {
       (await admin`SELECT current_database() AS name`) as { name: string }[]
     )[0]!.name;
 
+    databaseName = database;
     await admin.unsafe(`ALTER ROLE ${ROLE} LOGIN PASSWORD '${ROLE_PASSWORD}'`);
     await admin.unsafe(
       `ALTER ROLE ${TELEGRAM_ROLE} LOGIN PASSWORD '${TELEGRAM_PASSWORD}'`
@@ -901,6 +903,164 @@ suite("the #1145 credential-path review fixes against PostgreSQL", () => {
     });
   });
 
+  describe("re-audit of #1483, Low-1: no free text in the post reference, the event or a code", () => {
+    test("as the role, a token in external_post_id/url, an event payload or order_key, or a free code is refused; the admitted values pass", async () => {
+      const page = await seedPage(TENANT_A);
+      const admin = getAdminSql();
+      const publication = (
+        (await admin`
+          INSERT INTO awcms_social_publications
+            (tenant_id, source_kind, trigger_event, state, title, caption,
+             content_hash, approval_required)
+          VALUES (${TENANT_A}, 'manual', 'manual_editor_action', 'ready', 't',
+                  'c', ${"0".repeat(64)}, false)
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+      const job = (
+        (await admin`
+          INSERT INTO awcms_social_publish_jobs
+            (tenant_id, publication_id, channel_account_id, provider,
+             account_kind, variant, idempotency_key)
+          VALUES (${TENANT_A}, ${publication}, ${page.accountId}, 'facebook',
+                  'page', 'text', ${"b".repeat(64)})
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+
+      await admin`
+        UPDATE awcms_social_publish_jobs SET status = 'publishing',
+               attempt_count = 1
+        WHERE id = ${job}
+      `;
+
+      const payload = {
+        jobId: job,
+        publicationId: publication,
+        accountId: page.accountId,
+        provider: "facebook",
+        attemptNo: 1,
+        failureCode: "NEEDS_REAUTH"
+      };
+      const event =
+        (over: { payload?: unknown; orderKey?: string }) =>
+        (tx: Bun.TransactionSQL) =>
+          tx`
+            INSERT INTO awcms_domain_events
+              (tenant_id, event_type, event_version, aggregate_type,
+               aggregate_id, order_key, producer_module, payload, occurred_at)
+            VALUES (${TENANT_A}, 'awcms.social_publishing.job.failed', '1.0',
+                    'social_publish_job', ${job},
+                    ${over.orderKey ?? `social_publish_job:${job}`},
+                    'social_publishing', ${over.payload ?? payload}::jsonb,
+                    now())
+          `;
+      const publish =
+        (id: string, url: string | null) => (tx: Bun.TransactionSQL) =>
+          tx`
+          UPDATE awcms_social_publish_jobs
+          SET status = 'published', published_at = now(),
+              external_post_id = ${id}, external_post_url = ${url}
+          WHERE id = ${job}
+        `;
+      const refused: [string, (tx: Bun.TransactionSQL) => Promise<unknown>][] =
+        [
+          ["post id token", publish("EAAGabcDEF123xyzMixedCase", null)],
+          [
+            "post url token",
+            publish("1_2", "https://www.facebook.com/1_2?access_token=EAAG")
+          ],
+          ["post url on another host", publish("1_2", "https://x.invalid/1_2")],
+          [
+            "event payload token",
+            event({ payload: { ...payload, token: "EAAG" } })
+          ],
+          [
+            "event free failureCode",
+            event({ payload: { ...payload, failureCode: "EAAGABCDEF0123" } })
+          ],
+          ["event order_key token", event({ orderKey: "EAAG-plaintext" })],
+          [
+            "free failure_code",
+            (tx) =>
+              tx`UPDATE awcms_social_publish_jobs SET failure_code = 'EAAGABCDEF0123456789' WHERE id = ${job}`
+          ]
+        ];
+
+      for (const [what, statement] of refused) {
+        expect(await sqlState(() => asRole(TENANT_A, statement)), what).toBe(
+          "42501"
+        );
+      }
+
+      await asRole(TENANT_A, event({}));
+      await asRole(
+        TENANT_A,
+        publish("111_222", "https://www.facebook.com/111_222")
+      );
+
+      const row = (await admin`
+        SELECT status, external_post_url FROM awcms_social_publish_jobs WHERE id = ${job}
+      `) as { status: string; external_post_url: string }[];
+
+      expect(row[0]).toEqual({
+        status: "published",
+        external_post_url: "https://www.facebook.com/111_222"
+      });
+    });
+  });
+
+  describe("re-audit of #1483, Low-2: the role cannot hold a lock open", () => {
+    test("a real login as the role carries the reviewed timeouts", async () => {
+      const shown = (await roleLogin!`
+        SELECT current_setting('idle_in_transaction_session_timeout') AS idle,
+               current_setting('transaction_timeout') AS tx
+      `) as { idle: string; tx: string }[];
+
+      expect(shown[0]).toEqual({ idle: "15s", tx: "30s" });
+    });
+
+    test("a transaction left idle after the definer lock is ended by the server, and the app's disconnect goes through", async () => {
+      const page = await seedPage(TENANT_A);
+      const holder = new Bun.SQL(loginUrl(ROLE, ROLE_PASSWORD, databaseName), {
+        max: 1
+      });
+
+      try {
+        const reserved = await holder.reserve();
+
+        await reserved.unsafe("BEGIN");
+        await reserved`SELECT set_config('app.current_tenant_id', ${TENANT_A}, true)`;
+        await reserved`SELECT awcms_social_report_credential_rejected(${TENANT_A}::uuid, ${page.accountId}::uuid)`;
+        // ... and now the role just sits on the row lock.
+
+        const started = Date.now();
+        const result = await asApp(TENANT_A, (tx) =>
+          disconnectAccount(tx, store, TENANT_A, ACTOR, page.accountId)
+        );
+        const waited = Date.now() - started;
+
+        expect(result).toMatchObject({ outcome: "disconnected" });
+        // Bounded by idle_in_transaction_session_timeout (15s), with slack.
+        expect(waited).toBeLessThan(25_000);
+        expect(waited).toBeGreaterThan(5_000);
+
+        let ended = false;
+
+        try {
+          await reserved`SELECT 1`;
+        } catch {
+          ended = true;
+        }
+
+        expect(ended).toBe(true);
+      } finally {
+        await holder.close({ timeout: 1 }).catch(() => undefined);
+        resetDatabaseCircuitBreakerForTests();
+      }
+    });
+  });
+
   describe("readiness pins every new control exactly (mutations FAIL, restore passes)", () => {
     test("readiness and both probes pass on the migrated database", async () => {
       const result = await checkWorkerSetupRoleGrants();
@@ -934,6 +1094,16 @@ suite("the #1145 credential-path review fixes against PostgreSQL", () => {
         "GRANT UPDATE ON awcms_channel_accounts TO awcms_social_credential_report",
         // A table-level REVOKE also revokes the column grants: put them back.
         "REVOKE UPDATE ON awcms_channel_accounts FROM awcms_social_credential_report; GRANT UPDATE (status, status_reason, updated_at, version) ON awcms_channel_accounts TO awcms_social_credential_report"
+      ],
+      [
+        "the idle-in-transaction timeout reset on the role (re-audit Low-2)",
+        `ALTER ROLE ${ROLE} RESET idle_in_transaction_session_timeout`,
+        `ALTER ROLE ${ROLE} SET idle_in_transaction_session_timeout = '15s'`
+      ],
+      [
+        "transaction_timeout relaxed to 0 for this database (re-audit Low-2)",
+        `DO $$ BEGIN EXECUTE format('ALTER ROLE ${ROLE} IN DATABASE %I SET transaction_timeout = 0', current_database()); END $$`,
+        `DO $$ BEGIN EXECUTE format('ALTER ROLE ${ROLE} IN DATABASE %I RESET transaction_timeout', current_database()); END $$`
       ],
       [
         "the dedupe guard disabled (L2)",
@@ -1003,6 +1173,36 @@ suite("the #1145 credential-path review fixes against PostgreSQL", () => {
     });
 
     const valueMutations: [string, string, string, (s: string) => string][] = [
+      [
+        "awcms_social_publish_jobs",
+        "awcms_social_publish_jobs_social_dispatch_update",
+        "external_post_url unbounded (re-audit Low-1)",
+        (s) =>
+          s.replace(
+            "      external_post_url IS NULL\n",
+            "      true OR external_post_url IS NULL\n"
+          )
+      ],
+      [
+        "awcms_domain_events",
+        "awcms_domain_events_social_dispatch_insert",
+        "any payload key admitted (re-audit Low-1)",
+        (s) =>
+          s.replace(
+            "        'failureCode'\n      ]",
+            "        'failureCode', 'token'\n      ]"
+          )
+      ],
+      [
+        "awcms_audit_events",
+        "awcms_audit_events_social_dispatch_insert",
+        "a free code admitted (re-audit Low-1)",
+        (s) =>
+          s.replace(
+            "      NOT attributes ? 'code'\n",
+            "      true OR NOT attributes ? 'code'\n"
+          )
+      ],
       [
         "awcms_social_publish_jobs",
         "awcms_social_publish_jobs_social_dispatch_update",

@@ -57,11 +57,16 @@ import {
 } from "./lib/channel-accounts-access-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
 import { findDedicatedRoleMembershipFindings } from "./lib/dedicated-role-membership";
+import { findDedicatedRoleTimeoutFindings } from "./lib/dedicated-role-timeouts";
 import {
   SOCIAL_DISPATCH_ALLOWED_PHRASES,
   SOCIAL_DISPATCH_AUDIT_ACTIONS,
   SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS,
-  SOCIAL_DISPATCH_AUDIT_MESSAGES
+  SOCIAL_DISPATCH_AUDIT_MESSAGES,
+  SOCIAL_DISPATCH_FAILURE_CODES,
+  SOCIAL_DISPATCH_PROVIDERS,
+  ADMITTED_EXTERNAL_POST_ID_PATTERN,
+  ADMITTED_EXTERNAL_POST_URL_PREFIX
 } from "../src/modules/social-publishing/domain/social-dispatch-vocabulary";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
@@ -2727,6 +2732,8 @@ const UUID_SHAPE =
 const ALLOWED_PHRASES_ARRAY = deparsedTextArray(
   SOCIAL_DISPATCH_ALLOWED_PHRASES
 );
+const FAILURE_CODES_ARRAY = deparsedTextArray(SOCIAL_DISPATCH_FAILURE_CODES);
+const SOCIAL_PROVIDERS_ARRAY = deparsedTextArray(SOCIAL_DISPATCH_PROVIDERS);
 
 /** sql/358, narrowed by sql/427 (MEDIUM-1, L3): what `awcms_social_dispatch` may see. */
 export const SOCIAL_DISPATCH_PINNED_POLICIES: readonly PinnedPolicy[] = [
@@ -2776,10 +2783,10 @@ const SOCIAL_DISPATCH_AUDIT_CHECK = [
   `((attributes - ${deparsedTextArray(SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS)}) = '{}'::jsonb)`,
   `((NOT (attributes ? 'publicationId'::text)) OR ((attributes ->> 'publicationId'::text) ~ ${UUID_SHAPE}))`,
   `((NOT (attributes ? 'accountId'::text)) OR ((attributes ->> 'accountId'::text) ~ ${UUID_SHAPE}))`,
-  "((NOT (attributes ? 'provider'::text)) OR ((attributes ->> 'provider'::text) ~ '^[a-z][a-z0-9_]{1,31}$'::text))",
+  `((NOT (attributes ? 'provider'::text)) OR ((attributes ->> 'provider'::text) = ANY (${SOCIAL_PROVIDERS_ARRAY})))`,
   "((NOT (attributes ? 'attemptNo'::text)) OR ((jsonb_typeof((attributes -> 'attemptNo'::text)) = 'number'::text) AND ((attributes ->> 'attemptNo'::text) ~ '^[0-9]{1,4}$'::text)))",
-  "((NOT (attributes ? 'code'::text)) OR ((attributes ->> 'code'::text) ~ '^[A-Z][A-Z0-9_]{2,63}$'::text))",
-  "((NOT (attributes ? 'failureCode'::text)) OR ((attributes ->> 'failureCode'::text) ~ '^[A-Z][A-Z0-9_]{2,63}$'::text))",
+  `((NOT (attributes ? 'code'::text)) OR ((attributes ->> 'code'::text) = ANY (${FAILURE_CODES_ARRAY})))`,
+  `((NOT (attributes ? 'failureCode'::text)) OR ((attributes ->> 'failureCode'::text) = ANY (${FAILURE_CODES_ARRAY})))`,
   "((NOT (attributes ? 'accountDegraded'::text)) OR (jsonb_typeof((attributes -> 'accountDegraded'::text)) = 'boolean'::text))"
 ].join(" AND ");
 
@@ -2802,7 +2809,7 @@ export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
     command: "w",
     expression:
       "(status = ANY (ARRAY['queued'::text, 'retry_wait'::text, 'publishing'::text]))",
-    withCheck: `((status = ANY (ARRAY['queued'::text, 'publishing'::text, 'retry_wait'::text, 'published'::text, 'failed'::text, 'needs_reconciliation'::text])) AND ((last_error IS NULL) OR (last_error = ANY (${ALLOWED_PHRASES_ARRAY}))))`
+    withCheck: `((status = ANY (ARRAY['queued'::text, 'publishing'::text, 'retry_wait'::text, 'published'::text, 'failed'::text, 'needs_reconciliation'::text])) AND ((last_error IS NULL) OR (last_error = ANY (${ALLOWED_PHRASES_ARRAY}))) AND ((failure_code IS NULL) OR (failure_code = ANY (${FAILURE_CODES_ARRAY}))) AND ((external_post_id IS NULL) OR (external_post_id ~ '${ADMITTED_EXTERNAL_POST_ID_PATTERN}'::text)) AND ((external_post_url IS NULL) OR (external_post_url = ('${ADMITTED_EXTERNAL_POST_URL_PREFIX}'::text || external_post_id))))`
   },
   {
     // L1 (sql/427): the attempt ledger's free text is a fixed phrase.
@@ -2811,7 +2818,7 @@ export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
     role: SOCIAL_DISPATCH_ROLE,
     command: "a",
     expression: "",
-    withCheck: `((error_message IS NULL) OR (error_message = ANY (${ALLOWED_PHRASES_ARRAY})))`
+    withCheck: `(((error_code IS NULL) OR (error_code = ANY (${FAILURE_CODES_ARRAY}))) AND ((error_message IS NULL) OR (error_message = ANY (${ALLOWED_PHRASES_ARRAY}))))`
   },
   {
     // L1 (sql/427): only the dispatcher's own audit rows, in its vocabulary.
@@ -2828,7 +2835,9 @@ export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
     role: SOCIAL_DISPATCH_ROLE,
     command: "a",
     expression: "",
-    withCheck: `((producer_module = 'social_publishing'::text) AND (event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES})))`
+    // L1, the re-audit of #1483 (sql/427): the envelope and the payload of
+    // the two events, per event type.
+    withCheck: `((producer_module = 'social_publishing'::text) AND (event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES})) AND (event_version = '1.0'::text) AND (aggregate_type = 'social_publish_job'::text) AND (aggregate_version IS NULL) AND (order_key = ('social_publish_job:'::text || (aggregate_id)::text)) AND ((correlation_id IS NULL) OR (correlation_id ~ ${UUID_SHAPE})) AND (causation_id IS NULL) AND (schema_ref IS NULL) AND (actor_tenant_user_id IS NULL) AND (actor_profile_id IS NULL) AND (jsonb_typeof(payload) = 'object'::text) AND ((payload - ARRAY['jobId'::text, 'publicationId'::text, 'accountId'::text, 'provider'::text, 'attemptNo'::text, 'failureCode'::text]) = '{}'::jsonb) AND ((payload ->> 'jobId'::text) = (aggregate_id)::text) AND ((payload ->> 'publicationId'::text) ~ ${UUID_SHAPE}) AND ((payload ->> 'accountId'::text) ~ ${UUID_SHAPE}) AND ((payload ->> 'provider'::text) = ANY (${SOCIAL_PROVIDERS_ARRAY})) AND (jsonb_typeof((payload -> 'attemptNo'::text)) = 'number'::text) AND ((payload ->> 'attemptNo'::text) ~ '^[0-9]{1,4}$'::text) AND (((event_type = 'awcms.social_publishing.job.published'::text) AND (NOT (payload ? 'failureCode'::text))) OR ((event_type = 'awcms.social_publishing.job.failed'::text) AND ((payload ->> 'failureCode'::text) = ANY (${FAILURE_CODES_ARRAY})))))`
   },
   {
     // The #1271 audit, M1: the role reads back only its own module's events.
@@ -3972,6 +3981,36 @@ export async function probeSocialDispatchWriteBoundary(
           `
         );
 
+      const jobPayload = {
+        jobId: queued,
+        publicationId: publication,
+        accountId: facebook,
+        provider: "facebook",
+        attemptNo: 1,
+        failureCode: "NEEDS_REAUTH"
+      };
+      const insertJobEvent = (over: {
+        payload?: Record<string, unknown>;
+        orderKey?: string;
+        eventType?: string;
+        actor?: string;
+      }) =>
+        attempt(
+          () => tx`
+            INSERT INTO awcms_domain_events
+              (tenant_id, event_type, event_version, aggregate_type,
+               aggregate_id, order_key, producer_module, payload,
+               actor_tenant_user_id, occurred_at)
+            VALUES (${tenant},
+                    ${over.eventType ?? "awcms.social_publishing.job.failed"},
+                    '1.0', 'social_publish_job', ${queued},
+                    ${over.orderKey ?? `social_publish_job:${queued}`},
+                    'social_publishing', ${over.payload ?? jobPayload}::jsonb,
+                    ${over.actor ?? null}, now())
+            RETURNING id
+          `
+        );
+
       expectRows(
         "writing this module's audit row",
         await insertAudit(auditRow({})),
@@ -3989,6 +4028,12 @@ export async function probeSocialDispatchWriteBoundary(
           auditRow({
             attributes: { failureCode: "NEEDS_REAUTH", provider: "EAAG-probe" }
           })
+        )
+      );
+      expectRefused(
+        "an audit row with a free code",
+        await insertAudit(
+          auditRow({ attributes: { code: "EAAGABCDEF0123456789ABCDEF" } })
         )
       );
       expectRefused(
@@ -4018,18 +4063,75 @@ export async function probeSocialDispatchWriteBoundary(
       );
       expectRows(
         "emitting this module's job event",
+        await insertJobEvent({}),
+        1
+      );
+      // L1 of the re-audit of #1483 (sql/427): the event envelope and payload.
+      for (const [what, over] of [
+        [
+          "a token in the event payload",
+          { payload: { ...jobPayload, token: "EAAG-probe" } }
+        ],
+        [
+          "a free failureCode in the event payload",
+          {
+            payload: { ...jobPayload, failureCode: "EAAGPROBETOKEN0123456789" }
+          }
+        ],
+        ["a token as the event order_key", { orderKey: "EAAG-probe-token" }],
+        [
+          "a failure code on a published event",
+          { eventType: "awcms.social_publishing.job.published" }
+        ],
+        ["an actor on the event", { actor: crypto.randomUUID() }]
+      ] as [string, Parameters<typeof insertJobEvent>[0]][]) {
+        expectRefused(what, await insertJobEvent(over));
+      }
+      expectRefused(
+        "a token in external_post_id",
         await attempt(
           () => tx`
-            INSERT INTO awcms_domain_events
-              (tenant_id, event_type, event_version, aggregate_type,
-               aggregate_id, order_key, producer_module, payload, occurred_at)
-            VALUES (${tenant}, 'awcms.social_publishing.job.failed', '1.0',
-                    'probe', ${tenant}, 'probe', 'social_publishing',
-                    ${{}}::jsonb, now())
-            RETURNING id
+            UPDATE awcms_social_publish_jobs
+            SET status = 'published', published_at = now(),
+                external_post_id = 'EAAGabcDEF123xyzMixedCase'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
+        )
+      );
+      expectRefused(
+        "a token in external_post_url",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs
+            SET status = 'published', published_at = now(),
+                external_post_id = '1_2',
+                external_post_url = 'https://www.facebook.com/1_2?access_token=EAAG'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
+        )
+      );
+      expectRows(
+        "storing the admitted post id and its URL",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs
+            SET status = 'published', published_at = now(),
+                external_post_id = '111_222',
+                external_post_url = 'https://www.facebook.com/111_222'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
           `
         ),
         1
+      );
+      expectRefused(
+        "a free 64-character code as failure_code",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs
+            SET failure_code = 'EAAGABCDEF0123456789'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
+        )
       );
       expectRefused(
         "emitting another module's event",
@@ -5169,6 +5271,11 @@ export async function checkWorkerSetupRoleGrants(
           sql,
           SOCIAL_DISPATCH_ROLE
         ))
+      );
+      // Low-2 of the re-audit of #1483 (sql/428): the role's own session
+      // timeouts, so a held definer lock cannot stall an operator's revoke.
+      findings.push(
+        ...(await findDedicatedRoleTimeoutFindings(sql, SOCIAL_DISPATCH_ROLE))
       );
 
       const writeProbe = await probeSocialDispatchWriteBoundary(sql);
