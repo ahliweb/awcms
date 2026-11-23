@@ -1587,17 +1587,25 @@ suite("telegram_engagement against PostgreSQL (Issue #1156)", () => {
         expect(rows.length, what).toBe(0);
       };
 
-      await unaffected(
-        "re-enable a disabled bot",
-        (tx) => tx`
-        UPDATE awcms_channel_accounts SET status = 'connected' WHERE id = ${fx.accounts.c} RETURNING id
-      `
+      // sql/436 (defence in depth): the role holds no UPDATE on the accounts
+      // at all any more, so these are refused outright rather than unmatched.
+      await assertRejected(
+        asDispatchRole(
+          T1,
+          (tx) => tx`
+          UPDATE awcms_channel_accounts SET status = 'connected' WHERE id = ${fx.accounts.c} RETURNING id
+        `
+        ),
+        "re-enabling a disabled bot"
       );
-      await unaffected(
-        "re-enable a WhatsApp account",
-        (tx) => tx`
-        UPDATE awcms_channel_accounts SET status = 'connected' WHERE id = ${whatsapp} RETURNING id
-      `
+      await assertRejected(
+        asDispatchRole(
+          T1,
+          (tx) => tx`
+          UPDATE awcms_channel_accounts SET status = 'connected' WHERE id = ${whatsapp} RETURNING id
+        `
+        ),
+        "re-enabling a WhatsApp account"
       );
       await unaffected(
         "un-stop a contact",

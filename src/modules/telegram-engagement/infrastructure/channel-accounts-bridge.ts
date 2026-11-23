@@ -20,11 +20,7 @@
  * reference to a route response, and no route file imports this file's
  * `resolve*` functions directly (`tests/telegram-engagement-boundary.test.ts`).
  */
-import {
-  fetchAccountRecord,
-  recordAccountHealth,
-  type RecordHealthInput
-} from "../../channel-accounts/application/account-directory";
+import { fetchAccountRecord } from "../../channel-accounts/application/account-directory";
 import { resolveCapability } from "../../channel-accounts/application/capability-directory";
 import { defaultSecretStore } from "../../channel-accounts/application/secret-store";
 import { isChannelAccountsEnabled } from "../../channel-accounts/domain/channel-accounts-constants";
@@ -126,13 +122,30 @@ export async function removeSecret(
   await defaultSecretStore.remove(tx, tenantId, secretId);
 }
 
+/** The closed verdicts the dispatcher reports (`sql/436`). */
+export type BotHealthVerdict =
+  "OK" | "TOKEN_REJECTED" | "BOT_IDENTITY_MISMATCH";
+
+/**
+ * DISPATCHER ONLY. Records a bot's health through the fixed-body SECURITY
+ * DEFINER `awcms_telegram_engagement_report_bot_health` (`sql/436`): the dispatch role
+ * holds no direct write on the account or its health row, so it reports one
+ * closed verdict and the function decides every value (status, reason,
+ * timestamps, `version + 1` on a real transition).
+ */
 export async function recordBotHealth(
   tx: Bun.SQL,
   tenantId: string,
   accountId: string,
-  input: RecordHealthInput
-): Promise<void> {
-  await recordAccountHealth(tx, tenantId, accountId, input);
+  verdict: BotHealthVerdict
+): Promise<string> {
+  const rows = (await tx`
+    SELECT awcms_telegram_engagement_report_bot_health(
+      ${tenantId}::uuid, ${accountId}::uuid, ${verdict}
+    ) AS code
+  `) as { code: string }[];
+
+  return rows[0]?.code ?? "NOT_A_BOT";
 }
 
 /** Fail-closed per account (ADR-0148 I2): anything but an explicit allow, including a throw, is a denial. */

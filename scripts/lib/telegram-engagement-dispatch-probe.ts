@@ -185,6 +185,36 @@ export async function probeTelegramEngagementDispatchRole(
         `) as { id: string }[]
       )[0]!.id;
 
+      // sql/436: a started contact (the one transition the role may make) and
+      // a pending bot whose health the role reports through the definer.
+      const startedContact = (
+        (await tx`
+          INSERT INTO awcms_telegram_engagement_contacts
+            (tenant_id, account_id, contact_hash, chat_ciphertext, state)
+          VALUES (${tenantA}, ${liveBot}, ${`k1:${"e".repeat(64)}`},
+                  'v2:probe:aa:bb:cc', 'started')
+          RETURNING id, version
+        `) as { id: string; version: number }[]
+      )[0]!;
+      const pendingBot = await account(
+        tenantA,
+        "telegram",
+        "bot",
+        "bot_token",
+        "pending",
+        null
+      );
+      const versionOf = async (id: string) =>
+        Number(
+          (
+            (await tx`
+              SELECT version FROM awcms_channel_accounts WHERE id = ${id}
+            `) as { version: number }[]
+          )[0]!.version
+        );
+      const liveBotVersion = await versionOf(liveBot);
+      const pendingBotVersion = await versionOf(pendingBot);
+
       // The #1271 audit, M1 (sql/374): another module's event the role must
       // neither see nor deliver to a consumer.
       await tx`SELECT set_config('app.current_tenant_id', ${tenantA}, true)`;
@@ -310,6 +340,168 @@ export async function probeTelegramEngagementDispatchRole(
         RETURNING id
       `
       );
+
+      // sql/436 (defence in depth): no direct write on the account or its
+      // health row is left to the role, whatever the value.
+      for (const [what, statement] of [
+        [
+          "set a bot's version directly",
+          (sp: Bun.SQL) => sp`
+            UPDATE awcms_channel_accounts SET version = 2147483647
+            WHERE id = ${liveBot} RETURNING id
+          `
+        ],
+        [
+          "write a free status_reason",
+          (sp: Bun.SQL) => sp`
+            UPDATE awcms_channel_accounts SET status_reason = 'probe free text'
+            WHERE id = ${liveBot} RETURNING id
+          `
+        ],
+        [
+          "write a health row directly",
+          (sp: Bun.SQL) => sp`
+            INSERT INTO awcms_channel_account_health
+              (tenant_id, account_id, state, reason_code, checked_at)
+            VALUES (${tenantA}, ${liveBot}, 'ok', NULL, now() - interval '9 years')
+            RETURNING account_id
+          `
+        ]
+      ] as [string, (sp: Bun.SQL) => Promise<unknown[]>][]) {
+        await refused(what, statement);
+      }
+
+      /** The definer report, in a savepoint; its code, or `refused`. */
+      const report = async (
+        accountId: string,
+        verdict: string,
+        tenantArgument: string = tenantA
+      ): Promise<string> => {
+        try {
+          return await tx.savepoint(async (sp) => {
+            const rows = (await sp`
+              SELECT awcms_telegram_engagement_report_bot_health(
+                ${tenantArgument}::uuid, ${accountId}::uuid, ${verdict}
+              ) AS code
+            `) as { code: string }[];
+
+            return rows[0]?.code ?? "none";
+          });
+        } catch {
+          return "refused";
+        }
+      };
+      const expectCode = (what: string, got: string, want: string) => {
+        if (got !== want) {
+          findings.push(
+            `the health report ${what} answered ${got}, expected ${want}`
+          );
+        }
+      };
+
+      expectCode(
+        "for a pending bot, OK,",
+        await report(pendingBot, "OK"),
+        "CONNECTED"
+      );
+      expectCode(
+        "for a connected bot, TOKEN_REJECTED,",
+        await report(liveBot, "TOKEN_REJECTED"),
+        "DEGRADED"
+      );
+      expectCode(
+        "for the same bot again",
+        await report(liveBot, "TOKEN_REJECTED"),
+        "UNCHANGED"
+      );
+      expectCode(
+        "for a WhatsApp account",
+        await report(whatsapp, "OK"),
+        "NOT_A_BOT"
+      );
+      expectCode(
+        "for a free-text verdict",
+        await report(liveBot, "probe free text"),
+        "refused"
+      );
+      expectCode(
+        "for another tenant",
+        await report(liveBot, "OK", tenantB),
+        "refused"
+      );
+
+      // The contact block: whatever version the statement writes, the stored
+      // one is OLD + 1.
+      try {
+        await tx.savepoint(
+          (sp) => sp`
+            UPDATE awcms_telegram_engagement_contacts
+            SET state = 'blocked', blocked_at = now(), version = 2147483647,
+                updated_at = now()
+            WHERE id = ${startedContact.id}
+          `
+        );
+      } catch (error) {
+        findings.push(
+          `the dispatch role could not mark a started contact blocked (positive control): ${error instanceof Error ? error.message.slice(0, 120) : "error"}`
+        );
+      }
+
+      await tx.unsafe("RESET ROLE");
+
+      const contactVersion = Number(
+        (
+          (await tx`
+            SELECT version FROM awcms_telegram_engagement_contacts
+            WHERE id = ${startedContact.id}
+          `) as { version: number }[]
+        )[0]!.version
+      );
+
+      if (contactVersion !== Number(startedContact.version) + 1) {
+        findings.push(
+          `a contact the dispatch role marked blocked stored version ${contactVersion}, not ${Number(startedContact.version) + 1}`
+        );
+      }
+
+      const bots = (await tx`
+        SELECT a.id, a.status, a.status_reason, a.version, h.state, h.reason_code
+        FROM awcms_channel_accounts a
+        LEFT JOIN awcms_channel_account_health h
+          ON h.tenant_id = a.tenant_id AND h.account_id = a.id
+        WHERE a.id IN (${liveBot}, ${pendingBot})
+      `) as {
+        id: string;
+        status: string;
+        status_reason: string | null;
+        version: number;
+        state: string | null;
+        reason_code: string | null;
+      }[];
+      const live = bots.find((row) => row.id === liveBot);
+      const pending = bots.find((row) => row.id === pendingBot);
+
+      if (
+        live?.status !== "degraded" ||
+        live.status_reason !== "TOKEN_REJECTED" ||
+        Number(live.version) !== liveBotVersion + 1 ||
+        live.state !== "failing" ||
+        live.reason_code !== "TOKEN_REJECTED"
+      ) {
+        findings.push(
+          `the health report did not write exactly its constants for a rejected token (got ${JSON.stringify(live)})`
+        );
+      }
+      if (
+        pending?.status !== "connected" ||
+        pending.status_reason !== null ||
+        Number(pending.version) !== pendingBotVersion + 1 ||
+        pending.state !== "ok"
+      ) {
+        findings.push(
+          `the health report did not write exactly its constants for a verified bot (got ${JSON.stringify(pending)})`
+        );
+      }
 
       throw new ProbeRollback("rollback");
     });

@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 292   |
+| Migrations                          | 294   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 897   |
+| Test files                          | 898   |
 | Route files                         | 697   |
 | ADR                                 | 340   |
 
@@ -357,6 +357,8 @@
 | 290 | `sql/426_awcms_social_dispatch_credential_report_function.sql`         |
 | 291 | `sql/427_awcms_social_dispatch_secret_view_and_value_bounds.sql`       |
 | 292 | `sql/428_awcms_social_dispatch_session_timeouts.sql`                   |
+| 293 | `sql/436_awcms_telegram_dispatch_health_report_function.sql`           |
+| 294 | `sql/437_awcms_telegram_dispatch_session_timeouts.sql`                 |
 
 ### Tables & Row-Level Security
 
@@ -647,7 +649,7 @@
 | ------------- | ---------- |
 | `(root)`      | 659        |
 | `e2e`         | 32         |
-| `integration` | 204        |
+| `integration` | 205        |
 | `unit`        | 2          |
 
 ### Routes

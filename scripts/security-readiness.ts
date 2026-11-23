@@ -4905,7 +4905,8 @@ export async function checkWorkerSetupRoleGrants(
     {
       role: SOCIAL_CREDENTIAL_REPORT_ROLE,
       grants: SOCIAL_CREDENTIAL_REPORT_ROLE_GRANTS
-    }
+    },
+    { role: TELEGRAM_HEALTH_REPORT_ROLE, grants: {} }
   ];
 
   try {
@@ -5017,6 +5018,10 @@ export async function checkWorkerSetupRoleGrants(
         columns:
           policy?.socialCredentialReportColumns ??
           SOCIAL_CREDENTIAL_REPORT_COLUMN_GRANTS
+      },
+      {
+        role: TELEGRAM_HEALTH_REPORT_ROLE,
+        columns: TELEGRAM_HEALTH_REPORT_COLUMN_GRANTS
       }
     ]) {
       if (!present.includes(role)) {
@@ -6128,7 +6133,11 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   // dispatcher's "credential rejected" report; column privileges on the account
   // status columns and the health row, nothing else.
   "awcms_social_credential_report",
-  "awcms_telegram_bootstrap"
+  "awcms_telegram_bootstrap",
+  // sql/436 (defence in depth): owns the customer Telegram dispatcher's health
+  // report; column privileges on the account status columns and the health
+  // row, nothing else.
+  "awcms_telegram_engagement_health_report"
 ];
 
 export async function checkDefinerOwnerRolesNoLogin(
@@ -8325,39 +8334,10 @@ export const TELEGRAM_ENGAGEMENT_DISPATCH_COLUMN_GRANTS: Record<
       "updated_at",
       "version",
       "deleted_at"
-    ],
-    UPDATE: ["status", "status_reason", "connected_at", "updated_at", "version"]
-  },
-  awcms_channel_account_health: {
-    SELECT: [
-      "tenant_id",
-      "account_id",
-      "state",
-      "reason_code",
-      "checked_at",
-      "token_expires_at",
-      "quota_remaining",
-      "quota_limit"
-    ],
-    INSERT: [
-      "tenant_id",
-      "account_id",
-      "state",
-      "reason_code",
-      "checked_at",
-      "token_expires_at",
-      "quota_remaining",
-      "quota_limit"
-    ],
-    UPDATE: [
-      "state",
-      "reason_code",
-      "checked_at",
-      "token_expires_at",
-      "quota_remaining",
-      "quota_limit",
-      "updated_at"
     ]
+    // sql/436 (defence in depth): NO direct write on the account and NO
+    // grant on awcms_channel_account_health; the health report is the
+    // fixed-body definer `awcms_telegram_engagement_report_bot_health`.
   },
   awcms_channel_account_capabilities: {
     SELECT: [
@@ -8510,9 +8490,6 @@ export type PinnedRolePolicy = {
   check: string | null;
 };
 
-const LIVE_BOT_ACCOUNT =
-  "(exists(select1fromawcms_channel_accountsawhere((a.tenant_id=awcms_channel_account_health.tenant_id)and(a.id=awcms_channel_account_health.account_id)and(a.provider='telegram')and(a.account_kind='bot')and(a.deleted_atisnull))))";
-
 /**
  * EVERY policy that names `awcms_telegram_engagement_dispatch`, exactly
  * (audits M-A and M-B of PR #1260). All RESTRICTIVE, all `TO` that role only.
@@ -8528,22 +8505,6 @@ export const TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES: readonly PinnedRolePolicy[] 
       using:
         "(((purpose='bot_token')and(exists(select1from(awcms_channel_accountsajoinawcms_telegram_engagement_endpointseon(((e.tenant_id=a.tenant_id)and(e.account_id=a.id))))where((a.tenant_id=awcms_channel_secrets.tenant_id)and(a.secret_id=awcms_channel_secrets.id)and(a.provider='telegram')and(a.account_kind='bot')and(a.auth_mode='bot_token')and(a.deleted_atisnull)and(a.status=any(array['pending','connected','degraded']))and((e.state<>'revoked')or(e.provider_action='delete'))))))or((purpose='webhook_signing_secret')and(exists(select1from(awcms_telegram_engagement_endpointsejoinawcms_channel_accountsaon(((a.tenant_id=e.tenant_id)and(a.id=e.account_id))))where((e.tenant_id=awcms_channel_secrets.tenant_id)and(e.secret_id=awcms_channel_secrets.id)and(e.state<>'revoked')and(a.provider='telegram')and(a.account_kind='bot')and(a.deleted_atisnull)and(a.status=any(array['pending','connected','degraded'])))))))",
       check: null
-    },
-    {
-      table: "awcms_channel_accounts",
-      name: "awcms_channel_accounts_telegram_engagement_dispatch_update",
-      cmd: "w",
-      using:
-        "((provider='telegram')and(account_kind='bot')and(deleted_atisnull)and(status=any(array['pending','connected','degraded'])))",
-      check:
-        "((provider='telegram')and(account_kind='bot')and(deleted_atisnull)and(status=any(array['connected','degraded'])))"
-    },
-    {
-      table: "awcms_channel_account_health",
-      name: "awcms_channel_account_health_telegram_engagement_dispatch",
-      cmd: "*",
-      using: LIVE_BOT_ACCOUNT,
-      check: LIVE_BOT_ACCOUNT
     },
     {
       table: "awcms_telegram_engagement_consents",
@@ -8578,6 +8539,87 @@ export const TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES: readonly PinnedRolePolicy[] 
       check: null
     }
   ];
+
+/** sql/436: the NOLOGIN, memberless owner of the Telegram dispatcher's health report. */
+export const TELEGRAM_HEALTH_REPORT_ROLE =
+  "awcms_telegram_engagement_health_report";
+
+export const TELEGRAM_HEALTH_REPORT_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS =
+  {
+    awcms_channel_accounts: {
+      SELECT: [
+        "tenant_id",
+        "id",
+        "provider",
+        "account_kind",
+        "status",
+        "deleted_at",
+        "connected_at",
+        "version"
+      ],
+      UPDATE: [
+        "status",
+        "status_reason",
+        "connected_at",
+        "updated_at",
+        "version"
+      ]
+    },
+    awcms_channel_account_health: {
+      SELECT: [
+        "tenant_id",
+        "account_id",
+        "state",
+        "reason_code",
+        "checked_at",
+        "token_expires_at",
+        "quota_remaining",
+        "quota_limit"
+      ],
+      INSERT: [
+        "tenant_id",
+        "account_id",
+        "state",
+        "reason_code",
+        "checked_at",
+        "token_expires_at",
+        "quota_remaining",
+        "quota_limit"
+      ],
+      UPDATE: [
+        "state",
+        "reason_code",
+        "checked_at",
+        "token_expires_at",
+        "quota_remaining",
+        "quota_limit",
+        "updated_at"
+      ]
+    }
+  };
+
+/** sql/436: the one account/health write of the Telegram dispatcher, pinned exactly. */
+export const TELEGRAM_DISPATCH_DEFINER_FUNCTIONS: readonly PinnedDefinerFunction[] =
+  [
+    {
+      signature: "awcms_telegram_engagement_report_bot_health(uuid,uuid,text)",
+      owner: TELEGRAM_HEALTH_REPORT_ROLE,
+      executors: [TELEGRAM_ENGAGEMENT_DISPATCH_ROLE],
+      volatility: "v",
+      body: "DECLARE v_status text; BEGIN IF p_tenant_id IS NULL OR p_account_id IS NULL OR p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.current_tenant_id', true), '')::uuid THEN RAISE EXCEPTION 'awcms_telegram_engagement_report_bot_health: the tenant is not the transaction tenant' USING ERRCODE = '42501'; END IF; IF p_verdict IS NULL OR p_verdict NOT IN ('OK', 'TOKEN_REJECTED', 'BOT_IDENTITY_MISMATCH') THEN RAISE EXCEPTION 'awcms_telegram_engagement_report_bot_health: unknown verdict' USING ERRCODE = '22023'; END IF; SELECT a.status INTO v_status FROM awcms_channel_accounts AS a WHERE a.tenant_id = p_tenant_id AND a.id = p_account_id AND a.provider = 'telegram' AND a.account_kind = 'bot' AND a.deleted_at IS NULL FOR UPDATE; IF NOT FOUND THEN RETURN 'NOT_A_BOT'; END IF; INSERT INTO awcms_channel_account_health (tenant_id, account_id, state, reason_code, checked_at, token_expires_at, quota_remaining, quota_limit) VALUES (p_tenant_id, p_account_id, CASE WHEN p_verdict = 'OK' THEN 'ok' ELSE 'failing' END, CASE WHEN p_verdict = 'OK' THEN NULL ELSE p_verdict END, now(), NULL, NULL, NULL) ON CONFLICT (tenant_id, account_id) DO UPDATE SET state = EXCLUDED.state, reason_code = EXCLUDED.reason_code, checked_at = EXCLUDED.checked_at, token_expires_at = EXCLUDED.token_expires_at, quota_remaining = EXCLUDED.quota_remaining, quota_limit = EXCLUDED.quota_limit, updated_at = now(); IF p_verdict = 'OK' THEN IF v_status NOT IN ('pending', 'degraded') THEN RETURN 'UNCHANGED'; END IF; UPDATE awcms_channel_accounts SET status = 'connected', status_reason = NULL, connected_at = COALESCE(connected_at, now()), updated_at = now(), version = version + 1 WHERE tenant_id = p_tenant_id AND id = p_account_id AND status IN ('pending', 'degraded') AND deleted_at IS NULL; RETURN 'CONNECTED'; END IF; IF v_status IS DISTINCT FROM 'connected' THEN RETURN 'UNCHANGED'; END IF; UPDATE awcms_channel_accounts SET status = 'degraded', status_reason = p_verdict, updated_at = now(), version = version + 1 WHERE tenant_id = p_tenant_id AND id = p_account_id AND status = 'connected' AND deleted_at IS NULL; RETURN 'DEGRADED'; END;"
+    }
+  ];
+
+/** sql/436: the dispatch role's contact `version` is always OLD + 1. */
+export const TELEGRAM_DISPATCH_TRIGGERS: readonly PinnedTrigger[] = [
+  {
+    table: "awcms_telegram_engagement_contacts",
+    trigger: "awcms_telegram_engagement_contacts_dispatch_version",
+    fn: "awcms_telegram_engagement_contacts_dispatch_version",
+    events: "update",
+    body: "BEGIN IF current_user = 'awcms_telegram_engagement_dispatch' THEN NEW.version := OLD.version + 1; END IF; RETURN NEW; END;"
+  }
+];
 
 /**
  * The customer Telegram dispatcher's role holds no table-level privilege, the
@@ -8759,6 +8801,44 @@ export async function checkTelegramEngagementDispatchRole(options?: {
     // The #1145 credential-path review, MEDIUM-2 (same helper as the social
     // dispatcher): a member of no role, and no unlisted member.
     findings.push(...(await findDedicatedRoleMembershipFindings(sql, role)));
+    // sql/437: the role's own session timeouts.
+    findings.push(...(await findDedicatedRoleTimeoutFindings(sql, role)));
+
+    // sql/436: the health report definer and the contact version trigger,
+    // pinned exactly; and the closure of definer functions the role can reach
+    // (directly, through PUBLIC or a membership) is exactly the reviewed one.
+    for (const pin of TELEGRAM_DISPATCH_DEFINER_FUNCTIONS) {
+      const finding = await pinDefinerFunction(sql, pin);
+
+      if (finding) findings.push(finding);
+    }
+
+    for (const pin of TELEGRAM_DISPATCH_TRIGGERS) {
+      const finding = await pinTriggerFunction(sql, pin);
+
+      if (finding) findings.push(finding);
+    }
+
+    const reviewedTelegramFunctions = new Set(
+      TELEGRAM_DISPATCH_DEFINER_FUNCTIONS.map((pin) => pin.signature)
+    );
+    const reachableTelegram = (await sql`
+      SELECT p.oid::regprocedure::text AS signature,
+             pg_get_userbyid(p.proowner) AS owner
+      FROM pg_proc p
+      WHERE p.proowner = to_regrole(${TELEGRAM_HEALTH_REPORT_ROLE})::oid
+         OR (p.prosecdef
+             AND has_function_privilege(${role}, p.oid, 'EXECUTE'))
+      ORDER BY 1
+    `) as { signature: string; owner: string }[];
+
+    for (const row of reachableTelegram) {
+      if (!reviewedTelegramFunctions.has(row.signature)) {
+        findings.push(
+          `function ${row.signature} (owner ${row.owner}) is reachable by ${role} or owned by ${TELEGRAM_HEALTH_REPORT_ROLE} and is not a reviewed pin`
+        );
+      }
+    }
 
     // ...and what the policies DO, as the role, in a rolled-back transaction.
     const probe = await probeTelegramEngagementDispatchRole(sql);
@@ -8770,7 +8850,7 @@ export async function checkTelegramEngagementDispatchRole(options?: {
           name,
           severity,
           status: "pass",
-          evidence: `${role} holds no table-level privilege, exactly its pinned column grants on ${Object.keys(columns).length} table(s), exactly its ${TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES.length} pinned restrictive policies (secret view, account/health/contact/consent/outbox writes), and a rolled-back probe as the role confirms what they allow and refuse.`
+          evidence: `${role} holds no table-level privilege, exactly its pinned column grants on ${Object.keys(columns).length} table(s), exactly its ${TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES.length} pinned restrictive policies (secret view, contact/consent/outbox writes; the account and its health only through the sql/436 definer), its session timeouts, no role membership, and a rolled-back probe as the role confirms what they allow and refuse.`
         }
       : { name, severity, status: "fail", evidence: findings.join("; ") };
   } catch (error) {

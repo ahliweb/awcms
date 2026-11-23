@@ -78,6 +78,7 @@ import {
   botCapabilityAllowed,
   fetchBotAccount,
   recordBotHealth,
+  type BotHealthVerdict,
   resolveBotToken,
   resolveWebhookSeed
 } from "../infrastructure/channel-accounts-bridge";
@@ -156,6 +157,19 @@ type ClaimedEndpoint = {
   connector_attempts: number;
 };
 
+/**
+ * The connector's terminal codes that are a fact about the BOT (`health: true`)
+ * map onto the closed verdicts of `sql/436`; anything else is a programming
+ * error, refused before the database is asked.
+ */
+function toHealthVerdict(code: string): BotHealthVerdict {
+  if (code === "TOKEN_REJECTED" || code === "BOT_IDENTITY_MISMATCH") {
+    return code;
+  }
+
+  throw new Error(`telegram-engagement: ${code} is not a bot health verdict`);
+}
+
 async function connectorFinalize(
   sql: Bun.SQL,
   tenantId: string,
@@ -185,10 +199,7 @@ async function connectorFinalize(
         `) as { id: string }[];
 
         if (rows.length > 0) {
-          await recordBotHealth(tx, tenantId, endpoint.account_id, {
-            state: "ok",
-            reasonCode: null
-          });
+          await recordBotHealth(tx, tenantId, endpoint.account_id, "OK");
         }
 
         return;
@@ -233,10 +244,12 @@ async function connectorFinalize(
       `;
 
       if (patch.kind === "failed" && patch.health) {
-        await recordBotHealth(tx, tenantId, endpoint.account_id, {
-          state: "failing",
-          reasonCode: code
-        });
+        await recordBotHealth(
+          tx,
+          tenantId,
+          endpoint.account_id,
+          toHealthVerdict(code)
+        );
       }
     },
     { workClass: "background_sync" }
@@ -786,10 +799,12 @@ async function finalizeMessage(
             WHERE tenant_id = ${tenantId} AND account_id = ${message.account_id}
               AND state = 'active'
           `;
-          await recordBotHealth(tx, tenantId, message.account_id, {
-            state: "failing",
-            reasonCode: "TOKEN_REJECTED"
-          });
+          await recordBotHealth(
+            tx,
+            tenantId,
+            message.account_id,
+            "TOKEN_REJECTED"
+          );
 
           return;
       }
