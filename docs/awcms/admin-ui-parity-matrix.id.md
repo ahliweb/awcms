@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:8d9f31dfec351d95fe252e2e4caad16aeb2a8f93965c1828d86f4288906ed73a -->
+<!-- i18n-source-hash: sha256:16f407103a901827c73b2fe22515149e3f384bb9b6df7d8f37fef73e679a5f3b -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -49,8 +49,7 @@ bisa dicek terhadap tiap baris di bawah:**
 ## 2. Baseline tervalidasi
 
 Diverifikasi ulang secara independen di branch ini terhadap
-`/home/data/dev_bun/awcms-one` (checkout lokal `ahliweb/awcms-one`,
-`apps/cms` meng-embed permukaan admin repo ini):
+sebuah checkout lokal repo produk konsumen (`apps/cms` meng-embed permukaan admin repo ini):
 
 | Berkas                                                      | Hasil                                                                                                                                                                                                                                                                   |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

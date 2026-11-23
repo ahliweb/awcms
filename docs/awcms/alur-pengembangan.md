@@ -487,7 +487,7 @@ Read this step together with the generic flow, without stretching either:
   It is never done by editing a process document, adding a
   `ModuleDeploymentProfile`, or standing up an environment quietly.
 - **What is not applicable:** a staging tier for **this repo's reference
-  deployment** (its single production deployment, `awcms.ahlikoding.com`).
+  deployment** (its single production deployment).
 - **What is NOT forbidden:** a consumer or derived repository running its own
   pre-production environment. ADR-0083 §Consequences says such an installation
   uses `development`, or a second `production` deployment bound by the isolation

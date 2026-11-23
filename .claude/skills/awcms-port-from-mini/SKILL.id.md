@@ -5,7 +5,7 @@ description: HISTORIS / JANGAN DIIKUTI SEBAGAI PROSEDUR — [ADR-0055](../../../
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:bab4b4c61d2d99bdb471f683a57b5b81efc72fb63c995542c1c82175c5c6fdfb -->
+<!-- i18n-source-hash: sha256:19b5f3a966da671538396924243151559055cf1f38b81a0761d21058dc0b1af4 -->
 
 # AWCMS — Port modul dari awcms-mini (HISTORIS)
 
@@ -29,8 +29,8 @@ description: HISTORIS / JANGAN DIIKUTI SEBAGAI PROSEDUR — [ADR-0055](../../../
 
 Konteks historis di bawah dipertahankan apa adanya.
 
-- SUMBER (baca saja): `/home/data/dev_react/awcms-mini`
-- TARGET: `/home/data/dev_bun/awcms`
+- SUMBER (baca saja): `<mini-checkout>`
+- TARGET: `<checkout>`
 
 > **Berlaku juga untuk port dari `awcms-micro`** — dan sejak 2026-07-24 itulah
 > sumber yang paling aktif. [ADR-0035](../../../docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
@@ -38,7 +38,7 @@ Konteks historis di bawah dipertahankan apa adanya.
 > `awcms-micro`; peta gelombang + urutan dependensinya di
 > [`absorb-awcms-micro-roadmap.md`](../../../docs/awcms/absorb-awcms-micro-roadmap.md).
 > Playbook di bawah identik, dengan dua penyesuaian: SUMBER =
-> `/home/data/dev_react/awcms-micro`, dan aturan rename §2 berlaku untuk prefix
+> `<micro-checkout>`, dan aturan rename §2 berlaku untuk prefix
 > `awcms_micro_` → `awcms_` (bukan `awcms_mini_`). Satu **adaptasi khas awcms**
 > yang berulang di tiap port konten: rute publik micro **host-resolved**
 > (`/news/:slug`), sedangkan base ini **path-tenant-scoped**
@@ -48,7 +48,7 @@ Konteks historis di bawah dipertahankan apa adanya.
 ## 1. Recon sebelum menulis
 
 ```bash
-M=/home/data/dev_react/awcms-mini; A=/home/data/dev_bun/awcms
+M=<mini-checkout>; A=<checkout>
 sed -n '/dependencies:/,/]/p' $M/src/modules/<mod>/module.ts     # deps → SEMUA harus sudah ada di $A/src/modules/index.ts
 find $M/src/modules/<mod> -type f | wc -l                         # ukuran modul
 ls $M/sql | grep -i <mod>                                         # migrasi (bisa >1 — konsolidasikan)
@@ -92,7 +92,7 @@ Kalau salah satu dependency modul **belum** ada di awcms → port dependency itu
 ## 6. Definition of Done — semua HARUS hijau
 
 ```bash
-cd /home/data/dev_bun/awcms
+cd <checkout>
 git add -A                       # agar check:docs memindai .md baru (changeset/README)
 bun run format                   # WAJIB dulu: prettier --write (file buatan subagent sering belum terformat)
 bun run check                    # rantai PENUH — ini yang ditegakkan CI

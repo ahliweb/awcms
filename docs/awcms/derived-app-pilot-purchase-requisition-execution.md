@@ -171,7 +171,7 @@ Findings that change the top-level plan — the result of verifying against the 
 ## 3. Phase A — Scaffold the derived repo (vendor)
 
 1. Create the GitHub repo **`ahliweb/awcms-erp-pilot`** (private) + a local checkout
-   (e.g. `/home/data/dev_bun/awcms-erp-pilot`).
+   (e.g. `<erp-pilot-checkout>`).
 2. **Vendor base v5.1.1**: copy a clean snapshot of the base tree (without the base `.git`),
    fresh `git init`, `bun install`. Change `package.json` `name` → `awcms-erp-pilot`,
    `version` `0.1.0`. Keep every gate/skill/CI/Dockerfile.production.

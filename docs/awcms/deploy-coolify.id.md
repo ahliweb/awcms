@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:5e058f3fa8cf4b7b374d63e6fa07c1848f6699561c6a1c8899134b7fca035132 -->
+<!-- i18n-source-hash: sha256:a0aab75e02d42b734123ef2fed80de0704c94465dd6e6f7c3b2b56f1d8ebae7c -->
 
 # Deploy Coolify
 
-> **Deployment repo ini: SATU environment.** `awcms.ahlikoding.com`,
+> **Deployment repo ini: SATU environment** (host produksi),
 > `APP_ENV=production`. Tidak ada environment ter-deploy kedua —
 > [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md). Alasannya
 > bukan penghematan: repo ini **template**, dan deployment hidupnya ada untuk
@@ -31,12 +31,12 @@
 > yang Anda jalankan.
 >
 > **Verifikasi ke control-plane, bukan ke `curl`.** Per 11 Agustus 2026
-> `https://awcms.ahlikoding.com` menjawab 200 sepanjang waktu — sementara baris
-> aplikasi produksinya (`got4etcblum9kowdv4mrixqo`) **tidak ada** di tabel
+> `https://awcms.example.com` menjawab 200 sepanjang waktu — sementara baris
+> aplikasi produksinya (`<app-uuid>`) **tidak ada** di tabel
 > `applications` Coolify (bukan soft-delete) dan tidak ada database produksi di
 > `standalone_postgresqls`. Container `awcms-staging-varnish` memasang rule
-> Traefik yang mencocokkan `awcms-staging.ahlikoding.com` **dan**
-> `awcms.ahlikoding.com`, jadi domain produksi sedang dilayani deployment lain
+> Traefik yang mencocokkan `awcms-staging.example.com` **dan**
+> `awcms.example.com`, jadi domain produksi sedang dilayani deployment lain
 > di atas database `awcms_staging`. **200 di domain produksi bukan bukti
 > produksi hidup**; yang membuktikan adalah `applications` dan
 > `standalone_postgresqls`. Sumber daya bernama `awcms-staging-*` itu sedang
@@ -237,7 +237,7 @@ Setiap aplikasi/database pada topologi multi-app punya migrasi one-shot sendiri 
 Endpoint: `GET /api/v1/health` — dipakai sebagai **Health Check Path** di konfigurasi Coolify application (lihat §Dua pola deploy di atas). Coolify memakai endpoint ini untuk menentukan container sehat sebelum menandai deploy sukses/sebelum mengarahkan traffic.
 
 ```bash
-curl https://awcms.ahlikoding.com/api/v1/health
+curl https://awcms.example.com/api/v1/health
 ```
 
 Setiap aplikasi pada topologi multi-app dicek lewat endpoint health-nya masing-masing — tidak ada health check bersama lintas aplikasi. Perhatikan batas buktinya: endpoint ini membuktikan **container yang menjawab domain itu** sehat, bukan container mana yang menjawab. Untuk pertanyaan "apakah deployment X benar-benar hidup", jawabannya ada di `applications`/`standalone_postgresqls` Coolify — lihat catatan verifikasi di kepala dokumen ini.
@@ -253,7 +253,7 @@ Konsekuensinya adalah yang disebut temuan **D10** putaran 17 Agustus 2026: **ril
 `GET /api/v1/database/pool/health` sama-sama tanpa autentikasi dan melaporkan `databaseReachable`, `circuitBreakerState`, saturasi per work class, serta kapasitas pool proses ini.
 
 ```bash
-curl -s https://awcms.ahlikoding.com/api/v1/database/pool/health
+curl -s https://awcms.example.com/api/v1/database/pool/health
 # {"status":"healthy","databaseReachable":true,"circuitBreakerState":"closed", …}
 ```
 

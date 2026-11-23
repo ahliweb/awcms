@@ -29,13 +29,13 @@
 # exactly the reason above — in a pipeline, `$?` is the LAST command's.
 #
 # Install:
-#   scp ops/backup-awcms.sh dinkes-prod:/home/admin1/awcms-jobs/ && chmod +x
+#   scp ops/backup-awcms.sh <prod-host>:<jobs-dir>/ && chmod +x
 #   crontab:  30 17 * * * /usr/bin/flock -n … backup-awcms.sh >> …/backup.log 2>&1
 # 17:30 UTC = 00:30 WIB — before the retention jobs at 03:00-04:00 UTC, so the
 # night's backup is always taken BEFORE anything deletes for retention.
 set -euo pipefail
 
-DEST="${AWCMS_BACKUP_DEST:-/home/admin1/backups/awcms}"
+DEST="${AWCMS_BACKUP_DEST:-${HOME}/backups/awcms}"
 KEEP="${KEEP:-14}"
 DB="${AWCMS_DB:-awcms}"
 DB_USER="${AWCMS_DB_USER:-awcms_staging}"

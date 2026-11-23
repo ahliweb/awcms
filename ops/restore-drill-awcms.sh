@@ -29,11 +29,11 @@
 # a new cluster, and the roles are already there.
 #
 # Install:
-#   scp ops/restore-drill-awcms.sh dinkes-prod:/home/admin1/awcms-jobs/ && chmod +x
+#   scp ops/restore-drill-awcms.sh <prod-host>:<jobs-dir>/ && chmod +x
 #   crontab:  0 18 * * 6 /usr/bin/flock -n … restore-drill-awcms.sh >> …/restore-drill.log 2>&1
 set -euo pipefail
 
-DEST="${AWCMS_BACKUP_DEST:-/home/admin1/backups/awcms}"
+DEST="${AWCMS_BACKUP_DEST:-${HOME}/backups/awcms}"
 PG_FILTER="${AWCMS_PG_FILTER:-my85c1xd4txesedhic72maeu}"
 DB_USER="${AWCMS_DB_USER:-awcms_staging}"
 DRILL_DB="${AWCMS_DRILL_DB:-awcms_restore_drill}"

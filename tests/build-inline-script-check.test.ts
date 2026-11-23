@@ -107,7 +107,7 @@ describe("extractInlinedScripts", () => {
     const found = extractInlinedScripts(
       manifest([
         [
-          "/home/data/dev_bun/awcms/src/components/ThemeToggle.astro?astro&type=script&index=0&lang.ts",
+          "/app/src/components/ThemeToggle.astro?astro&type=script&index=0&lang.ts",
           body
         ]
       ])

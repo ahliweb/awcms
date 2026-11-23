@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deployment-profiles.md)
 
-<!-- i18n-source-hash: sha256:b1e7b8f8de355c5f852841e53ca08a64c5281618e6bee4152711647a20ea2675 -->
+<!-- i18n-source-hash: sha256:bcdca5efac8e1270f341ce5141574610967db942006c9ba5b15d7e6fdbe76425 -->
 
 # Deployment Profiles
 
@@ -31,7 +31,7 @@ Tiga profil dan berkas `deploy/*` yang relevan untuk masing-masing (`deploy/back
 
 **Tiga, bukan empat.** `staging` dulu baris keempat di tabel ini; ia **dihapus dari kosakata profil** ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md), sebagaimana diamandemen) — bukan sekadar tidak dijalankan di sini. `ModuleDeploymentProfile` di `src/modules/_shared/module-contract.ts` karena itu `development | production | offline-lan`. Sebuah profil yang tak pernah dilatih siapa pun adalah klaim, bukan kapabilitas: ia menempel di setiap `deploymentProfiles` modul, di setiap tabel dokumen, dan di setiap percabangan `APP_ENV` tanpa satu pun deployment yang membuktikannya benar.
 
-Yang **tidak** hilang bersamanya adalah kontrak isolasinya — database sendiri, role/password sendiri, secret sendiri, integrasi keluar mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge per-environment. Kontrak itu berpindah rumah ke [`environments.md`](environments.md) §Kontrak isolasi environment kedua, dan kini berlaku bagi **environment kedua apa pun** yang seseorang dirikan di samping produksinya, apa pun namanya. Deployment milik repo ini sendiri tetap cuma satu: production di `awcms.ahlikoding.com` — yang akan "di-stage" di sini adalah templatenya sendiri, dan itu divalidasi rantai gerbang CI plus suite integrasi ber-Postgres, bukan salinan kedua yang berjalan. Panduan Coolify yang menurunkan aturan ini ke tingkat operator: [`deploy-coolify.md`](deploy-coolify.md).
+Yang **tidak** hilang bersamanya adalah kontrak isolasinya — database sendiri, role/password sendiri, secret sendiri, integrasi keluar mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge per-environment. Kontrak itu berpindah rumah ke [`environments.md`](environments.md) §Kontrak isolasi environment kedua, dan kini berlaku bagi **environment kedua apa pun** yang seseorang dirikan di samping produksinya, apa pun namanya. Deployment milik repo ini sendiri tetap cuma satu: production di host produksi — yang akan "di-stage" di sini adalah templatenya sendiri, dan itu divalidasi rantai gerbang CI plus suite integrasi ber-Postgres, bukan salinan kedua yang berjalan. Panduan Coolify yang menurunkan aturan ini ke tingkat operator: [`deploy-coolify.md`](deploy-coolify.md).
 
 Prinsip pemilihan: nginx (`deploy/nginx/`) hanya dibutuhkan saat butuh terminasi TLS untuk klien di luar mesin/jaringan tepercaya atau saat memfasadkan beberapa instance upstream — topologi LAN-first satu server bisa langsung menyajikan aplikasi di port 4321 tanpa reverse proxy sama sekali. PgBouncer (`deploy/pgbouncer/`) hanya untuk skenario koneksi pendek bervolume tinggi (mis. banyak worker sync integrasi eksternal berjalan bersamaan) — bukan kebutuhan default.
 

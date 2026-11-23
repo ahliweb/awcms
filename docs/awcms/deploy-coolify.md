@@ -2,7 +2,7 @@
 
 # Deploy Coolify
 
-> **This repo's deployment: ONE environment.** `awcms.ahlikoding.com`,
+> **This repo's deployment: ONE environment** (the production host),
 > `APP_ENV=production`. There is no second deployed environment —
 > [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md). The reason
 > is not cost saving: this repo is a **template**, and its live deployment exists
@@ -28,12 +28,12 @@
 > options, security checklist) applies per environment, however many you run.
 >
 > **Verify against the control-plane, not with `curl`.** As of 11 August 2026
-> `https://awcms.ahlikoding.com` answers 200 all the time — while its production
-> application row (`got4etcblum9kowdv4mrixqo`) **does not exist** in Coolify's
+> `https://awcms.example.com` answers 200 all the time — while its production
+> application row (`<app-uuid>`) **does not exist** in Coolify's
 > `applications` table (not a soft-delete) and there is no production database in
 > `standalone_postgresqls`. The `awcms-staging-varnish` container installs a
-> Traefik rule matching `awcms-staging.ahlikoding.com` **and**
-> `awcms.ahlikoding.com`, so the production domain is being served by another
+> Traefik rule matching `awcms-staging.example.com` **and**
+> `awcms.example.com`, so the production domain is being served by another
 > deployment on top of the `awcms_staging` database. **A 200 on the production
 > domain is not proof that production is alive**; what proves it is `applications`
 > and `standalone_postgresqls`. Those `awcms-staging-*` resources are being torn
@@ -233,7 +233,7 @@ Every application/database in a multi-app topology has its own one-shot migratio
 Endpoint: `GET /api/v1/health` — used as the **Health Check Path** in the Coolify application configuration (see §Two deploy patterns above). Coolify uses this endpoint to decide the container is healthy before marking the deploy successful/before routing traffic.
 
 ```bash
-curl https://awcms.ahlikoding.com/api/v1/health
+curl https://awcms.example.com/api/v1/health
 ```
 
 Every application in a multi-app topology is checked via its own health endpoint — there is no shared cross-application health check. Note the limit of what it proves: this endpoint proves **the container answering that domain** is healthy, not which container is answering. For the question "is deployment X really alive", the answer is in Coolify's `applications`/`standalone_postgresqls` — see the verification note at the head of this document.
@@ -249,7 +249,7 @@ The consequence, and it is the one finding **D10** of the 17 August 2026 round n
 `GET /api/v1/database/pool/health` is equally unauthenticated and reports `databaseReachable`, `circuitBreakerState`, per-work-class saturation and this process's pool capacity.
 
 ```bash
-curl -s https://awcms.ahlikoding.com/api/v1/database/pool/health
+curl -s https://awcms.example.com/api/v1/database/pool/health
 # {"status":"healthy","databaseReachable":true,"circuitBreakerState":"closed", …}
 ```
 

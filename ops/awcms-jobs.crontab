@@ -9,9 +9,9 @@
 # env from the running app container so a config change takes effect on the
 # next tick.
 
-AWCMS_RUN_JOB=/home/admin1/awcms-jobs/run-job.sh
-AWCMS_JOB_LOG=/home/admin1/awcms-jobs/logs
-AWCMS_LOCK=/home/admin1/awcms-jobs/locks
+AWCMS_RUN_JOB=/opt/awcms-jobs/run-job.sh
+AWCMS_JOB_LOG=/opt/awcms-jobs/logs
+AWCMS_LOCK=/opt/awcms-jobs/locks
 
 # Every line is wrapped in `flock -n`, matching the convention already used by
 # the other services on this host. The job runner takes an advisory lock in

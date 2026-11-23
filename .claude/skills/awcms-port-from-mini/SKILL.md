@@ -26,8 +26,8 @@ description: HISTORICAL / DO NOT FOLLOW AS A PROCEDURE — [ADR-0055](../../../d
 
 The historical context below is kept as-is.
 
-- SOURCE (read only): `/home/data/dev_react/awcms-mini`
-- TARGET: `/home/data/dev_bun/awcms`
+- SOURCE (read only): `<mini-checkout>`
+- TARGET: `<checkout>`
 
 > **Also applies to porting from `awcms-micro`** — and since 2026-07-24 that is
 > the most active source. [ADR-0035](../../../docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
@@ -35,7 +35,7 @@ The historical context below is kept as-is.
 > website/e-commerce cluster; its wave map + dependency ordering is in
 > [`absorb-awcms-micro-roadmap.md`](../../../docs/awcms/absorb-awcms-micro-roadmap.md).
 > The playbook below is identical, with two adjustments: SOURCE =
-> `/home/data/dev_react/awcms-micro`, and the rename rule of §2 applies to the prefix
+> `<micro-checkout>`, and the rename rule of §2 applies to the prefix
 > `awcms_micro_` → `awcms_` (not `awcms_mini_`). One **awcms-specific adaptation**
 > that recurs in every content port: micro's public routes are **host-resolved**
 > (`/news/:slug`), whereas this base is **tenant-path-scoped**
@@ -45,7 +45,7 @@ The historical context below is kept as-is.
 ## 1. Recon before writing
 
 ```bash
-M=/home/data/dev_react/awcms-mini; A=/home/data/dev_bun/awcms
+M=<mini-checkout>; A=<checkout>
 sed -n '/dependencies:/,/]/p' $M/src/modules/<mod>/module.ts     # deps → ALL of them must already exist in $A/src/modules/index.ts
 find $M/src/modules/<mod> -type f | wc -l                         # module size
 ls $M/sql | grep -i <mod>                                         # migrations (can be >1 — consolidate them)
@@ -89,7 +89,7 @@ If one of the module's dependencies does **not** yet exist in awcms → port tha
 ## 6. Definition of Done — everything MUST be green
 
 ```bash
-cd /home/data/dev_bun/awcms
+cd <checkout>
 git add -A                       # so check:docs scans the new .md files (changeset/README)
 bun run format                   # MANDATORY first: prettier --write (files made by a subagent are often unformatted)
 bun run check                    # the FULL chain — this is what CI enforces

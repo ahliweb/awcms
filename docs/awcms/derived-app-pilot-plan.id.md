@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](derived-app-pilot-plan.md)
 
-<!-- i18n-source-hash: sha256:591a7025983b211c6658edc49ced557de6395852650d034dfa3bd30853df99c4 -->
+<!-- i18n-source-hash: sha256:9a5554bcac3af05eab0c6d448828374ac18f7b19c0c07e2c6c7d2f8c04fca47a -->
 
 # Rencana Pilot Aplikasi Turunan Pertama
 
@@ -110,7 +110,7 @@ sebagai base/dependency, bukan 38 issue dari awal.
 ## Outline PRD/SRS
 
 PRD/SRS lengkap **sudah ada** di
-`/home/data/dev_bun/awpos/docs/awpos/02_prd_detail_per_modul.md` (PRD) dan
+`docs/awpos/02_prd_detail_per_modul.md` (PRD) dan
 `03_srs_detail_per_modul.md` (SRS) — dokumen ini tidak menduplikasinya,
 hanya meringkas untuk konteks keputusan pilot:
 

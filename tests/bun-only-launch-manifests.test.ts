@@ -675,7 +675,7 @@ describe("scanner fixtures: what must be allowed (no false positives)", () => {
 
   test("the run-job.sh form resolves the target", () => {
     const text = [
-      "AWCMS_RUN_JOB=/home/admin1/awcms-jobs/run-job.sh",
+      "AWCMS_RUN_JOB=/opt/awcms-jobs/run-job.sh",
       "*/5 * * * * /usr/bin/flock -n /l/x.lock $AWCMS_RUN_JOB blog:publish:scheduled >> /l/x.log 2>&1"
     ].join("\n");
     expect(parseCrontabJobs(text).map((j) => j.target)).toEqual([

@@ -24,9 +24,9 @@
 
 ## One environment
 
-| Environment    | Domain                 | `APP_ENV`    | Notes                                                                           |
-| -------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- |
-| **Production** | `awcms.ahlikoding.com` | `production` | The only live deployment of this repo. Real data, outbound integrations **ON**. |
+| Environment    | Domain              | `APP_ENV`    | Notes                                                                           |
+| -------------- | ------------------- | ------------ | ------------------------------------------------------------------------------- |
+| **Production** | `awcms.example.com` | `production` | The only live deployment of this repo. Real data, outbound integrations **ON**. |
 
 Development is not a second row missing from that table. It is
 `http://localhost:4321` with `APP_ENV=development`, lives on a workstation, and
@@ -50,7 +50,7 @@ has been **verified restorable** before each migration is applied
 equivalent replacement.
 
 The deployment runs on the same Docker host as other applications
-(`192.42.84.46`), managed by Coolify, behind Traefik which holds `:80`/`:443` and
+(`<server-ip>`), managed by Coolify, behind Traefik which holds `:80`/`:443` and
 issues TLS via the `letsencrypt` resolver.
 
 > **A rule that still holds for anyone running more than one environment: one
@@ -72,17 +72,17 @@ person in exactly the same way if it is not written down. Verified on the host,
 - **There is no production database** in `standalone_postgresqls`. The only one
   that exists is `awcms_staging`.
 - The `awcms-staging-varnish` container installs a Traefik rule matching **both**
-  hosts: ``Host(`awcms-staging.ahlikoding.com`) ||
-Host(`awcms.ahlikoding.com`)``. The production domain is therefore served by the
+  hosts: ``Host(`awcms-staging.example.com`) ||
+Host(`awcms.example.com`)``. The production domain is therefore served by the
   **staging deployment, on top of the staging database**, with `APP_ENV=staging`.
 
 From that, one sentence worth memorising: **a 200 response at
-`awcms.ahlikoding.com` is not proof that production is alive.** Throughout the
+`awcms.example.com` is not proof that production is alive.** Throughout the
 state above that domain answered 200, healthy, without complaint. Verify against
 `applications`/`standalone_postgresqls` — not against `curl`.
 
 The consequence for reading this document today: **every direct measurement
-against `awcms.ahlikoding.com` measures that `awcms-staging-*` deployment.**
+against `awcms.example.com` measures that `awcms-staging-*` deployment.**
 Sections marked "production" below describe the shape being re-established, along
 with evidence from when it last genuinely ran — not observations from today. That
 two-host Traefik rule must be revoked when production is re-established; until
@@ -164,7 +164,7 @@ interlocks and limits: [`load-testing.md`](load-testing.md).
 | ------------------------- | -------------------------- | -------------------------- |
 | `tenant_code`             | `development`              | `ahliweb`                  |
 | `PUBLIC_DEFAULT_TENANT_*` | pinned to the local tenant | pinned to tenant `ahliweb` |
-| Owner login               | `admin@ahlikoding.com`     | `admin@ahlikoding.com`     |
+| Owner login               | `admin@example.com`        | `admin@example.com`        |
 | Owner password            | **its own**                | **its own**                |
 | Role                      | `owner` (system, 197/197)  | `owner` (system, 197/197)  |
 
@@ -367,7 +367,7 @@ link.
 
 ```bash
 APP_ENV=production
-APP_URL=https://awcms.ahlikoding.com
+APP_URL=https://awcms.example.com
 ```
 
 A derived installation running a second environment registers **one redirect URI
@@ -376,9 +376,9 @@ environment is used — not after the flow has already failed.
 
 ## DNS
 
-The `ahlikoding.com` zone lives at Cloudflare (NS `dilbert`/`katja`).
-`awcms.ahlikoding.com` points at `192.42.84.46`. The
-`awcms-staging.ahlikoding.com` record still exists and points at the same host — a
+The `example.com` zone lives at Cloudflare.
+`awcms.example.com` points at `<server-ip>`. The
+`awcms-staging.example.com` record still exists and points at the same host — a
 leftover of the old topology, and on 11 August 2026 it was that very hostname
 whose deployment served both domains (§The state corrected). That record is being
 dismantled together with the identically named resources; it does not signal a
@@ -388,9 +388,7 @@ Once the record exists, TLS is issued automatically via Traefik — no other
 configuration. Since 2026-07-25 the `letsencrypt` resolver in Traefik uses the
 **DNS-01 challenge via Cloudflare** (no longer HTTP-01), so the record's proxy
 status (DNS-only vs proxied/orange cloud) **does not affect** certificate
-issuance/renewal — both work exactly the same. The details of the change and its
-reasoning are in `docs/12-cloudflare-proxy-dns01.md` in the `serv-dinkesdocker`
-repo.
+issuance/renewal — both work exactly the same.
 
 ### Tenant subdomains (assumption — confirm before use)
 
@@ -400,15 +398,15 @@ yet decided on. The most coherent one with the domains above:
 
 ```bash
 TENANT_DOMAIN_DNS_PROVIDER=cloudflare
-TENANT_DOMAIN_PLATFORM_ROOT_DOMAIN=awcms.ahlikoding.com
-TENANT_DOMAIN_SERVING_TARGET=awcms.ahlikoding.com
+TENANT_DOMAIN_PLATFORM_ROOT_DOMAIN=awcms.example.com
+TENANT_DOMAIN_SERVING_TARGET=awcms.example.com
 TENANT_DOMAIN_SERVING_RECORD_TYPE=CNAME
 ```
 
-→ tenant subdomains of the form `<tenant>.awcms.ahlikoding.com`.
+→ tenant subdomains of the form `<tenant>.awcms.example.com`.
 
 This is an **explicitly written assumption**, not a decision that has been taken.
-The alternative is the root `ahlikoding.com` (giving `<tenant>.ahlikoding.com`),
+The alternative is the root `example.com` (giving `<tenant>.example.com`),
 which is shorter but puts the tenant namespace in a zone shared with other
 applications on that host. The adapter **refuses** hostnames outside the
 configured root, so choosing the wrong root is not a security hole — only a
@@ -458,7 +456,7 @@ zero Traefik `compress` middleware declared by the repo. All that emanates from
 here is `Vary: Accept-Encoding` on cacheable responses — a promise about caching,
 not an act of compressing.
 
-Proven by a probe on 4 August 2026: **both** `ahlikoding.com` hostnames answering
+Proven by a probe on 4 August 2026: **both** `example.com` hostnames answering
 at that time sent `content-encoding: gzip`, because both are Cloudflare-proxied.
 So the claim "there is no compression anywhere" is wrong for what a reader
 receives, and right for what this repo owns.
@@ -506,11 +504,11 @@ not ship `scripts/`, so it cannot be run via `docker exec` on the app container
 (the same problem and the same pattern as the migrations below):
 
 ```
-* * * * * /home/admin1/awcms-prod-varnish/purge-runner.sh
+* * * * * <varnish-dir>/purge-runner.sh
 ```
 
 > **As of 11 August 2026 the Varnish container sitting in front of
-> `awcms.ahlikoding.com` is `awcms-staging-varnish`**, not production's — see
+> `awcms.example.com` is `awcms-staging-varnish`**, not production's — see
 > §The state corrected. That container is among those being dismantled; the cron
 > and purge endpoint above are the shape being re-established along with
 > production.
@@ -546,7 +544,7 @@ Every bug in this layer reports success while not working. Only this is valid:
 | queue row                         | `done attempts=1` |
 
 > **Warning — the table above measures Varnish, and Varnish is NOT the tier that
-> answers readers.** The `ahlikoding.com` hosts are Cloudflare-proxied, so the tier
+> answers readers.** The `example.com` hosts are Cloudflare-proxied, so the tier
 > answering readers is **Cloudflare** — proven by a probe on 4 August 2026
 > (`cf-cache-status: HIT` plus an `age:` header). Read `cf-cache-status`/`age`
 > too, not only `X-Cache`; and a post-purge `MISS` at Varnish **does not prove
@@ -676,13 +674,13 @@ difference between a policy that filters and a policy that is inert.
 
 ## Actual status (11 August 2026)
 
-| Item                           | Status                                                                                                                       |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Production Coolify app         | ❌ the row `got4etcblum9kowdv4mrixqo` **does not exist** in `applications` — not a soft-delete                               |
-| Production database            | ❌ not in `standalone_postgresqls`; the only one that exists is `awcms_staging` (being dismantled)                           |
-| `https://awcms.ahlikoding.com` | ⚠️ answers **200** — but is served by `awcms-staging-varnish` (two-host Traefik rule) on top of the `awcms_staging` database |
-| Local development              | ✅ dev↔prod parity enforced since 2026-07-26 (§Local development); the numbers are re-measured, not quoted                   |
-| Root page `/`                  | ✅ an informational landing page (ADR-0083); the catch-all `[...path].ts` still returns a clean 404 for unknown paths        |
+| Item                        | Status                                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Production Coolify app      | ❌ the row `got4etcblum9kowdv4mrixqo` **does not exist** in `applications` — not a soft-delete                               |
+| Production database         | ❌ not in `standalone_postgresqls`; the only one that exists is `awcms_staging` (being dismantled)                           |
+| `https://awcms.example.com` | ⚠️ answers **200** — but is served by `awcms-staging-varnish` (two-host Traefik rule) on top of the `awcms_staging` database |
+| Local development           | ✅ dev↔prod parity enforced since 2026-07-26 (§Local development); the numbers are re-measured, not quoted                   |
+| Root page `/`               | ✅ an informational landing page (ADR-0083); the catch-all `[...path].ts` still returns a clean 404 for unknown paths        |
 
 The measurements that follow come from a two-environment topology that **no longer
 exists** and are kept as historical evidence, not as status: `auto` mode was
@@ -695,7 +693,7 @@ isolation `0/1/0` was proven under `awcms_app` on the same date.
 - **Re-establish the production app + database**, then **dismantle the app,
   database, and Varnish named `awcms-staging-*`** along with the two-host Traefik
   rule they install (infrastructure work, outside this repo). Until both are done,
-  `awcms.ahlikoding.com` serves the `awcms_staging` database — not production
+  `awcms.example.com` serves the `awcms_staging` database — not production
   data.
 - Once the new production database is standing: run `bun run config:validate` +
   `bun run security:readiness`, prove `0/1/0` as `awcms_app`, and run

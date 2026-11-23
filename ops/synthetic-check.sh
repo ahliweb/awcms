@@ -36,19 +36,20 @@
 # record even when no message is sent.
 #
 # Install:
-#   scp ops/synthetic-check.sh dinkes-prod:/home/admin1/awcms-jobs/ && chmod +x
+#   scp ops/synthetic-check.sh <prod-host>:<jobs-dir>/ && chmod +x
 #   crontab:  */10 * * * * /usr/bin/flock -n … synthetic-check.sh >> …/synthetic.log 2>&1
 set -uo pipefail
 
-BASE="${AWCMS_BASE_URL:-https://awcms.ahlikoding.com}"
+BASE="${AWCMS_BASE_URL:-https://awcms.example.com}"
 TENANT="${AWCMS_PROBE_TENANT:-ahliweb}"
-STATE="${AWCMS_SYNTHETIC_STATE:-/home/admin1/awcms-jobs/.synthetic-state}"
+STATE="${AWCMS_SYNTHETIC_STATE:-${HOME}/awcms-jobs/.synthetic-state}"
 # The one CSP hash this app is allowed to carry — the theme-init script body.
 THEME_HASH="${AWCMS_THEME_HASH:-sha256-lOc2GAiS/8scFxSOam/Qp0WAZJ9iWtVPpAe0h4d3eDE=}"
 CURL="curl -sS --max-time 20"
 
-NOTIFY_LIB="${HOME}/hermes/notify-telegram.sh"
-if [ -r "$NOTIFY_LIB" ]; then . "$NOTIFY_LIB"; else notify_telegram() { return 1; }; fi
+# Optional alert hook: set AWCMS_NOTIFY_LIB to a script that defines notify_telegram.
+NOTIFY_LIB="${AWCMS_NOTIFY_LIB:-}"
+if [ -n "$NOTIFY_LIB" ] && [ -r "$NOTIFY_LIB" ]; then . "$NOTIFY_LIB"; else notify_telegram() { return 1; }; fi
 
 FAILURES=()
 log() { echo "$(date -Is) synthetic: $*"; }

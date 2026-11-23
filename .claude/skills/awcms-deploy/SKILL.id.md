@@ -5,7 +5,7 @@ description: Pilih dan jalankan profil deployment AWCMS (development/production/
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:1f1962009ac04b7b8079582217fec72a09439e9f629f8fb7947d2469ac0db15b -->
+<!-- i18n-source-hash: sha256:bcdfc46abcbd3a2fb5d93d27d7ff5d9dbb727aff52b89342c4e8e397c5c6052f -->
 
 # AWCMS — Deployment Profile & Execution
 
@@ -74,7 +74,7 @@ kesalahan konfigurasi yang melapor sukses:
 2. **Kompresi datang dari lapisan LUAR, dan repo ini tak memeriksanya.** Repo
    tidak mengompresi apa pun (nol di aplikasi, nol `do_gzip` di
    `infra/varnish/default.vcl`, nol middleware `compress` Traefik). Deployment
-   `ahlikoding.com` tetap mengompresi karena **Cloudflare** ada di depan —
+   deployment produksi tetap mengompresi karena **Cloudflare** ada di depan —
    topologi ter-deploy adalah `Cloudflare (proxied) -> Traefik :443 -> varnish
 -> app`, tertulis di [`environments.md`](../../../docs/awcms/environments.md)
    §Cache tepi. **Deployment template ini di luar CDN pengompresi tidak mendapat
@@ -111,11 +111,11 @@ bun run db:pool:health    # pool sehat terhadap DB target
 > `bun run <target>` dan **semuanya** keluar `error: Script not found` di sana;
 > tidak ada penjadwal in-process sebagai jalur kedua. Deployment yang berjalan
 > memakai image kedua `awcms-jobs:<versi>` (dibangun dari `scripts/` + `src/` +
-> `sql/`) yang dipanggil `/home/admin1/awcms-jobs/run-job.sh <target>` dari
+> `sql/`) yang dipanggil `<jobs-dir>/run-job.sh <target>` dari
 > cron. **Coolify MENGHAPUS image itu tiap kali app di-deploy** (prune image
 > yang tak dipakai container mana pun) — karena itu `run-job.sh` membangunnya
 > ulang sendiri saat hilang (~55 detik). Yang TIDAK otomatis: konteks build
-> `/home/admin1/awcms-jobs/` adalah SNAPSHOT sumber, jadi **segarkan tiap
+> `<jobs-dir>/` adalah SNAPSHOT sumber, jadi **segarkan tiap
 > rilis** — auto-rebuild memperbaiki penghapusan, bukan keusangan, dan versi
 > job yang tertinggal akan menjalankan kode LAMA terhadap skema BARU tanpa
 > suara. Detail + utang yang tersisa: `docs/PROJECT_STATE.md` §4.
