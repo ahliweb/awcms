@@ -23,6 +23,11 @@ import { installExtensionPointSource } from "../src/modules/_shared/extension-po
 import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { recordCounter } from "../src/lib/observability/metrics-port";
+import {
+  createQueueHealthRecorder,
+  formatQueueHealthLine
+} from "../src/lib/observability/queue-health";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
 import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
@@ -94,6 +99,21 @@ async function main() {
       }
     }
 
+    // Issue #1412: after draining, what is LEFT is the outage signal — the
+    // oldest overdue row and any expired claim lease, as gauges on the
+    // existing metrics port. Observing never fails the dispatch.
+    const queueHealth = createQueueHealthRecorder("email");
+
+    for (const tenant of tenants) {
+      await queueHealth.observeTenant(sql, tenant.id);
+    }
+
+    const queueSnapshot = queueHealth.flush();
+
+    if (queueSnapshot !== null) {
+      console.log(formatQueueHealthLine("email:dispatch", queueSnapshot));
+    }
+
     console.log(
       `email:dispatch complete — correlationId=${correlationId} ` +
         `tenants=${tenants.length} claimed=${totalClaimed} sent=${totalSent} ` +
@@ -125,6 +145,14 @@ async function main() {
     ) {
       console.warn(`email:dispatch — ${MAILKETING_V2_UNVERIFIED_WARNING}`);
     }
+
+    // Issue #1412: an uncertain outcome (the provider may have accepted it) is
+    // a counter of its own — it needs the operator runbook, not a retry.
+    recordCounter(
+      "queue_uncertain_outcome_total",
+      { queue: "email" },
+      totalUncertain
+    );
 
     if (totalUncertain > 0) {
       // Issue #1159: re-claimed after an expired lease; the previous worker may

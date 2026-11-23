@@ -27,6 +27,7 @@ import {
   getTelegramEngagementDispatchDatabaseClient
 } from "../src/lib/database/telegram-engagement-dispatch-client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { recordCounter } from "../src/lib/observability/metrics-port";
 import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
 import { dispatchTelegramEngagement } from "../src/modules/telegram-engagement/application/dispatch";
 import { isTelegramEngagementEnabled } from "../src/modules/telegram-engagement/domain/telegram-engagement-config";
@@ -119,6 +120,14 @@ async function main() {
     for (const entry of snapshotSecretDecryptCounts()) {
       decrypts[entry.purpose] = (decrypts[entry.purpose] ?? 0) + entry.count;
     }
+
+    // Issue #1412: an uncertain outcome (the provider may have accepted it) is
+    // a counter of its own — it needs the operator runbook, not a retry.
+    recordCounter(
+      "queue_uncertain_outcome_total",
+      { queue: "telegram_engagement" },
+      totals.uncertain
+    );
 
     console.log(
       `telegram-engagement:dispatch complete — correlationId=${correlationId} ` +

@@ -30,6 +30,10 @@ import { installExtensionPointSource } from "../src/modules/_shared/extension-po
 import { listModules } from "../src/modules";
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import {
+  createQueueHealthRecorder,
+  formatQueueHealthLine
+} from "../src/lib/observability/queue-health";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
 import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
@@ -103,6 +107,21 @@ async function main() {
           );
         }
       }
+    }
+
+    // Issue #1412: after draining, what is LEFT is the outage signal — the
+    // oldest overdue row and any expired claim lease, as gauges on the
+    // existing metrics port. Observing never fails the dispatch.
+    const queueHealth = createQueueHealthRecorder("whatsapp");
+
+    for (const tenant of tenants) {
+      await queueHealth.observeTenant(sql, tenant.id);
+    }
+
+    const queueSnapshot = queueHealth.flush();
+
+    if (queueSnapshot !== null) {
+      console.log(formatQueueHealthLine("whatsapp:dispatch", queueSnapshot));
     }
 
     console.log(

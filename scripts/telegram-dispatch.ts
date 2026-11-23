@@ -21,6 +21,10 @@
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import {
+  createQueueHealthRecorder,
+  formatQueueHealthLine
+} from "../src/lib/observability/queue-health";
 import { dispatchTelegramQueue } from "../src/modules/telegram-delivery/application/telegram-dispatch";
 
 const MAX_PASSES_PER_TENANT = 20;
@@ -78,6 +82,21 @@ async function main() {
         failedTenants += 1;
         logScriptFailure("telegram:dispatch tenant pass FAILED", error);
       }
+    }
+
+    // Issue #1412: after draining, what is LEFT is the outage signal — the
+    // oldest overdue row and any expired claim lease, as gauges on the
+    // existing metrics port. Observing never fails the dispatch.
+    const queueHealth = createQueueHealthRecorder("telegram");
+
+    for (const tenant of tenants) {
+      await queueHealth.observeTenant(sql, tenant.id);
+    }
+
+    const queueSnapshot = queueHealth.flush();
+
+    if (queueSnapshot !== null) {
+      console.log(formatQueueHealthLine("telegram:dispatch", queueSnapshot));
     }
 
     console.log(

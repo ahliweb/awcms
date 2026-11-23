@@ -41,6 +41,7 @@ import {
   getSocialPublishingDispatchDatabaseClient
 } from "../src/lib/database/social-publishing-dispatch-client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { recordCounter } from "../src/lib/observability/metrics-port";
 import type { ChannelPublisherCredentialPort } from "../src/modules/_shared/ports/channel-account-port";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
@@ -166,6 +167,14 @@ async function main() {
         );
       }
     }
+
+    // Issue #1412: an uncertain outcome (the provider may have accepted it) is
+    // a counter of its own — it needs the operator runbook, not a retry.
+    recordCounter(
+      "queue_uncertain_outcome_total",
+      { queue: "social_publishing" },
+      unknown
+    );
 
     console.log(
       `social-publishing:dispatch complete — correlationId=${correlationId} ` +

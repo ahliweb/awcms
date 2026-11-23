@@ -58,6 +58,10 @@ Every metric the application emits must be declared in `METRIC_DEFINITIONS` with
 
 **No tenant id, unbounded id-bearing route, email/IP, object key, token, account/NPWP number, transaction amount, or conversation content may appear in any label** — every value must be a member of a fixed enum or a code literal string, never data originating from a request body, a tenant record, or financial/personal data.
 
+## Delivery-queue health (Issue #1412)
+
+`queue_pending_count`, `queue_oldest_due_age_seconds`, `queue_expired_lease_count` (gauges) and `queue_uncertain_outcome_total` (counter) carry a single `queue` label from a code-defined set (`email`, `whatsapp`, `telegram`, `push`, `object_sync`; plus `social_publishing` and `telegram_engagement` for the counter) — about 20 series, never a tenant id. The gauges are a per-run, per-process snapshot aggregated across the tenants one dispatch run visited, recorded from `src/lib/observability/queue-health.ts` inside the dispatchers that already iterate tenants (never on a request path). Because the dispatchers are short-lived cron jobs and no adapter is registered by default, each also prints a fixed job-log line, `<job> queue — pending=N oldestDueAgeSeconds=N expiredLeases=N`. The inventory of what exists versus what was added, the multi-process caveats (a circuit breaker is per process, not a global provider oracle), and the operator procedure are in [`provider-outage-runbook.md`](provider-outage-runbook.md).
+
 ## Reading p95 from the HTTP histogram
 
 `http_request_duration_ms` is a histogram in milliseconds with the adapter's bucket boundaries (`DEFAULT_HISTOGRAM_BUCKETS_MS` for the bundled Prometheus text adapter: 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000 ms), so p95 is read per route pattern from the cumulative buckets, never from a mean. With Prometheus:

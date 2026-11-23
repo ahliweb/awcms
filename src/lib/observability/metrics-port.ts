@@ -262,6 +262,48 @@ export const METRIC_DEFINITIONS = {
     approxCardinality: "A handful of registered consumer names (2 today).",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
+  // Issue #1412 — provider-outage observability for the lease-based delivery
+  // queues. `queue` is one of the fixed `DELIVERY_QUEUES` literals declared in
+  // `queue-health.ts` (never a tenant id, table row, or provider response):
+  // the series are AGGREGATED across tenants in-process before they are
+  // recorded, so a gauge is never overwritten by whichever tenant ran last.
+  queue_pending_count: {
+    name: "queue_pending_count",
+    type: "gauge",
+    description:
+      "Rows waiting to be delivered (queued/retry_wait/pending) in a delivery queue, summed across the tenants one dispatch run visited — a per-process, per-run snapshot, not a global total.",
+    allowedLabelKeys: ["queue"],
+    approxCardinality: "One series per delivery queue (5 today).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  queue_oldest_due_age_seconds: {
+    name: "queue_oldest_due_age_seconds",
+    type: "gauge",
+    description:
+      "Age in seconds of the longest-overdue waiting row in a delivery queue (now minus its due time), the maximum across the tenants one dispatch run visited. 0 when nothing is overdue. A provider outage shows up here long before it shows up as failed rows.",
+    allowedLabelKeys: ["queue"],
+    approxCardinality: "One series per delivery queue (5 today).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  queue_expired_lease_count: {
+    name: "queue_expired_lease_count",
+    type: "gauge",
+    description:
+      "Rows still in the transient claim status whose lease has already expired — a worker died or hung mid-send. The next pass re-claims them as an uncertain redelivery; a number that does not fall means no dispatcher is running.",
+    allowedLabelKeys: ["queue"],
+    approxCardinality: "One series per delivery queue (5 today).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  queue_uncertain_outcome_total: {
+    name: "queue_uncertain_outcome_total",
+    type: "counter",
+    description:
+      "Deliveries whose outcome the dispatcher could not establish (provider may have accepted: expired-lease redelivery, timeout after the request left, needs_reconciliation) — each one needs the operator runbook, not a blind retry.",
+    allowedLabelKeys: ["queue"],
+    approxCardinality:
+      "One series per delivery queue that reports an uncertain outcome (3 today).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
   // Issue #746 (epic #738 platform-evolution Wave 2) — business-scope
   // assignments/SoD observability. `scopeType` is a small, code-defined
   // set today (only "office" resolves) but is technically operator/

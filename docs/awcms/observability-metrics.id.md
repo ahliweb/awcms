@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](observability-metrics.md)
 
-<!-- i18n-source-hash: sha256:55c485a8bf384af508959d0a136d14a491c4c6c78f728af3b8117babb3fc71fe -->
+<!-- i18n-source-hash: sha256:39c167bce56d34bc47ab4592f2b170ea5832918cd61665bb3fe4ec66f8551adb -->
 
 # Observability: Metrics, SLOs, Job Health, and Provider Telemetry
 
@@ -59,6 +59,10 @@ Setiap metrik yang dipancarkan aplikasi wajib dideklarasikan di `METRIC_DEFINITI
 **Label yang butuh mekanisme bounding khusus**: registry key circuit-breaker provider bisa tenant-scoped (mis. `sso-oidc-discovery:<tenantId>:<providerKey>`, atau untuk ERP: `payment-gateway:<tenantId>:<providerKey>`). Menaruh string mentah itu di label metrik akan JADI KEDUANYA — kebocoran tenant-id dan kardinalitas tak terbatas. Fungsi bounding (`deriveProviderFamilyLabel`, dipertahankan dari basis) menyimpan hanya prefix literal, code-hardcoded sebelum `:` pertama — setiap call site provider di repo ini mengikuti konvensi yang sama "literal-category-prefix, optional dynamic `:`-suffix", jadi satu aturan split generik cukup.
 
 **Tidak ada tenant id, route ber-id tak terbatas, email/IP, object key, token, nomor rekening/NPWP, nominal transaksi, atau konten percakapan yang boleh muncul di label mana pun** — setiap nilai wajib berupa anggota enum tetap atau string literal kode, tidak pernah data yang berasal dari body request, record tenant, atau data finansial/personal.
+
+## Kesehatan antrean pengiriman (Issue #1412)
+
+`queue_pending_count`, `queue_oldest_due_age_seconds`, `queue_expired_lease_count` (gauge) dan `queue_uncertain_outcome_total` (counter) membawa satu label `queue` dari himpunan terdefinisi di kode (`email`, `whatsapp`, `telegram`, `push`, `object_sync`; ditambah `social_publishing` dan `telegram_engagement` untuk counter) — sekitar 20 seri, tidak pernah tenant id. Gauge adalah snapshot per run, per proses, diagregasi lintas tenant yang dikunjungi satu run dispatch, dicatat dari `src/lib/observability/queue-health.ts` di dalam dispatcher yang memang sudah mengiterasi tenant (tidak pernah di jalur request). Karena dispatcher adalah job cron berumur pendek dan tidak ada adapter terdaftar secara bawaan, masing-masing juga mencetak baris log job tetap, `<job> queue — pending=N oldestDueAgeSeconds=N expiredLeases=N`. Inventaris apa yang ada versus yang ditambahkan, catatan multi-proses (circuit breaker bersifat per proses, bukan oracle provider global), dan prosedur operator ada di [`provider-outage-runbook.id.md`](provider-outage-runbook.id.md).
 
 ## Membaca p95 dari histogram HTTP
 
