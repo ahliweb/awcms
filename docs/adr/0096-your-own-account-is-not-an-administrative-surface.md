@@ -46,7 +46,7 @@ the `awcms-abac-guard` skill records that an action which is not seeded denies e
 the tenant owner, while the code reads as though it were guarded correctly. An
 `identity_access.own_profile.update` would land as a universal 403 on the page
 that of all pages must not have a wall — and
-[project memory](../awcms/agent-memory.md) records that this class of defect has
+project memory records that this class of defect has
 already claimed a victim in `awcms-admin-abac-write-notes`.
 
 What is therefore NOT built: there is no permissioned sibling for these routes.

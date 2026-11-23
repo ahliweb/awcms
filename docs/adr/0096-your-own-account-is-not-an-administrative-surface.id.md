@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0096-your-own-account-is-not-an-administrative-surface.md)
 
-<!-- i18n-source-hash: sha256:4794ff9c74e99f718d241e0a31135a82f9a843dc1eb7700f7ae9b3471f110b37 -->
+<!-- i18n-source-hash: sha256:ddb440390ec1146c0e02c886e4b6e2e4e21f6f97992e661f4136d13d84819f99 -->
 
 # ADR-0096 — Akun ANDA SENDIRI bukan permukaan administratif
 
@@ -47,7 +47,7 @@ skill `awcms-abac-guard` mencatat bahwa aksi yang tidak di-seed menolak semua or
 pemilik tenant, sementara kodenya terbaca seolah dijaga dengan benar. Sebuah
 `identity_access.own_profile.update` akan mendarat sebagai 403 universal di
 halaman yang justru paling tidak boleh punya tembok — dan
-[memori proyek](../awcms/agent-memory.md) mencatat kelas cacat itu sudah
+memori proyek mencatat kelas cacat itu sudah
 memakan korban di `awcms-admin-abac-write-notes`.
 
 Yang TIDAK dibuat karena itu: tidak ada saudara berizin untuk rute-rute ini.

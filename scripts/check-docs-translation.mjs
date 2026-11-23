@@ -33,13 +33,12 @@ const ROOT = resolve(import.meta.dirname, "..");
  * These are not exempt from being English — they are exempt from being mirrored
  * BY HAND. `api-reference.md` is regenerated from the OpenAPI `description`
  * fields (ADR-0023 already scoped it out for this reason, and ADR-0097 keeps
- * that carve-out); the other two are emitted by scripts in `scripts/`. Making
+ * that carve-out); the other is emitted by a script in `scripts/`. Making
  * them English is a change to the generator or the spec, not to the file.
  */
 const GENERATED_NOT_HAND_MIRRORED = new Set([
   "docs/awcms/api-reference.md",
-  "docs/awcms/repo-inventory.md",
-  "docs/awcms/agent-memory.md"
+  "docs/awcms/repo-inventory.md"
 ]);
 
 /**
