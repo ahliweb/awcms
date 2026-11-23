@@ -1,11 +1,11 @@
 {
   "packVersion": 1,
-  "contractSha256": "d42ced65e6fb6fa3e8ded6c07ba19cbfadd12ba54ef555f3a89f6d4ef62ae441",
+  "contractSha256": "1d99edd6926c4db23a5f440a6a4bbd0c33d8f61ca84b5ebd7b482c8ca0a6fde5",
   "summary": {
     "operations": 742,
-    "fixtures": 1780,
+    "fixtures": 1782,
     "declared": 13,
-    "generated": 1767,
+    "generated": 1769,
     "skipped": 4
   },
   "sharedResponses": {
@@ -40,6 +40,36 @@
       }
     },
     "NotFound": {
+      "contentType": "application/json",
+      "source": "generated",
+      "value": {
+        "success": false,
+        "error": {
+          "code": "example",
+          "message": "example"
+        },
+        "meta": {
+          "correlationId": "example",
+          "requestId": "example"
+        }
+      }
+    },
+    "RateLimited": {
+      "contentType": "application/json",
+      "source": "generated",
+      "value": {
+        "success": false,
+        "error": {
+          "code": "example",
+          "message": "example"
+        },
+        "meta": {
+          "correlationId": "example",
+          "requestId": "example"
+        }
+      }
+    },
+    "RateLimitedNoRetryAfter": {
       "contentType": "application/json",
       "source": "generated",
       "value": {
@@ -1193,6 +1223,9 @@
               "requestId": "example"
             }
           }
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimited"
         }
       },
       "operationId": "analyticsCollect",
@@ -2841,6 +2874,9 @@
         },
         "401": {
           "$ref": "#/sharedResponses/Unauthorized"
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimitedNoRetryAfter"
         }
       },
       "operationId": "issueSessionHandoffCode",
@@ -2881,6 +2917,9 @@
               "requestId": "example"
             }
           }
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimitedNoRetryAfter"
         }
       },
       "operationId": "redeemSessionHandoffCode",
@@ -3584,6 +3623,9 @@
               "requestId": "example"
             }
           }
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimitedNoRetryAfter"
         },
         "502": {
           "contentType": "application/json",
@@ -13700,6 +13742,9 @@
         },
         "400": {
           "$ref": "#/sharedResponses/BadRequest"
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimited"
         }
       },
       "operationId": "reportPublicComment",
@@ -34419,6 +34464,9 @@
               "requestId": "example"
             }
           }
+        },
+        "429": {
+          "$ref": "#/sharedResponses/RateLimited"
         }
       },
       "operationId": "postSetupInitialize",
