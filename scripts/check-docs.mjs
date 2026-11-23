@@ -83,15 +83,11 @@ function anyComposeFileExists() {
  * Berkas markdown yang di-GENERATE, di mana pemeriksaan doc di berkas ini tidak
  * berlaku dan hanya menghasilkan false positive.
  *
- * `agent-memory.md` adalah cermin verbatim memory agent (`bun run
- * memory:docs:sync`): indeks `MEMORY.md`-nya menautkan berkas memory yang hidup
- * di luar repo (terbaca sebagai tautan internal rusak), dan prosanya penuh
- * rujukan `sql/NNN`/`[[wikilink]]`/issue historis. Memperbaikinya agar "lolos"
- * berarti mengubah isi memory — merusak fidelitas round-trip
- * `memory:docs:restore`.
+ * Saat ini tidak ada berkas semacam itu yang ter-track; set dibiarkan sebagai
+ * titik ekstensi.
  * @type {Set<string>}
  */
-const GENERATED_EXEMPT = new Set(["docs/awcms/agent-memory.md"]);
+const GENERATED_EXEMPT = new Set([]);
 
 /**
  * Berkas SUMBER yang ikut diperiksa rujukan `bun run`-nya (lihat

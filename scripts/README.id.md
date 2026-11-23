@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:dfbf65d8db1dc2866c2c95212a0838ec6028ebc5f4f634109431b45f3ad80a5a -->
+<!-- i18n-source-hash: sha256:14879e5234ad04180d6c8ab311fe1685e54c995fb4a823fd7be63ab78966a4b6 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-170 target menjalankan berkas di `scripts/`; 70 di antaranya
+167 target menjalankan berkas di `scripts/`; 69 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -144,9 +144,6 @@ terjadwal, atau oleh workflow CI tertentu.
 | `knowledge:obsidian:export`               | `knowledge-obsidian-sync.ts`                   | —    |
 | `logging:lint:check`                      | `logging-lint-check.ts`                        | ✅   |
 | `logs:audit:purge`                        | `audit-log-purge.ts`                           | —    |
-| `memory:docs:check`                       | `sync-agent-memory.ts`                         | ✅   |
-| `memory:docs:restore`                     | `sync-agent-memory.ts`                         | —    |
-| `memory:docs:sync`                        | `sync-agent-memory.ts`                         | —    |
 | `modules:compose:check`                   | `validate-module-composition.ts`               | ✅   |
 | `modules:composition:inventory:check`     | `module-composition-inventory-check.ts`        | ✅   |
 | `modules:composition:inventory:generate`  | `module-composition-inventory-generate.ts`     | —    |

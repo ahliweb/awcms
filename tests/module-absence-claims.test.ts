@@ -63,8 +63,8 @@ const ABSENCE =
  * Files whose absence claims are legitimately frozen in time. Detected by
  * marker rather than by filename so the list cannot go stale:
  *
- * - generated snapshots (`agent-memory.md` comes from `memory:docs:sync`;
- *   hand-editing it is explicitly wrong and would be overwritten);
+ * - generated snapshots marked "File ini di-generate" (hand-editing them is
+ *   explicitly wrong and would be overwritten);
  * - documents already marked DEPRECATED, retained precisely as a record of
  *   what was true when they were written.
  */
