@@ -90,7 +90,7 @@ import { isValidSlug } from "../src/modules/blog-content/domain/slug-policy";
  * belongs beside the data directory it describes, not in whatever directory the
  * operator happened to be standing in.
  */
-const EMIT_DIR = path.resolve(import.meta.dir, "../data/seputarborneo-legacy");
+const EMIT_DIR = path.resolve(import.meta.dir, "../data/legacy-news-example");
 
 /** A pageful is `LEGACY_REDIRECT_MAP_LIMIT`; this bounds a runaway loop, not a page. */
 const MAX_PAGES = 2_000;

@@ -225,7 +225,7 @@ function usage(message: string): void {
       "  --file=<path>        NDJSON, one article per line (required)\n" +
       "  --tenant=<uuid>      the tenant to import INTO (required)\n" +
       "  --author=<uuid>      awcms_tenant_users.id recorded as the author (required)\n" +
-      "  --system=<name>      legacy_source_system value, e.g. seputarborneo (required)\n" +
+      "  --system=<name>      legacy_source_system value, e.g. legacy-cms (required)\n" +
       "  --locale=<tag>       default locale for lines that carry none (default: id)\n" +
       "  --images=<path>      write the upload set — every src the archive still needs\n" +
       "                       uploaded, body images AND lead photographs, most-used\n" +
@@ -257,7 +257,7 @@ function usage(message: string): void {
  *
  * The body/lead split is printed, not just the total, because the total on its
  * own is what hid the real task: body scanning found 2 images in the
- * SeputarBorneo archive and the honest number is ~25,031. A summary that cannot
+ * legacy-news archive and the honest number is ~25,031. A summary that cannot
  * be read as "almost nothing to do" is the whole point of the two extra lines.
  */
 async function writeImageInventory(
@@ -483,7 +483,7 @@ export function planLegacyImportRows({
     // see two rows of THIS file claiming one — and `awcms_blog_posts` has its
     // own slug uniqueness, so the second one raises 23505 in the middle of a
     // committing batch, after earlier batches have already landed. The real
-    // SeputarBorneo archive has 84 such collision groups across 171 rows, so
+    // legacy-news archive has 84 such collision groups across 171 rows, so
     // this is not a hypothetical: without this set the first real run dies
     // part-imported.
     const collidesWith = seenSlugs.get(record.value.slug);
@@ -615,7 +615,7 @@ export function planLegacyImportRows({
     // The lead photograph gets the same answer as an unmanaged `<img>`, and
     // for the same reason: `foto_berita` is the picture the legacy page led
     // with, and an article that imported cleanly without it is a broken
-    // article that looks imported. Every one of the 25,029 SeputarBorneo rows
+    // article that looks imported. Every one of the 25,029 legacy-news rows
     // has one, so silently importing past this would strip the archive.
     if (record.value.featuredImageSrc && featuredMediaId === null) {
       refusals.push({

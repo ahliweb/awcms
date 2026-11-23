@@ -124,7 +124,7 @@ export type LegacyPostImportInput = {
    *
    * This type had no media field at all and the INSERT below named 16 columns
    * without `featured_media_id`, so every imported article arrived without the
-   * photograph the legacy page led with — 25,029 of 25,029 for SeputarBorneo,
+   * photograph the legacy page led with — 25,029 of 25,029 for legacy-news,
    * silently, because `--images` scanned body HTML only and never mentioned
    * them (ADR-0114). The column has existed since `sql/035:46` and
    * `public-content-port-adapter.ts` has been serving it to `awcms-astro` the

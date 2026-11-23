@@ -17,7 +17,7 @@
  * one.
  *
  * `--path-template` carries the legacy URL shape (`/news/{legacyId}_{slug}.html`
- * for SeputarBorneo) because that shape belongs to the system being migrated
+ * for legacy-news) because that shape belongs to the system being migrated
  * FROM. Hard-coding it here would make the next migration a code change.
  *
  * ## Preview is the default
@@ -89,7 +89,7 @@ function usage(message: string): void {
       "  --tenant=<uuid>          the tenant whose posts carry the provenance (required)\n" +
       "  --tenant-code=<code>     its public tenant_code, used to build targets (required)\n" +
       "  --actor=<uuid>           awcms_tenant_users.id recorded as author of each rule (required)\n" +
-      "  --system=<name>          legacy_source_system to map, e.g. seputarborneo (required)\n" +
+      "  --system=<name>          legacy_source_system to map, e.g. legacy-cms (required)\n" +
       "  --path-template=<tpl>    legacy URL shape, e.g. '/news/{legacyId}_{slug}.html' (required)\n" +
       "  --commit                 write. Without it, nothing is written and you get the report.\n"
   );

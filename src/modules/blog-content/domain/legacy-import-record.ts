@@ -78,7 +78,7 @@ export type LegacyImportRecord = {
   categories: readonly string[];
   /**
    * The LEAD photograph's `src`, EXACTLY as the legacy row spells it — for
-   * SeputarBorneo that is the `foto_berita` column, and all 25,029 rows have
+   * legacy-news that is the `foto_berita` column, and all 25,029 rows have
    * one. Resolved to a managed media object through `--media-map`, the same
    * handoff a body `<img>` goes through and against the same registry check;
    * never fetched, never stored as a URL.
@@ -147,7 +147,7 @@ export function parseLegacyImportRecord(
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
     // This slug is the NEW URL's slug and only that. It is NOT "half of the
     // legacy URL" — an earlier comment here said so, and ADR-0114 records why
-    // that was false: the SeputarBorneo legacy segment is
+    // that was false: the legacy-news legacy segment is
     // `rawurlencode(str_replace(' ', '_', title))`, so every one of 25,029 of
     // them carries `_` and most carry capitals, both of which this pattern
     // forbids. The two slugs are disjoint BY CONSTRUCTION, so no export can

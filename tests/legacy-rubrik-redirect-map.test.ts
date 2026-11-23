@@ -1,5 +1,5 @@
 /**
- * The committed SeputarBorneo rubrik redirect map, held to the guards that will
+ * The committed legacy-news rubrik redirect map, held to the guards that will
  * actually judge it (Issue #711, ADR-0113).
  *
  * ## Why a test over a data file is worth writing here
@@ -37,7 +37,7 @@ import {
 import { stripComments } from "../scripts/lib/source-text";
 import { MAX_REDIRECT_IMPORT_ITEMS } from "../src/modules/seo-distribution/domain/redirect-rule";
 
-const MAP_PATH = "data/seputarborneo-legacy/rubrik-redirects.json";
+const MAP_PATH = "data/legacy-news-example/rubrik-redirects.json";
 const BUILDER_PATH = "scripts/blog-legacy-rubrik-redirects.ts";
 
 const map = JSON.parse(readFileSync(MAP_PATH, "utf8")) as LegacyRubrikMap;
@@ -51,7 +51,7 @@ const ORPHANS = [
   "/rubrik/travel.html"
 ];
 
-describe("SeputarBorneo legacy rubrik redirect map", () => {
+describe("legacy-news legacy rubrik redirect map", () => {
   test("every source path and target passes the write-path guards", () => {
     // The whole point: not "the file parses", but "the write path would accept
     // every row of it". A raw space, a duplicate source, a self-redirect or an

@@ -20,7 +20,7 @@
  *
  * Neither is visible from a unit test of a pure function, which is exactly how
  * both survived. The exit codes below come from a real process; the classifier
- * is exercised with the paths that actually appear in the SeputarBorneo map.
+ * is exercised with the paths that actually appear in the legacy-news map.
  *
  * No database is required or used: every case here either fails before
  * `getDatabaseClient()` is reached, or is a pure classification.
@@ -42,7 +42,7 @@ const SCRIPT = join(
   "blog-legacy-cutover-verify.ts"
 );
 const TENANT = "11111111-1111-4111-8111-111111111111";
-const TENANT_CODE = "seputarborneo";
+const TENANT_CODE = "legacy-tenant";
 
 let workDir = "";
 let sitemapFile = "";
@@ -80,8 +80,8 @@ beforeAll(() => {
     [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-      "  <url><loc>https://seputarborneo.test/news/48213_Banjir_Kobar.html</loc></url>",
-      "  <url><loc>https://seputarborneo.test/Kalteng/Sampit.html</loc></url>",
+      "  <url><loc>https://legacy-news.test/news/48213_Banjir_Kobar.html</loc></url>",
+      "  <url><loc>https://legacy-news.test/Kalteng/Sampit.html</loc></url>",
       "</urlset>"
     ].join("\n")
   );
@@ -91,8 +91,8 @@ beforeAll(() => {
     [
       "# no legacy sitemap exists — this corpus came from a crawl",
       "",
-      "https://seputarborneo.test/news/48213_Banjir_Kobar.html",
-      "https://seputarborneo.test/Kalteng/Sampit.html"
+      "https://legacy-news.test/news/48213_Banjir_Kobar.html",
+      "https://legacy-news.test/Kalteng/Sampit.html"
     ].join("\n")
   );
 });
@@ -237,7 +237,7 @@ describe("classifyPublicBlogTarget", () => {
     expect(classify("/kategori/nope")).toBeNull();
     expect(classify("/kategori/kalteng")).toBeNull();
     expect(classify("/berita/48213")).toBeNull();
-    expect(classify("https://seputarborneo.com/kategori/kalteng")).toBeNull();
+    expect(classify("https://legacy-news.example/kategori/kalteng")).toBeNull();
   });
 
   test("the archive families this repo DOES serve are recognised", () => {

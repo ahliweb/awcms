@@ -104,7 +104,7 @@ export function sitemapLocationPath(location: string): string | null {
  * shape as a parsed sitemap so the caller has one code path for both.
  *
  * This exists because the premise of `--sitemap` failed on the first real
- * archive it met. SeputarBorneo has no sitemap and never had one: none in the
+ * archive it met. legacy-news has no sitemap and never had one: none in the
  * legacy tree, none in its git history, and the live site 404s `/robots.txt`
  * and every conventional sitemap path while serving 200 itself. "Needs the live
  * sitemap" was recorded as a blocker on Issue #711 — but the flag was always
@@ -214,7 +214,7 @@ export type CutoverFacts = {
  * That was the defect `target_unverifiable` exists to close. `targetLive` came
  * back `null` for every destination the caller could not resolve, `null` fell
  * through to `return "ok"`, and the `/kategori/**` rules of ADR-0113 — 63 of
- * them, over the 68 entries in `data/seputarborneo-legacy/rubrik-redirects.json`
+ * them, over the 68 entries in `data/legacy-news-example/rubrik-redirects.json`
  * (62 over 67 when the defect was found) — were
  * therefore reported clean by a job that had not — could not — check a single
  * one of them, because they are served by a different deployment entirely

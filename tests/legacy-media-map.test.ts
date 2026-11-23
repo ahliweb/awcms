@@ -137,7 +137,7 @@ describe("the upload set", () => {
   });
 
   test("the LEAD photograph is in the set even when no body mentions an image", () => {
-    // This is the defect the split exists for. The SeputarBorneo archive has 2
+    // This is the defect the split exists for. The legacy-news archive has 2
     // body images and 25,029 lead photographs; a set built from bodies alone
     // reported "2 distinct images", which reads as "almost nothing to upload"
     // and was wrong by the entire archive (ADR-0114).

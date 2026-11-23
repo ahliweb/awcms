@@ -34,7 +34,7 @@ unique and the insert is `ON CONFLICT DO NOTHING`, so a second run reports
 `legacy_source_system` is how the redirect importer decides which rows to build a
 301 map from, and it takes the system name as an explicit `--system` flag. Using
 a distinct name here is what keeps a real migration run
-(`--system=seputarborneo`) from deriving redirects for URLs that never existed on
+(`--system=legacy-cms`) from deriving redirects for URLs that never existed on
 anybody's site.
 
 Do not load this archive under the same system name as a real import.

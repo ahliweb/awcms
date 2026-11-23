@@ -988,7 +988,7 @@ export const LEGACY_REDIRECT_MAP_LIMIT = 500;
  * URLs that have the inbound links worth preserving.
  *
  * `pathTemplate` carries `{legacyId}` and `{slug}` because the legacy URL shape
- * belongs to the system being migrated FROM — SeputarBorneo served
+ * belongs to the system being migrated FROM — legacy-news served
  * `/news/{id_ber}_{slug}.html`, the next archive will serve something else, and
  * hard-coding one of them here would make the second migration a code change.
  *

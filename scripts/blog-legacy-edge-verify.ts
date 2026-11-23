@@ -43,7 +43,7 @@
  * database knows about one. Counting the 3xx responses actually received counts
  * all of them.
  *
- * Start from the URL a crawler holds — `http://www.seputarborneo.com/news/…` —
+ * Start from the URL a crawler holds — `http://www.legacy-news.example/news/…` —
  * not from the canonical one, or the run will pass while readers take three
  * hops.
  *

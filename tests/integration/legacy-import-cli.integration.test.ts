@@ -10,7 +10,7 @@
  *     fields and none of them was media; the INSERT named 16 columns and
  *     `featured_media_id` — a column `sql/035:46` has had since the schema was
  *     created, and one `public-content-port-adapter.ts` serves to
- *     `awcms-astro` — was not among them. 25,029 of 25,029 SeputarBorneo
+ *     `awcms-astro` — was not among them. 25,029 of 25,029 legacy-news
  *     articles have a `foto_berita`, so a real run would have landed the whole
  *     archive without the picture each page led with, reporting success. What
  *     is at stake is a COLUMN in a row, so the assertion has to read that row.
@@ -80,7 +80,7 @@ const OTHER_TENANT = "c8888888-8888-4888-8888-888888888888";
 const AUTHOR = "c9999999-9999-4999-8999-999999999999";
 const UPLOADER = "ca000000-0000-4000-8000-000000000000";
 const OTHER_UPLOADER = "cb000000-0000-4000-8000-000000000000";
-const SYSTEM = "seputarborneo";
+const SYSTEM = "legacy-cms";
 
 let workDir = "";
 let ready = false;
@@ -144,7 +144,7 @@ async function seedTenants(): Promise<void> {
     INSERT INTO awcms_tenants (id, tenant_code, tenant_name, status)
     VALUES
       (${TENANT}, 'lentera', 'Lentera', 'active'),
-      (${OTHER_TENANT}, 'seputar', 'Seputar', 'active')
+      (${OTHER_TENANT}, 'other-tenant', 'Other Tenant', 'active')
     ON CONFLICT (id) DO NOTHING
   `;
 }
@@ -292,7 +292,7 @@ suite("blog:legacy:import driven end to end (integration, Issue #599)", () => {
   test("a lead photograph mapped to ANOTHER tenant's media aborts the whole run", async () => {
     if (!ready) return;
     await seedUploader(TENANT, UPLOADER, "lentera");
-    await seedUploader(OTHER_TENANT, OTHER_UPLOADER, "seputar");
+    await seedUploader(OTHER_TENANT, OTHER_UPLOADER, "other-tenant");
     const foreign = await seedMedia(OTHER_TENANT, OTHER_UPLOADER, "verified");
 
     // The map's ONLY entry is a featured `src`. If the featured path ever grew
@@ -432,7 +432,7 @@ suite("blog:legacy:import driven end to end (integration, Issue #599)", () => {
       "..",
       "..",
       "data",
-      "seputarborneo-legacy",
+      "legacy-news-example",
       "article-paths.json"
     );
     rmSync(emitted, { force: true });

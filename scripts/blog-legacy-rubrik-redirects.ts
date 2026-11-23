@@ -2,7 +2,7 @@
  * blog-legacy-rubrik-redirects.ts — `bun run blog:legacy:rubrik-redirects`.
  *
  * Issue #711 / ADR-0113. Turns the committed
- * `data/seputarborneo-legacy/rubrik-redirects.json` map into
+ * `data/legacy-news-example/rubrik-redirects.json` map into
  * `POST /api/v1/seo/redirects/import` payload chunks.
  *
  * ## Why the map is a committed FILE and not derived here
@@ -16,7 +16,7 @@
  * workstation and ship nowhere.
  *
  * So the derivation happened once, against both, and its result is committed
- * with its provenance (`data/seputarborneo-legacy/README.md`). This script does
+ * with its provenance (`data/legacy-news-example/README.md`). This script does
  * not touch a legacy database and cannot: there is nothing left to ask it.
  *
  * ## What this does NOT do
@@ -64,7 +64,7 @@ export const IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS;
  */
 const MAP_PATH = path.resolve(
   import.meta.dir,
-  "../data/seputarborneo-legacy/rubrik-redirects.json"
+  "../data/legacy-news-example/rubrik-redirects.json"
 );
 const EMIT_DIR = path.dirname(MAP_PATH);
 
@@ -86,7 +86,7 @@ export type LegacyRubrikEntry = {
    * (empty) listing. `sourcePath` is therefore the served form, not the encoded
    * href, and this flag is what stops that looking like a typo. The whole tree
    * was re-swept for the class: it is the only listing link literal missing
-   * `.html`. See `data/seputarborneo-legacy/README.md` §"One known gap".
+   * `.html`. See `data/legacy-news-example/README.md` §"One known gap".
    */
   hrefLacksHtmlSuffix?: boolean;
 };
@@ -190,7 +190,7 @@ export function buildImportItems(map: LegacyRubrikMap): ImportItem[] {
       sourcePath: entry.sourcePath,
       target: entry.targetPath!,
       statusCode: 301 as const,
-      reason: `SeputarBorneo legacy rubrik listing (ADR-0113; ${entry.articlesAtCapture} articles at capture)`
+      reason: `legacy-news legacy rubrik listing (ADR-0113; ${entry.articlesAtCapture} articles at capture)`
     }));
 }
 
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
   chunks.forEach((batch, index) => {
     const file = path.join(
       EMIT_DIR,
-      `seputarborneo-rubrik-redirects.${index + 1}.json`
+      `legacy-rubrik-redirects.${index + 1}.json`
     );
 
     writeFileSync(

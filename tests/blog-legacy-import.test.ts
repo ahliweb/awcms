@@ -100,7 +100,7 @@ describe("parsing one legacy line", () => {
       "2019-03-04T02:11:00.000Z"
     );
     // Not supplied, so it takes the run's default rather than the repo default:
-    // a SeputarBorneo archive is Indonesian.
+    // a legacy-news archive is Indonesian.
     expect(result.value.locale).toBe("id");
   });
 
@@ -273,7 +273,7 @@ describe("the importer preserves what makes the archive worth moving", () => {
     // The column has existed since `sql/035:46` and `public-content-port-
     // adapter.ts` serves it to awcms-astro; this INSERT named 16 columns and
     // not this one, so every imported article arrived without the picture its
-    // legacy page led with — 25,029 of 25,029 for SeputarBorneo (ADR-0114).
+    // legacy page led with — 25,029 of 25,029 for legacy-news (ADR-0114).
     const insert = source.slice(
       source.indexOf("INSERT INTO awcms_blog_posts"),
       source.indexOf("ON CONFLICT (tenant_id, legacy_source_system")
@@ -387,7 +387,7 @@ describe("the import script refuses rather than repairs", () => {
     // the DATABASE, which has not yet seen either row.
     //
     // So this reads the DECISION. 84 such collision groups over 171 rows in
-    // the real SeputarBorneo archive is what a missing `continue` costs.
+    // the real legacy-news archive is what a missing `continue` costs.
     const plan = plan_([
       record({ legacyId: "1", slug: "banjir-kobar" }),
       record({ legacyId: "2", slug: "banjir-kobar" })

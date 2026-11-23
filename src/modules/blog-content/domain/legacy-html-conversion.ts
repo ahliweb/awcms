@@ -12,7 +12,7 @@ import {
  *
  * ## Why this exists at all
  *
- * PRD §41 imports 23,906 SeputarBorneo articles whose bodies are raw CKEditor
+ * PRD §41 imports 23,906 legacy-news articles whose bodies are raw CKEditor
  * HTML. `content_json` cannot hold that, and write-time validation correctly
  * REFUSES `<script>`/`<iframe>`/`<embed>`/`<object>`. So an import needs a
  * converter — and it must target the canonical body, not the projection being

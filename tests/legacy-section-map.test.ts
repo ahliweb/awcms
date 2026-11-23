@@ -98,7 +98,7 @@ describe("the section map is refused as a whole, or accepted as a whole", () => 
 
   test("names are matched literally — two spellings are two entries", () => {
     // `MITRA BORNEO` (11,767 articles) and `MITRA-BORNEO` (133) are both real
-    // values in the SeputarBorneo archive. Normalising would silently decide
+    // values in the legacy-news archive. Normalising would silently decide
     // they are one rubrik.
     const result = parseLegacySectionMap({
       "MITRA BORNEO": "mitra-borneo",
