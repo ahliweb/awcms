@@ -1365,8 +1365,17 @@ export const READER_BUDGET_BYTES = 39_000;
  * — and the panel markup itself. The layout is the only app-surface page that
  * renders the panel; every other public page is a reader-surface route, whose
  * weight is in `READER_BUDGET_BYTES`. Margin 141 B, as above.
+ *
+ * **Raised for Issue #1365** (the `/login` second-factor step): +2,625 B
+ * (385,460 -> 388,085), measured 387,945 B on a clean build. The cost is the
+ * code form on the sign-in page (one more `<form>`, nine server-rendered
+ * messages as `data-msg-*` attributes), the step's client logic in the login
+ * script and the pure helpers in `src/lib/ui/login-mfa-client.ts` (shared
+ * lifecycle stays in `admin-form-client.ts`, so nothing is duplicated per
+ * screen), and a few rules in `auth.css`. A person with a TOTP factor could not
+ * sign in through the page at all before this. Margin 140 B, as above.
  */
-export const APP_BUDGET_BYTES = 385_460;
+export const APP_BUDGET_BYTES = 388_085;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

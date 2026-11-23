@@ -39,6 +39,9 @@ export type { Page, Locator, Response } from "@playwright/test";
  */
 const ALLOWED_MUTATIONS = [
   "/api/v1/auth/login",
+  // Completes a login that `/auth/login` paused with `MFA_REQUIRED` (#1365):
+  // the same session-minting write, one step later.
+  "/api/v1/auth/mfa/totp/verify",
   "/api/v1/auth/logout"
 ] as const;
 

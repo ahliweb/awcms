@@ -10157,6 +10157,42 @@ msgid "Forgot your password?"
 msgstr "Lupa kata sandi?"
 
 msgctxt "login"
+msgid "Enter the 6-digit code from your authenticator app to finish signing in."
+msgstr "Masukkan kode 6 digit dari aplikasi autentikator Anda untuk menyelesaikan masuk."
+
+msgctxt "login"
+msgid "Authentication code"
+msgstr "Kode autentikasi"
+
+msgctxt "login"
+msgid "Recovery code"
+msgstr "Kode pemulihan"
+
+msgctxt "login"
+msgid "Verify"
+msgstr "Verifikasi"
+
+msgctxt "login"
+msgid "Use a recovery code instead"
+msgstr "Gunakan kode pemulihan"
+
+msgctxt "login"
+msgid "Use an authenticator code instead"
+msgstr "Gunakan kode autentikator"
+
+msgctxt "login"
+msgid "Back to sign in"
+msgstr "Kembali ke halaman masuk"
+
+msgctxt "login"
+msgid "That code was not accepted. Check it and try again."
+msgstr "Kode tidak diterima. Periksa lalu coba lagi."
+
+msgctxt "login"
+msgid "Verification could not be completed. Sign in again."
+msgstr "Verifikasi tidak dapat diselesaikan. Silakan masuk kembali."
+
+msgctxt "login"
 msgid "Sign in failed. Check your details and try again."
 msgstr "Gagal masuk. Periksa data Anda lalu coba lagi."
 

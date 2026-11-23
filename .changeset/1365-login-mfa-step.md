@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(auth): `/login` now has the second-factor step (Issue #1365). A person with an active TOTP factor could not sign in through the page: `POST /api/v1/auth/login` answers `401 MFA_REQUIRED` with a challenge token and the page showed the generic failure. The page now swaps to a code form (6-digit authenticator code, with a "use a recovery code instead" alternative and a "back" link), posts the token and code to `POST /api/v1/auth/mfa/totp/verify` and goes to `/admin` on success. The token lives only in script memory (never storage, URL or DOM). Anti-oracle: after the password step the page distinguishes only `success` and `MFA_REQUIRED`; after verify it reads only `success`, and returns to the password step from its own attempt counter and clock, rendered from `AUTH_MFA_MAX_VERIFY_ATTEMPTS` / `AUTH_MFA_CHALLENGE_TTL_SEC`. Nine new msgids in the `login` context (en/id). `MFA_ENROLLMENT_REQUIRED` still shows the generic failure on `/login` (follow-up).

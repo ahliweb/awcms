@@ -10197,6 +10197,42 @@ msgid "Forgot your password?"
 msgstr ""
 
 msgctxt "login"
+msgid "Enter the 6-digit code from your authenticator app to finish signing in."
+msgstr ""
+
+msgctxt "login"
+msgid "Authentication code"
+msgstr ""
+
+msgctxt "login"
+msgid "Recovery code"
+msgstr ""
+
+msgctxt "login"
+msgid "Verify"
+msgstr ""
+
+msgctxt "login"
+msgid "Use a recovery code instead"
+msgstr ""
+
+msgctxt "login"
+msgid "Use an authenticator code instead"
+msgstr ""
+
+msgctxt "login"
+msgid "Back to sign in"
+msgstr ""
+
+msgctxt "login"
+msgid "That code was not accepted. Check it and try again."
+msgstr ""
+
+msgctxt "login"
+msgid "Verification could not be completed. Sign in again."
+msgstr ""
+
+msgctxt "login"
 msgid "Sign in failed. Check your details and try again."
 msgstr ""
 

@@ -436,6 +436,29 @@
   min-height: 65px;
 }
 
+/*
+ * Login second-factor step (#1365). `.auth-form` sets `display: flex`, which
+ * beats the UA `[hidden]` rule, so swapping between the password form and the
+ * code form needs this explicit override.
+ */
+.auth-form[hidden] {
+  display: none !important;
+}
+
+.auth-link-button {
+  min-height: 44px;
+  padding: 0 var(--sp-2);
+  background: none;
+  border: 0;
+  color: var(--color-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-link-button:hover {
+  text-decoration: underline;
+}
+
 .auth-submit {
   margin-top: var(--sp-1);
   min-height: 48px;
