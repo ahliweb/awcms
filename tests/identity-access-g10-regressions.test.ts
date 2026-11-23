@@ -72,9 +72,7 @@ describe("G10: factor disabled between read and lock", () => {
     const { tx, statements } = disabledFactorTx();
     expect(await lockFactorForVerify(tx, "f1")).toBeNull();
     expect(await advanceLastUsedStep(tx, "f1", 5, new Date())).toBe(false);
-    expect(await consumeRecoveryCode(tx, "p1", "f1", "h", new Date())).toBe(
-      false
-    );
+    expect(await consumeRecoveryCode(tx, "p1", "h", new Date())).toBe(false);
     expect(statements.every((s) => /status = 'active'/.test(s))).toBe(true);
   });
 });

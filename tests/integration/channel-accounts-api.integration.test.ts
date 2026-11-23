@@ -213,11 +213,12 @@ async function seedUser(
   await sql`
     INSERT INTO awcms_sessions
       (tenant_id, identity_id, token_hash, expires_at, assurance_level,
-       last_authenticated_at, stepped_up_at)
+       last_authenticated_at, stepped_up_at, stepped_up_method)
     VALUES (${tenantId}, ${identity[0]!.id}, ${hashSessionToken(token)},
             now() + interval '8 hours',
             ${options.steppedUp ? "aal2" : "aal1"}, now(),
-            ${options.steppedUp ? new Date() : null})
+            ${options.steppedUp ? new Date() : null},
+            ${options.steppedUp ? "totp" : null})
   `;
 
   if (permissionKeys.length > 0) {

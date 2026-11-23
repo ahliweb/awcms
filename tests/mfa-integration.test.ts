@@ -560,7 +560,7 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     const stepUpB = await tx(tenantB, (t) =>
       verifyStepUpFactor(t, tenantB, identityB, { code }, MFA_ENV, at)
     );
-    expect(stepUpB).toEqual({ ok: true });
+    expect(stepUpB).toEqual({ ok: true, proof: { method: "totp" } });
 
     // A DIFFERENT human in the same tenant is unaffected — the factor is shared
     // by person, not by tenant.
@@ -780,7 +780,7 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
         afterCooldown
       )
     );
-    expect(ok).toEqual({ ok: true });
+    expect(ok).toEqual({ ok: true, proof: { method: "totp" } });
 
     const row = (await sql`
       SELECT failed_verify_count, locked_until FROM awcms_principal_mfa_factors

@@ -155,6 +155,9 @@ export const POST: APIRoute = async ({
     const rotation = await stepUpSession(tx, {
       tenantId,
       session,
+      // The factor that was just verified, as decided by the branch that
+      // matched (ADR-0168 A2) — never re-derived from the request body.
+      proof: verified.proof,
       ttlMin: policy.sessionTtlMin,
       now
     });

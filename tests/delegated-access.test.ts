@@ -213,10 +213,13 @@ describe("klaim URUTAN dan klaim PEMBACA — dipin di level source", () => {
 });
 
 describe("sesi terdelegasi tidak boleh berpindah tenant", () => {
-  test("`delegated` ada di daftar non-switchable, bersama sso dan handoff", () => {
+  test("`delegated` ada di daftar non-switchable, bersama sso, handoff, dan passkey", () => {
+    // `passkey` (ADR-0168 Q7, `sql/443`) ditolak sampai pemeriksaan A4 di
+    // tenant TUJUAN ada — gagal-tertutup, bukan lupa.
     expect([...NON_SWITCHABLE_ORIGIN_AUTH].sort()).toEqual([
       "delegated",
       "handoff",
+      "passkey",
       "sso"
     ]);
   });

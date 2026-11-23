@@ -27,7 +27,11 @@ import {
 } from "./session-credential-epoch";
 import {
   evaluateStepUp,
-  type SessionAssuranceLevel
+  stepUpColumns,
+  stepUpProofFromColumns,
+  type SessionAssuranceGrant,
+  type SessionAssuranceLevel,
+  type StepUpProof
 } from "../domain/mfa-policy";
 
 export type SessionAssurance = {
@@ -35,6 +39,11 @@ export type SessionAssurance = {
   identityId: string;
   assuranceLevel: SessionAssuranceLevel;
   steppedUpAt: Date | null;
+  /**
+   * How this session reached `aal2` (`sql/443`, ADR-0168 A2); `null` for `aal1`.
+   * Gates that require a passkey read THIS, never `assuranceLevel` alone.
+   */
+  steppedUpBy: StepUpProof | null;
   expiresAt: Date;
   /** How the session came to exist (`sql/117`). Needed to decide what counts as re-authentication (#1004). */
   originAuth: SessionOriginAuth;
@@ -51,6 +60,7 @@ export async function resolveSessionAssurance(
 ): Promise<SessionAssurance | null> {
   const rows = (await tx`
     SELECT s.id, s.identity_id, s.assurance_level, s.stepped_up_at,
+           s.stepped_up_method, s.stepped_up_passkey_id,
            s.expires_at, s.revoked_at, s.origin_auth, s.last_authenticated_at
     FROM awcms_sessions s
     WHERE s.tenant_id = ${tenantId} AND s.token_hash = ${tokenHash}
@@ -60,6 +70,8 @@ export async function resolveSessionAssurance(
     identity_id: string;
     assurance_level: SessionAssuranceLevel;
     stepped_up_at: Date | null;
+    stepped_up_method: string | null;
+    stepped_up_passkey_id: string | null;
     expires_at: Date;
     revoked_at: Date | null;
     origin_auth: SessionOriginAuth;
@@ -76,6 +88,11 @@ export async function resolveSessionAssurance(
     identityId: row.identity_id,
     assuranceLevel: row.assurance_level,
     steppedUpAt: row.stepped_up_at ? new Date(row.stepped_up_at) : null,
+    steppedUpBy: stepUpProofFromColumns(
+      row.assurance_level,
+      row.stepped_up_method,
+      row.stepped_up_passkey_id
+    ),
     expiresAt: new Date(row.expires_at),
     originAuth: row.origin_auth,
     lastAuthenticatedAt: row.last_authenticated_at
@@ -94,10 +111,12 @@ export async function resolveSessionAssurance(
  * CHECK exactly. `switch` is ADR-0088 and is produced by exactly one caller:
  * `POST /api/v1/auth/session/switch`, which refuses every value in
  * {@link NON_SWITCHABLE_ORIGIN_AUTH} — so a `switch` session is password-rooted
- * by construction. `delegated` is ADR-0090.
+ * by construction. `delegated` is ADR-0090. `passkey` is ADR-0168 Q7
+ * (`sql/443`): admitted to the CHECK, produced by nothing yet — passwordless
+ * login is not in the first release (Q3).
  */
 export type SessionOriginAuth =
-  "password" | "sso" | "handoff" | "switch" | "delegated";
+  "password" | "sso" | "handoff" | "switch" | "delegated" | "passkey";
 
 /**
  * Sessions that may NOT move to another tenant, and the one place that answers
@@ -115,11 +134,17 @@ export type SessionOriginAuth =
  * - `delegated` — a session that exists because tenant C granted access to a
  *   partner (ADR-0090). A grant FOR tenant C that can be walked into tenant D is
  *   not a grant; it is an entry point.
+ * - `passkey` — ADR-0168 A4 makes a passkey-rooted session switchable only
+ *   under the TARGET tenant's `password_login_disabled`/SSO enforcement, and
+ *   that check does not exist yet. Until the slice that builds it, the value is
+ *   refused here: fail closed rather than let a future producer inherit a
+ *   switch nobody evaluated (Issue #1405, slice S2).
  */
 export const NON_SWITCHABLE_ORIGIN_AUTH: readonly SessionOriginAuth[] = [
   "sso",
   "handoff",
-  "delegated"
+  "delegated",
+  "passkey"
 ];
 
 /**
@@ -142,12 +167,20 @@ export type SessionIssueContext = {
   userAgentSummary?: string | null;
 };
 
+/**
+ * `assurance` is a {@link SessionAssuranceGrant}, not a bare level: an `aal2`
+ * session cannot be minted without naming the proof that raised it, and the
+ * method is written in the same INSERT (`sql/443`, ADR-0168 A2). The database
+ * backs the type with a biconditional CHECK, so an issuer that bypasses this
+ * function and forgets the method fails at INSERT instead of minting a session
+ * no passkey-required gate could classify.
+ */
 export async function createSessionWithAssurance(
   tx: Bun.SQL,
   input: {
     tenantId: string;
     identityId: string;
-    assuranceLevel: SessionAssuranceLevel;
+    assurance: SessionAssuranceGrant;
     ttlMin: number;
     now: Date;
     issue: SessionIssueContext;
@@ -156,16 +189,20 @@ export async function createSessionWithAssurance(
   const token = generateSessionToken();
   const tokenHash = hashSessionToken(token);
   const expiresAt = new Date(input.now.getTime() + input.ttlMin * 60_000);
-  const steppedUpAt = input.assuranceLevel === "aal2" ? input.now : null;
+  const assuranceLevel = input.assurance.level;
+  const steppedUpAt = assuranceLevel === "aal2" ? input.now : null;
+  const stepUp = stepUpColumns(input.assurance);
 
   await tx`
     INSERT INTO awcms_sessions
       (tenant_id, identity_id, token_hash, expires_at,
        assurance_level, last_authenticated_at, stepped_up_at,
+       stepped_up_method, stepped_up_passkey_id,
        client_ip_hash, user_agent_summary, origin_auth, credential_epoch)
     VALUES (
       ${input.tenantId}, ${input.identityId}, ${tokenHash}, ${expiresAt},
-      ${input.assuranceLevel}, ${input.now}, ${steppedUpAt},
+      ${assuranceLevel}, ${input.now}, ${steppedUpAt},
+      ${stepUp.method}, ${stepUp.passkeyId},
       ${input.issue.clientIpHash ?? null}, ${input.issue.userAgentSummary ?? null},
       ${input.issue.originAuth},
       ${currentCredentialEpoch(tx, input.tenantId, input.identityId)}
@@ -180,12 +217,19 @@ export async function createSessionWithAssurance(
  * the old session is revoked and a fresh aal2 session is minted (anti-fixation)
  * — returns the new token. If the session is already aal2, only the step-up
  * stamp is refreshed in place — returns `rotated: false`, no new token.
+ *
+ * `proof` is the factor that was JUST verified, and it replaces whatever the
+ * session recorded before (ADR-0168 A2): a session stepped up by TOTP that
+ * later refreshes with a recovery code is, from then on, a recovery-code
+ * session. Keeping the stronger earlier method would let a phishable code
+ * extend the freshness of a phishing-resistant stamp.
  */
 export async function stepUpSession(
   tx: Bun.SQL,
   input: {
     tenantId: string;
     session: SessionAssurance;
+    proof: StepUpProof;
     ttlMin: number;
     now: Date;
   }
@@ -215,7 +259,7 @@ export async function stepUpSession(
     const created = await createSessionWithAssurance(tx, {
       tenantId: input.tenantId,
       identityId: input.session.identityId,
-      assuranceLevel: "aal2",
+      assurance: { level: "aal2", proof: input.proof },
       ttlMin: input.ttlMin,
       now: input.now,
       issue: {
@@ -232,9 +276,13 @@ export async function stepUpSession(
     };
   }
 
+  const stepUp = stepUpColumns({ level: "aal2", proof: input.proof });
+
   await tx`
     UPDATE awcms_sessions
-    SET stepped_up_at = ${input.now}, last_authenticated_at = ${input.now}
+    SET stepped_up_at = ${input.now}, last_authenticated_at = ${input.now},
+        stepped_up_method = ${stepUp.method},
+        stepped_up_passkey_id = ${stepUp.passkeyId}
     WHERE id = ${input.session.sessionId}
   `;
 

@@ -170,7 +170,8 @@ export const POST: APIRoute = async ({
     const created = await createSessionWithAssurance(tx, {
       tenantId,
       identityId,
-      assuranceLevel: "aal2",
+      // TOTP or recovery code, whichever actually matched (ADR-0168 A2).
+      assurance: { level: "aal2", proof: result.proof },
       ttlMin: policy.sessionTtlMin,
       now,
       issue: {

@@ -40,7 +40,8 @@ import {
 } from "../../../lib/auth/mfa-challenge-token";
 import {
   evaluateMfaChallenge,
-  type MfaChallengeDenyReason
+  type MfaChallengeDenyReason,
+  type StepUpProof
 } from "../domain/mfa-policy";
 import { resolveActiveSession } from "./session-lookup";
 import { linkIdentityToPrincipal } from "./principal-store";
@@ -116,11 +117,22 @@ async function requirePrincipalIdForEnrollment(
   return linkIdentityToPrincipal(tx, identityId, loginIdentifier);
 }
 
-async function insertRecoveryCodes(
+/**
+ * Issues a fresh recovery-code set for the PRINCIPAL, replacing any previous
+ * one (ADR-0168 A1, `sql/442`). The codes belong to the person, not to the
+ * factor that happened to be enrolled when they were issued, so nothing here
+ * names a factor.
+ *
+ * The old set is deleted in the same transaction before the new one is
+ * written: two live sets on one principal would double the guessing surface
+ * and leave a set the person may no longer hold still able to sign in.
+ */
+async function replaceRecoveryCodes(
   tx: Bun.SQL,
-  principalId: string,
-  factorId: string
+  principalId: string
 ): Promise<string[]> {
+  await factorStore.deleteRecoveryCodesForPrincipal(tx, principalId);
+
   const rawCodes: string[] = [];
 
   for (let i = 0; i < RECOVERY_CODE_COUNT; i += 1) {
@@ -130,7 +142,6 @@ async function insertRecoveryCodes(
     await factorStore.insertRecoveryCodeHash(
       tx,
       principalId,
-      factorId,
       hashRecoveryCode(rawCode)
     );
   }
@@ -349,7 +360,13 @@ export async function verifyTotpEnrollment(
 
   await factorStore.activateFactor(tx, row.id, matchedStep, now);
 
-  const recoveryCodes = await insertRecoveryCodes(tx, principalId, row.id);
+  // ADR-0168 A1: recovery codes are issued when the principal enrols its FIRST
+  // factor of any type. `startTotpEnrollment` refuses while a TOTP factor is
+  // active and TOTP is the only factor type today, so reaching this line always
+  // means a first factor. The slice that adds passkeys must make this
+  // conditional on "no other active factor", or enrolling TOTP next to a
+  // passkey would silently replace the set the person printed earlier.
+  const recoveryCodes = await replaceRecoveryCodes(tx, principalId);
 
   return { ok: true, recoveryCodes };
 }
@@ -379,6 +396,10 @@ export async function disableMfa(
   // their own factor, and stamping the tenant they happened to be signed into
   // would read, later, like an administrative reset that never happened.
   await factorStore.disableLiveFactors(tx, principalId, now, null);
+  // The codes go because NO factor is left, not because a particular one was
+  // disabled (ADR-0168 A1): this path disables every live factor of the
+  // principal, and a recovery code for a person with no second factor is a
+  // credential that would come back to life on their next enrolment.
   await factorStore.deleteRecoveryCodesForPrincipal(tx, principalId);
 
   return { ok: true };
@@ -404,9 +425,7 @@ export async function regenerateRecoveryCodes(
     return { ok: false, code: "MFA_NOT_ACTIVE" };
   }
 
-  await factorStore.deleteRecoveryCodesForFactor(tx, factor.id);
-
-  const recoveryCodes = await insertRecoveryCodes(tx, principalId, factor.id);
+  const recoveryCodes = await replaceRecoveryCodes(tx, principalId);
 
   return { ok: true, recoveryCodes };
 }
@@ -627,7 +646,15 @@ export async function resolveEnrollAuth(
 
 export type FactorCredential = { code?: string; recoveryCode?: string };
 
-type ConsumeFactorResult = { matched: boolean; misconfigured: boolean };
+/**
+ * `method` names WHICH credential matched, decided here by the branch that
+ * matched rather than by a route re-reading the request body — so the method a
+ * session records (`sql/443`, ADR-0168 A2) is the one that was actually
+ * verified, even when a body carries both fields.
+ */
+type ConsumeFactorResult =
+  | { matched: true; method: "totp" | "recovery_code" }
+  | { matched: false; misconfigured: boolean };
 
 /**
  * Replay-safe verification + consumption of a single credential (TOTP code or
@@ -688,7 +715,9 @@ async function consumeFactorCredential(
         now
       );
 
-      return { matched: advanced, misconfigured: false };
+      return advanced
+        ? { matched: true, method: "totp" }
+        : { matched: false, misconfigured: false };
     }
 
     return { matched: false, misconfigured: false };
@@ -698,19 +727,21 @@ async function consumeFactorCredential(
     const consumed = await factorStore.consumeRecoveryCode(
       tx,
       principalId,
-      factor.id,
       hashRecoveryCode(credentials.recoveryCode),
       now
     );
 
-    return { matched: consumed, misconfigured: false };
+    return consumed
+      ? { matched: true, method: "recovery_code" }
+      : { matched: false, misconfigured: false };
   }
 
   return { matched: false, misconfigured: false };
 }
 
 export type FactorVerifyStatus =
-  "matched" | "failed" | "locked" | "misconfigured";
+  | { status: "matched"; proof: StepUpProof }
+  | { status: "failed" | "locked" | "misconfigured" };
 
 /**
  * Wraps `consumeFactorCredential` with the per-factor cumulative failed-verify
@@ -745,14 +776,14 @@ async function verifyFactorWithLockout(
   // The stale snapshot must not verify; this is not a guess, so no failure is
   // counted.
   if (!current) {
-    return "failed";
+    return { status: "failed" };
   }
 
   if (
     current?.locked_until &&
     new Date(current.locked_until).getTime() > now.getTime()
   ) {
-    return "locked";
+    return { status: "locked" };
   }
 
   const consumed = await consumeFactorCredential(
@@ -764,15 +795,15 @@ async function verifyFactorWithLockout(
     now
   );
 
+  if (consumed.matched) {
+    await factorStore.clearFactorFailures(tx, factor.id, now);
+    return { status: "matched", proof: { method: consumed.method } };
+  }
+
   if (consumed.misconfigured) {
     // A missing key is an operator error, not a guessing attempt — do not burn
     // an attempt against the lockout counter.
-    return "misconfigured";
-  }
-
-  if (consumed.matched) {
-    await factorStore.clearFactorFailures(tx, factor.id, now);
-    return "matched";
+    return { status: "misconfigured" };
   }
 
   const maxAttempts = resolveMfaMaxVerifyAttempts(env);
@@ -792,14 +823,14 @@ async function verifyFactorWithLockout(
     now
   );
 
-  return "failed";
+  return { status: "failed" };
 }
 
 export type MfaChallengeFailureCode =
   "MFA_CHALLENGE_INVALID" | "MFA_MISCONFIGURED";
 
 export type VerifyMfaChallengeResult =
-  | { ok: true; identityId: string }
+  | { ok: true; identityId: string; proof: StepUpProof }
   | { ok: false; code: MfaChallengeFailureCode };
 
 /**
@@ -876,7 +907,7 @@ export async function verifyMfaChallenge(
     return { ok: false, code: "MFA_CHALLENGE_INVALID" };
   }
 
-  const status = await verifyFactorWithLockout(
+  const verified = await verifyFactorWithLockout(
     tx,
     principalId!,
     factor,
@@ -885,11 +916,11 @@ export async function verifyMfaChallenge(
     now
   );
 
-  if (status === "misconfigured") {
+  if (verified.status === "misconfigured") {
     return { ok: false, code: "MFA_MISCONFIGURED" };
   }
 
-  if (status !== "matched") {
+  if (verified.status !== "matched") {
     // `failed` and `locked` both collapse to the same generic response
     // pre-session (no enumeration/state signal). `locked` did not consume an
     // attempt above, but still counts against this challenge's own cap.
@@ -905,11 +936,15 @@ export async function verifyMfaChallenge(
     UPDATE awcms_mfa_challenges SET consumed_at = ${now} WHERE id = ${challenge!.id}
   `;
 
-  return { ok: true, identityId: challenge!.identity_id };
+  return {
+    ok: true,
+    identityId: challenge!.identity_id,
+    proof: verified.proof
+  };
 }
 
 export type VerifyStepUpResult =
-  | { ok: true }
+  | { ok: true; proof: StepUpProof }
   | {
       ok: false;
       code:
@@ -944,7 +979,7 @@ export async function verifyStepUpFactor(
     return { ok: false, code: "MFA_NOT_ACTIVE" };
   }
 
-  const status = await verifyFactorWithLockout(
+  const verified = await verifyFactorWithLockout(
     tx,
     principalId!,
     factor,
@@ -953,17 +988,19 @@ export async function verifyStepUpFactor(
     now
   );
 
-  if (status === "misconfigured") {
-    return { ok: false, code: "MFA_MISCONFIGURED" };
-  }
-  if (status === "locked") {
-    return { ok: false, code: "MFA_LOCKED" };
-  }
-  if (status === "failed") {
-    return { ok: false, code: "MFA_INVALID_CODE" };
+  if (verified.status !== "matched") {
+    return {
+      ok: false,
+      code:
+        verified.status === "misconfigured"
+          ? "MFA_MISCONFIGURED"
+          : verified.status === "locked"
+            ? "MFA_LOCKED"
+            : "MFA_INVALID_CODE"
+    };
   }
 
-  return { ok: true };
+  return { ok: true, proof: verified.proof };
 }
 
 export type AdminResetMfaResult =

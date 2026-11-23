@@ -117,7 +117,11 @@ async function issue(
       requestedRedirectUri: REDIRECT_URI,
       identityId: seeded[tenantId]!.identityId,
       sessionId: seeded[tenantId]!.sessionId,
-      assuranceLevel: assurance,
+      // An aal2 code snapshots HOW the session got there (ADR-0168 A2).
+      assurance:
+        assurance === "aal2"
+          ? { level: "aal2", proof: { method: "totp" } }
+          : { level: "aal1" },
       actorTenantUserId: userId,
       now: new Date()
     })
@@ -292,6 +296,38 @@ suite("BFF session handoff", () => {
 
     expect(rows[0]!.assurance_level).toBe("aal2");
     expect(rows[0]!.stepped_up_at).not.toBeNull();
+
+    // ADR-0168 A2: the method travels with the level, so the minted session
+    // records the factor the issuing login actually used.
+    const method = (await getAdminSql()`
+      SELECT stepped_up_method, stepped_up_passkey_id FROM awcms_sessions
+      WHERE tenant_id = ${TENANT_A}
+        AND token_hash = ${hashSessionToken(result.ok ? result.token : "")}
+    `) as {
+      stepped_up_method: string | null;
+      stepped_up_passkey_id: string | null;
+    }[];
+    expect(method[0]!.stepped_up_method).toBe("totp");
+    expect(method[0]!.stepped_up_passkey_id).toBeNull();
+  });
+
+  test("an aal1 code mints an aal1 session that records no step-up method (ADR-0168 A2)", async () => {
+    // The opposite case (an aal2 code whose method cannot be read) is not
+    // storable — `sql/443`'s CHECK refuses it — so the fail-closed downgrade is
+    // pinned on the pure `assuranceGrantOf` in mfa-step-up-method.test.ts.
+    const aal1Code = await issue(TENANT_A, USER_A, "aal1");
+    const result = await redeem(TENANT_A, aal1Code);
+
+    expect(result.ok && result.assuranceLevel).toBe("aal1");
+
+    const rows = (await getAdminSql()`
+      SELECT assurance_level, stepped_up_method FROM awcms_sessions
+      WHERE tenant_id = ${TENANT_A}
+        AND token_hash = ${hashSessionToken(result.ok ? result.token : "")}
+    `) as { assurance_level: string; stepped_up_method: string | null }[];
+
+    expect(rows[0]!.assurance_level).toBe("aal1");
+    expect(rows[0]!.stepped_up_method).toBeNull();
   });
 
   test("a wrong client secret authenticates nothing", async () => {
@@ -333,7 +369,7 @@ suite("BFF session handoff", () => {
         requestedRedirectUri: REDIRECT_URI,
         identityId: seeded[TENANT_A]!.identityId,
         sessionId: seeded[TENANT_A]!.sessionId,
-        assuranceLevel: "aal1",
+        assurance: { level: "aal1" },
         actorTenantUserId: USER_A,
         now: new Date()
       });
@@ -350,7 +386,7 @@ suite("BFF session handoff", () => {
         requestedRedirectUri: "https://evil.test/internal/callback",
         identityId: seeded[TENANT_A]!.identityId,
         sessionId: seeded[TENANT_A]!.sessionId,
-        assuranceLevel: "aal1",
+        assurance: { level: "aal1" },
         actorTenantUserId: USER_A,
         now: new Date()
       })

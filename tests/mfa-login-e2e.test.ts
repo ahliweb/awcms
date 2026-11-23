@@ -359,6 +359,12 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     expect(typeof verify.body.data.token).toBe("string");
     expect(verify.cookies.has("awcms_session")).toBe(true);
 
+    // ADR-0168 A2: the grant-completed session records the TOTP that confirmed
+    // the enrolment.
+    expect(
+      await stepUpMethodOf(tenantId, verify.body.data.token as string)
+    ).toEqual({ method: "totp", passkeyId: null });
+
     // A subsequent login now stops at the ordinary MFA challenge (factor exists).
     const login2 = await callRoute(loginPOST, {
       tenantId,
@@ -1300,6 +1306,57 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     ).toBeNull();
   });
 
+  async function stepUpMethodOf(
+    tenantId: string,
+    token: string
+  ): Promise<{ method: string | null; passkeyId: string | null }> {
+    const rows = (await sql`
+      SELECT stepped_up_method, stepped_up_passkey_id FROM awcms_sessions
+      WHERE tenant_id = ${tenantId} AND token_hash = ${hashSessionToken(token)}
+    `) as {
+      stepped_up_method: string | null;
+      stepped_up_passkey_id: string | null;
+    }[];
+    return {
+      method: rows[0]?.stepped_up_method ?? null,
+      passkeyId: rows[0]?.stepped_up_passkey_id ?? null
+    };
+  }
+
+  test("ADR-0168 A2: a login completed with a RECOVERY CODE mints a session that says so", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    await seedActiveFactor(user.identityId, generateTotpSecret());
+    await sql`
+      INSERT INTO awcms_principal_mfa_recovery_codes (principal_id, code_hash)
+      VALUES (${await principalOf(user.identityId)}, ${hashRecoveryCode("LOGINRC1")})
+    `;
+
+    const login = await callRoute(loginPOST, {
+      tenantId,
+      ip: nextIp(),
+      body: { loginIdentifier: user.loginIdentifier, password: PASSWORD }
+    });
+    expect(login.body.error.code).toBe("MFA_REQUIRED");
+
+    const challenge = await callRoute(challengeVerifyPOST, {
+      tenantId,
+      ip: nextIp(),
+      cookies: fakeCookies(),
+      body: {
+        mfaChallengeToken: login.body.error.details.mfaChallengeToken,
+        recoveryCode: "LOGINRC1"
+      }
+    });
+    expect(challenge.status).toBe(200);
+
+    // Not `totp`: the method comes from the branch that matched, so a session a
+    // phishable code opened can be refused by a passkey-required gate later.
+    expect(
+      await stepUpMethodOf(tenantId, challenge.body.data.token as string)
+    ).toEqual({ method: "recovery_code", passkeyId: null });
+  });
+
   test("F7: login -> MFA -> stale step-up blocks admin action -> step-up -> action succeeds", async () => {
     const tenantId = await createTenant();
     const admin = await seedUser(tenantId);
@@ -1307,14 +1364,11 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     await seedActiveFactor(admin.identityId, secret);
     await grantPermission(tenantId, admin.tenantUserId, "mfa_admin", "reset");
     // Seed a recovery code for step-up (not timestep-bound, avoids collision).
+    // Principal-owned since ADR-0168 A1 (`sql/442`): no factor id.
     const adminPrincipal = await principalOf(admin.identityId);
-    const factorRows = (await sql`
-      SELECT id FROM awcms_principal_mfa_factors
-      WHERE principal_id = ${adminPrincipal}
-    `) as { id: string }[];
     await sql`
-      INSERT INTO awcms_principal_mfa_recovery_codes (principal_id, factor_id, code_hash)
-      VALUES (${adminPrincipal}, ${factorRows[0]!.id}, ${hashRecoveryCode("RECOVERY1")})
+      INSERT INTO awcms_principal_mfa_recovery_codes (principal_id, code_hash)
+      VALUES (${adminPrincipal}, ${hashRecoveryCode("RECOVERY1")})
     `;
 
     // A target user with MFA to be reset.
@@ -1344,6 +1398,12 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     expect(challenge.status).toBe(200);
     const sessionToken = challenge.body.data.token as string;
 
+    // ADR-0168 A2: the session records that TOTP raised it.
+    expect(await stepUpMethodOf(tenantId, sessionToken)).toEqual({
+      method: "totp",
+      passkeyId: null
+    });
+
     // 3. Age the step-up so it is stale (simulates time passing past the TTL).
     await sql`
       UPDATE awcms_sessions SET stepped_up_at = ${new Date(Date.now() - 3600_000)}
@@ -1369,6 +1429,14 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     });
     expect(stepUp.status).toBe(200);
     expect(stepUp.body.data.assuranceLevel).toBe("aal2");
+
+    // ADR-0168 A2: a refresh REPLACES the method with the factor just used. A
+    // phishable recovery code must not extend a TOTP-stamped session while it
+    // keeps claiming TOTP.
+    expect(await stepUpMethodOf(tenantId, sessionToken)).toEqual({
+      method: "recovery_code",
+      passkeyId: null
+    });
 
     // 6. Admin action now succeeds.
     const reset = await callRoute(adminResetPOST, {
