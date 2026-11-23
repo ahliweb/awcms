@@ -42,6 +42,10 @@ const ALLOWED_MUTATIONS = [
   // Completes a login that `/auth/login` paused with `MFA_REQUIRED` (#1365):
   // the same session-minting write, one step later.
   "/api/v1/auth/mfa/totp/verify",
+  // The pre-session enrolment of the same login (#1425): the `/login` spec
+  // fulfils both answers itself, so no factor is created and no session minted.
+  "/api/v1/auth/mfa/totp/enroll/start",
+  "/api/v1/auth/mfa/totp/enroll/verify",
   "/api/v1/auth/logout"
 ] as const;
 

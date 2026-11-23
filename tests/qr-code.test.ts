@@ -394,6 +394,23 @@ describe("enrolment QR behaviour (Issue #1316)", () => {
     expect(byId.get("account-mfa-secret")!.textContent).toBe("");
   });
 
+  test("the /login enrolment (#1425) renders and clears its own targets, leaving the account ones alone", () => {
+    const { doc, byId } = fakeDocument();
+    byId.set("enrol-qr", new FakeNode("div"));
+    byId.set("enrol-secret", new FakeNode("code"));
+    const targets = { qrId: "enrol-qr", secretId: "enrol-secret" };
+    byId.get("enrol-secret")!.textContent = "JBSWY3DP";
+
+    renderEnrolmentQr(doc, uri, label, targets);
+    expect(byId.get("enrol-qr")!.children).toHaveLength(1);
+    expect(byId.get("account-mfa-qr")!.children).toHaveLength(0);
+    expect(strings(byId.get("enrol-qr")!).join("\n")).not.toContain("JBSWY3DP");
+
+    clearEnrolmentSecret(doc, targets);
+    expect(byId.get("enrol-qr")!.children).toHaveLength(0);
+    expect(byId.get("enrol-secret")!.textContent).toBe("");
+  });
+
   test("finishing enrolment clears the QR as well", () => {
     const { doc, byId } = fakeDocument();
     renderEnrolmentQr(doc, uri, label);

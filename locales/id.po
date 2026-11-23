@@ -10193,6 +10193,34 @@ msgid "Verification could not be completed. Sign in again."
 msgstr "Verifikasi tidak dapat diselesaikan. Silakan masuk kembali."
 
 msgctxt "login"
+msgid "Your organization requires two-factor authentication. Scan the QR code with an authenticator app, or type the key into it, then enter the 6-digit code it shows."
+msgstr "Organisasi Anda mewajibkan autentikasi dua faktor. Pindai kode QR dengan aplikasi autentikator, atau ketik kuncinya ke aplikasi itu, lalu masukkan kode 6 digit yang ditampilkannya."
+
+msgctxt "login"
+msgid "Key for your authenticator app"
+msgstr "Kunci untuk aplikasi autentikator Anda"
+
+msgctxt "login"
+msgid "Confirm and finish"
+msgstr "Konfirmasi dan selesai"
+
+msgctxt "login"
+msgid "Save your recovery codes"
+msgstr "Simpan kode pemulihan Anda"
+
+msgctxt "login"
+msgid "Each code works once if you lose your authenticator app. They are shown only now: store them somewhere safe before you continue."
+msgstr "Setiap kode hanya berlaku satu kali jika Anda kehilangan aplikasi autentikator. Kode ini hanya ditampilkan sekarang: simpan di tempat aman sebelum melanjutkan."
+
+msgctxt "login"
+msgid "Continue to your workspace"
+msgstr "Lanjut ke ruang kerja Anda"
+
+msgctxt "login"
+msgid "QR code for your authenticator app. If you cannot scan it, type the key shown below into the app instead."
+msgstr "Kode QR untuk aplikasi autentikator Anda. Jika tidak bisa dipindai, ketik kunci di bawah ini ke aplikasi."
+
+msgctxt "login"
 msgid "Sign in failed. Check your details and try again."
 msgstr "Gagal masuk. Periksa data Anda lalu coba lagi."
 

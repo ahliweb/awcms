@@ -16,6 +16,18 @@ import {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
+/**
+ * Where the QR and the manual key live. The account page uses the defaults;
+ * the pre-session enrolment on `/login` (Issue #1425) passes its own pair, so
+ * one renderer serves both and neither duplicates the encoding or the clearing.
+ */
+export type EnrolmentTargets = { qrId: string; secretId: string };
+
+const ACCOUNT_TARGETS: EnrolmentTargets = {
+  qrId: "account-mfa-qr",
+  secretId: "account-mfa-secret"
+};
+
 /** True between a rendered enrolment and its completion. */
 let pending = false;
 
@@ -23,9 +35,12 @@ let pending = false;
  * Drop the enrolment secret AND its QR from the DOM, on completion and when
  * the page is left.
  */
-export function clearEnrolmentSecret(doc: Document): void {
-  doc.getElementById("account-mfa-qr")?.replaceChildren();
-  const secret = doc.getElementById("account-mfa-secret");
+export function clearEnrolmentSecret(
+  doc: Document,
+  targets: EnrolmentTargets = ACCOUNT_TARGETS
+): void {
+  doc.getElementById(targets.qrId)?.replaceChildren();
+  const secret = doc.getElementById(targets.secretId);
   if (secret) secret.textContent = "";
 }
 
@@ -58,9 +73,10 @@ export function restoreAfterPageCache(doc: Document): void {
 export function renderEnrolmentQr(
   doc: Document,
   otpauthUri: string,
-  label: string
+  label: string,
+  targets: EnrolmentTargets = ACCOUNT_TARGETS
 ): void {
-  const host = doc.getElementById("account-mfa-qr");
+  const host = doc.getElementById(targets.qrId);
   if (!host) return;
 
   let matrix;
