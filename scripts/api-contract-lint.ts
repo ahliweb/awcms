@@ -47,6 +47,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
+import { validateContractExamples } from "./api-contract-examples";
 import { BUNDLED_PATH } from "./openapi-bundle";
 
 type AnyRecord = Record<string, unknown>;
@@ -116,14 +117,14 @@ const OPENAPI_ROOT_KEYS = [
   "tags"
 ];
 
-const ROOT_ID = "urn:awcms:contract-bundle";
+export const ROOT_ID = "urn:awcms:contract-bundle";
 
-function isRecord(value: unknown): value is AnyRecord {
+export function isRecord(value: unknown): value is AnyRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** RFC 6901 escaping of one pointer segment. */
-function seg(key: string): string {
+export function seg(key: string): string {
   return key.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
@@ -145,11 +146,21 @@ function collectVendorExtensions(node: unknown, into: Set<string>): void {
   }
 }
 
-function createAjv(doc: AnyRecord): Ajv2020 {
-  const formats: Record<string, true> = {};
+/**
+ * `formatOverrides` lets the example validator (`api-contract-examples.ts`)
+ * enforce the formats it can check without a second dependency; the lint itself
+ * keeps every known format accept-all.
+ */
+export function createAjv(
+  doc: AnyRecord,
+  formatOverrides: Record<string, RegExp | ((value: string) => boolean)> = {}
+): Ajv2020 {
+  const formats: Record<string, true | RegExp | ((value: string) => boolean)> =
+    {};
   for (const name of KNOWN_FORMATS) {
     formats[name] = true;
   }
+  Object.assign(formats, formatOverrides);
   const ajv = new Ajv2020({
     strict: true,
     allErrors: false,
@@ -338,7 +349,11 @@ export async function runContractLint(
 
 if (import.meta.main) {
   const started = performance.now();
-  const result = await runContractLint();
+  const doc = parseYaml(
+    await readFile(path.resolve(process.cwd(), BUNDLED_PATH), "utf8")
+  ) as AnyRecord;
+  const result = lintOpenApiContract(doc);
+  const examples = validateContractExamples(doc);
   const ms = Math.round(performance.now() - started);
   if (result.failures.length > 0) {
     console.error(
@@ -350,9 +365,19 @@ if (import.meta.main) {
       );
     }
     process.exitCode = 1;
-  } else {
+  }
+  if (examples.failures.length > 0) {
+    console.error(
+      `api:contract:lint FAILED -- ${examples.failures.length} example(s) do not validate against their schema (${examples.checked} checked):`
+    );
+    for (const failure of examples.failures) {
+      console.error(`  - ${failure.pointer}\n      ${failure.message}`);
+    }
+    process.exitCode = 1;
+  }
+  if (process.exitCode !== 1) {
     console.log(
-      `api:contract:lint OK -- ${result.compiled} schema locations compiled in ${ms} ms.`
+      `api:contract:lint OK -- ${result.compiled} schema locations compiled, ${examples.checked} examples validated in ${ms} ms.`
     );
   }
 }

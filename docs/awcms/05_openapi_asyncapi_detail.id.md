@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:8abd4404ba9a9ad43ddfbcfebfe192f9a0abc15a292551b89a5ae45c99a06827 -->
+<!-- i18n-source-hash: sha256:9bde35f937824e0198c6bbc0dc35f53ab0bdcf5d16a1092d2b35941c638d1832 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -381,8 +381,19 @@ flowchart LR
 
 - **Ketat, bukan longgar.** Keyword tak dikenal, `format` tak dikenal, `properties: null`, `$ref` putus, `required` bukan array, dan `exclusiveMinimum: true` gaya 3.0 semuanya gagal. Keyword OpenAPI yang bukan JSON Schema didaftarkan satu per satu: `discriminator` (bentuknya diperiksa), `xml`, `externalDocs`, `example`, ekstensi `x-*` yang muncul, dan kunci tingkat-atas dokumen OpenAPI sendiri. `nullable` ditangani `ajv` sendiri, yang menolaknya tanpa `type`; pada 3.1 ia tidak berefek dan diperbaiki bertahap (ADR-0167 §6).
 - **Format dikenali, tidak ditegakkan.** Hanya format JSON Schema dan OpenAPI yang diterima, sebagai nama; instance tidak divalidasi di sini sehingga `ajv-formats` tidak diperlukan.
-- **Di luar scope.** Contoh, paket fixture, dan validasi respons handler nyata adalah isu terpisah (#1391 sampai #1395).
+- **Di luar scope.** Paket fixture dan validasi respons handler nyata adalah isu terpisah (#1392 sampai #1395). Contoh divalidasi di sini, lihat bagian berikut.
 - **Biaya.** Sekitar 2,5 sampai 3 detik untuk sekitar 2.300 lokasi skema di satu mesin pengembang (Bun 1.4.4); satu kali jalan, bukan benchmark.
 - **Dependensi.** `ajv` 8.20.0 adalah dependensi dev, dipin persis (MIT; empat dependensi langsung miliknya); lolos `deps:audit:check` dan `deps:license:check`.
 
 Tes: `tests/api-contract-lint.test.ts` (bundle asli harus terkompilasi; kontrak yang sengaja dirusak harus gagal).
+
+### Contoh ikut divalidasi (Issue #1391)
+
+Perintah yang sama juga memvalidasi setiap contoh di bundle dengan `ajv` yang sama: `example` dan `examples.<nama>.value` pada media type (request dan respons, inline atau lewat `components`), contoh parameter, dan `example`/`examples` tingkat skema. Kegagalan mencetak pointer contoh dan pelanggaran pertama, sehingga contoh yang menyimpang dari skemanya (field baru di `required`, nilai enum yang diganti nama) memerahkan `check`. `uuid`, `date`, `date-time`, `email`, dan `uri` ditegakkan untuk contoh (pemeriksaan kecil buatan sendiri, tanpa `ajv-formats`); `nullable` dihormati.
+
+- **Hanya sintetis.** Alamat e-mail di contoh wajib memakai domain tercadang (`example.test`, `example.com|org|net`, atau host `.test`, `.example`, `.invalid`, `.localhost`); domain nyata menggagalkan gerbang.
+- **Menulisnya di mana.** `examples` (bernama) pada media type, di fragmen operasinya sendiri. `components.responses` akar (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`) dibekukan `tests/openapi-bundle.test.ts`, jadi operasi yang butuh contoh galat khusus mendeklarasikan respons itu inline, bukan `$ref`.
+- **Bentuk bersyarat.** Daftar blog adalah `oneOf [BlogPostSummary, BlogPostFeedItem]`; `BlogPostSummary` ber-`additionalProperties: false` agar `oneOf` tetap eksklusif dan contoh `view=full` tak lolos sebagai ringkasan. `BlogPostFeedItem` mendaftar field feed yang selalu dikembalikan handler (`BlogPost` tak bisa, karena respons siklus hidup memakainya bersama).
+- **Yang tercakup.** `GET /api/v1/blog/posts` (`summary`, `stable_order`, `full`, plus 400/401/403), `POST /api/v1/newsletter/subscribe` (satu 200 netral yang tak membedakan alamat baru dari yang dikenal; 400; 429) dan `PUT /api/v1/booking/policy` (200, 400 x2, 401, 403, 409, 422). Operasi lain belum wajib bercontoh (ADR-0167: syarat berlaku untuk operasi baru).
+
+Tes: `tests/api-contract-examples.test.ts` (bundle asli lolos; merusak satu field contoh nyata, uuid cacat, atau domain e-mail nyata memerahkannya).
