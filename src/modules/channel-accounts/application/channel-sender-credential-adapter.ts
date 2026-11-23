@@ -25,12 +25,19 @@
  * A failure is a RETURNED reason with no value and no key material; the caller
  * fails the row or holds it. There is no fallback to any other credential.
  *
- * ## `resolvePublishCredential` has no composer yet (Issue #1145, audit H1)
+ * ## `resolvePublishCredential`: composed under its own DB role (ADR-0157 section 6)
  *
- * The same decrypt, for an account that PUBLISHES (`social_publishing`). No
- * script composes it: `awcms_worker` cannot read a social token (`sql/328`) and
- * `social-publishing:dispatch` is deliberately granted no key ring. The first
- * connector composes it under a SEPARATE DB role (ADR-0157 section 6).
+ * The same decrypt, for an account that PUBLISHES (`social_publishing`).
+ * `scripts/social-publishing-dispatch.ts` composes it, and only when
+ * `SOCIAL_PUBLISHING_FACEBOOK_ENABLED=true` (default off; otherwise every
+ * request is refused). That job holds the key ring and connects ONLY as
+ * `awcms_social_dispatch` (`SOCIAL_PUBLISHING_DATABASE_URL`, no fallback; the
+ * role ships NOLOGIN until a deployment activates it), never as `awcms_worker`
+ * (which cannot read a social token, `sql/328`) or `awcms_app`. The role sees
+ * only the access token of an `active` grant used by a `connected` Facebook
+ * Page with a granted publish capability (`sql/427`, pinned and probed by
+ * `security:readiness`), and must be a member of no other role (checked at
+ * start, `assertConnectedAsDedicatedRole`).
  *
  * ## Email (Issue #1160, ADR-0151 section 2)
  *

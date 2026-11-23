@@ -15530,7 +15530,7 @@ HIGH-RISK: the permission is separately grantable and declares `requiresMfaEnrol
 - **operationId**: `disconnectChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-The account becomes `revoked`, its OWN stored credential is hard-deleted and its webhook subscriptions are revoked. Effective on the next use: every capability check reads the status. Does not call the provider and does not touch a shared connection (revoke the connection for that). High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+The account becomes `revoked`, its OWN stored credential is hard-deleted and its webhook subscriptions are revoked. Effective on the next use: every capability check reads the status. When it was the last live account on its OAuth connection, the connection is revoked too and its token ciphertexts are deleted (`connectionRevoked`); a connection still serving another account is left alone (revoke the connection for that). Does not call the provider. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
 
 **Parameters**
 

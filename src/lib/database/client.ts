@@ -266,6 +266,16 @@ export function buildDedicatedRoleClient(databaseUrl: string): Bun.SQL {
  * `session_user` (the login itself) must be the role too, and the role must
  * not be SUPERUSER or BYPASSRLS. The message names roles only, never a
  * connection string.
+ *
+ * The #1145 credential-path review, MEDIUM-2: the role must also be a member
+ * of NO other role. `GRANT awcms_app TO <role> WITH INHERIT FALSE, SET TRUE`
+ * left every grant check (`has_table_privilege` does not follow a NOINHERIT
+ * membership) and the session/current-user test above passing, after which a
+ * single `SET LOCAL ROLE awcms_app` in the job's own session read every
+ * tenant's secrets, WhatsApp included. A membership of any kind (inherited or
+ * not, SET or not, a predefined `pg_*` role such as `pg_read_all_data`
+ * included) is refused at start; `security:readiness` checks the same, and the
+ * role's own members, for both dedicated roles.
  */
 export async function assertConnectedAsDedicatedRole(
   sql: Bun.SQL,
@@ -274,7 +284,13 @@ export async function assertConnectedAsDedicatedRole(
 ): Promise<void> {
   const rows = (await sql`
     SELECT current_user AS name, session_user AS login,
-           r.rolsuper AS superuser, r.rolbypassrls AS bypass
+           r.rolsuper AS superuser, r.rolbypassrls AS bypass,
+           ARRAY(
+             SELECT pg_get_userbyid(m.roleid)::text
+             FROM pg_auth_members m
+             WHERE m.member = r.oid
+             ORDER BY 1
+           ) AS member_of
     FROM pg_roles r
     WHERE r.rolname = current_user
   `) as {
@@ -282,18 +298,21 @@ export async function assertConnectedAsDedicatedRole(
     login: string;
     superuser: boolean;
     bypass: boolean;
+    member_of: string[];
   }[];
   const who = rows[0];
+  const memberOf = who?.member_of ?? [];
 
   if (
     !who ||
     who.name !== roleName ||
     who.login !== roleName ||
     who.superuser ||
-    who.bypass
+    who.bypass ||
+    memberOf.length > 0
   ) {
     throw new Error(
-      `${jobName} must log in as ${roleName} (session and current user, non-superuser, no BYPASSRLS); connected as ${who?.login ?? "unknown"}${who && who.login !== who.name ? ` acting as ${who.name}` : ""}${who?.superuser ? " (SUPERUSER)" : ""}${who?.bypass ? " (BYPASSRLS)" : ""}.`
+      `${jobName} must log in as ${roleName} (session and current user, non-superuser, no BYPASSRLS, a member of no other role); connected as ${who?.login ?? "unknown"}${who && who.login !== who.name ? ` acting as ${who.name}` : ""}${who?.superuser ? " (SUPERUSER)" : ""}${who?.bypass ? " (BYPASSRLS)" : ""}${memberOf.length > 0 ? ` (a member of ${memberOf.join(", ")})` : ""}.`
     );
   }
 }

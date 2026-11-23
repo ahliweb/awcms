@@ -309,29 +309,33 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
       });
     });
 
-    test("it decrypts the token of a live social account with a granted publish capability, through the real credential adapter", async () => {
+    test("it decrypts the token of a live Facebook Page with a granted publish capability, through the real credential adapter; a provider with no admitted connector stays sealed (L3)", async () => {
       const fb = await seedSocial(TENANT_A, { provider: "facebook" });
       const yt = await seedSocial(TENANT_A, { provider: "youtube" });
-
-      for (const seeded of [fb, yt]) {
-        const result = await asRole(SOCIAL_ROLE, TENANT_A, (tx) =>
+      const resolve = (accountId: string) =>
+        asRole(SOCIAL_ROLE, TENANT_A, (tx) =>
           credentials.resolvePublishCredential(tx, {
             tenantId: TENANT_A,
-            accountId: seeded.accountId
+            accountId
           })
         );
 
-        expect(result).toEqual({ ok: true, credential: seeded.token });
-      }
+      expect(await resolve(fb.accountId)).toEqual({
+        ok: true,
+        credential: fb.token
+      });
+      // The #1145 credential-path review, L3 (sql/427): only Facebook has an
+      // admitted connector, so a YouTube token is not readable by the role.
+      expect((await resolve(yt.accountId)).ok).toBe(false);
     });
 
-    test("M2: only connected/degraded accounts, active/expired grants and a GRANTED publish capability are visible", async () => {
-      const visible = [
-        await seedSocial(TENANT_A, { status: "connected" }),
-        await seedSocial(TENANT_A, { status: "degraded" }),
-        await seedSocial(TENANT_A, { grantState: "expired" })
-      ];
+    test("M2, narrowed by MEDIUM-1 of the #1145 credential-path review: only a connected account, an active grant and a GRANTED publish capability are visible", async () => {
+      const visible = [await seedSocial(TENANT_A, { status: "connected" })];
       const hidden = [
+        // sql/427: the adapter never decrypts these, so the role cannot read them.
+        await seedSocial(TENANT_A, { status: "degraded" }),
+        await seedSocial(TENANT_A, { grantState: "expired" }),
+        await seedSocial(TENANT_A, { provider: "instagram" }),
         await seedSocial(TENANT_A, { status: "revoked" }),
         await seedSocial(TENANT_A, { status: "disabled" }),
         await seedSocial(TENANT_A, { status: "pending" }),
@@ -356,7 +360,7 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
 
     test("a revocation leaves the role's view at once: the next read no longer sees the token", async () => {
       const fb = await seedSocial(TENANT_A);
-      const ig = await seedSocial(TENANT_A, { provider: "instagram" });
+      const ig = await seedSocial(TENANT_A);
 
       expect((await visibleSecretIds(SOCIAL_ROLE, TENANT_A)).sort()).toEqual(
         [fb.secretId, ig.secretId].sort()
@@ -1105,7 +1109,13 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
       }
     }
 
-    const SECRETS_FILE = "sql/358_awcms_social_dispatch_credential_role.sql";
+    // The secret policy as sql/427 narrowed it (MEDIUM-1, L3 of the #1145
+    // credential-path review); the account and connection policies are still
+    // the sql/358 ones.
+    const SECRETS_FILE =
+      "sql/427_awcms_social_dispatch_secret_view_and_value_bounds.sql";
+    const PROVIDER_POLICIES_FILE =
+      "sql/358_awcms_social_dispatch_credential_role.sql";
     const SECRETS_POLICY = "awcms_channel_secrets_social_dispatch_publish";
     const FLOOR_FILE = "sql/357_awcms_social_publishing_retention.sql";
 
@@ -1177,7 +1187,7 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
         "an inverted status list",
         (s) =>
           s.replace(
-            "a.status IN ('connected', 'degraded')",
+            "a.status = 'connected'",
             "a.status NOT IN ('disconnected')"
           )
       ],
@@ -1185,8 +1195,8 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
         "a WhatsApp provider added",
         (s) =>
           s.replace(
-            "'facebook', 'instagram'",
-            "'whatsapp_cloud', 'facebook', 'instagram'"
+            "c.provider = 'facebook'",
+            "c.provider IN ('whatsapp_cloud', 'facebook')"
           )
       ]
     ];
@@ -1254,7 +1264,7 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
           "awcms_channel_provider_connections_social_dispatch_providers"
         ]
       ] as const) {
-        const original = policyStatement(SECRETS_FILE, name);
+        const original = policyStatement(PROVIDER_POLICIES_FILE, name);
         const outcome = await withPolicy(
           table,
           name,

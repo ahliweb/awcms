@@ -133,6 +133,8 @@ describe("findSharedTableWrites", () => {
       // #1146: the social dispatch write-boundary probe.
       "awcms_social_publications",
       "awcms_social_publish_jobs",
+      // The #1145 credential-path review, L1: the same probe's attempt rows.
+      "awcms_social_publish_attempts",
       "awcms_channel_account_health",
       "awcms_audit_events",
       "awcms_domain_events",

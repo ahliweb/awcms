@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 289   |
+| Migrations                          | 291   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 893   |
+| Test files                          | 896   |
 | Route files                         | 697   |
 | ADR                                 | 340   |
 
@@ -354,6 +354,8 @@
 | 287 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
 | 288 | `sql/414_awcms_omes_workflow_verdict_worker_grants.sql`                |
 | 289 | `sql/415_awcms_email_messages_worker_update_columns.sql`               |
+| 290 | `sql/426_awcms_social_dispatch_credential_report_function.sql`         |
+| 291 | `sql/427_awcms_social_dispatch_secret_view_and_value_bounds.sql`       |
 
 ### Tables & Row-Level Security
 
@@ -642,9 +644,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 656        |
+| `(root)`      | 658        |
 | `e2e`         | 32         |
-| `integration` | 203        |
+| `integration` | 204        |
 | `unit`        | 2          |
 
 ### Routes

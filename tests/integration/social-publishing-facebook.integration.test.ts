@@ -831,7 +831,7 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
     expect(graphCalls).toHaveLength(0);
   });
 
-  describe("the role's boundary (sql/358 + sql/373)", () => {
+  describe("the role's boundary (sql/358 + sql/373 + sql/426 + sql/427)", () => {
     test("as awcms_social_dispatch, only the token of a LIVE, publish-granted Facebook Page of the scoped tenant is readable", async () => {
       const live = await seedPage(TENANT_A);
       const denied = await seedPage(TENANT_A, { capability: "denied" });
@@ -1014,32 +1014,45 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
         UPDATE awcms_channel_accounts SET status = 'degraded' WHERE id = ${page.id}
       `;
 
-      const counts = await withTenantOrThrow(
+      const requeue = await withTenantOrThrow(
         roleSql(),
         TENANT_A,
-        async (tx) => {
-          const requeue = await tx`
+        async (tx) =>
+          (
+            await tx`
           UPDATE awcms_social_publish_jobs SET status = 'queued'
           WHERE id = ${job.id}
-        `;
-          const revive = await tx`
-          UPDATE awcms_channel_accounts SET status = 'connected'
-          WHERE id = ${page.id}
-        `;
-          const degradeWhatsapp = await tx`
-          UPDATE awcms_channel_accounts SET status = 'degraded'
-          WHERE id = ${whatsapp.id}
-        `;
-
-          return {
-            requeue: requeue.count,
-            revive: revive.count,
-            degradeWhatsapp: degradeWhatsapp.count
-          };
-        }
+        `
+          ).count
       );
 
-      expect(counts).toEqual({ requeue: 0, revive: 0, degradeWhatsapp: 0 });
+      expect(requeue).toBe(0);
+
+      // sql/426 (the #1145 credential-path review, HIGH): the role holds no
+      // UPDATE on the accounts at all any more, so reviving or degrading one
+      // directly is refused outright (its only write is the definer report).
+      for (const [what, accountId, status] of [
+        ["revive a degraded account", page.id, "connected"],
+        ["degrade a WhatsApp account", whatsapp.id, "degraded"]
+      ] as const) {
+        let errno: unknown = null;
+
+        try {
+          await withTenantOrThrow(
+            roleSql(),
+            TENANT_A,
+            (tx) =>
+              tx`UPDATE awcms_channel_accounts SET status = ${status} WHERE id = ${accountId}`
+          );
+        } catch (error) {
+          errno = (error as { errno?: unknown }).errno;
+        } finally {
+          resetDatabaseCircuitBreakerForTests();
+        }
+
+        expect(String(errno), what).toBe("42501");
+      }
+
       expect((await jobsOf(pub.publicationId!))[0]!.status).toBe("failed");
     });
 
@@ -1057,6 +1070,9 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
       expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
     });
 
+    // The account/health write policies of sql/373 are gone (sql/426 revoked
+    // the writes they bounded); the job and audit policies are now the
+    // sql/427 ones, so a mutation is restored from that file.
     const MUTATIONS: [string, string, string, string][] = [
       [
         "awcms_social_publish_jobs",
@@ -1077,30 +1093,20 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
            WITH CHECK (true OR status IN ('queued'))`
       ],
       [
-        "awcms_channel_accounts",
-        "awcms_channel_accounts_social_dispatch_degrade",
-        "a WITH CHECK that admits connected",
-        `CREATE POLICY awcms_channel_accounts_social_dispatch_degrade
-           ON awcms_channel_accounts AS RESTRICTIVE FOR UPDATE TO awcms_social_dispatch
-           USING (provider IN ('facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin') AND deleted_at IS NULL AND status = 'connected')
-           WITH CHECK (provider IN ('facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin') AND deleted_at IS NULL AND status IN ('degraded', 'connected'))`
-      ],
-      [
-        "awcms_channel_accounts",
-        "awcms_channel_accounts_social_dispatch_degrade",
-        "a dropped provider test",
-        `CREATE POLICY awcms_channel_accounts_social_dispatch_degrade
-           ON awcms_channel_accounts AS RESTRICTIVE FOR UPDATE TO awcms_social_dispatch
-           USING (deleted_at IS NULL AND status = 'connected')
-           WITH CHECK (deleted_at IS NULL AND status = 'degraded')`
-      ],
-      [
         "awcms_audit_events",
         "awcms_audit_events_social_dispatch_insert",
         "any module's audit row",
         `CREATE POLICY awcms_audit_events_social_dispatch_insert
            ON awcms_audit_events AS RESTRICTIVE FOR INSERT TO awcms_social_dispatch
            WITH CHECK (true)`
+      ],
+      [
+        "awcms_audit_events",
+        "awcms_audit_events_social_dispatch_insert",
+        "the sql/373 module-only bound (no vocabulary)",
+        `CREATE POLICY awcms_audit_events_social_dispatch_insert
+           ON awcms_audit_events AS RESTRICTIVE FOR INSERT TO awcms_social_dispatch
+           WITH CHECK (module_key = 'social_publishing')`
       ]
     ];
 
@@ -1110,12 +1116,12 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
         // points DATABASE_URL at the ephemeral database).
         const local = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
         const original = await Bun.file(
-          "sql/373_awcms_social_dispatch_runtime_grants.sql"
+          "sql/427_awcms_social_dispatch_secret_view_and_value_bounds.sql"
         ).text();
         const from = original.indexOf(`CREATE POLICY ${policy}\n`);
         const statement = original.slice(
           from,
-          original.indexOf(";\n", from) + 1
+          original.indexOf("\n  );\n", from) + "\n  );".length
         );
 
         expect(from).toBeGreaterThan(0);

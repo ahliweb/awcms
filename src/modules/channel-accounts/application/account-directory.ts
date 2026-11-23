@@ -29,6 +29,7 @@ import type {
   ListAccountsQuery,
   UpdateAccountInput
 } from "../domain/channel-accounts-validation";
+import { revokeConnection } from "./connection-directory";
 import type { SecretStorePort } from "./secret-store";
 import { revokeAccountWebhookSubscriptions } from "./webhook-subscription-directory";
 
@@ -812,16 +813,104 @@ async function eraseAccountCredential(
   await store.remove(tx, tenantId, secretId);
 }
 
+/**
+ * Locks the connection an account names BEFORE the account itself, so this path
+ * takes the two row locks in the same order as `revokeConnection` (connection,
+ * then its accounts) and two disconnects of sibling accounts serialise on the
+ * connection: the second one then sees the first one's account as revoked and
+ * revokes the orphaned grant (the #1145 credential-path review, MEDIUM-4).
+ * Returns the account locked, or `null` when it is not a live account of this
+ * tenant. An account whose `connection_id` changed between the two reads is
+ * re-read under the new connection's lock.
+ */
+async function lockAccountWithConnection(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string
+): Promise<AccountRecord | null> {
+  let lockedConnection: string | null = null;
+
+  for (let round = 0; round < 3; round += 1) {
+    const peek = await fetchAccountRecord(tx, tenantId, accountId);
+
+    if (!peek) return null;
+
+    if (peek.connectionId && peek.connectionId !== lockedConnection) {
+      await tx`
+        SELECT 1 FROM awcms_channel_provider_connections
+        WHERE tenant_id = ${tenantId} AND id = ${peek.connectionId}
+        FOR UPDATE
+      `;
+      lockedConnection = peek.connectionId;
+    }
+
+    const account = await fetchAccountRecord(tx, tenantId, accountId, {
+      lock: true
+    });
+
+    if (!account) return null;
+    if (!account.connectionId || account.connectionId === lockedConnection) {
+      return account;
+    }
+  }
+
+  throw new Error("channel account connection kept changing while locking it");
+}
+
+/**
+ * MEDIUM-4 of the #1145 credential-path review: an OAuth account keeps its
+ * token on its CONNECTION, not on itself (sql/318), so erasing the account's
+ * own `secret_id` left that token alive (decryptable by the app role and the
+ * key ring, and usable again, without a new consent, by any account later
+ * bound to the same connection). When the account just taken out of service
+ * was the last live account on its connection, the connection is revoked too:
+ * its access, refresh, pending-code and PKCE ciphertexts are deleted
+ * (`revokeConnection`). A connection still serving another live account
+ * (pending, connected, degraded or disabled) keeps its grant: revoking it
+ * would cut that account off, which is the explicit "revoke connection" act.
+ * The caller holds the connection's row lock (`lockAccountWithConnection`).
+ */
+async function revokeOrphanedConnection(
+  tx: Bun.SQL,
+  store: SecretStorePort,
+  tenantId: string,
+  accountId: string,
+  connectionId: string | null
+): Promise<boolean> {
+  if (!connectionId) return false;
+
+  const siblings = (await tx`
+    SELECT 1 FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND connection_id = ${connectionId}
+      AND id <> ${accountId} AND deleted_at IS NULL AND status <> 'revoked'
+    LIMIT 1
+  `) as unknown[];
+
+  if (siblings.length > 0) return false;
+
+  const revoked = await revokeConnection(tx, store, tenantId, connectionId);
+
+  return revoked.outcome === "revoked";
+}
+
 export type DisconnectOutcome =
-  | { outcome: "disconnected"; account: AccountView; credentialErased: boolean }
+  | {
+      outcome: "disconnected";
+      account: AccountView;
+      credentialErased: boolean;
+      connectionRevoked: boolean;
+    }
   | { outcome: "not_found" }
   | { outcome: "refused"; code: "ACCOUNT_STATE_INVALID" };
 
 /**
  * Disconnect: the account becomes `revoked`, its OWN credential is erased, its
  * webhook subscriptions are revoked, and every later capability check fails on
- * the status. Capability rows are kept as history; they cannot be used again.
- * Idempotent in effect (a second call is `ACCOUNT_STATE_INVALID`).
+ * the status. When it was the last live account on its OAuth connection, that
+ * connection is revoked as well and its token ciphertexts deleted
+ * (`connectionRevoked`; the #1145 credential-path review, MEDIUM-4). Capability
+ * rows are kept as history; they cannot be used again. Idempotent in effect (a
+ * second call is `ACCOUNT_STATE_INVALID`).
  */
 export async function disconnectAccount(
   tx: Bun.SQL,
@@ -830,9 +919,7 @@ export async function disconnectAccount(
   actorTenantUserId: string,
   accountId: string
 ): Promise<DisconnectOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId, {
-    lock: true
-  });
+  const account = await lockAccountWithConnection(tx, tenantId, accountId);
 
   if (!account) return { outcome: "not_found" };
   if (account.status === "revoked") {
@@ -856,24 +943,37 @@ export async function disconnectAccount(
     account.secretId
   );
 
+  const connectionRevoked = await revokeOrphanedConnection(
+    tx,
+    store,
+    tenantId,
+    accountId,
+    account.connectionId
+  );
   const refreshed = await fetchAccountRecord(tx, tenantId, accountId);
 
   return {
     outcome: "disconnected",
     account: toPublicAccount(refreshed!),
-    credentialErased: account.secretId !== null
+    credentialErased: account.secretId !== null || connectionRevoked,
+    connectionRevoked
   };
 }
 
 export type DeleteOutcome =
-  | { outcome: "deleted" }
+  | { outcome: "deleted"; connectionRevoked: boolean }
   | { outcome: "not_found" }
   | {
       outcome: "refused";
       code: "ACCOUNT_STATE_INVALID" | "HAS_CHILD_ACCOUNTS";
     };
 
-/** Soft delete. Only an account that is not serving traffic can be deleted, and never one that still has live children. */
+/**
+ * Soft delete. Only an account that is not serving traffic can be deleted, and
+ * never one that still has live children. A deleted account that was the last
+ * live one on its OAuth connection takes the connection's grant with it
+ * (`connectionRevoked`), exactly as a disconnect does (MEDIUM-4).
+ */
 export async function deleteAccount(
   tx: Bun.SQL,
   store: SecretStorePort,
@@ -881,9 +981,7 @@ export async function deleteAccount(
   actorTenantUserId: string,
   accountId: string
 ): Promise<DeleteOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId, {
-    lock: true
-  });
+  const account = await lockAccountWithConnection(tx, tenantId, accountId);
 
   if (!account) return { outcome: "not_found" };
   if (account.status === "connected" || account.status === "degraded") {
@@ -918,7 +1016,15 @@ export async function deleteAccount(
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
   `;
 
-  return { outcome: "deleted" };
+  const connectionRevoked = await revokeOrphanedConnection(
+    tx,
+    store,
+    tenantId,
+    accountId,
+    account.connectionId
+  );
+
+  return { outcome: "deleted", connectionRevoked };
 }
 
 // ---------------------------------------------------------------------------

@@ -10159,7 +10159,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Disconnect an account and erase its credential.
-      description: "The account becomes `revoked`, its OWN stored credential is hard-deleted and its webhook subscriptions are revoked. Effective on the next use: every capability check reads the status. Does not call the provider and does not touch a shared connection (revoke the connection for that). High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      description: "The account becomes `revoked`, its OWN stored credential is hard-deleted and its webhook subscriptions are revoked. Effective on the next use: every capability check reads the status. When it was the last live account on its OAuth connection, the connection is revoked too and its token ciphertexts are deleted (`connectionRevoked`); a connection still serving another account is left alone (revoke the connection for that). Does not call the provider. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -10181,6 +10181,10 @@ paths:
                         $ref: "#/components/schemas/ChannelAccount"
                       credentialErased:
                         type: boolean
+                        description: "A stored credential was erased: the account's own, or its connection's grant (`connectionRevoked`)."
+                      connectionRevoked:
+                        type: boolean
+                        description: The account was the last live account on its OAuth connection, so the connection was revoked and its access, refresh, pending-code and PKCE ciphertexts deleted.
                   meta:
                     type: object
         "400":
