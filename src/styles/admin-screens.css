@@ -650,7 +650,7 @@
    line editor (Issue #905, `.line-editor`): the same stacked fieldset rows.
    Fieldsets default to `min-width: min-content`, which would push a 360px
    viewport sideways. */
-:is(.tax-editor, .line-editor) fieldset {
+:is(.tax-editor, .line-editor, .rule-editor) fieldset {
   min-width: 0;
   margin: 0 0 var(--sp-3, 0.75rem);
   padding: var(--sp-3, 0.75rem);
@@ -658,15 +658,32 @@
   border-radius: var(--radius-md, 6px);
 }
 
-:is(.tax-editor, .line-editor) label {
+:is(.tax-editor, .line-editor, .rule-editor) label {
   display: block;
   margin-bottom: var(--sp-2, 0.5rem);
 }
 
-:is(.tax-editor, .line-editor) :is(input, select) {
+:is(.tax-editor, .line-editor, .rule-editor) :is(input, select) {
   display: block;
   width: 100%;
   max-width: 100%;
+}
+
+/* The follow-up rule editor (Issue #1165): the same stacked fieldsets, plus
+   checkboxes that stay checkbox-sized and a textarea that fits a 360px column. */
+.rule-editor textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.rule-editor .checkbox-label {
+  display: flex;
+}
+
+.rule-editor input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
 }
 
 /* Inside `.admin-create-form` every button is a solid primary one, so the

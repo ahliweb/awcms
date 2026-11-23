@@ -11371,9 +11371,6 @@ msgstr ""
 msgid "Switch follow-up on"
 msgstr ""
 
-msgid "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
-msgstr ""
-
 msgid "Starts when"
 msgstr ""
 
@@ -11452,3 +11449,180 @@ msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "Someone else changed this rule. Reload the page and try again."
+msgstr ""
+
+msgid "A rule with this code already exists."
+msgstr ""
+
+msgid "A person you named is not an active user of this organisation."
+msgstr ""
+
+msgid "This rule is archived and can no longer change."
+msgstr ""
+
+msgid "Nothing changed: the definition is identical to the current revision."
+msgstr ""
+
+msgid "The working time does not allow these offsets. Allow more working days or hours."
+msgstr ""
+
+msgid "You may not change follow-up rules."
+msgstr ""
+
+msgid "This needs a signed-in person."
+msgstr ""
+
+msgid "That rule is no longer available."
+msgstr ""
+
+msgid "Please correct: {fields}."
+msgstr ""
+
+msgid "Archive this rule? It creates no new task from now on. Tasks it already created keep running, and an archived rule cannot be restored."
+msgstr ""
+
+msgid "Escalation recipient"
+msgstr ""
+
+msgid "Working days"
+msgstr ""
+
+msgid "Work starts"
+msgstr ""
+
+msgid "Work ends"
+msgstr ""
+
+msgid "When it happened"
+msgstr ""
+
+msgid "Lead id"
+msgstr ""
+
+msgid "Lead owner"
+msgstr ""
+
+msgid "A task would be created."
+msgstr ""
+
+msgid "No task would be created."
+msgstr ""
+
+msgid "The sample event does not match the rule's trigger."
+msgstr ""
+
+msgid "A stop signal is already recorded on this lead."
+msgstr ""
+
+msgid "The lead already has as many open tasks as the rule allows."
+msgstr ""
+
+msgid "No one"
+msgstr ""
+
+msgid "The candidate assignee is not an active user, so the task would have no assignee."
+msgstr ""
+
+msgid "That lead"
+msgstr ""
+
+msgid "Stopped"
+msgstr ""
+
+msgid "Open tasks: {count}"
+msgstr ""
+
+msgid "A rule's published revisions never change: changing a rule publishes a new revision, and tasks already created keep the revision that created them."
+msgstr ""
+
+msgid "Archive this rule"
+msgstr ""
+
+msgid "Publish a new revision"
+msgstr ""
+
+msgid "Create a rule"
+msgstr ""
+
+msgid "Try a rule draft"
+msgstr ""
+
+msgid "The form starts from the current revision of {name}. Publishing appends revision {number}; earlier revisions stay as they are."
+msgstr ""
+
+msgid "A new rule starts at revision 1. Use Simulate to see what a draft would do before saving it."
+msgstr ""
+
+msgid "You may simulate a draft but not save it. Simulating writes nothing."
+msgstr ""
+
+msgid "Start a new rule instead"
+msgstr ""
+
+msgid "2 to 40 characters: start with a lowercase letter, then lowercase letters, digits, dashes and underscores. It cannot change later."
+msgstr ""
+
+msgid "Leave a filter blank to match any. A lead assigned event carries no pipeline or stage, so it takes no filter."
+msgstr ""
+
+msgid "The task"
+msgstr ""
+
+msgid "The person's id. They must be an active user of this organisation."
+msgstr ""
+
+msgid "Due after (working time)"
+msgstr ""
+
+msgid "Minutes"
+msgstr ""
+
+msgid "Escalation and notices"
+msgstr ""
+
+msgid "Leave both escalation boxes blank for a rule that never escalates."
+msgstr ""
+
+msgid "Escalates after, hours"
+msgstr ""
+
+msgid "Escalates after, minutes"
+msgstr ""
+
+msgid "Optional: the person's id. Blank still escalates the task, but no escalation notice is sent."
+msgstr ""
+
+msgid "Notify when assigned"
+msgstr ""
+
+msgid "Notify when due"
+msgstr ""
+
+msgid "An IANA name such as Asia/Jakarta."
+msgstr ""
+
+msgid "24-hour time, HH:MM. The day may end at 24:00."
+msgstr ""
+
+msgid "One date per line, as YYYY-MM-DD."
+msgstr ""
+
+msgid "Sample event for the simulation"
+msgstr ""
+
+msgid "Pipeline id"
+msgstr ""
+
+msgid "Stage category"
+msgstr ""
+
+msgid "Optional: with a lead id the simulation also checks that lead's stop signals and open tasks."
+msgstr ""
+
+msgid "Publish revision"
+msgstr ""
+
+msgid "Simulate this draft"
+msgstr ""

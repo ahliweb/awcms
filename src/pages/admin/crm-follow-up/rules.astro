@@ -9,11 +9,23 @@
  * revision history. A revision never changes once published, so what is shown
  * is exactly what will run.
  *
- * The one write is the tenant's own switch (`PATCH /settings`, `rules.configure`,
- * audited at warning, `Idempotency-Key`). Creating a rule, publishing a revision,
- * archiving and the simulation have API endpoints but no form here yet: the rule
- * editor is the recorded follow-up (module README), and nothing here pretends to
- * offer it.
+ * Writes (all high-risk, audited at warning, each with an `Idempotency-Key`
+ * held stable per distinct body so a retry replays instead of raising
+ * `IDEMPOTENCY_CONFLICT`): the tenant's own switch (`PATCH /settings`), creating
+ * a rule with its first revision (`POST /rules`), publishing the next immutable
+ * revision (`POST /rules/{id}/revisions`, carrying the `expectedVersion` the
+ * person SAW) and archiving (`POST /rules/{id}/archive`). All four are gated by
+ * `rules.configure`. A revision is never edited in place: "Publish a new
+ * revision" always appends.
+ *
+ * The SIMULATION (`POST /rules/simulate`, `rules.read`) is the same form's
+ * second button: it evaluates the DRAFT in the form against a sample event and
+ * writes nothing, so a reader without `configure` may use it and it works while
+ * the tenant switch is off.
+ *
+ * A fixed assignee and an escalation recipient are typed as the person's id: no
+ * staff picker exists yet (recorded in the module README), and the server
+ * refuses an id that is not an active user of this tenant (`USER_NOT_FOUND`).
  *
  * It shows NOTHING about any prospect: a rule describes a process. A person a
  * rule names is "You" or "Another staff member".
@@ -34,8 +46,17 @@ import {
   minutesToClock,
   offsetParts
 } from "../../../lib/ui/crm-follow-up-screen";
+import {
+  emptyValues,
+  valuesFromDefinition
+} from "../../../lib/ui/crm-follow-up-rule-form";
 import { asUuid } from "../../../modules/crm-follow-up/application/route-support";
 import { loadRules } from "../../../modules/crm-follow-up/application/screen-loaders";
+import {
+  ASSIGNEE_MODES,
+  STAGE_CATEGORIES,
+  TRIGGER_KINDS
+} from "../../../modules/crm-follow-up/domain/crm-follow-up-constants";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -89,6 +110,105 @@ const selected = data?.selected ?? null;
 const revision = selected?.rule.currentRevision ?? null;
 const definition = revision?.definition ?? null;
 const me = data?.me ?? null;
+
+const canConfigure = data?.canConfigure ?? false;
+const selectedActive = selected !== null && selected.rule.status === "active";
+/**
+ * `revise` appends the next revision of the opened rule; `create` makes a new
+ * rule (also the mode for an ARCHIVED rule, which cannot change: its values
+ * only seed the form); `draft` is a reader's form, which can simulate and
+ * nothing else.
+ */
+const editorMode = !canConfigure
+  ? "draft"
+  : selectedActive
+    ? "revise"
+    : "create";
+const form = definition ? valuesFromDefinition(definition) : emptyValues();
+const dayOptions = [1, 2, 3, 4, 5, 6, 7];
+
+/** Translated here, read by the page script: a client script cannot translate. */
+const messages = {
+  VERSION_CONFLICT: t(
+    "Someone else changed this rule. Reload the page and try again."
+  ),
+  RULE_CODE_TAKEN: t("A rule with this code already exists."),
+  USER_NOT_FOUND: t(
+    "A person you named is not an active user of this organisation."
+  ),
+  RULE_ARCHIVED: t("This rule is archived and can no longer change."),
+  REVISION_UNCHANGED: t(
+    "Nothing changed: the definition is identical to the current revision."
+  ),
+  CALENDAR_UNSCHEDULABLE: t(
+    "The working time does not allow these offsets. Allow more working days or hours."
+  ),
+  CRM_FOLLOW_UP_DISABLED: t(
+    "Follow-up tasks are switched off on this deployment."
+  ),
+  ACCESS_DENIED: t("You may not change follow-up rules."),
+  INTERACTIVE_SESSION_REQUIRED: t("This needs a signed-in person."),
+  RESOURCE_NOT_FOUND: t("That rule is no longer available."),
+  rejected: t("Please correct: {fields}."),
+  confirmArchive: t(
+    "Archive this rule? It creates no new task from now on. Tasks it already created keep running, and an archived rule cannot be restored."
+  ),
+  busy: t("Please wait…"),
+  fallback: t("Could not save the change. Please try again.")
+};
+
+/** What the form's controls are called in a "please correct" sentence. */
+const fieldLabels = {
+  code: t("Code"),
+  name: t("Name"),
+  kind: t("Starts when"),
+  pipelineId: t("Only for pipeline"),
+  stageCategory: t("Only for stage category"),
+  stageKey: t("Only for stage"),
+  taskTitle: t("Task title"),
+  dueAfterMinutes: t("Due after"),
+  afterMinutes: t("Escalates after"),
+  recipientTenantUserId: t("Escalation recipient"),
+  mode: t("Assigned to"),
+  tenantUserId: t("Person"),
+  maxOpenPerLead: t("Open tasks per lead, at most"),
+  timeZone: t("Time zone"),
+  workingDays: t("Working days"),
+  workStartMinute: t("Work starts"),
+  workEndMinute: t("Work ends"),
+  holidays: t("Holidays"),
+  occurredAt: t("When it happened"),
+  leadId: t("Lead id"),
+  ownerTenantUserId: t("Lead owner")
+};
+
+/** The simulation's answer, in the page's own words. */
+const simLabels = {
+  wouldCreate: t("A task would be created."),
+  wouldNot: t("No task would be created."),
+  not_matched: t("The sample event does not match the rule's trigger."),
+  lead_stopped: t("A stop signal is already recorded on this lead."),
+  capped: t("The lead already has as many open tasks as the rule allows."),
+  due: t("Due"),
+  escalates: t("Escalates"),
+  never: t("Never"),
+  assignee: t("Assigned to"),
+  nobody: t("No one"),
+  inactive: t(
+    "The candidate assignee is not an active user, so the task would have no assignee."
+  ),
+  notices: t("Staff notices"),
+  noNotices: t("None"),
+  assigned: t("When assigned"),
+  dueNotice: t("When due"),
+  lead: t("That lead"),
+  leadStopped: t("Stopped"),
+  leadLive: t("Open tasks: {count}"),
+  yes: t("Yes"),
+  no: t("No"),
+  you: t("You"),
+  other: t("Another staff member")
+};
 
 function personText(id: string | null): string {
   if (id === null) return "—";
@@ -195,7 +315,7 @@ function durationText(totalMinutes: number): string {
         </h2>
         <p class="page-description">
           {t(
-            "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
+            "A rule's published revisions never change: changing a rule publishes a new revision, and tasks already created keep the revision that created them."
           )}
         </p>
         <div
@@ -376,6 +496,19 @@ function durationText(totalMinutes: number): string {
             </dd>
           </dl>
 
+          {data.canConfigure && selected.rule.status === "active" && (
+            <p>
+              <button
+                class="btn btn-secondary js-rule-archive"
+                type="button"
+                data-version={selected.rule.version}
+                data-rule-id={selected.rule.id}
+              >
+                {t("Archive this rule")}
+              </button>
+            </p>
+          )}
+
           <h3 class="admin-section-title" id="crm-follow-up-revisions-title">
             {t("Revisions")}
           </h3>
@@ -433,6 +566,386 @@ function durationText(totalMinutes: number): string {
           </div>
         </section>
       )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-follow-up-editor-title"
+        id="crm-follow-up-editor"
+        data-mode={editorMode}
+        data-me={me ?? ""}
+        data-rule-id={selected?.rule.id ?? ""}
+        data-version={selected?.rule.version ?? ""}
+        data-messages={JSON.stringify(messages)}
+        data-field-labels={JSON.stringify(fieldLabels)}
+        data-sim-labels={JSON.stringify(simLabels)}
+      >
+        <h2 class="admin-section-title" id="crm-follow-up-editor-title">
+          {editorMode === "revise"
+            ? t("Publish a new revision")
+            : editorMode === "create"
+              ? t("Create a rule")
+              : t("Try a rule draft")}
+        </h2>
+        <p class="page-description">
+          {editorMode === "revise"
+            ? t(
+                "The form starts from the current revision of {name}. Publishing appends revision {number}; earlier revisions stay as they are.",
+                {
+                  name: selected?.rule.name ?? "",
+                  number: (selected?.rule.currentRevisionNumber ?? 0) + 1
+                }
+              )
+            : editorMode === "create"
+              ? t(
+                  "A new rule starts at revision 1. Use Simulate to see what a draft would do before saving it."
+                )
+              : t(
+                  "You may simulate a draft but not save it. Simulating writes nothing."
+                )}{" "}
+          {editorMode === "revise" && (
+            <a href={PATH}>{t("Start a new rule instead")}</a>
+          )}
+        </p>
+
+        <form id="crm-rule-form" class="admin-create-form rule-editor">
+          <p
+            id="crm-rule-error-box"
+            class="admin-create-error"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+
+          {editorMode === "create" && (
+            <fieldset>
+              <legend>{t("Identity")}</legend>
+              <label for="rule-code">{t("Code")}</label>
+              <input
+                id="rule-code"
+                type="text"
+                maxlength="40"
+                autocomplete="off"
+                aria-describedby="rule-code-hint"
+              />
+              <p class="form-hint" id="rule-code-hint">
+                {t(
+                  "2 to 40 characters: start with a lowercase letter, then lowercase letters, digits, dashes and underscores. It cannot change later."
+                )}
+              </p>
+              <label for="rule-name">{t("Name")}</label>
+              <input
+                id="rule-name"
+                type="text"
+                maxlength="120"
+                autocomplete="off"
+              />
+            </fieldset>
+          )}
+
+          <fieldset>
+            <legend>{t("Starts when")}</legend>
+            <label for="rule-trigger-kind">{t("Starts when")}</label>
+            <select id="rule-trigger-kind">
+              {TRIGGER_KINDS.map((kind) => (
+                <option value={kind} selected={form.triggerKind === kind}>
+                  {triggerKindLabel(t, kind)}
+                </option>
+              ))}
+            </select>
+            <div id="rule-filters">
+              <label for="rule-pipeline-id">{t("Only for pipeline")}</label>
+              <input
+                id="rule-pipeline-id"
+                type="text"
+                value={form.pipelineId}
+                autocomplete="off"
+                aria-describedby="rule-filters-hint"
+              />
+              <label for="rule-stage-category">
+                {t("Only for stage category")}
+              </label>
+              <select id="rule-stage-category">
+                <option value="" selected={form.stageCategory === ""}>
+                  {t("Any")}
+                </option>
+                {STAGE_CATEGORIES.map((category) => (
+                  <option
+                    value={category}
+                    selected={form.stageCategory === category}
+                  >
+                    {stageCategoryLabel(t, category)}
+                  </option>
+                ))}
+              </select>
+              <label for="rule-stage-key">{t("Only for stage")}</label>
+              <input
+                id="rule-stage-key"
+                type="text"
+                maxlength="40"
+                value={form.stageKey}
+                autocomplete="off"
+              />
+              <p class="form-hint" id="rule-filters-hint">
+                {t(
+                  "Leave a filter blank to match any. A lead assigned event carries no pipeline or stage, so it takes no filter."
+                )}
+              </p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>{t("The task")}</legend>
+            <label for="rule-task-title">{t("Task title")}</label>
+            <input
+              id="rule-task-title"
+              type="text"
+              maxlength="160"
+              value={form.taskTitle}
+              autocomplete="off"
+            />
+            <label for="rule-assignee-mode">{t("Assigned to")}</label>
+            <select id="rule-assignee-mode">
+              {ASSIGNEE_MODES.map((mode) => (
+                <option value={mode} selected={form.assigneeMode === mode}>
+                  {assigneeModeLabel(t, mode)}
+                </option>
+              ))}
+            </select>
+            <div id="rule-assignee-user-box">
+              <label for="rule-assignee-user">{t("Person")}</label>
+              <input
+                id="rule-assignee-user"
+                type="text"
+                value={form.assigneeUser}
+                autocomplete="off"
+                aria-describedby="rule-person-hint"
+              />
+              <p class="form-hint" id="rule-person-hint">
+                {t(
+                  "The person's id. They must be an active user of this organisation."
+                )}
+              </p>
+            </div>
+            <p class="form-legend">{t("Due after (working time)")}</p>
+            <label for="rule-due-hours">{t("Hours")}</label>
+            <input
+              id="rule-due-hours"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              value={form.dueHours}
+            />
+            <label for="rule-due-minutes">{t("Minutes")}</label>
+            <input
+              id="rule-due-minutes"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              value={form.dueMinutes}
+            />
+            <label for="rule-max-open">
+              {t("Open tasks per lead, at most")}
+            </label>
+            <input
+              id="rule-max-open"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              value={form.maxOpenPerLead}
+            />
+          </fieldset>
+
+          <fieldset>
+            <legend>{t("Escalation and notices")}</legend>
+            <p class="form-hint">
+              {t(
+                "Leave both escalation boxes blank for a rule that never escalates."
+              )}
+            </p>
+            <label for="rule-escalate-hours">
+              {t("Escalates after, hours")}
+            </label>
+            <input
+              id="rule-escalate-hours"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              value={form.escalateHours}
+            />
+            <label for="rule-escalate-minutes">
+              {t("Escalates after, minutes")}
+            </label>
+            <input
+              id="rule-escalate-minutes"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              value={form.escalateMinutes}
+            />
+            <label for="rule-escalation-recipient">
+              {t("Escalation recipient")}
+            </label>
+            <input
+              id="rule-escalation-recipient"
+              type="text"
+              value={form.escalationRecipient}
+              autocomplete="off"
+              aria-describedby="rule-recipient-hint"
+            />
+            <p class="form-hint" id="rule-recipient-hint">
+              {t(
+                "Optional: the person's id. Blank still escalates the task, but no escalation notice is sent."
+              )}
+            </p>
+            <label class="checkbox-label" for="rule-notify-assign">
+              <input
+                id="rule-notify-assign"
+                type="checkbox"
+                checked={form.notifyOnAssign}
+              />
+              {t("Notify when assigned")}
+            </label>
+            <label class="checkbox-label" for="rule-notify-due">
+              <input
+                id="rule-notify-due"
+                type="checkbox"
+                checked={form.notifyOnDue}
+              />
+              {t("Notify when due")}
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>{t("Working time")}</legend>
+            <label for="rule-time-zone">{t("Time zone")}</label>
+            <input
+              id="rule-time-zone"
+              type="text"
+              value={form.timeZone}
+              autocomplete="off"
+              aria-describedby="rule-zone-hint"
+            />
+            <p class="form-hint" id="rule-zone-hint">
+              {t("An IANA name such as Asia/Jakarta.")}
+            </p>
+            <p class="form-legend" id="rule-days-legend">
+              {t("Working days")}
+            </p>
+            <div role="group" aria-labelledby="rule-days-legend">
+              {dayOptions.map((day) => (
+                <label class="checkbox-label" for={`rule-day-${day}`}>
+                  <input
+                    id={`rule-day-${day}`}
+                    type="checkbox"
+                    data-day={day}
+                    checked={form.workingDays.includes(day)}
+                  />
+                  {weekdayLabel(t, day)}
+                </label>
+              ))}
+            </div>
+            <label for="rule-work-start">{t("Work starts")}</label>
+            <input
+              id="rule-work-start"
+              type="text"
+              inputmode="numeric"
+              placeholder="09:00"
+              maxlength="5"
+              value={form.workStart}
+              autocomplete="off"
+            />
+            <label for="rule-work-end">{t("Work ends")}</label>
+            <input
+              id="rule-work-end"
+              type="text"
+              inputmode="numeric"
+              placeholder="17:00"
+              maxlength="5"
+              value={form.workEnd}
+              autocomplete="off"
+              aria-describedby="rule-clock-hint"
+            />
+            <p class="form-hint" id="rule-clock-hint">
+              {t("24-hour time, HH:MM. The day may end at 24:00.")}
+            </p>
+            <label for="rule-holidays">{t("Holidays")}</label>
+            <textarea
+              id="rule-holidays"
+              rows="3"
+              autocomplete="off"
+              aria-describedby="rule-holidays-hint"
+            >{form.holidays}</textarea>
+            <p class="form-hint" id="rule-holidays-hint">
+              {t("One date per line, as YYYY-MM-DD.")}
+            </p>
+          </fieldset>
+
+          <fieldset>
+            <legend>{t("Sample event for the simulation")}</legend>
+            <label for="rule-sample-at">{t("When it happened")}</label>
+            <input id="rule-sample-at" type="datetime-local" />
+            <label for="rule-sample-pipeline">{t("Pipeline id")}</label>
+            <input id="rule-sample-pipeline" type="text" autocomplete="off" />
+            <label for="rule-sample-category">{t("Stage category")}</label>
+            <select id="rule-sample-category">
+              <option value="">{t("None")}</option>
+              {STAGE_CATEGORIES.map((category) => (
+                <option value={category}>
+                  {stageCategoryLabel(t, category)}
+                </option>
+              ))}
+            </select>
+            <label for="rule-sample-stage">{t("Stage")}</label>
+            <input
+              id="rule-sample-stage"
+              type="text"
+              maxlength="40"
+              autocomplete="off"
+            />
+            <label for="rule-sample-owner">{t("Lead owner")}</label>
+            <input id="rule-sample-owner" type="text" autocomplete="off" />
+            <label for="rule-sample-lead">{t("Lead id")}</label>
+            <input
+              id="rule-sample-lead"
+              type="text"
+              autocomplete="off"
+              aria-describedby="rule-sample-lead-hint"
+            />
+            <p class="form-hint" id="rule-sample-lead-hint">
+              {t(
+                "Optional: with a lead id the simulation also checks that lead's stop signals and open tasks."
+              )}
+            </p>
+          </fieldset>
+
+          <div class="admin-form-actions">
+            {editorMode !== "draft" && (
+              <button type="submit" id="rule-save">
+                {editorMode === "revise"
+                  ? t("Publish revision")
+                  : t("Create rule")}
+              </button>
+            )}
+            <button type="button" id="rule-simulate" class="js-rule-simulate">
+              {t("Simulate this draft")}
+            </button>
+          </div>
+        </form>
+
+        <div
+          id="crm-rule-sim-result"
+          class="state-notice"
+          role="status"
+          aria-live="polite"
+          tabindex="-1"
+          hidden
+        ></div>
+      </section>
     </>
   )}
 </AdminLayout>
@@ -442,20 +955,39 @@ function durationText(totalMinutes: number): string {
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
   import {
+    checkboxChecked,
+    holdForNavigation,
+    inputValue,
+    localDateTimeToInstant,
+    lockElement,
     messageBox,
     mutateAndReload,
     onAction,
-    sendJson
+    onSubmit,
+    sendJson,
+    sendJsonRequest
   } from "../../../lib/ui/admin-form-client";
   import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
   import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
   import { switchBody } from "../../../lib/ui/crm-follow-up-screen";
+  import {
+    archiveBody,
+    createBody,
+    publishBody,
+    rejectedFieldNames,
+    simulateBody,
+    type RejectedField,
+    type RuleFormValues
+  } from "../../../lib/ui/crm-follow-up-rule-form";
 
   const switchError = messageBox("crm-follow-up-switch-error-box");
+  const ruleError = messageBox("crm-rule-error-box");
   const BASE = "/api/v1/crm-follow-up";
+  const PATH = "/admin/crm-follow-up/rules";
 
-  // The switch is high-risk and requires the header. One key per distinct
-  // (url, body): a retry replays, the opposite switch gets a new key.
+  // Every write is high-risk and requires the header. One key per distinct
+  // (url, body): a retry replays, a changed form gets a new key. No body here
+  // carries an instant, so a retry of the same form cannot conflict.
   const keyFor = createIdempotencyKeySource();
 
   function failure(errorCode: string | null): string {
@@ -492,5 +1024,328 @@ function durationText(totalMinutes: number): string {
         }),
       failure
     );
+  });
+
+  // The rule editor. Its sentences were translated on the server and ride on
+  // the element: a client script cannot translate.
+  const editor = document.getElementById("crm-follow-up-editor");
+
+  function carried(name: "messages" | "fieldLabels" | "simLabels") {
+    try {
+      return JSON.parse(editor?.dataset[name] ?? "{}") as Record<
+        string,
+        string
+      >;
+    } catch {
+      return {};
+    }
+  }
+
+  const messages = carried("messages");
+  const fieldLabels = carried("fieldLabels");
+  const simLabels = carried("simLabels");
+
+  function describe(errorCode: string | null, fields: RejectedField[]): string {
+    if (errorCode === "VALIDATION_ERROR") {
+      const names = rejectedFieldNames(fields, fieldLabels);
+
+      if (names.length > 0) {
+        return (messages.rejected ?? "").replace("{fields}", names.join(", "));
+      }
+    }
+
+    return (
+      (errorCode !== null ? messages[errorCode] : undefined) ??
+      messages.fallback ??
+      ""
+    );
+  }
+
+  function readValues(): RuleFormValues {
+    const days: number[] = [];
+
+    for (const box of document.querySelectorAll<HTMLInputElement>(
+      "input[data-day]"
+    )) {
+      if (box.checked) days.push(Number(box.dataset.day));
+    }
+
+    const holidays = document.getElementById("rule-holidays");
+
+    return {
+      triggerKind: inputValue("rule-trigger-kind"),
+      pipelineId: inputValue("rule-pipeline-id"),
+      stageCategory: inputValue("rule-stage-category"),
+      stageKey: inputValue("rule-stage-key"),
+      taskTitle: inputValue("rule-task-title"),
+      dueHours: inputValue("rule-due-hours"),
+      dueMinutes: inputValue("rule-due-minutes"),
+      escalateHours: inputValue("rule-escalate-hours"),
+      escalateMinutes: inputValue("rule-escalate-minutes"),
+      escalationRecipient: inputValue("rule-escalation-recipient"),
+      assigneeMode: inputValue("rule-assignee-mode"),
+      assigneeUser: inputValue("rule-assignee-user"),
+      notifyOnAssign: checkboxChecked("rule-notify-assign"),
+      notifyOnDue: checkboxChecked("rule-notify-due"),
+      maxOpenPerLead: inputValue("rule-max-open"),
+      timeZone: inputValue("rule-time-zone"),
+      workingDays: days,
+      workStart: inputValue("rule-work-start"),
+      workEnd: inputValue("rule-work-end"),
+      holidays: holidays instanceof HTMLTextAreaElement ? holidays.value : ""
+    };
+  }
+
+  // A lead_assigned trigger takes no filter, and a lead_owner assignee takes no
+  // person: hide what the API would refuse.
+  function syncVisibility() {
+    const filters = document.getElementById("rule-filters");
+    const person = document.getElementById("rule-assignee-user-box");
+
+    if (filters) {
+      filters.hidden = inputValue("rule-trigger-kind") === "lead_assigned";
+    }
+
+    if (person) {
+      person.hidden = inputValue("rule-assignee-mode") !== "fixed_user";
+    }
+  }
+
+  syncVisibility();
+  document
+    .getElementById("rule-trigger-kind")
+    ?.addEventListener("change", syncVisibility);
+  document
+    .getElementById("rule-assignee-mode")
+    ?.addEventListener("change", syncVisibility);
+
+  // Save: create a rule, or publish the next revision of the opened one. The
+  // `expectedVersion` is the one the page was rendered with, so a rule someone
+  // else changed meanwhile answers VERSION_CONFLICT instead of being overwritten.
+  onSubmit("crm-rule-form", async ({ submit }) => {
+    const mode = editor?.dataset.mode;
+
+    if (mode !== "create" && mode !== "revise") return;
+
+    const values = readValues();
+    const ruleId = editor?.dataset.ruleId ?? "";
+    const url =
+      mode === "create" ? `${BASE}/rules` : `${BASE}/rules/${ruleId}/revisions`;
+    const body =
+      mode === "create"
+        ? createBody(inputValue("rule-code"), inputValue("rule-name"), values)
+        : publishBody(Number(editor?.dataset.version ?? "0"), values);
+
+    ruleError.clear();
+    const unlock = submit
+      ? lockElement(submit, messages.busy ?? "Please wait…")
+      : () => {};
+    const result = await sendJsonRequest("POST", url, body, {
+      "Idempotency-Key": keyFor({ url, body })
+    });
+
+    if (result.ok) {
+      holdForNavigation();
+      const created = (result.payload?.data as { id?: string } | undefined)?.id;
+
+      if (mode === "create" && typeof created === "string") {
+        window.location.assign(`${PATH}?rule=${encodeURIComponent(created)}`);
+      } else {
+        window.location.reload();
+      }
+
+      return;
+    }
+
+    const details = result.payload?.error?.details;
+
+    ruleError.show(
+      describe(
+        result.errorCode,
+        Array.isArray(details) ? (details as RejectedField[]) : []
+      )
+    );
+    document.getElementById("crm-rule-error-box")?.focus();
+    unlock();
+  });
+
+  onAction(".js-rule-archive", async (button) => {
+    const ruleId = button.dataset.ruleId ?? "";
+    const url = `${BASE}/rules/${ruleId}/archive`;
+    const body = archiveBody(Number(button.dataset.version ?? "0"));
+
+    if (!(await confirmAction(messages.confirmArchive ?? ""))) return;
+
+    await mutateAndReload(
+      button,
+      ruleError,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      (errorCode) => describe(errorCode, [])
+    );
+  });
+
+  // The simulation: read-only, so no key and no reload. It sends the DRAFT in
+  // the form, never the stored revision.
+  type Simulation = {
+    wouldCreateTask: boolean;
+    blockedBy: string[];
+    dueAt: string;
+    escalateAt: string | null;
+    assigneeTenantUserId: string | null;
+    candidateAssigneeInactive: boolean;
+    notices: { kind: string; scheduledAt: string }[];
+    lead: { stopped: boolean; liveTasks: number } | null;
+  };
+
+  function formatter(timeZone: string): (iso: string) => string {
+    try {
+      const format = new Intl.DateTimeFormat(
+        document.documentElement.lang || undefined,
+        { dateStyle: "medium", timeStyle: "short", timeZone }
+      );
+
+      return (iso) => format.format(new Date(iso));
+    } catch {
+      return (iso) => iso;
+    }
+  }
+
+  function line(label: string, value: string): HTMLParagraphElement {
+    const paragraph = document.createElement("p");
+    const strong = document.createElement("strong");
+
+    strong.textContent = label;
+    paragraph.append(strong, ` ${value}`);
+
+    return paragraph;
+  }
+
+  function person(id: string | null): string {
+    if (id === null) return simLabels.nobody ?? "";
+
+    return id === editor?.dataset.me
+      ? (simLabels.you ?? "")
+      : (simLabels.other ?? "");
+  }
+
+  function render(data: Simulation, timeZone: string) {
+    const box = document.getElementById("crm-rule-sim-result");
+
+    if (!box) return;
+
+    const when = formatter(timeZone);
+    const nodes: Node[] = [];
+    const verdict = document.createElement("p");
+    const strong = document.createElement("strong");
+
+    strong.textContent = data.wouldCreateTask
+      ? (simLabels.wouldCreate ?? "")
+      : (simLabels.wouldNot ?? "");
+    verdict.append(strong);
+    nodes.push(verdict);
+
+    for (const reason of data.blockedBy) {
+      const item = document.createElement("p");
+
+      item.textContent = simLabels[reason] ?? reason;
+      nodes.push(item);
+    }
+
+    nodes.push(line(simLabels.due ?? "", when(data.dueAt)));
+    nodes.push(
+      line(
+        simLabels.escalates ?? "",
+        data.escalateAt === null
+          ? (simLabels.never ?? "")
+          : when(data.escalateAt)
+      )
+    );
+    nodes.push(
+      line(simLabels.assignee ?? "", person(data.assigneeTenantUserId))
+    );
+
+    if (data.candidateAssigneeInactive) {
+      const warning = document.createElement("p");
+
+      warning.textContent = simLabels.inactive ?? "";
+      nodes.push(warning);
+    }
+
+    nodes.push(
+      line(
+        simLabels.notices ?? "",
+        data.notices.length === 0
+          ? (simLabels.noNotices ?? "")
+          : data.notices
+              .map(
+                (notice) =>
+                  `${
+                    notice.kind === "assigned"
+                      ? (simLabels.assigned ?? "")
+                      : (simLabels.dueNotice ?? "")
+                  }: ${when(notice.scheduledAt)}`
+              )
+              .join("; ")
+      )
+    );
+
+    if (data.lead !== null) {
+      nodes.push(
+        line(
+          simLabels.lead ?? "",
+          `${simLabels.leadStopped ?? ""}: ${
+            data.lead.stopped ? (simLabels.yes ?? "") : (simLabels.no ?? "")
+          }; ${(simLabels.leadLive ?? "").replace(
+            "{count}",
+            String(data.lead.liveTasks)
+          )}`
+        )
+      );
+    }
+
+    box.replaceChildren(...nodes);
+    box.hidden = false;
+    box.focus();
+  }
+
+  onAction(".js-rule-simulate", async (button) => {
+    const values = readValues();
+    const body = simulateBody(values, {
+      occurredAt: localDateTimeToInstant("rule-sample-at"),
+      pipelineId: inputValue("rule-sample-pipeline"),
+      stageCategory: inputValue("rule-sample-category"),
+      stageKey: inputValue("rule-sample-stage"),
+      ownerTenantUserId: inputValue("rule-sample-owner"),
+      leadId: inputValue("rule-sample-lead")
+    });
+
+    ruleError.clear();
+    const unlock = lockElement(button, messages.busy ?? "Please wait…");
+    const result = await sendJsonRequest(
+      "POST",
+      `${BASE}/rules/simulate`,
+      body
+    );
+
+    unlock();
+
+    if (!result.ok || result.payload?.data === undefined) {
+      const details = result.payload?.error?.details;
+
+      ruleError.show(
+        describe(
+          result.errorCode,
+          Array.isArray(details) ? (details as RejectedField[]) : []
+        )
+      );
+      document.getElementById("crm-rule-error-box")?.focus();
+
+      return;
+    }
+
+    render(result.payload.data as Simulation, values.timeZone);
   });
 </script>
