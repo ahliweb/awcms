@@ -106,59 +106,43 @@ export function createFcmPushProvider(
       target: PushTarget,
       message: PushMessage
     ): Promise<PushDeliveryResult> {
-      const attemptedAt = now();
+      const permit = breaker.tryAcquire(now());
 
-      const token = await getGoogleAccessToken(options.credential, {
-        http,
-        timeoutMs: options.timeoutMs,
-        now: attemptedAt
-      });
-
-      if (!token.ok) {
-        // A token failure that is retryable means the token endpoint itself was
-        // unreachable or erroring, which IS a statement about the upstream —
-        // so it counts toward the breaker. A rejected assertion is a
-        // configuration fact and does not.
-        if (token.retryable) {
-          breaker.recordFailure(attemptedAt);
-        }
-
-        return { ok: false, error: token.error, retryable: token.retryable };
+      if (!permit) {
+        return {
+          ok: false,
+          error: "Push circuit breaker is open; no attempt was made.",
+          retryable: true,
+          skipped: true
+        };
       }
 
-      let response = await post(token.accessToken, target, message);
+      // Every path below that gives the breaker no verdict (a dead
+      // subscription, a bad key, a credential problem, a throw) hands the
+      // half-open probe back here; a recorded verdict has already moved the
+      // state, which makes this a no-op.
+      try {
+        const attemptedAt = now();
 
-      if (!response.ok) {
-        breaker.recordFailure(attemptedAt);
-
-        return { ok: false, error: response.reason, retryable: true };
-      }
-
-      let outcome = mapFcmResponse(response.status, response.body);
-
-      // ONE retry, and only for 401. Google rejected the token we hold; minting
-      // a fresh one and replaying is the whole fix, and doing it here means a
-      // token that expired mid-batch costs one extra call instead of failing
-      // every remaining message in the pass. Bounded to a single attempt so a
-      // credential that is simply wrong cannot loop.
-      if (outcome.kind === "unauthorized") {
-        invalidateGoogleAccessToken(options.credential.clientEmail);
-
-        const refreshed = await getGoogleAccessToken(options.credential, {
+        const token = await getGoogleAccessToken(options.credential, {
           http,
           timeoutMs: options.timeoutMs,
           now: attemptedAt
         });
 
-        if (!refreshed.ok) {
-          return {
-            ok: false,
-            error: refreshed.error,
-            retryable: refreshed.retryable
-          };
+        if (!token.ok) {
+          // A token failure that is retryable means the token endpoint itself was
+          // unreachable or erroring, which IS a statement about the upstream —
+          // so it counts toward the breaker. A rejected assertion is a
+          // configuration fact and does not.
+          if (token.retryable) {
+            breaker.recordFailure(attemptedAt);
+          }
+
+          return { ok: false, error: token.error, retryable: token.retryable };
         }
 
-        response = await post(refreshed.accessToken, target, message);
+        let response = await post(token.accessToken, target, message);
 
         if (!response.ok) {
           breaker.recordFailure(attemptedAt);
@@ -166,45 +150,80 @@ export function createFcmPushProvider(
           return { ok: false, error: response.reason, retryable: true };
         }
 
-        outcome = mapFcmResponse(response.status, response.body);
+        let outcome = mapFcmResponse(response.status, response.body);
 
+        // ONE retry, and only for 401. Google rejected the token we hold; minting
+        // a fresh one and replaying is the whole fix, and doing it here means a
+        // token that expired mid-batch costs one extra call instead of failing
+        // every remaining message in the pass. Bounded to a single attempt so a
+        // credential that is simply wrong cannot loop.
         if (outcome.kind === "unauthorized") {
-          // A freshly minted token was refused too. That is a credential
-          // problem, not an expiry, and retrying the message will not fix it.
-          return { ok: false, error: outcome.error, retryable: false };
+          invalidateGoogleAccessToken(options.credential.clientEmail);
+
+          const refreshed = await getGoogleAccessToken(options.credential, {
+            http,
+            timeoutMs: options.timeoutMs,
+            now: attemptedAt
+          });
+
+          if (!refreshed.ok) {
+            return {
+              ok: false,
+              error: refreshed.error,
+              retryable: refreshed.retryable
+            };
+          }
+
+          response = await post(refreshed.accessToken, target, message);
+
+          if (!response.ok) {
+            breaker.recordFailure(attemptedAt);
+
+            return { ok: false, error: response.reason, retryable: true };
+          }
+
+          outcome = mapFcmResponse(response.status, response.body);
+
+          if (outcome.kind === "unauthorized") {
+            // A freshly minted token was refused too. That is a credential
+            // problem, not an expiry, and retrying the message will not fix it.
+            return { ok: false, error: outcome.error, retryable: false };
+          }
         }
-      }
 
-      if (outcome.kind === "success") {
-        breaker.recordSuccess(attemptedAt);
+        if (outcome.kind === "success") {
+          breaker.recordSuccess(attemptedAt);
 
-        return { ok: true, providerMessageId: response.body.slice(0, 200) };
-      }
+          return { ok: true, providerMessageId: response.body.slice(0, 200) };
+        }
 
-      if (outcome.kind === "subscription_gone") {
-        log("info", "push.fcm.subscription_gone", {
-          moduleKey: MODULE_KEY,
-          endpoint: target.endpointMasked,
-          correlationId: message.correlationId
-        });
+        if (outcome.kind === "subscription_gone") {
+          log("info", "push.fcm.subscription_gone", {
+            moduleKey: MODULE_KEY,
+            endpoint: target.endpointMasked,
+            correlationId: message.correlationId
+          });
+
+          return {
+            ok: false,
+            error: outcome.error,
+            retryable: false,
+            subscriptionGone: true
+          };
+        }
+
+        if (outcome.tripsBreaker) {
+          breaker.recordFailure(attemptedAt);
+        }
 
         return {
           ok: false,
           error: outcome.error,
-          retryable: false,
-          subscriptionGone: true
+          retryable: outcome.retryable
         };
+      } finally {
+        permit.release();
       }
-
-      if (outcome.tripsBreaker) {
-        breaker.recordFailure(attemptedAt);
-      }
-
-      return {
-        ok: false,
-        error: outcome.error,
-        retryable: outcome.retryable
-      };
     },
 
     /**

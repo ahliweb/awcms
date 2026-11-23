@@ -79,140 +79,159 @@ export function createMetaCloudWhatsappProvider(
 
   return {
     async send(request: WhatsappSendRequest): Promise<WhatsappSendResult> {
-      // A free-text service message only when the dispatcher verified the
-      // 24-hour window (Issue #1143); otherwise templates only, as before.
-      const sessionText =
-        !request.providerTemplate && request.serviceWindowOpen === true;
+      const permit = breaker.tryAcquire(now());
 
-      if (!request.providerTemplate && !sessionText) {
+      if (!permit) {
         return {
           ok: false,
-          error: `Template "${request.templateKey}" has no approved provider template.`,
-          retryable: false,
-          failureCode: "template_not_approved"
-        };
-      }
-
-      const to = request.to.replace(/^\+/, "");
-      const payload = request.providerTemplate
-        ? {
-            messaging_product: "whatsapp",
-            to,
-            type: "template",
-            template: {
-              name: request.providerTemplate.name,
-              language: { code: request.providerTemplate.language },
-              ...(request.parameters.length > 0
-                ? {
-                    components: [
-                      {
-                        type: "body",
-                        parameters: request.parameters.map((text) => ({
-                          type: "text",
-                          text
-                        }))
-                      }
-                    ]
-                  }
-                : {})
-            }
-          }
-        : {
-            messaging_product: "whatsapp",
-            to,
-            type: "text",
-            text: { preview_url: false, body: request.body }
-          };
-      const attemptedAt = now();
-      const response = await http(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${options.accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload),
-        timeoutMs: options.timeoutMs
-      });
-
-      if (!response.ok) {
-        breaker.recordFailure(attemptedAt);
-
-        return {
-          ok: false,
-          error: scrubProviderText(response.reason),
+          error: "WhatsApp circuit breaker is open; no attempt was made.",
           retryable: true,
-          failureCode: "network_error"
+          failureCode: "circuit_open",
+          skipped: true
         };
       }
 
-      if (response.status >= 200 && response.status < 300) {
-        breaker.recordSuccess(attemptedAt);
+      // Every path below that gives the breaker no verdict (a bad message, a
+      // credential problem, a throw) hands the half-open probe back here; a
+      // recorded verdict has already moved the state, which makes this a no-op.
+      try {
+        // A free-text service message only when the dispatcher verified the
+        // 24-hour window (Issue #1143); otherwise templates only, as before.
+        const sessionText =
+          !request.providerTemplate && request.serviceWindowOpen === true;
 
-        try {
-          const parsed = JSON.parse(response.body) as {
-            messages?: { id?: unknown }[];
+        if (!request.providerTemplate && !sessionText) {
+          return {
+            ok: false,
+            error: `Template "${request.templateKey}" has no approved provider template.`,
+            retryable: false,
+            failureCode: "template_not_approved"
           };
-          const id = parsed.messages?.[0]?.id;
+        }
+
+        const to = request.to.replace(/^\+/, "");
+        const payload = request.providerTemplate
+          ? {
+              messaging_product: "whatsapp",
+              to,
+              type: "template",
+              template: {
+                name: request.providerTemplate.name,
+                language: { code: request.providerTemplate.language },
+                ...(request.parameters.length > 0
+                  ? {
+                      components: [
+                        {
+                          type: "body",
+                          parameters: request.parameters.map((text) => ({
+                            type: "text",
+                            text
+                          }))
+                        }
+                      ]
+                    }
+                  : {})
+              }
+            }
+          : {
+              messaging_product: "whatsapp",
+              to,
+              type: "text",
+              text: { preview_url: false, body: request.body }
+            };
+        const attemptedAt = now();
+        const response = await http(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${options.accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload),
+          timeoutMs: options.timeoutMs
+        });
+
+        if (!response.ok) {
+          breaker.recordFailure(attemptedAt);
 
           return {
-            ok: true,
-            ...(typeof id === "string"
-              ? { providerMessageId: id.slice(0, 200) }
-              : {})
+            ok: false,
+            error: scrubProviderText(response.reason),
+            retryable: true,
+            failureCode: "network_error"
           };
-        } catch {
-          return { ok: true };
         }
-      }
 
-      const { code, message } = readError(response.body);
+        if (response.status >= 200 && response.status < 300) {
+          breaker.recordSuccess(attemptedAt);
 
-      if (
-        response.status >= 500 ||
-        response.status === 429 ||
-        (code !== undefined && RATE_LIMIT_CODES.has(code))
-      ) {
-        breaker.recordFailure(attemptedAt);
+          try {
+            const parsed = JSON.parse(response.body) as {
+              messages?: { id?: unknown }[];
+            };
+            const id = parsed.messages?.[0]?.id;
+
+            return {
+              ok: true,
+              ...(typeof id === "string"
+                ? { providerMessageId: id.slice(0, 200) }
+                : {})
+            };
+          } catch {
+            return { ok: true };
+          }
+        }
+
+        const { code, message } = readError(response.body);
+
+        if (
+          response.status >= 500 ||
+          response.status === 429 ||
+          (code !== undefined && RATE_LIMIT_CODES.has(code))
+        ) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: message || `Meta answered HTTP ${response.status}.`,
+            retryable: true,
+            failureCode:
+              response.status >= 500 ? "provider_error" : "rate_limited"
+          };
+        }
+
+        if (code !== undefined && RECIPIENT_INVALID_CODES.has(code)) {
+          return {
+            ok: false,
+            error: message || "Recipient cannot receive WhatsApp.",
+            retryable: false,
+            failureCode: "recipient_invalid",
+            recipientInvalid: true
+          };
+        }
+
+        if (
+          response.status === 401 ||
+          response.status === 403 ||
+          (code !== undefined && AUTH_CODES.has(code))
+        ) {
+          return {
+            ok: false,
+            error: "Meta rejected the configured credentials.",
+            retryable: false,
+            failureCode: "unauthorized"
+          };
+        }
 
         return {
           ok: false,
-          error: message || `Meta answered HTTP ${response.status}.`,
-          retryable: true,
-          failureCode:
-            response.status >= 500 ? "provider_error" : "rate_limited"
-        };
-      }
-
-      if (code !== undefined && RECIPIENT_INVALID_CODES.has(code)) {
-        return {
-          ok: false,
-          error: message || "Recipient cannot receive WhatsApp.",
+          error:
+            message || `Meta rejected the message (HTTP ${response.status}).`,
           retryable: false,
-          failureCode: "recipient_invalid",
-          recipientInvalid: true
+          failureCode: "rejected"
         };
+      } finally {
+        permit.release();
       }
-
-      if (
-        response.status === 401 ||
-        response.status === 403 ||
-        (code !== undefined && AUTH_CODES.has(code))
-      ) {
-        return {
-          ok: false,
-          error: "Meta rejected the configured credentials.",
-          retryable: false,
-          failureCode: "unauthorized"
-        };
-      }
-
-      return {
-        ok: false,
-        error:
-          message || `Meta rejected the message (HTTP ${response.status}).`,
-        retryable: false,
-        failureCode: "rejected"
-      };
     },
 
     async healthCheck(): Promise<WhatsappHealthResult> {

@@ -75,6 +75,13 @@ export type PushDeliveryResult =
       error: string;
       retryable: boolean;
       subscriptionGone?: boolean;
+      /**
+       * The circuit breaker refused the call (open, or its single half-open
+       * probe is held): nothing reached the push service (Issue #1409). The
+       * dispatcher defers the row without recording an attempt or spending a
+       * retry.
+       */
+      skipped?: true;
     };
 
 export type PushHealthCheckResult = { ok: true } | { ok: false; error: string };

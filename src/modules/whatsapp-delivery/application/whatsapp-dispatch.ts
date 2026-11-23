@@ -1584,6 +1584,24 @@ export async function dispatchWhatsappQueue(
       ...(serviceWindowOpen ? { serviceWindowOpen: true } : {})
     });
 
+    if (!sendResult.ok && sendResult.skipped) {
+      // The breaker refused the call (open, or its one half-open probe is held
+      // by another send): nothing reached the provider (Issue #1409). The row
+      // waits with its retry count UNCHANGED and no delivery attempt recorded,
+      // exactly like the gate's BREAKER_OPEN hold.
+      await holdMessage(
+        sql,
+        tenantId,
+        entry.id,
+        new Date(clock().getTime() + SENDER_HOLD_MS),
+        leaseUntil
+      );
+      result.held += 1;
+      summary.held += 1;
+
+      return;
+    }
+
     if (sendResult.ok) {
       await recordDeliveryAttempt(
         sql,

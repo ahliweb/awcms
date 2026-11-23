@@ -49,6 +49,13 @@ export type WhatsappSendResult =
       retryable: boolean;
       failureCode: string;
       recipientInvalid?: boolean;
+      /**
+       * The circuit breaker refused the call (open, or its single half-open
+       * probe is held by another send): NOTHING reached the provider (Issue
+       * #1409). The dispatcher holds the row without recording an attempt or
+       * spending a retry.
+       */
+      skipped?: true;
     };
 
 export type WhatsappHealthResult = { ok: true } | { ok: false; error: string };
