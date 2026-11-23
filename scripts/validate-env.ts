@@ -38,6 +38,8 @@ import {
   resolveCrmLeadsEncryptionRingUnchecked,
   resolveCrmLeadsHashRingUnchecked
 } from "../src/modules/crm-leads/domain/crm-leads-config";
+import { readPayrollAddendumFromEnv } from "../src/modules/_shared/payroll-dpia-addendum-gate";
+import { checkPayrollAddendumArtifact } from "./lib/payroll-addendum-artifact";
 import { resolveTelegramEngagementRing } from "../src/modules/telegram-engagement/domain/telegram-engagement-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
@@ -1866,6 +1868,17 @@ export function validateEnv(env: EnvBag): string[] {
     );
   }
 
+  // Issue #1449 — the payroll DPIA-addendum gate. Shape only here (this
+  // function is pure); the artifact itself is verified by `main` below and by
+  // `security:readiness`. Unset is valid (payroll off); HALF set is not.
+  const addendum = readPayrollAddendumFromEnv(env);
+
+  if (!addendum.ok && addendum.configured) {
+    for (const problem of addendum.problems) {
+      problems.push(`Payroll DPIA addendum: ${problem}`);
+    }
+  }
+
   return problems;
 }
 
@@ -1885,6 +1898,13 @@ if (import.meta.main) {
   }
 
   const problems = validateEnv(env);
+
+  // The addendum artifact is read from the checkout, which `validateEnv` (pure)
+  // cannot do. Only when the shape is already valid: otherwise the shape
+  // problems above are the whole story.
+  if (readPayrollAddendumFromEnv(env).ok) {
+    problems.push(...(await checkPayrollAddendumArtifact(env)).problems);
+  }
 
   for (const warning of collectEnvWarnings(env)) {
     console.warn(`  ! PERINGATAN: ${warning}`);
