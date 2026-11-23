@@ -47,8 +47,9 @@ const LEAD_PERSON_NOTE =
  * ## Status
  *
  * `active` since the operator screens landed (`/admin/crm-leads`, its `/{id}`
- * detail and `/settings`, with their `navigation` entries in the same change:
- * ADR-0021 criterion 1). The capability itself ships OFF at three levels
+ * detail and `/settings`, then the write screens `/new`, `/deleted` and, under
+ * a lead, `/edit`, `/merge` and `/conversion`, each with its `navigation` entry
+ * or its parent page in the same change: ADR-0021 criterion 1). The capability itself ships OFF at three levels
  * (ADR-0153 section 1): the deployment switch `CRM_LEADS_ENABLED`, Module
  * Management's per-tenant enable, and the module's own tenant switch (default
  * off); with the deployment switch off the screens say so instead of failing.
@@ -163,6 +164,18 @@ export const crmLeadsModule = defineModule({
       path: "/admin/crm-leads/settings",
       order: 87,
       requiredPermission: "crm_leads.pipelines.configure"
+    },
+    {
+      labelKey: "admin.layout.nav_crm_leads_new",
+      path: "/admin/crm-leads/new",
+      order: 88,
+      requiredPermission: "crm_leads.leads.create"
+    },
+    {
+      labelKey: "admin.layout.nav_crm_leads_deleted",
+      path: "/admin/crm-leads/deleted",
+      order: 89,
+      requiredPermission: "crm_leads.leads.restore"
     }
   ],
   subjectData: [

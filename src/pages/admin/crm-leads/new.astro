@@ -1,0 +1,351 @@
+---
+/**
+ * New lead — enter a prospect by hand (Issue #1166, ADR-0153 section 4).
+ *
+ * ## What it does
+ *
+ * One form behind `POST /api/v1/crm-leads/leads` with the `manual` source: the
+ * pipeline, an optional display name and owner (you), up to three contact
+ * points (an e-mail address, a phone number and one messaging account) and the
+ * legal basis the person entering the lead states. It creates a LEAD and
+ * nothing else: no profile, no consent record, no customer (the customer
+ * record stays with the system that owns it).
+ *
+ * ## Why only a hand-entry form
+ *
+ * Import and API intake name an `externalEventId` so a replay is the same lead;
+ * a person at a keyboard has none, and inventing one would be a second way to
+ * collapse two real people. Those paths stay on the API. The form still
+ * carries an `Idempotency-Key`, so a double click or a retry after a lost
+ * response is one lead.
+ *
+ * ## What it never does
+ *
+ * It does not echo a contact value back: after the save the browser goes to
+ * the lead's detail, which shows the MASKED view only. The legal basis is a
+ * RECORD of what was stated, not consent inferred from anything.
+ *
+ * Gated by `crm_leads.leads.create` (the endpoint's permission); the module
+ * switch is checked after authorization, so an unauthorised caller learns
+ * nothing about it.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  crmLeadWriteMessages,
+  legalBasisLabel
+} from "../../../lib/i18n/labels/crm-leads";
+import { loadLeadCreate } from "../../../modules/crm-leads/application/screen-write-loaders";
+import { LEGAL_BASES } from "../../../modules/crm-leads/domain/crm-leads-constants";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+
+/** The entry guard, spelled out as a literal so `admin:screen-coverage:check` sees the permission this screen claims. */
+const CREATE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "create"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: CREATE_GUARD,
+  load: ({ tx, auth }) =>
+    loadLeadCreate({
+      context: { tx, tenantId: ssr.tenantId, me: auth.context.tenantUserId }
+    }),
+  onError: (error) => {
+    logAdminPageError("admin/crm-leads/new.astro: failed to load", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
+
+const allowed = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const ready = data !== null && data.enabled && data.tenantEnabled;
+const pipelines = data?.pipelines ?? [];
+
+const messages = {
+  ...crmLeadWriteMessages(t),
+  busy: t("Please wait…")
+};
+---
+
+<AdminLayout
+  title={t("New lead")}
+  description={t(
+    "Enter a prospect by hand. This creates a lead only: no profile, no consent and no customer."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the leads")}</a>
+  </p>
+
+  {!allowed && (
+    <p class="state-notice fade-in-up" id="crm-lead-new-denied">
+      {t("You do not have permission to create leads.")}
+    </p>
+  )}
+
+  {allowed && loadError && (
+    <p class="state-notice fade-in-up" id="crm-lead-new-error">
+      {t("The form could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {allowed && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-lead-new-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {allowed &&
+    !loadError &&
+    deploymentEnabled &&
+    data &&
+    !data.tenantEnabled && (
+      <p class="state-notice fade-in-up" id="crm-lead-new-tenant-off">
+        {t(
+          "The lead pipeline is switched off for this tenant, so leads cannot be created."
+        )}
+      </p>
+    )}
+
+  {ready && pipelines.length === 0 && (
+    <p class="state-notice fade-in-up" id="crm-lead-new-no-pipeline">
+      {t(
+        "There is no active pipeline to put a lead in. Create or restore one in the pipeline settings."
+      )}
+    </p>
+  )}
+
+  {ready && pipelines.length > 0 && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="crm-lead-new-title"
+      id="crm-lead-new"
+      data-me={data.me}
+      data-messages={JSON.stringify(messages)}
+    >
+      <h2 class="admin-section-title" id="crm-lead-new-title">
+        {t("New lead")}
+      </h2>
+
+      <p
+        id="crm-lead-new-error-box"
+        class="admin-create-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      />
+
+      <form id="crm-lead-new-form" class="admin-form" novalidate>
+        <div class="admin-field">
+          <label for="crm-lead-new-pipeline">{t("Pipeline")}</label>
+          <select id="crm-lead-new-pipeline" name="pipelineId" required>
+            {pipelines.map((pipeline) => (
+              <option value={pipeline.id}>{pipeline.name}</option>
+            ))}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label for="crm-lead-new-name">{t("Name (optional)")}</label>
+          <input
+            id="crm-lead-new-name"
+            name="displayName"
+            type="text"
+            maxlength="120"
+            autocomplete="off"
+          />
+        </div>
+
+        <fieldset>
+          <legend>{t("Contact points (optional)")}</legend>
+          <p class="cell-muted">
+            {t(
+              "A contact value is stored protected and shown masked from now on. It cannot be edited later, only revoked and replaced."
+            )}
+          </p>
+          <div class="admin-field">
+            <label for="crm-lead-new-email">{t("Email")}</label>
+            <input
+              id="crm-lead-new-email"
+              name="email"
+              type="email"
+              maxlength="254"
+              autocomplete="off"
+            />
+          </div>
+          <div class="admin-field">
+            <label for="crm-lead-new-phone">{t("Phone")}</label>
+            <input
+              id="crm-lead-new-phone"
+              name="phone"
+              type="tel"
+              maxlength="254"
+              autocomplete="off"
+            />
+          </div>
+          <div class="admin-field">
+            <label for="crm-lead-new-platform">{t("Messaging platform")}</label>
+            <input
+              id="crm-lead-new-platform"
+              name="platform"
+              type="text"
+              maxlength="32"
+              autocomplete="off"
+              aria-describedby="crm-lead-new-platform-hint"
+            />
+            <p class="admin-field-hint" id="crm-lead-new-platform-hint">
+              {t("Lower case, for example whatsapp or telegram.")}
+            </p>
+          </div>
+          <div class="admin-field">
+            <label for="crm-lead-new-platform-id">
+              {t("Messaging account")}
+            </label>
+            <input
+              id="crm-lead-new-platform-id"
+              name="platformId"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+            />
+          </div>
+        </fieldset>
+
+        <div class="admin-field">
+          <label for="crm-lead-new-legal-basis">
+            {t("Legal basis stated")}
+          </label>
+          <select
+            id="crm-lead-new-legal-basis"
+            name="legalBasis"
+            aria-describedby="crm-lead-new-legal-basis-hint"
+          >
+            {LEGAL_BASES.map((basis) => (
+              <option value={basis} selected={basis === "not_stated"}>
+                {legalBasisLabel(t, basis)}
+              </option>
+            ))}
+          </select>
+          <p class="admin-field-hint" id="crm-lead-new-legal-basis-hint">
+            {t(
+              "A record of what the person entering the lead states. It is not consent."
+            )}
+          </p>
+        </div>
+        <div class="admin-field">
+          <label for="crm-lead-new-campaign">
+            {t("Campaign reference (optional)")}
+          </label>
+          <input
+            id="crm-lead-new-campaign"
+            name="campaignRef"
+            type="text"
+            maxlength="64"
+            autocomplete="off"
+          />
+        </div>
+        <div class="admin-field">
+          <label>
+            <input id="crm-lead-new-mine" name="mine" type="checkbox" />
+            {t("Assign to me")}
+          </label>
+        </div>
+
+        <div>
+          <button type="submit" class="btn btn-primary">
+            {t("Create lead")}
+          </button>
+          <a class="btn btn-secondary" href={LIST_PATH}>
+            {t("Cancel")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>`). The import makes
+  // Astro emit it EXTERNAL, where the app's `default-src 'self'` CSP allows it.
+  import {
+    field,
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    onSubmit,
+    sendJsonForData
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import {
+    createInstantSource,
+    failureText,
+    readMessages
+  } from "../../../lib/ui/crm-leads-write-client";
+
+  const error = messageBox("crm-lead-new-error-box");
+  const messages = readMessages("crm-lead-new");
+  const me = document.getElementById("crm-lead-new")?.dataset.me ?? "";
+  // One key per distinct request: a retry replays, a changed form is new.
+  const keyFor = createIdempotencyKeySource();
+  const instantFor = createInstantSource();
+  const LEAD_ID =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  onSubmit("crm-lead-new-form", async ({ data, submit }) => {
+    const contactPoints: Record<string, string>[] = [];
+    const email = field(data, "email");
+    const phone = field(data, "phone");
+    const platform = field(data, "platform").toLowerCase();
+    const platformId = field(data, "platformId");
+    const name = field(data, "displayName");
+    const campaign = field(data, "campaignRef");
+
+    if (email) contactPoints.push({ kind: "email", value: email });
+    if (phone) contactPoints.push({ kind: "phone", value: phone });
+    if (platform || platformId) {
+      contactPoints.push({ kind: "platform_id", platform, value: platformId });
+    }
+
+    const source = {
+      kind: "manual",
+      legalBasis: field(data, "legalBasis") || "not_stated",
+      ...(campaign ? { campaignRef: campaign } : {})
+    };
+    const body = {
+      pipelineId: field(data, "pipelineId"),
+      ...(name ? { displayName: name } : {}),
+      ...(data.get("mine") !== null && me ? { ownerTenantUserId: me } : {}),
+      contactPoints,
+      source: { ...source, occurredAt: instantFor({ source }) }
+    };
+    const url = "/api/v1/crm-leads/leads";
+
+    error.clear();
+    const unlock = submit ? lockElement(submit, messages.busy ?? "") : () => {};
+    const result = await sendJsonForData<{ id?: string }>("POST", url, body, {
+      "Idempotency-Key": keyFor({ url, body })
+    });
+    const id = result.data?.id;
+
+    if (result.ok && typeof id === "string" && LEAD_ID.test(id)) {
+      holdForNavigation();
+      window.location.assign(`/admin/crm-leads/${id}`);
+      return;
+    }
+
+    error.show(failureText(messages, result.errorCode));
+    unlock();
+  });
+</script>

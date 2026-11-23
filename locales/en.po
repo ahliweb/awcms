@@ -11443,3 +11443,320 @@ msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] ""
 msgstr[1] ""
+
+#. Lead write screens (Issue #1166)
+msgid "A contact point to revoke is no longer part of this lead. Reload the page and try again."
+msgstr ""
+
+msgid "A contact value is stored protected and shown masked from now on. It cannot be edited later, only revoked and replaced."
+msgstr ""
+
+msgid "A converted lead cannot be merged away."
+msgstr ""
+
+msgid "Add contact points"
+msgstr ""
+
+msgid "An opaque reference to the proof (an order or enrolment number). Letters, digits and . _ : - only."
+msgstr ""
+
+msgid "A record of what the person entering the lead states. It is not consent."
+msgstr ""
+
+msgid "Back to the lead"
+msgstr ""
+
+msgid "Campaign reference (optional)"
+msgstr ""
+
+msgid "Candidates"
+msgstr ""
+
+msgid "Candidates that share a contact point with this lead. Nothing is merged until you review a pair and confirm."
+msgstr ""
+
+msgid "Change the name, revoke or add contact points, or delete the lead. Contact points are always masked."
+msgstr ""
+
+msgid "Contact points (optional)"
+msgstr ""
+
+msgid "Conversion"
+msgstr ""
+
+msgid "Converted stage"
+msgstr ""
+
+msgid "{count} deleted lead"
+msgid_plural "{count} deleted leads"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} merge"
+msgid_plural "{count} merges"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Create lead"
+msgstr ""
+
+msgid "Customer reference (confirmed conversions)"
+msgstr ""
+
+msgid "Deleted leads"
+msgstr ""
+
+msgid "Delete lead"
+msgstr ""
+
+msgid "Delete this lead"
+msgstr ""
+
+msgid "Delete this lead? It leaves the list and can be restored from the deleted leads."
+msgstr ""
+
+msgid "Edit lead"
+msgstr ""
+
+msgid "Edit the lead or delete it"
+msgstr ""
+
+msgid "Enter a prospect by hand. This creates a lead only: no profile, no consent and no customer."
+msgstr ""
+
+msgid "Evidence of the reversal"
+msgstr ""
+
+msgid "Final"
+msgstr ""
+
+msgid "Keep"
+msgstr ""
+
+msgid "Kept"
+msgstr ""
+
+msgid "Leads that were deleted, newest first. Restoring a lead puts it back in the list as it was."
+msgstr ""
+
+msgid "Lower case, for example whatsapp or telegram."
+msgstr ""
+
+msgid "Matched on"
+msgstr ""
+
+msgid "Merged away"
+msgstr ""
+
+msgid "Merge review"
+msgstr ""
+
+msgid "Merges"
+msgstr ""
+
+msgid "Merge these leads"
+msgstr ""
+
+msgid "Merge these two leads? You can undo it for {hours} hours."
+msgstr ""
+
+msgid "Messaging account"
+msgstr ""
+
+msgid "Messaging platform"
+msgstr ""
+
+msgid "More"
+msgstr ""
+
+msgid "Name (optional)"
+msgstr ""
+
+msgid "New lead"
+msgstr ""
+
+msgid "No deleted leads."
+msgstr ""
+
+msgid "No merge yet."
+msgstr ""
+
+msgid "No other lead shares a contact point with this lead."
+msgstr ""
+
+msgid "Note (required for a manual conversion)"
+msgstr ""
+
+msgid "Nothing to change."
+msgstr ""
+
+msgid "Only leads of the same pipeline can be merged."
+msgstr ""
+
+msgid "Open lead"
+msgstr ""
+
+msgid "Open leads of this tenant that share an exact contact value with this lead. A match is a suggestion, not proof that they are the same person."
+msgstr ""
+
+msgid "Other lead"
+msgstr ""
+
+msgid "Phone"
+msgstr ""
+
+msgid "Record a conversion"
+msgstr ""
+
+msgid "Record conversion"
+msgstr ""
+
+msgid "Record or reverse a conversion"
+msgstr ""
+
+msgid "Record that a lead became a customer, or reverse a conversion. The customer record stays with the system that owns it."
+msgstr ""
+
+msgid "Record this conversion? It moves the lead to a converted stage and is kept in its history."
+msgstr ""
+
+msgid "Reverse conversion"
+msgstr ""
+
+msgid "Reverse this conversion? The lead moves back and both facts stay in its history."
+msgstr ""
+
+msgid "Review merges"
+msgstr ""
+
+msgid "Revoke {kind} {value}"
+msgstr ""
+
+msgid "Role of this lead"
+msgstr ""
+
+msgid "Save changes"
+msgstr ""
+
+msgid "Some of the details are not valid. Check the form and try again."
+msgstr ""
+
+msgid "That kind of conversion is not allowed for your access."
+msgstr ""
+
+msgid "That pipeline is archived and takes no new leads."
+msgstr ""
+
+msgid "That pipeline no longer exists."
+msgstr ""
+
+msgid "The deleted leads could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The form could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The lead leaves the list and can be restored from the deleted leads. This does not erase the person; that is a data-subject request."
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so conversions cannot be changed."
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be created."
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be merged."
+msgstr ""
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be restored."
+msgstr ""
+
+msgid "The lead to merge away already has another lead merged into it."
+msgstr ""
+
+msgid "The merged lead is no longer merged into the survivor."
+msgstr ""
+
+msgid "The other lead"
+msgstr ""
+
+msgid "The pipeline does not allow converting from this stage."
+msgstr ""
+
+msgid "The pipeline has no converted stage."
+msgstr ""
+
+msgid "The pipeline has no converted stage, so a conversion cannot be recorded."
+msgstr ""
+
+msgid "There are more deleted leads than this screen shows. Showing the newest {count}."
+msgstr ""
+
+msgid "There is no active pipeline to put a lead in. Create or restore one in the pipeline settings."
+msgstr ""
+
+msgid "The time to undo this merge has passed."
+msgstr ""
+
+msgid "This conversion was already reversed."
+msgstr ""
+
+msgid "This evidence reference is already recorded for something else."
+msgstr ""
+
+msgid "This lead"
+msgstr ""
+
+msgid "This lead has no live contact point."
+msgstr ""
+
+msgid "This lead is already converted."
+msgstr ""
+
+msgid "This lead is already deleted."
+msgstr ""
+
+msgid "This lead is in another pipeline, so it cannot be merged with this one."
+msgstr ""
+
+msgid "This lead is not deleted."
+msgstr ""
+
+msgid "This merge was already undone."
+msgstr ""
+
+msgid "This needs a signed-in person; a machine credential cannot do it."
+msgstr ""
+
+msgid "This step needs something the lead does not have yet (an owner, a contact point or a reason)."
+msgstr ""
+
+msgid "Undo merge"
+msgstr ""
+
+msgid "Undone"
+msgstr ""
+
+msgid "Undo this merge? The merged lead becomes an open lead again."
+msgstr ""
+
+msgid "Undo until"
+msgstr ""
+
+msgid "Why they are the same person"
+msgstr ""
+
+msgid "You do not have permission to change leads."
+msgstr ""
+
+msgid "You do not have permission to create leads."
+msgstr ""
+
+msgid "You do not have permission to restore leads."
+msgstr ""
+
+msgid "You do not have permission to review merges."
+msgstr ""
+
+msgid "You may read this lead's conversions but not record or reverse one."
+msgstr ""

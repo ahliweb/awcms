@@ -11386,3 +11386,318 @@ msgstr[0] "{count} pemberitahuan staf"
 msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] "{count} aturan"
+
+#. Lead write screens (Issue #1166)
+msgid "A contact point to revoke is no longer part of this lead. Reload the page and try again."
+msgstr "Titik kontak yang akan dicabut sudah bukan bagian dari prospek ini. Muat ulang halaman lalu coba lagi."
+
+msgid "A contact value is stored protected and shown masked from now on. It cannot be edited later, only revoked and replaced."
+msgstr "Nilai kontak disimpan terlindungi dan seterusnya ditampilkan tersamar. Nilainya tidak dapat diubah nanti, hanya dicabut lalu diganti."
+
+msgid "A converted lead cannot be merged away."
+msgstr "Prospek yang sudah terkonversi tidak dapat digabungkan ke prospek lain."
+
+msgid "Add contact points"
+msgstr "Tambah titik kontak"
+
+msgid "An opaque reference to the proof (an order or enrolment number). Letters, digits and . _ : - only."
+msgstr "Referensi opak ke bukti (nomor pesanan atau pendaftaran). Hanya huruf, angka, dan . _ : -."
+
+msgid "A record of what the person entering the lead states. It is not consent."
+msgstr "Catatan tentang apa yang dinyatakan orang yang memasukkan prospek. Ini bukan persetujuan."
+
+msgid "Back to the lead"
+msgstr "Kembali ke prospek"
+
+msgid "Campaign reference (optional)"
+msgstr "Referensi kampanye (opsional)"
+
+msgid "Candidates"
+msgstr "Kandidat"
+
+msgid "Candidates that share a contact point with this lead. Nothing is merged until you review a pair and confirm."
+msgstr "Kandidat yang memiliki titik kontak sama dengan prospek ini. Tidak ada yang digabung sampai Anda meninjau sepasang prospek dan mengonfirmasi."
+
+msgid "Change the name, revoke or add contact points, or delete the lead. Contact points are always masked."
+msgstr "Ubah nama, cabut atau tambah titik kontak, atau hapus prospek. Titik kontak selalu disamarkan."
+
+msgid "Contact points (optional)"
+msgstr "Titik kontak (opsional)"
+
+msgid "Conversion"
+msgstr "Konversi"
+
+msgid "Converted stage"
+msgstr "Tahap terkonversi"
+
+msgid "{count} deleted lead"
+msgid_plural "{count} deleted leads"
+msgstr[0] "{count} prospek terhapus"
+
+msgid "{count} merge"
+msgid_plural "{count} merges"
+msgstr[0] "{count} penggabungan"
+
+msgid "Create lead"
+msgstr "Buat prospek"
+
+msgid "Customer reference (confirmed conversions)"
+msgstr "Referensi pelanggan (konversi terkonfirmasi)"
+
+msgid "Deleted leads"
+msgstr "Prospek terhapus"
+
+msgid "Delete lead"
+msgstr "Hapus prospek"
+
+msgid "Delete this lead"
+msgstr "Hapus prospek ini"
+
+msgid "Delete this lead? It leaves the list and can be restored from the deleted leads."
+msgstr "Hapus prospek ini? Prospek keluar dari daftar dan dapat dipulihkan dari prospek terhapus."
+
+msgid "Edit lead"
+msgstr "Ubah prospek"
+
+msgid "Edit the lead or delete it"
+msgstr "Ubah atau hapus prospek"
+
+msgid "Enter a prospect by hand. This creates a lead only: no profile, no consent and no customer."
+msgstr "Masukkan prospek secara manual. Ini hanya membuat prospek: tanpa profil, tanpa persetujuan, dan tanpa pelanggan."
+
+msgid "Evidence of the reversal"
+msgstr "Bukti pembalikan"
+
+msgid "Final"
+msgstr "Final"
+
+msgid "Keep"
+msgstr "Pertahankan"
+
+msgid "Kept"
+msgstr "Dipertahankan"
+
+msgid "Leads that were deleted, newest first. Restoring a lead puts it back in the list as it was."
+msgstr "Prospek yang dihapus, terbaru lebih dulu. Memulihkan prospek mengembalikannya ke daftar seperti semula."
+
+msgid "Lower case, for example whatsapp or telegram."
+msgstr "Huruf kecil, misalnya whatsapp atau telegram."
+
+msgid "Matched on"
+msgstr "Cocok pada"
+
+msgid "Merged away"
+msgstr "Digabungkan"
+
+msgid "Merge review"
+msgstr "Tinjauan penggabungan"
+
+msgid "Merges"
+msgstr "Penggabungan"
+
+msgid "Merge these leads"
+msgstr "Gabungkan prospek ini"
+
+msgid "Merge these two leads? You can undo it for {hours} hours."
+msgstr "Gabungkan kedua prospek ini? Anda dapat membatalkannya selama {hours} jam."
+
+msgid "Messaging account"
+msgstr "Akun pesan"
+
+msgid "Messaging platform"
+msgstr "Platform pesan"
+
+msgid "More"
+msgstr "Lainnya"
+
+msgid "Name (optional)"
+msgstr "Nama (opsional)"
+
+msgid "New lead"
+msgstr "Prospek baru"
+
+msgid "No deleted leads."
+msgstr "Tidak ada prospek terhapus."
+
+msgid "No merge yet."
+msgstr "Belum ada penggabungan."
+
+msgid "No other lead shares a contact point with this lead."
+msgstr "Tidak ada prospek lain yang memiliki titik kontak sama dengan prospek ini."
+
+msgid "Note (required for a manual conversion)"
+msgstr "Catatan (wajib untuk konversi manual)"
+
+msgid "Nothing to change."
+msgstr "Tidak ada yang diubah."
+
+msgid "Only leads of the same pipeline can be merged."
+msgstr "Hanya prospek dari pipeline yang sama yang dapat digabungkan."
+
+msgid "Open lead"
+msgstr "Buka prospek"
+
+msgid "Open leads of this tenant that share an exact contact value with this lead. A match is a suggestion, not proof that they are the same person."
+msgstr "Prospek terbuka milik tenant ini yang memiliki nilai kontak persis sama dengan prospek ini. Kecocokan hanyalah saran, bukan bukti bahwa mereka orang yang sama."
+
+msgid "Other lead"
+msgstr "Prospek lain"
+
+msgid "Phone"
+msgstr "Telepon"
+
+msgid "Record a conversion"
+msgstr "Catat konversi"
+
+msgid "Record conversion"
+msgstr "Catat konversi"
+
+msgid "Record or reverse a conversion"
+msgstr "Catat atau balik konversi"
+
+msgid "Record that a lead became a customer, or reverse a conversion. The customer record stays with the system that owns it."
+msgstr "Catat bahwa prospek menjadi pelanggan, atau balik sebuah konversi. Catatan pelanggan tetap berada di sistem yang memilikinya."
+
+msgid "Record this conversion? It moves the lead to a converted stage and is kept in its history."
+msgstr "Catat konversi ini? Prospek dipindah ke tahap terkonversi dan tersimpan dalam riwayatnya."
+
+msgid "Reverse conversion"
+msgstr "Balik konversi"
+
+msgid "Reverse this conversion? The lead moves back and both facts stay in its history."
+msgstr "Balik konversi ini? Prospek dipindah kembali dan kedua fakta tetap ada di riwayatnya."
+
+msgid "Review merges"
+msgstr "Tinjau penggabungan"
+
+msgid "Revoke {kind} {value}"
+msgstr "Cabut {kind} {value}"
+
+msgid "Role of this lead"
+msgstr "Peran prospek ini"
+
+msgid "Save changes"
+msgstr "Simpan perubahan"
+
+msgid "Some of the details are not valid. Check the form and try again."
+msgstr "Sebagian isian tidak valid. Periksa formulir lalu coba lagi."
+
+msgid "That kind of conversion is not allowed for your access."
+msgstr "Jenis konversi itu tidak diizinkan untuk akses Anda."
+
+msgid "That pipeline is archived and takes no new leads."
+msgstr "Pipeline itu diarsipkan dan tidak menerima prospek baru."
+
+msgid "That pipeline no longer exists."
+msgstr "Pipeline itu sudah tidak ada."
+
+msgid "The deleted leads could not be loaded right now. Please try again later."
+msgstr "Prospek terhapus tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The form could not be loaded right now. Please try again later."
+msgstr "Formulir tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The lead leaves the list and can be restored from the deleted leads. This does not erase the person; that is a data-subject request."
+msgstr "Prospek keluar dari daftar dan dapat dipulihkan dari prospek terhapus. Ini tidak menghapus orangnya; itu adalah permintaan subjek data."
+
+msgid "The lead pipeline is switched off for this tenant, so conversions cannot be changed."
+msgstr "Pipeline prospek dimatikan untuk tenant ini, sehingga konversi tidak dapat diubah."
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be created."
+msgstr "Pipeline prospek dimatikan untuk tenant ini, sehingga prospek tidak dapat dibuat."
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be merged."
+msgstr "Pipeline prospek dimatikan untuk tenant ini, sehingga prospek tidak dapat digabungkan."
+
+msgid "The lead pipeline is switched off for this tenant, so leads cannot be restored."
+msgstr "Pipeline prospek dimatikan untuk tenant ini, sehingga prospek tidak dapat dipulihkan."
+
+msgid "The lead to merge away already has another lead merged into it."
+msgstr "Prospek yang akan digabungkan sudah menjadi tujuan penggabungan prospek lain."
+
+msgid "The merged lead is no longer merged into the survivor."
+msgstr "Prospek yang digabungkan sudah tidak tergabung ke prospek yang dipertahankan."
+
+msgid "The other lead"
+msgstr "Prospek yang lain"
+
+msgid "The pipeline does not allow converting from this stage."
+msgstr "Pipeline tidak mengizinkan konversi dari tahap ini."
+
+msgid "The pipeline has no converted stage."
+msgstr "Pipeline tidak memiliki tahap terkonversi."
+
+msgid "The pipeline has no converted stage, so a conversion cannot be recorded."
+msgstr "Pipeline tidak memiliki tahap terkonversi, sehingga konversi tidak dapat dicatat."
+
+msgid "There are more deleted leads than this screen shows. Showing the newest {count}."
+msgstr "Ada lebih banyak prospek terhapus daripada yang ditampilkan layar ini. Menampilkan {count} yang terbaru."
+
+msgid "There is no active pipeline to put a lead in. Create or restore one in the pipeline settings."
+msgstr "Tidak ada pipeline aktif untuk menampung prospek. Buat atau pulihkan satu di pengaturan pipeline."
+
+msgid "The time to undo this merge has passed."
+msgstr "Waktu untuk membatalkan penggabungan ini sudah lewat."
+
+msgid "This conversion was already reversed."
+msgstr "Konversi ini sudah dibalik."
+
+msgid "This evidence reference is already recorded for something else."
+msgstr "Referensi bukti ini sudah tercatat untuk hal lain."
+
+msgid "This lead"
+msgstr "Prospek ini"
+
+msgid "This lead has no live contact point."
+msgstr "Prospek ini tidak memiliki titik kontak aktif."
+
+msgid "This lead is already converted."
+msgstr "Prospek ini sudah terkonversi."
+
+msgid "This lead is already deleted."
+msgstr "Prospek ini sudah dihapus."
+
+msgid "This lead is in another pipeline, so it cannot be merged with this one."
+msgstr "Prospek ini berada di pipeline lain, sehingga tidak dapat digabungkan dengan yang ini."
+
+msgid "This lead is not deleted."
+msgstr "Prospek ini tidak dihapus."
+
+msgid "This merge was already undone."
+msgstr "Penggabungan ini sudah dibatalkan."
+
+msgid "This needs a signed-in person; a machine credential cannot do it."
+msgstr "Ini memerlukan orang yang sedang masuk; kredensial mesin tidak dapat melakukannya."
+
+msgid "This step needs something the lead does not have yet (an owner, a contact point or a reason)."
+msgstr "Langkah ini membutuhkan sesuatu yang belum dimiliki prospek (pemilik, titik kontak, atau alasan)."
+
+msgid "Undo merge"
+msgstr "Batalkan penggabungan"
+
+msgid "Undone"
+msgstr "Dibatalkan"
+
+msgid "Undo this merge? The merged lead becomes an open lead again."
+msgstr "Batalkan penggabungan ini? Prospek yang digabungkan menjadi prospek terbuka lagi."
+
+msgid "Undo until"
+msgstr "Dapat dibatalkan hingga"
+
+msgid "Why they are the same person"
+msgstr "Mengapa mereka orang yang sama"
+
+msgid "You do not have permission to change leads."
+msgstr "Anda tidak memiliki izin untuk mengubah prospek."
+
+msgid "You do not have permission to create leads."
+msgstr "Anda tidak memiliki izin untuk membuat prospek."
+
+msgid "You do not have permission to restore leads."
+msgstr "Anda tidak memiliki izin untuk memulihkan prospek."
+
+msgid "You do not have permission to review merges."
+msgstr "Anda tidak memiliki izin untuk meninjau penggabungan."
+
+msgid "You may read this lead's conversions but not record or reverse one."
+msgstr "Anda dapat membaca konversi prospek ini tetapi tidak dapat mencatat atau membaliknya."

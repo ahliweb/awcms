@@ -160,7 +160,7 @@
       "capabilitiesProvided": ["crm_lead"],
       "capabilitiesConsumed": [],
       "permissionCount": 11,
-      "navigationCount": 2,
+      "navigationCount": 4,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

@@ -114,6 +114,16 @@ describe("the screens gate on keys that really exist", () => {
       expect.objectContaining({
         path: "/admin/crm-leads/settings",
         requiredPermission: "crm_leads.pipelines.configure"
+      }),
+      // The write screens' own entries, pinned in
+      // `admin-crm-leads-write-page-contract.test.ts`.
+      expect.objectContaining({
+        path: "/admin/crm-leads/new",
+        requiredPermission: "crm_leads.leads.create"
+      }),
+      expect.objectContaining({
+        path: "/admin/crm-leads/deleted",
+        requiredPermission: "crm_leads.leads.restore"
       })
     ]);
     expect(list).toContain("authorize: READ_GUARD");

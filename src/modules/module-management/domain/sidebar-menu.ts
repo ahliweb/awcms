@@ -316,6 +316,8 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_website_engagement_sources": "Website sources",
   "admin.layout.nav_crm_leads": "Lead pipeline",
   "admin.layout.nav_crm_leads_settings": "Pipeline settings",
+  "admin.layout.nav_crm_leads_new": "New lead",
+  "admin.layout.nav_crm_leads_deleted": "Deleted leads",
   "admin.layout.nav_crm_follow_up": "Follow-up",
   "admin.layout.nav_crm_follow_up_rules": "Follow-up rules",
   "admin.layout.nav_sync": "Sync & storage",
@@ -435,6 +437,8 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_website_engagement_sources": "gear",
   "admin.layout.nav_crm_leads": "users",
   "admin.layout.nav_crm_leads_settings": "gear",
+  "admin.layout.nav_crm_leads_new": "users",
+  "admin.layout.nav_crm_leads_deleted": "doc",
   "admin.layout.nav_crm_follow_up": "chat",
   "admin.layout.nav_crm_follow_up_rules": "gear",
   // Operations.

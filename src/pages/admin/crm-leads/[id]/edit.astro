@@ -1,0 +1,403 @@
+---
+/**
+ * Edit a lead — name, contact points, and soft delete (Issue #1166, ADR-0153).
+ *
+ * ## What it does
+ *
+ * One form behind `PATCH /api/v1/crm-leads/leads/{id}`: change or clear the
+ * display name, REVOKE a live contact point, add new ones (an e-mail address, a
+ * phone number, one messaging account). A contact value is never edited in
+ * place: the endpoint refuses it, so the screen offers "revoke" and "add"
+ * instead, and never shows the value (the masked form only).
+ *
+ * A second control, shown only to someone who may delete, is the SOFT delete
+ * (`DELETE /leads/{id}`): the lead leaves the list and can be restored from
+ * `/admin/crm-leads/deleted`. Erasing the PERSON is a different act (the
+ * anonymise endpoint of the data-subject request flow) and is not offered here.
+ *
+ * ## Concurrency and replay
+ *
+ * Both writes carry the version the page was rendered with (`expectedVersion`,
+ * `If-Match`): two staff members get exactly one winner and a "someone else
+ * changed it" sentence for the other. Both carry an `Idempotency-Key`. The
+ * form sends only what the viewer changed, so an untouched field cannot undo
+ * another person's edit.
+ *
+ * Gated by `crm_leads.leads.update`; the delete control additionally by
+ * `crm_leads.leads.delete`, decided by the chokepoint of this render.
+ */
+import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import "../../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../../lib/i18n";
+import {
+  contactPointKindLabel,
+  crmLeadWriteMessages,
+  leadStatusLabel
+} from "../../../../lib/i18n/labels/crm-leads";
+import { uuidOrNull } from "../../../../modules/crm-leads/application/screen-loaders";
+import { loadLeadEdit } from "../../../../modules/crm-leads/application/screen-write-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+const leadId = uuidOrNull(Astro.params.id);
+
+/** The guards of this screen, spelled out as literals so `admin:screen-coverage:check` sees them. */
+const UPDATE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "update"
+} as const;
+const DELETE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "delete"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: UPDATE_GUARD,
+  load: ({ tx, auth, can }) =>
+    loadLeadEdit({
+      context: { tx, tenantId: ssr.tenantId, me: auth.context.tenantUserId },
+      leadId,
+      deleteGuard: DELETE_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads/[id]/edit.astro: failed to load",
+      error,
+      {
+        correlationId: Astro.locals.correlationId
+      }
+    );
+  }
+});
+
+const allowed = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const found = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const lead = found?.lead ?? null;
+const livePoints =
+  lead?.contactPoints.filter(
+    (point) => point.revokedAt === null && !point.erased
+  ) ?? [];
+/** An edit needs the tenant switch on and a lead still `open`; a delete only the switch. */
+const editable =
+  found !== null && found.tenantEnabled && lead?.status === "open";
+const deletable = found !== null && found.tenantEnabled && found.canDelete;
+
+const messages = {
+  ...crmLeadWriteMessages(t),
+  busy: t("Please wait…"),
+  nothing: t("Nothing to change."),
+  confirmDelete: t(
+    "Delete this lead? It leaves the list and can be restored from the deleted leads."
+  )
+};
+---
+
+<AdminLayout
+  title={t("Edit lead")}
+  description={t(
+    "Change the name, revoke or add contact points, or delete the lead. Contact points are always masked."
+  )}
+>
+  <p class="page-description">
+    {leadId !== null ? (
+      <a href={`${LIST_PATH}/${leadId}`}>{t("Back to the lead")}</a>
+    ) : (
+      <a href={LIST_PATH}>{t("Back to the leads")}</a>
+    )}
+  </p>
+
+  {!allowed && (
+    <p class="state-notice fade-in-up" id="crm-lead-edit-denied">
+      {t("You do not have permission to change leads.")}
+    </p>
+  )}
+
+  {allowed && loadError && (
+    <p class="state-notice fade-in-up" id="crm-lead-edit-error">
+      {t("The lead could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {allowed && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-lead-edit-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {allowed && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="crm-lead-edit-not-found">
+      {t("That lead was not found.")}
+    </p>
+  )}
+
+  {found && lead && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="crm-lead-edit-title"
+      id="crm-lead-edit"
+      data-lead-id={lead.id}
+      data-version={lead.version}
+      data-name={lead.displayName ?? ""}
+      data-messages={JSON.stringify(messages)}
+    >
+      <h2 class="admin-section-title" id="crm-lead-edit-title">
+        {lead.displayName ?? t("Unnamed lead")}
+      </h2>
+
+      {!found.tenantEnabled && (
+        <p class="state-notice" id="crm-lead-edit-tenant-off">
+          {t(
+            "The lead pipeline is switched off for this tenant, so this lead cannot be changed."
+          )}
+        </p>
+      )}
+      {found.tenantEnabled && lead.status !== "open" && (
+        <p class="state-notice" id="crm-lead-edit-not-open">
+          {t("This lead can no longer be changed.")} (
+          {leadStatusLabel(t, lead.status)})
+        </p>
+      )}
+
+      <p
+        id="crm-lead-edit-error-box"
+        class="admin-create-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      />
+
+      <form id="crm-lead-edit-form" class="admin-form" novalidate>
+        <fieldset disabled={!editable}>
+          <div class="admin-field">
+            <label for="crm-lead-edit-name">{t("Name")}</label>
+            <input
+              id="crm-lead-edit-name"
+              name="displayName"
+              type="text"
+              maxlength="120"
+              autocomplete="off"
+              value={lead.displayName ?? ""}
+            />
+          </div>
+
+          <fieldset>
+            <legend>{t("Contact points")}</legend>
+            {livePoints.length === 0 ? (
+              <p class="cell-muted" id="crm-lead-edit-no-points">
+                {t("This lead has no live contact point.")}
+              </p>
+            ) : (
+              livePoints.map((point) => (
+                <div class="admin-field">
+                  <label>
+                    <input
+                      type="checkbox"
+                      class="js-revoke-point"
+                      value={point.id}
+                    />
+                    {t("Revoke {kind} {value}", {
+                      kind: contactPointKindLabel(t, point.kind),
+                      value: point.masked ?? "—"
+                    })}
+                  </label>
+                </div>
+              ))
+            )}
+          </fieldset>
+
+          <fieldset>
+            <legend>{t("Add contact points")}</legend>
+            <div class="admin-field">
+              <label for="crm-lead-edit-email">{t("Email")}</label>
+              <input
+                id="crm-lead-edit-email"
+                name="email"
+                type="email"
+                maxlength="254"
+                autocomplete="off"
+              />
+            </div>
+            <div class="admin-field">
+              <label for="crm-lead-edit-phone">{t("Phone")}</label>
+              <input
+                id="crm-lead-edit-phone"
+                name="phone"
+                type="tel"
+                maxlength="254"
+                autocomplete="off"
+              />
+            </div>
+            <div class="admin-field">
+              <label for="crm-lead-edit-platform">
+                {t("Messaging platform")}
+              </label>
+              <input
+                id="crm-lead-edit-platform"
+                name="platform"
+                type="text"
+                maxlength="32"
+                autocomplete="off"
+                aria-describedby="crm-lead-edit-platform-hint"
+              />
+              <p class="admin-field-hint" id="crm-lead-edit-platform-hint">
+                {t("Lower case, for example whatsapp or telegram.")}
+              </p>
+            </div>
+            <div class="admin-field">
+              <label for="crm-lead-edit-platform-id">
+                {t("Messaging account")}
+              </label>
+              <input
+                id="crm-lead-edit-platform-id"
+                name="platformId"
+                type="text"
+                maxlength="128"
+                autocomplete="off"
+              />
+            </div>
+          </fieldset>
+
+          <div>
+            <button type="submit" class="btn btn-primary">
+              {t("Save changes")}
+            </button>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+  )}
+
+  {found && lead && found.canDelete && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="crm-lead-delete-title"
+    >
+      <h2 class="admin-section-title" id="crm-lead-delete-title">
+        {t("Delete this lead")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "The lead leaves the list and can be restored from the deleted leads. This does not erase the person; that is a data-subject request."
+        )}
+      </p>
+      <button
+        type="button"
+        class="btn btn-danger btn-danger--solid js-lead-delete"
+        disabled={!deletable}
+      >
+        {t("Delete lead")}
+      </button>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  import {
+    field,
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../../lib/ui/confirm-dialog-client";
+  import {
+    failureText,
+    readMessages
+  } from "../../../../lib/ui/crm-leads-write-client";
+
+  const error = messageBox("crm-lead-edit-error-box");
+  const root = document.getElementById("crm-lead-edit");
+  const messages = readMessages("crm-lead-edit");
+  const leadId = root?.dataset.leadId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  const initialName = root?.dataset.name ?? "";
+  const base = `/api/v1/crm-leads/leads/${leadId}`;
+  const keyFor = createIdempotencyKeySource();
+
+  onSubmit("crm-lead-edit-form", async ({ form, data, submit }) => {
+    const name = field(data, "displayName");
+    const addContactPoints: Record<string, string>[] = [];
+    const email = field(data, "email");
+    const phone = field(data, "phone");
+    const platform = field(data, "platform").toLowerCase();
+    const platformId = field(data, "platformId");
+
+    if (email) addContactPoints.push({ kind: "email", value: email });
+    if (phone) addContactPoints.push({ kind: "phone", value: phone });
+    if (platform || platformId) {
+      addContactPoints.push({
+        kind: "platform_id",
+        platform,
+        value: platformId
+      });
+    }
+
+    const revokeContactPointIds = Array.from(
+      form.querySelectorAll<HTMLInputElement>(".js-revoke-point:checked"),
+      (box) => box.value
+    );
+    // Only what changed: an untouched field must not undo another edit.
+    const body = {
+      expectedVersion: version,
+      ...(name !== initialName
+        ? { displayName: name === "" ? null : name }
+        : {}),
+      ...(addContactPoints.length > 0 ? { addContactPoints } : {}),
+      ...(revokeContactPointIds.length > 0 ? { revokeContactPointIds } : {})
+    };
+
+    if (Object.keys(body).length === 1) {
+      error.show(messages.nothing ?? "");
+      return;
+    }
+
+    await mutateAndReload(
+      submit,
+      error,
+      () =>
+        sendJson("PATCH", base, body, {
+          "Idempotency-Key": keyFor({ url: base, body })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+
+  onAction(".js-lead-delete", async (button) => {
+    if (!(await confirmAction(messages.confirmDelete ?? ""))) return;
+
+    error.clear();
+    const unlock = lockElement(button, messages.busy ?? "");
+    const result = await sendJson("DELETE", base, undefined, {
+      "Idempotency-Key": keyFor({ url: base, version }),
+      "If-Match": `"${version}"`
+    });
+
+    if (result.ok) {
+      // The lead is gone from the list and this page would only say "not
+      // found": go back to the list.
+      holdForNavigation();
+      window.location.assign("/admin/crm-leads");
+      return;
+    }
+
+    error.show(failureText(messages, result.errorCode));
+    unlock();
+  });
+</script>

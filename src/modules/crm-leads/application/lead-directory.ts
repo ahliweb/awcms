@@ -555,6 +555,92 @@ export async function listLeads(
   };
 }
 
+/**
+ * One keyset page of the SOFT-DELETED leads of the tenant, newest first, with
+ * masked contact points only (the restore screen, Issue #1166). A separate
+ * query rather than a flag on {@link listLeads}: the predicate has to be the
+ * literal `deleted_at IS NOT NULL` for the planner to use the partial index of
+ * `sql/430`, which a boolean parameter would hide.
+ */
+export async function listDeletedLeads(
+  tx: Sql,
+  tenantId: string,
+  filter: {
+    cursor: { createdAt: string; id: string } | null;
+    limit: number;
+  }
+): Promise<{
+  items: LeadView[];
+  nextCursor: { createdAt: string; id: string } | null;
+}> {
+  const rows = (await tx`
+    SELECT id, pipeline_id, revision_id, stage_key, stage_category,
+           stage_entered_at, display_name, owner_tenant_user_id, status,
+           merged_into_lead_id, external_customer_ref, version, created_at,
+           updated_at, deleted_at, anonymized_at
+    FROM awcms_crm_leads
+    WHERE tenant_id = ${tenantId}
+      AND deleted_at IS NOT NULL
+      AND (${filter.cursor?.createdAt ?? null}::timestamptz IS NULL
+           OR (created_at, id) < (${filter.cursor?.createdAt ?? null}::timestamptz,
+                                  ${filter.cursor?.id ?? null}::uuid))
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${filter.limit + 1}
+  `) as LeadRow[];
+  const page = rows.slice(0, filter.limit);
+  const points = await contactPointsFor(
+    tx,
+    tenantId,
+    page.map((row) => row.id)
+  );
+  const last = page[page.length - 1];
+
+  return {
+    items: page.map((row) => ({
+      ...toLead(row),
+      contactPoints: points.get(row.id) ?? []
+    })),
+    nextCursor:
+      rows.length > filter.limit && last
+        ? { createdAt: last.created_at.toISOString(), id: last.id }
+        : null
+  };
+}
+
+/**
+ * Several leads of the tenant by id, in two queries whatever the count (the
+ * merge review shows each candidate beside the lead). A foreign or unknown id
+ * is simply absent.
+ */
+export async function fetchLeadViews(
+  tx: Sql,
+  tenantId: string,
+  leadIds: string[]
+): Promise<LeadView[]> {
+  if (leadIds.length === 0) return [];
+
+  const rows = (await tx`
+    SELECT id, pipeline_id, revision_id, stage_key, stage_category,
+           stage_entered_at, display_name, owner_tenant_user_id, status,
+           merged_into_lead_id, external_customer_ref, version, created_at,
+           updated_at, deleted_at, anonymized_at
+    FROM awcms_crm_leads
+    WHERE tenant_id = ${tenantId}
+      AND id = ANY(${tx.array(leadIds, "uuid")})
+    ORDER BY created_at DESC, id DESC
+  `) as LeadRow[];
+  const points = await contactPointsFor(
+    tx,
+    tenantId,
+    rows.map((row) => row.id)
+  );
+
+  return rows.map((row) => ({
+    ...toLead(row),
+    contactPoints: points.get(row.id) ?? []
+  }));
+}
+
 export type LeadHistory = {
   touches: Record<string, unknown>[];
   transitions: Record<string, unknown>[];

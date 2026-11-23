@@ -308,22 +308,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "social_publishing.rules.configure",
   "social_publishing.rules.read",
   "social_publishing.settings.configure",
-  // crm_leads (7) — ADR-0153 / Issue #1166. The lead list, the lead detail
-  // (move, assign) and the settings (tenant switch, catalogue view) are
-  // screened and claim `leads.read`, `leads.assign`, `stages.update` and
-  // `pipelines.configure`. The seven below have an endpoint and NO control yet:
-  // creating or editing a lead (contact points), merge review with undo,
-  // recording or reversing a conversion, soft delete and restore. Each is a
-  // form or a review flow of its own; the follow-up that screens one removes
-  // its key here in the same change. SYSTEM admin, built here.
-  "crm_leads.conversions.approve",
-  "crm_leads.leads.create",
-  "crm_leads.leads.delete",
-  "crm_leads.leads.restore",
-  "crm_leads.leads.update",
-  "crm_leads.manual_conversions.create",
-  "crm_leads.merges.manage",
-
   // email sender routing — Issue #1160, ADR-0151 section 2. The operator
   // screen is `/admin/email-senders` (Issue #1162), which claims
   // `email.senders.read` and `email.sender_policy.configure`. Only

@@ -14,8 +14,10 @@
  * display name and the MASKED contact points. A contact value is never
  * decrypted for a screen, a soft-deleted, merged-away or anonymised lead is not
  * listed, and a staff member is "you" or "another staff member", never a name.
- * There is no create form: lead intake stays on the API (and on the sources
- * that feed it) in this slice.
+ * Writing is on its own pages, reached from here by a link shown only to someone
+ * who may use it: `/admin/crm-leads/new` (enter a lead by hand) and
+ * `/admin/crm-leads/deleted` (restore a soft-deleted lead). Import and API
+ * intake stay on the API and on the sources that feed it.
  *
  * ## It shows exactly what the API shows
  *
@@ -86,6 +88,18 @@ const CONFIGURE_GUARD = {
   action: "configure"
 } as const;
 
+/** Only to decide whether to LINK to the two write pages; each gates itself. */
+const CREATE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "create"
+} as const;
+const RESTORE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "restore"
+} as const;
+
 // ---- Data-page state (ADR-0149) ------------------------------------------
 const PATH = "/admin/crm-leads";
 const SPEC: DataPageSpec = {
@@ -112,6 +126,7 @@ const screen = await loadAdminScreen({
       },
       filters: query.filters,
       configureGuard: CONFIGURE_GUARD,
+      writeGuards: { create: CREATE_GUARD, restore: RESTORE_GUARD },
       can
     }),
   onError: (error) => {
@@ -235,6 +250,22 @@ const summary = filtered
             {" "}
             <a href={`${PATH}/settings`} id="crm-leads-settings-link">
               {t("Pipelines and settings")}
+            </a>
+          </>
+        )}
+        {data.canCreate && (
+          <>
+            {" "}
+            <a href={`${PATH}/new`} id="crm-leads-new-link">
+              {t("New lead")}
+            </a>
+          </>
+        )}
+        {data.canRestore && (
+          <>
+            {" "}
+            <a href={`${PATH}/deleted`} id="crm-leads-deleted-link">
+              {t("Deleted leads")}
             </a>
           </>
         )}

@@ -105,6 +105,9 @@ export type LeadListData = {
   pipelines: PipelineView[];
   me: string;
   canConfigure: boolean;
+  /** Links only: the pages behind them gate themselves. `false` when no guard was given. */
+  canCreate: boolean;
+  canRestore: boolean;
 };
 
 /** The first source touch's kind per lead: one query for the whole page, never one per row. */
@@ -134,6 +137,8 @@ export async function loadLeadList(input: {
   context: CrmLeadsScreenContext;
   filters: LeadListFilters;
   configureGuard: AccessRequest;
+  /** The guards of the two write pages the list links to (create, restore). */
+  writeGuards?: { create: AccessRequest; restore: AccessRequest };
   can: CrmLeadsCan;
 }): Promise<LeadListData> {
   const { context, filters, can } = input;
@@ -149,7 +154,9 @@ export async function loadLeadList(input: {
       more: false,
       pipelines: [],
       me,
-      canConfigure: false
+      canConfigure: false,
+      canCreate: false,
+      canRestore: false
     };
   }
 
@@ -196,7 +203,9 @@ export async function loadLeadList(input: {
     more,
     pipelines: await listPipelines(tx, tenantId),
     me,
-    canConfigure: await can(input.configureGuard)
+    canConfigure: await can(input.configureGuard),
+    canCreate: input.writeGuards ? await can(input.writeGuards.create) : false,
+    canRestore: input.writeGuards ? await can(input.writeGuards.restore) : false
   };
 }
 
@@ -214,6 +223,10 @@ export type LeadDetailData =
       me: string;
       canMove: boolean;
       canAssign: boolean;
+      /** Links only: the write pages gate themselves. `false` when no guard was given. */
+      canEdit: boolean;
+      canMerge: boolean;
+      canConvert: boolean;
     };
 
 export async function loadLeadDetail(input: {
@@ -221,9 +234,16 @@ export async function loadLeadDetail(input: {
   leadId: string | null;
   moveGuard: AccessRequest;
   assignGuard: AccessRequest;
+  /** The guards of the write pages the detail links to. */
+  writeGuards?: {
+    update: AccessRequest;
+    merge: AccessRequest;
+    approve: AccessRequest;
+    manual: AccessRequest;
+  };
   can: CrmLeadsCan;
 }): Promise<LeadDetailData> {
-  const { context, leadId, can } = input;
+  const { context, leadId, can, writeGuards } = input;
   const { tx, tenantId, me } = context;
 
   if (!isCrmLeadsEnabled()) return { enabled: false };
@@ -254,7 +274,12 @@ export async function loadLeadDetail(input: {
     revision: currentRevision,
     me,
     canMove: await can(input.moveGuard),
-    canAssign: await can(input.assignGuard)
+    canAssign: await can(input.assignGuard),
+    canEdit: writeGuards ? await can(writeGuards.update) : false,
+    canMerge: writeGuards ? await can(writeGuards.merge) : false,
+    canConvert: writeGuards
+      ? (await can(writeGuards.approve)) || (await can(writeGuards.manual))
+      : false
   };
 }
 

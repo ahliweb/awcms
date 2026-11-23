@@ -1,0 +1,520 @@
+---
+/**
+ * Conversion — record that a lead became a customer, or reverse that (Issue
+ * #1166, ADR-0153 section 6).
+ *
+ * ## The two ways in, and why they are different permissions
+ *
+ * A conversion is a CLAIM about a customer, and the customer record belongs to
+ * another system (ADR-0153). So there are two honest ways to record one:
+ *
+ *   - CONFIRMED by the customer authority: `crm_leads.conversions.approve`
+ *     (`POST /leads/{id}/conversions`). Needs the authority's opaque customer
+ *     reference and an evidence reference; reported as confirmed.
+ *   - MANUAL, by staff, with no confirming authority:
+ *     `crm_leads.manual_conversions.create` (`POST /leads/{id}/manual-conversions`).
+ *     Needs a note and an evidence reference; stored as "not confirmed by an
+ *     authority" and reported separately, so it can never pass for a confirmed one.
+ *
+ * The form offers only the kinds the viewer may record. Reversing (a refund, a
+ * cancelled enrolment) is `conversions.approve` too, and is a CORRECTION BY
+ * EVENT: the lead moves back to the stage it came from and the history keeps
+ * both facts; nothing is edited.
+ *
+ * ## What it never shows
+ *
+ * Neither the customer reference nor an evidence reference is ever printed or
+ * returned to this page: the loader hands over only the id, the kind and the
+ * dates of each conversion. The form fields that take them are write-only.
+ *
+ * ## Writes
+ *
+ * High-risk, so each carries an `Idempotency-Key`, a stable `occurredAt` (so a
+ * retry replays instead of colliding with its own key), the version the page
+ * saw, and a confirmation first. Audited at warning by the endpoint.
+ */
+import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import "../../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../../lib/i18n";
+import {
+  conversionModeLabel,
+  crmLeadWriteMessages,
+  stageCategoryLabel
+} from "../../../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../../../lib/ui/channel-accounts-screen";
+import { uuidOrNull } from "../../../../modules/crm-leads/application/screen-loaders";
+import { loadLeadConversion } from "../../../../modules/crm-leads/application/screen-write-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+const leadId = uuidOrNull(Astro.params.id);
+
+/** The guards of this screen, spelled out as literals so `admin:screen-coverage:check` sees them. */
+const READ_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "read"
+} as const;
+const APPROVE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "conversions",
+  action: "approve"
+} as const;
+const MANUAL_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "manual_conversions",
+  action: "create"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: ({ tx, auth, can }) =>
+    loadLeadConversion({
+      context: { tx, tenantId: ssr.tenantId, me: auth.context.tenantUserId },
+      leadId,
+      approveGuard: APPROVE_GUARD,
+      manualGuard: MANUAL_GUARD,
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads/[id]/conversion.astro: failed to load",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const allowed = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const found = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const lead = found?.lead ?? null;
+const mayAct = found !== null && (found.canApprove || found.canManual);
+const converted = lead?.stageCategory === "converted";
+/** Writes need the tenant switch on and a lead still `open`. */
+const writable =
+  found !== null && found.tenantEnabled && lead?.status === "open";
+const mayRecord =
+  writable && !converted && found !== null && found.convertedStages.length > 0;
+
+const messages = {
+  ...crmLeadWriteMessages(t),
+  busy: t("Please wait…"),
+  confirmRecord: t(
+    "Record this conversion? It moves the lead to a converted stage and is kept in its history."
+  ),
+  confirmReverse: t(
+    "Reverse this conversion? The lead moves back and both facts stay in its history."
+  )
+};
+---
+
+<AdminLayout
+  title={t("Conversion")}
+  description={t(
+    "Record that a lead became a customer, or reverse a conversion. The customer record stays with the system that owns it."
+  )}
+>
+  <p class="page-description">
+    {leadId !== null ? (
+      <a href={`${LIST_PATH}/${leadId}`}>{t("Back to the lead")}</a>
+    ) : (
+      <a href={LIST_PATH}>{t("Back to the leads")}</a>
+    )}
+  </p>
+
+  {!allowed && (
+    <p class="state-notice fade-in-up" id="crm-lead-conversion-denied">
+      {t("You do not have permission to view leads.")}
+    </p>
+  )}
+
+  {allowed && loadError && (
+    <p class="state-notice fade-in-up" id="crm-lead-conversion-error">
+      {t("The lead could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {allowed && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-lead-conversion-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {allowed && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="crm-lead-conversion-not-found">
+      {t("That lead was not found.")}
+    </p>
+  )}
+
+  {found && lead && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-conversion-title"
+        id="crm-lead-conversion"
+        data-lead-id={lead.id}
+        data-version={lead.version}
+        data-messages={JSON.stringify(messages)}
+      >
+        <h2 class="admin-section-title" id="crm-lead-conversion-title">
+          {lead.displayName ?? t("Unnamed lead")}
+        </h2>
+
+        <dl class="admin-detail-list" id="crm-lead-conversion-summary">
+          <dt>{t("Stage")}</dt>
+          <dd data-stage-category={lead.stageCategory}>
+            {stageCategoryLabel(t, lead.stageCategory)}
+          </dd>
+        </dl>
+
+        {!mayAct && (
+          <p class="state-notice" id="crm-lead-conversion-no-access">
+            {t(
+              "You may read this lead's conversions but not record or reverse one."
+            )}
+          </p>
+        )}
+        {!found.tenantEnabled && (
+          <p class="state-notice" id="crm-lead-conversion-tenant-off">
+            {t(
+              "The lead pipeline is switched off for this tenant, so conversions cannot be changed."
+            )}
+          </p>
+        )}
+        {found.tenantEnabled && lead.status !== "open" && (
+          <p class="state-notice" id="crm-lead-conversion-not-open">
+            {t("This lead can no longer be changed.")}
+          </p>
+        )}
+
+        <p
+          id="crm-lead-conversion-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        />
+      </section>
+
+      {mayAct && (found.canApprove || found.canManual) && !converted && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-lead-record-title"
+        >
+          <h2 class="admin-section-title" id="crm-lead-record-title">
+            {t("Record a conversion")}
+          </h2>
+          {found.convertedStages.length === 0 ? (
+            <p class="cell-muted" id="crm-lead-no-converted-stage">
+              {t(
+                "The pipeline has no converted stage, so a conversion cannot be recorded."
+              )}
+            </p>
+          ) : (
+            <form id="crm-lead-record-form" class="admin-form" novalidate>
+              <fieldset disabled={!mayRecord}>
+                <div class="admin-field">
+                  <label for="crm-lead-record-mode">{t("How")}</label>
+                  <select id="crm-lead-record-mode" name="mode">
+                    {found.canApprove && (
+                      <option value="authority_confirmed">
+                        {conversionModeLabel(t, "authority_confirmed")}
+                      </option>
+                    )}
+                    {found.canManual && (
+                      <option value="authority_unconfirmed">
+                        {conversionModeLabel(t, "authority_unconfirmed")}
+                      </option>
+                    )}
+                  </select>
+                </div>
+                <div class="admin-field">
+                  <label for="crm-lead-record-stage">
+                    {t("Converted stage")}
+                  </label>
+                  <select id="crm-lead-record-stage" name="toStageKey">
+                    {found.convertedStages.map((stage) => (
+                      <option value={stage.key}>{stage.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div class="admin-field">
+                  <label for="crm-lead-record-evidence">
+                    {t("Evidence reference")}
+                  </label>
+                  <input
+                    id="crm-lead-record-evidence"
+                    name="evidenceRef"
+                    type="text"
+                    maxlength="128"
+                    autocomplete="off"
+                    required
+                    aria-describedby="crm-lead-record-evidence-hint"
+                  />
+                  <p
+                    class="admin-field-hint"
+                    id="crm-lead-record-evidence-hint"
+                  >
+                    {t(
+                      "An opaque reference to the proof (an order or enrolment number). Letters, digits and . _ : - only."
+                    )}
+                  </p>
+                </div>
+                <div class="admin-field">
+                  <label for="crm-lead-record-customer">
+                    {t("Customer reference (confirmed conversions)")}
+                  </label>
+                  <input
+                    id="crm-lead-record-customer"
+                    name="externalCustomerRef"
+                    type="text"
+                    maxlength="128"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="admin-field">
+                  <label for="crm-lead-record-note">
+                    {t("Note (required for a manual conversion)")}
+                  </label>
+                  <textarea
+                    id="crm-lead-record-note"
+                    name="note"
+                    rows="2"
+                    maxlength="1000"
+                  />
+                </div>
+                <div>
+                  <button type="submit" class="btn btn-primary">
+                    {t("Record conversion")}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          )}
+        </section>
+      )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-conversions-list-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-conversions-list-title">
+          {t("Conversions")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-conversions-list-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-conversions-list"
+          >
+            <caption id="crm-lead-conversions-list-caption">
+              {tn(
+                "{count} conversion",
+                "{count} conversions",
+                found.conversions.length,
+                { count: found.conversions.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("How")}</th>
+                <th scope="col">{t("Reversed")}</th>
+                <th scope="col">{t("Actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {found.conversions.length === 0 ? (
+                <tr>
+                  <td colspan={4}>
+                    <span class="cell-muted">
+                      {t("No conversion recorded.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                found.conversions.map((row) => (
+                  <tr
+                    data-conversion-id={row.id}
+                    data-conversion-mode={row.mode}
+                  >
+                    <td data-label={t("When")}>
+                      {formatUtcMinute(row.occurredAt)}
+                    </td>
+                    <td data-label={t("How")}>
+                      {conversionModeLabel(t, row.mode)}
+                    </td>
+                    <td data-label={t("Reversed")}>
+                      {row.reversedAt === null
+                        ? "—"
+                        : formatUtcMinute(row.reversedAt)}
+                    </td>
+                    <td data-label={t("Actions")}>
+                      {row.reversedAt === null && found.canApprove ? (
+                        <form
+                          class="admin-form js-conversion-reverse-form"
+                          novalidate
+                          data-conversion-id={row.id}
+                        >
+                          <fieldset disabled={!found.tenantEnabled}>
+                            <div class="admin-field">
+                              <label>
+                                {t("Evidence of the reversal")}
+                                <input
+                                  name="evidenceRef"
+                                  type="text"
+                                  maxlength="128"
+                                  autocomplete="off"
+                                  required
+                                />
+                              </label>
+                            </div>
+                            <div class="admin-field">
+                              <label>
+                                {t("Reason (optional)")}
+                                <textarea
+                                  name="reason"
+                                  rows="2"
+                                  maxlength="500"
+                                />
+                              </label>
+                            </div>
+                            <button
+                              type="submit"
+                              class="btn btn-danger btn-danger--solid"
+                            >
+                              {t("Reverse conversion")}
+                            </button>
+                          </fieldset>
+                        </form>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    onSubmitAll,
+    sendJson
+  } from "../../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../../lib/ui/confirm-dialog-client";
+  import {
+    createInstantSource,
+    failureText,
+    readMessages
+  } from "../../../../lib/ui/crm-leads-write-client";
+
+  const error = messageBox("crm-lead-conversion-error-box");
+  const root = document.getElementById("crm-lead-conversion");
+  const messages = readMessages("crm-lead-conversion");
+  const leadId = root?.dataset.leadId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  const base = `/api/v1/crm-leads`;
+  const keyFor = createIdempotencyKeySource();
+  const instantFor = createInstantSource();
+
+  onSubmit("crm-lead-record-form", async ({ data, submit }) => {
+    const mode =
+      field(data, "mode") === "authority_unconfirmed"
+        ? "authority_unconfirmed"
+        : "authority_confirmed";
+    const evidenceRef = field(data, "evidenceRef");
+    const customer = field(data, "externalCustomerRef");
+    const note = field(data, "note");
+    const fields = {
+      mode,
+      expectedVersion: version,
+      evidenceRef,
+      toStageKey: field(data, "toStageKey"),
+      // The customer reference belongs to a confirmed conversion only.
+      ...(mode === "authority_confirmed" && customer
+        ? { externalCustomerRef: customer }
+        : {}),
+      ...(note ? { note } : {})
+    };
+
+    // Required by the endpoint; said here so the person is not sent a round trip.
+    if (
+      evidenceRef === "" ||
+      (mode === "authority_confirmed" && customer === "") ||
+      (mode === "authority_unconfirmed" && note === "")
+    ) {
+      error.show(failureText(messages, "VALIDATION_ERROR"));
+      return;
+    }
+
+    if (!(await confirmAction(messages.confirmRecord ?? ""))) return;
+
+    const url = `${base}/leads/${leadId}/${
+      mode === "authority_confirmed" ? "conversions" : "manual-conversions"
+    }`;
+    const body = { ...fields, occurredAt: instantFor(fields) };
+
+    await mutateAndReload(
+      submit,
+      error,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+
+  onSubmitAll(".js-conversion-reverse-form", async ({ form, data, submit }) => {
+    const id = form.dataset.conversionId ?? "";
+    const evidenceRef = field(data, "evidenceRef");
+    const reason = field(data, "reason");
+
+    if (!id || evidenceRef === "") {
+      error.show(failureText(messages, "VALIDATION_ERROR"));
+      return;
+    }
+
+    if (!(await confirmAction(messages.confirmReverse ?? ""))) return;
+
+    const url = `${base}/conversions/${id}/reverse`;
+    const fields = { evidenceRef, ...(reason ? { reason } : {}) };
+    const body = { ...fields, occurredAt: instantFor({ id, ...fields }) };
+
+    await mutateAndReload(
+      submit,
+      error,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+</script>

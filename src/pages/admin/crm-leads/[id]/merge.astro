@@ -1,0 +1,452 @@
+---
+/**
+ * Merge review — decide whether two leads are one person, and undo it (Issue
+ * #1166, ADR-0153 section 5).
+ *
+ * ## What it is
+ *
+ * The HUMAN-VERIFIED half of identity resolution. The screen lists the
+ * candidates (other open leads of THIS tenant that share an exact protected
+ * hash with one of this lead's live contact points) with the KINDS that matched
+ * and the masked contact points of both, and lets a reviewer merge one pair
+ * after writing a note. A candidate is a suggestion, never a merge: nothing
+ * happens until a person presses the button.
+ *
+ * It then lists every merge this lead takes part in, with an Undo button while
+ * the tenant's undo window is open (`POST /merges/{id}/revert`). An undone
+ * merge leaves the absorbed lead open again exactly as it was: the merge moved
+ * and deleted nothing.
+ *
+ * ## What it never shows
+ *
+ * No contact value (masked only), no customer reference. Another tenant's lead
+ * is never a candidate: the match is a per-tenant keyed hash and the read runs
+ * under RLS.
+ *
+ * ## Writes
+ *
+ * Each merge names both leads, the version of each the reviewer SAW
+ * (`409 VERSION_CONFLICT` if either moved) and a required note; it is
+ * high-risk, so it carries an `Idempotency-Key` and is audited at warning, and
+ * the screen asks for a confirmation first. Leads of different pipelines are
+ * shown but cannot be chosen (the endpoint refuses them).
+ *
+ * Gated by `crm_leads.merges.manage`, the permission of both endpoints.
+ */
+import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import "../../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../../lib/i18n";
+import {
+  contactPointKindLabel,
+  crmLeadWriteMessages,
+  leadStatusLabel,
+  stageCategoryLabel
+} from "../../../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../../../lib/ui/channel-accounts-screen";
+import { uuidOrNull } from "../../../../modules/crm-leads/application/screen-loaders";
+import { loadLeadMerge } from "../../../../modules/crm-leads/application/screen-write-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+const leadId = uuidOrNull(Astro.params.id);
+
+/** The entry guard, spelled out as a literal so `admin:screen-coverage:check` sees the permission this screen claims. */
+const MERGE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "merges",
+  action: "manage"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: MERGE_GUARD,
+  load: ({ tx, auth }) =>
+    loadLeadMerge({
+      context: { tx, tenantId: ssr.tenantId, me: auth.context.tenantUserId },
+      leadId
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/crm-leads/[id]/merge.astro: failed to load",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const allowed = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const found = data !== null && data.enabled && data.found ? data : null;
+const notFound = data !== null && data.enabled && !data.found;
+const lead = found?.lead ?? null;
+const writable =
+  found !== null && found.tenantEnabled && lead?.status === "open";
+/** Only a hint for the Undo button; the endpoint decides against the database clock. */
+const renderedAt = Date.now();
+
+const points = (candidate: {
+  contactPoints: {
+    revokedAt: string | null;
+    masked: string | null;
+    kind: string;
+    erased: boolean;
+  }[];
+}) => candidate.contactPoints.filter((point) => point.revokedAt === null);
+
+const messages = {
+  ...crmLeadWriteMessages(t),
+  busy: t("Please wait…"),
+  confirmMerge: t("Merge these two leads? You can undo it for {hours} hours.", {
+    hours: found?.mergeUndoHours ?? 0
+  }),
+  confirmUndo: t("Undo this merge? The merged lead becomes an open lead again.")
+};
+---
+
+<AdminLayout
+  title={t("Merge review")}
+  description={t(
+    "Candidates that share a contact point with this lead. Nothing is merged until you review a pair and confirm."
+  )}
+>
+  <p class="page-description">
+    {leadId !== null ? (
+      <a href={`${LIST_PATH}/${leadId}`}>{t("Back to the lead")}</a>
+    ) : (
+      <a href={LIST_PATH}>{t("Back to the leads")}</a>
+    )}
+  </p>
+
+  {!allowed && (
+    <p class="state-notice fade-in-up" id="crm-lead-merge-denied">
+      {t("You do not have permission to review merges.")}
+    </p>
+  )}
+
+  {allowed && loadError && (
+    <p class="state-notice fade-in-up" id="crm-lead-merge-error">
+      {t("The lead could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {allowed && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-lead-merge-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {allowed && !loadError && notFound && (
+    <p class="state-notice fade-in-up" id="crm-lead-merge-not-found">
+      {t("That lead was not found.")}
+    </p>
+  )}
+
+  {found && lead && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-merge-title"
+        id="crm-lead-merge"
+        data-lead-id={lead.id}
+        data-version={lead.version}
+        data-messages={JSON.stringify(messages)}
+      >
+        <h2 class="admin-section-title" id="crm-lead-merge-title">
+          {lead.displayName ?? t("Unnamed lead")}
+        </h2>
+
+        <p
+          id="crm-lead-merge-error-box"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        />
+
+        <dl class="admin-detail-list" id="crm-lead-merge-summary">
+          <dt>{t("Pipeline")}</dt>
+          <dd>{found.pipelineName}</dd>
+          <dt>{t("Status")}</dt>
+          <dd data-lead-status={lead.status}>
+            {leadStatusLabel(t, lead.status)}
+          </dd>
+          <dt>{t("Contact points")}</dt>
+          <dd>
+            {points(lead).length === 0
+              ? "—"
+              : points(lead).map((point) => (
+                  <span class="cell-muted">{point.masked ?? "—"} </span>
+                ))}
+          </dd>
+        </dl>
+
+        {!found.tenantEnabled && (
+          <p class="state-notice" id="crm-lead-merge-tenant-off">
+            {t(
+              "The lead pipeline is switched off for this tenant, so leads cannot be merged."
+            )}
+          </p>
+        )}
+        {found.tenantEnabled && lead.status !== "open" && (
+          <p class="state-notice" id="crm-lead-merge-not-open">
+            {t("This lead can no longer be changed.")}
+          </p>
+        )}
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-candidates-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-candidates-title">
+          {t("Candidates")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "Open leads of this tenant that share an exact contact value with this lead. A match is a suggestion, not proof that they are the same person."
+          )}
+        </p>
+        {found.candidates.length === 0 ? (
+          <p class="cell-muted" id="crm-lead-no-candidates">
+            {t("No other lead shares a contact point with this lead.")}
+          </p>
+        ) : (
+          found.candidates.map((candidate) => (
+            <form
+              class="admin-form js-lead-merge-form"
+              novalidate
+              data-other-id={candidate.lead.id}
+              data-other-version={candidate.lead.version}
+            >
+              <fieldset disabled={!writable || !candidate.samePipeline}>
+                <legend>
+                  {candidate.lead.displayName ?? t("Unnamed lead")}
+                </legend>
+                <dl class="admin-detail-list">
+                  <dt>{t("Matched on")}</dt>
+                  <dd>
+                    {candidate.matchedKinds
+                      .map((kind) => contactPointKindLabel(t, kind))
+                      .join(", ")}
+                  </dd>
+                  <dt>{t("Contact points")}</dt>
+                  <dd>
+                    {points(candidate.lead).map((point) => (
+                      <span class="cell-muted">{point.masked ?? "—"} </span>
+                    ))}
+                  </dd>
+                  <dt>{t("Stage")}</dt>
+                  <dd>{stageCategoryLabel(t, candidate.lead.stageCategory)}</dd>
+                  <dt>{t("Created")}</dt>
+                  <dd>{formatUtcMinute(candidate.lead.createdAt)}</dd>
+                </dl>
+                {!candidate.samePipeline && (
+                  <p class="cell-muted">
+                    {t(
+                      "This lead is in another pipeline, so it cannot be merged with this one."
+                    )}
+                  </p>
+                )}
+                <div class="admin-field">
+                  <label>
+                    {t("Keep")}
+                    <select name="keep">
+                      <option value="this">{t("This lead")}</option>
+                      <option value="other">{t("The other lead")}</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="admin-field">
+                  <label>
+                    {t("Why they are the same person")}
+                    <textarea name="note" rows="2" maxlength="1000" required />
+                  </label>
+                </div>
+                <div>
+                  <button type="submit" class="btn btn-primary">
+                    {t("Merge these leads")}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          ))
+        )}
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="crm-lead-merges-title"
+      >
+        <h2 class="admin-section-title" id="crm-lead-merges-title">
+          {t("Merges")}
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="crm-lead-merges-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="crm-lead-merges-table"
+          >
+            <caption id="crm-lead-merges-caption">
+              {tn("{count} merge", "{count} merges", found.merges.length, {
+                count: found.merges.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("Role of this lead")}</th>
+                <th scope="col">{t("Other lead")}</th>
+                <th scope="col">{t("Undo until")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {found.merges.length === 0 ? (
+                <tr>
+                  <td colspan={6}>
+                    <span class="cell-muted">{t("No merge yet.")}</span>
+                  </td>
+                </tr>
+              ) : (
+                found.merges.map((merge) => {
+                  const kept = merge.survivorLeadId === lead.id;
+                  const other = kept
+                    ? merge.absorbedLeadId
+                    : merge.survivorLeadId;
+                  const undoable =
+                    merge.revertedAt === null &&
+                    new Date(merge.undoUntil).getTime() > renderedAt;
+
+                  return (
+                    <tr data-merge-id={merge.id}>
+                      <td data-label={t("When")}>
+                        {formatUtcMinute(merge.mergedAt)}
+                      </td>
+                      <td data-label={t("Role of this lead")}>
+                        {kept ? t("Kept") : t("Merged away")}
+                      </td>
+                      <td data-label={t("Other lead")}>
+                        <a href={`${LIST_PATH}/${other}`}>{t("Open lead")}</a>
+                      </td>
+                      <td data-label={t("Undo until")}>
+                        {formatUtcMinute(merge.undoUntil)}
+                      </td>
+                      <td data-label={t("Status")}>
+                        {merge.revertedAt !== null
+                          ? t("Undone")
+                          : undoable
+                            ? t("Active")
+                            : t("Final")}
+                      </td>
+                      <td data-label={t("Actions")}>
+                        {undoable ? (
+                          <button
+                            type="button"
+                            class="btn btn-secondary js-merge-undo"
+                            data-merge-id={merge.id}
+                            disabled={!found.tenantEnabled}
+                          >
+                            {t("Undo merge")}
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmitAll,
+    sendJson
+  } from "../../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../../lib/ui/admin-idempotency-key";
+  import { confirmAction } from "../../../../lib/ui/confirm-dialog-client";
+  import {
+    failureText,
+    readMessages
+  } from "../../../../lib/ui/crm-leads-write-client";
+
+  const error = messageBox("crm-lead-merge-error-box");
+  const root = document.getElementById("crm-lead-merge");
+  const messages = readMessages("crm-lead-merge");
+  const leadId = root?.dataset.leadId ?? "";
+  const version = Number(root?.dataset.version ?? "0");
+  // One key per distinct request: a retry replays, a different pair or note is new.
+  const keyFor = createIdempotencyKeySource();
+
+  onSubmitAll(".js-lead-merge-form", async ({ form, data, submit }) => {
+    const otherId = form.dataset.otherId ?? "";
+    const otherVersion = Number(form.dataset.otherVersion ?? "0");
+    const note = field(data, "note");
+    const keepThis = field(data, "keep") !== "other";
+
+    if (!otherId || note === "") {
+      error.show(failureText(messages, "VALIDATION_ERROR"));
+      return;
+    }
+
+    if (!(await confirmAction(messages.confirmMerge ?? ""))) return;
+
+    const url = "/api/v1/crm-leads/leads/merge";
+    const body = {
+      survivorLeadId: keepThis ? leadId : otherId,
+      absorbedLeadId: keepThis ? otherId : leadId,
+      survivorVersion: keepThis ? version : otherVersion,
+      absorbedVersion: keepThis ? otherVersion : version,
+      note
+    };
+
+    await mutateAndReload(
+      submit,
+      error,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+
+  onAction(".js-merge-undo", async (button) => {
+    if (!(await confirmAction(messages.confirmUndo ?? ""))) return;
+
+    const url = `/api/v1/crm-leads/merges/${button.dataset.mergeId ?? ""}/revert`;
+
+    await mutateAndReload(
+      button,
+      error,
+      () =>
+        sendJson("POST", url, undefined, {
+          "Idempotency-Key": keyFor({ url })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+</script>

@@ -1410,8 +1410,26 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for the #1166 write screens** (create, edit, restore, merge review,
+ * conversion): +6,255 B (388,085 -> 394,340), measured 394,200 B on a clean
+ * build (`main` sat at 387,945 B), margin 140 B as above. Five page scripts,
+ * each on its own screen only (`/admin/crm-leads/new`, `/deleted`, and under a
+ * lead `/edit`, `/merge`, `/conversion`), about 1,250 B apiece: each reads its
+ * form, sends ONE or TWO idempotent writes and maps the API's error codes to
+ * the sentences the server translated. The lifecycle is the shared
+ * `admin-form-client.ts`, the key source the shared `admin-idempotency-key.ts`,
+ * the confirmation the shared `confirm-dialog-client.ts`, and the three helpers
+ * the screens have in common live once in `crm-leads-write-client.ts`
+ * (`readMessages`, `failureText`, `createInstantSource`), so there is no
+ * per-screen duplication left to recover. The list and detail ship no new
+ * script (a link is markup).
+ *
+ * Rebase note: `main` had moved to 393,025 B, so this branch's own raise
+ * (+6,255 B, written against 388,085 B) is stacked on it, giving
+ * 399,280 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 399_280;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
