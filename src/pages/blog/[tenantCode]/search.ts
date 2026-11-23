@@ -7,7 +7,8 @@ import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-res
 import { escapeHtml } from "../../../lib/html/escape";
 import {
   notFoundHtmlResponse,
-  serverErrorHtmlResponse
+  serverErrorHtmlResponse,
+  readDatabaseBusyRetryAfter
 } from "../../../lib/html/error-responses";
 import { log } from "../../../lib/logging/logger";
 import { searchPublicBlogContent } from "../../../modules/blog-content/application/blog-search";
@@ -132,10 +133,14 @@ export const GET: APIRoute = async ({ locals, params, url }) => {
       });
     });
   } catch (error) {
-    log("error", "public_blog.search.failed", {
-      tenantCode,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return serverErrorHtmlResponse();
+    log(
+      readDatabaseBusyRetryAfter(error) === null ? "error" : "warning",
+      "public_blog.search.failed",
+      {
+        tenantCode,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    );
+    return serverErrorHtmlResponse(error);
   }
 };

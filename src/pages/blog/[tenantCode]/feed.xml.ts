@@ -10,7 +10,8 @@ import { coerceLocale } from "../../../lib/i18n/negotiate";
 import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
 import {
   notFoundXmlResponse,
-  serverErrorXmlResponse
+  serverErrorXmlResponse,
+  readDatabaseBusyRetryAfter
 } from "../../../lib/html/error-responses";
 import { log } from "../../../lib/logging/logger";
 import { listPublicBlogPostsForFeed } from "../../../modules/blog-content/application/public-blog-directory";
@@ -136,10 +137,14 @@ ${items}
       });
     });
   } catch (error) {
-    log("error", "public_blog.feed.failed", {
-      tenantCode,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return serverErrorXmlResponse();
+    log(
+      readDatabaseBusyRetryAfter(error) === null ? "error" : "warning",
+      "public_blog.feed.failed",
+      {
+        tenantCode,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    );
+    return serverErrorXmlResponse(error);
   }
 };

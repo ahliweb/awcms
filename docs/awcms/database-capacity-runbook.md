@@ -343,4 +343,33 @@ this file is how you watch it happen.
 > was the warning meant to stop you trusting the data. Any capacity figure taken
 > from that file before this date should be re-derived.
 
+## What limits an uncached public page view (Issue #1454, LOCAL measurement)
+
+Measured on one shared workstation (the app pinned to 2 CPUs, PostgreSQL in a
+container with `fsync=off`, no CDN, `EDGE_CACHE_MODE=off`, one run per point),
+so read the shape, not the absolute numbers.
+
+- **A bare URL costs two requests**: the locale 307 (one tenant lookup) and the
+  prefixed page. App CPU per view was about 1.4-1.6 ms for the page and 0.3-0.5 ms
+  for the 307. `bun` runs the request loop on one thread, so "35-46% of a 2-CPU
+  quota" is one thread near saturation, not idle capacity.
+- **Raising the `interactive` gate is not the fix.** With the same load, gate 8
+  returned 34-38% 5xx at 800-900 views/s; gate 64 returned 0% 5xx but p50 of 1 s
+  at 800 and 3.3 s at 900 views/s. The gate turns overload into fast 503s; a
+  larger one turns it into queueing. Pool sizes were not changed.
+- **What made the pool the ceiling on a realistic tenant** was the tag-link
+  candidate aggregate (join + GROUP BY over every post/tag assignment) running
+  on every view: with 5,000 posts, 800 tags and 15,000 assignments it took about
+  10 ms to execute plus 3 ms to plan, and the median slot hold rose from 0.8 ms
+  to 8 ms. It is now cached per tenant (`BLOG_TAG_LINK_CANDIDATE_CACHE_TTL_SECONDS`,
+  default 60 s) and skipped for tenants/posts that opted out. On that tenant,
+  one page view at 100 views/s went from p50 13.5 ms to 4.4 ms; 300 views/s went
+  from 2.1% 5xx (p50 27.8 ms) to 0% (p50 3.3 ms); 450 views/s from 36% to 11% 5xx.
+- **A refused public view is now `503` + `Retry-After`**, not `500`, on the blog
+  routes and `/search`.
+- **Still open**: per-view CPU (route matching, the 307 hop, two transactions
+  per view) and running more than one process per node. ADR-0161's 2,000 rps per
+  2-vCPU node is not reachable uncached with one thread; it needs the edge cache
+  or a second process, which is an architecture decision and is not made here.
+
 </content>

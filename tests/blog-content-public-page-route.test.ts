@@ -106,7 +106,7 @@ describe("the route is gated like every other public blog route", () => {
     // distinguishable reasons, one indistinguishable answer. A route that
     // differentiated them would confirm which tenants exist to anyone asking.
     expect(route.split("notFoundHtmlResponse()").length - 1).toBe(4);
-    expect(route).toContain("serverErrorHtmlResponse()");
+    expect(route).toContain("serverErrorHtmlResponse(error)");
     expect(route).not.toContain("error.stack");
   });
 

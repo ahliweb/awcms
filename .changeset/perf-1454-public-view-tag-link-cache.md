@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+perf(blog): a public post view no longer re-ranks the tenant's tag vocabulary on every request, and a saturated database now answers public routes with 503 + `Retry-After` instead of 500 (Issue #1454, refs #1283). Measured locally on a tenant with 5,000 posts, 800 tags and 15,000 assignments, the "most-used tags" aggregate cost about 10 ms of execution plus 3 ms of planning per view and raised the median `interactive` slot hold from 0.8 ms to 8 ms, which made the 8-slot gate the ceiling (about 300 views/s). The ranked list is now cached per tenant in-process (bounded LRU, 60 s TTL via `BLOG_TAG_LINK_CANDIDATE_CACHE_TTL_SECONDS`, 0 disables; tag create/rename/delete invalidate in-process; per-tag opt-outs are still read fresh), the unused count query is gone from the public path, and a tenant or post that opted out of linking pays no tag query. Pool sizes are unchanged on purpose: raising the `interactive` gate to 64 only turned 503s into multi-second latency. No migration, API contract or access change.
