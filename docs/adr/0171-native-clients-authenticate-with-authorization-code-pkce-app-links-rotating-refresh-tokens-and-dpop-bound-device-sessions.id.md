@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0171-native-clients-authenticate-with-authorization-code-pkce-app-links-rotating-refresh-tokens-and-dpop-bound-device-sessions.md)
 
-<!-- i18n-source-hash: sha256:d66dcadad84fcf791a546cdf909ea402ff85d46df04832fc419ec2d41e3b9d27 -->
+<!-- i18n-source-hash: sha256:ebbad035e372c3234908b4e78dd3abf47396a7345d2a59e8912eb744c59cd4d2 -->
 
 # ADR-0171 — Klien native mengautentikasi dengan authorization code + PKCE lewat app link, refresh token berotasi, dan sesi perangkat yang terikat DPoP
 
