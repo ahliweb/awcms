@@ -30,6 +30,11 @@
  * registration with its own caching semantics.
  */
 
+import {
+  DEFAULT_PRODUCT_NAME,
+  resolveProductIdentity
+} from "../product-identity";
+
 /** The admin route prefix (`PROTECTED_PREFIX` in `src/middleware.ts`) + slash. */
 export const ADMIN_SCOPE = "/admin/";
 export const ADMIN_START_URL = "/admin/";
@@ -72,6 +77,13 @@ export interface PwaIdentity {
   shortName: string;
   themeColor: string;
   backgroundColor: string;
+  /** Issue #1352: same-origin overrides; absent = the built-in icon set. */
+  icons?: {
+    icon192: string | null;
+    icon512: string | null;
+    iconMaskable512: string | null;
+    appleTouch: string | null;
+  };
 }
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -103,9 +115,23 @@ function cleanColor(value: string | undefined, fallback: string): string {
 export function resolvePwaIdentity(
   env: Readonly<Record<string, string | undefined>>
 ): PwaIdentity {
+  // Issue #1352: PRODUCT_NAME renames the installed app too, unless the
+  // PWA_* variable (more specific) is set. Unset = the defaults below.
+  const product = resolveProductIdentity(env);
+  const renamed = product.productName !== DEFAULT_PRODUCT_NAME;
+
   return {
-    name: cleanText(env.PWA_APP_NAME, DEFAULT_PWA_APP_NAME, 45),
-    shortName: cleanText(env.PWA_APP_SHORT_NAME, DEFAULT_PWA_SHORT_NAME, 12),
+    name: cleanText(
+      env.PWA_APP_NAME,
+      renamed ? `${product.productName} Admin` : DEFAULT_PWA_APP_NAME,
+      45
+    ),
+    shortName: cleanText(
+      env.PWA_APP_SHORT_NAME,
+      renamed ? product.wordmark : DEFAULT_PWA_SHORT_NAME,
+      12
+    ),
+    icons: product.icons,
     themeColor: cleanColor(env.PWA_THEME_COLOR, DEFAULT_PWA_THEME_COLOR),
     backgroundColor: cleanColor(
       env.PWA_BACKGROUND_COLOR,
@@ -124,6 +150,15 @@ export function buildWebAppManifest(identity: PwaIdentity) {
     display: "standalone",
     theme_color: identity.themeColor,
     background_color: identity.backgroundColor,
-    icons: PWA_ICONS.map((icon) => ({ ...icon }))
+    icons: PWA_ICONS.map((icon) => {
+      const override =
+        icon.purpose === "maskable"
+          ? identity.icons?.iconMaskable512
+          : icon.sizes === "192x192"
+            ? identity.icons?.icon192
+            : identity.icons?.icon512;
+
+      return { ...icon, src: override ?? icon.src };
+    })
   };
 }
