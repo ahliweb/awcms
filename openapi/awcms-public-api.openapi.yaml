@@ -4017,7 +4017,15 @@ paths:
                     enum:
                       - true
                   data:
-                    type: object
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -4231,15 +4239,15 @@ paths:
                     enum:
                       - true
                   data:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        format: uuid
-                      deleted:
-                        type: boolean
-                        enum:
-                          - true
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -4590,7 +4598,15 @@ paths:
                     enum:
                       - true
                   data:
-                    type: object
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -6388,7 +6404,15 @@ paths:
                     enum:
                       - true
                   data:
-                    type: object
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -6859,7 +6883,15 @@ paths:
                     enum:
                       - true
                   data:
-                    type: object
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

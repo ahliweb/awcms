@@ -18,7 +18,12 @@ type Doc = Record<string, any>;
 const OPERATIONS = [
   { route: "/api/v1/blog/posts/{id}", file: "posts/[id].ts" },
   { route: "/api/v1/blog/pages/{id}", file: "pages/[id].ts" },
-  { route: "/api/v1/blog/terms/{id}", file: "terms/[id].ts" }
+  { route: "/api/v1/blog/terms/{id}", file: "terms/[id].ts" },
+  { route: "/api/v1/blog/institutions/{id}", file: "institutions/[id].ts" },
+  { route: "/api/v1/blog/widgets/{id}", file: "widgets/[id].ts" },
+  { route: "/api/v1/blog/menus/{id}", file: "menus/[id].ts" },
+  { route: "/api/v1/blog/templates/{id}", file: "templates/[id].ts" },
+  { route: "/api/v1/blog/ads/{id}", file: "ads/[id].ts" }
 ] as const;
 
 async function bundle(): Promise<Doc> {
@@ -63,6 +68,13 @@ describe("blog soft-delete contract matches the handler (#1443)", () => {
         "application/json"
       ].examples;
     expect(example).toBeDefined();
+
+    for (const { route } of OPERATIONS) {
+      const examples =
+        doc.paths[route].delete.responses["200"].content["application/json"]
+          .examples;
+      expect(Object.keys(examples ?? {})).toContain("softDeleted");
+    }
 
     const corrupted = structuredClone(doc);
     const first = Object.values(
