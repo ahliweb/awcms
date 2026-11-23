@@ -294,7 +294,8 @@ async function enrol(user: {
 async function freshStepUp(user: { identityId: string }): Promise<void> {
   await admin()`
     UPDATE awcms_sessions
-    SET assurance_level = 'aal2', stepped_up_at = now()
+    SET assurance_level = 'aal2', stepped_up_at = now(),
+        stepped_up_method = 'totp'
     WHERE identity_id = ${user.identityId}
   `;
 }

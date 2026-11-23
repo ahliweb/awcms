@@ -22,7 +22,6 @@ import {
   clearFactorFailures,
   consumeRecoveryCode,
   deletePendingFactors,
-  deleteRecoveryCodesForFactor,
   deleteRecoveryCodesForPrincipal,
   disableLiveFactors,
   findActiveFactor,
@@ -194,13 +193,17 @@ describe("the compare-and-swap guarantees survive the move", () => {
 
   test("a recovery code is spent under `used_at IS NULL`", async () => {
     const statement = await statementOf(
-      (tx) => consumeRecoveryCode(tx, "human-1", "f-1", "hash", new Date()),
+      (tx) => consumeRecoveryCode(tx, "human-1", "hash", new Date()),
       [{ id: "rc-1" }]
     );
 
     expect(statement).toContain("used_at IS NULL");
     expect(statement).toContain("principal_id = ?");
-    expect(statement).toContain("factor_id = ?");
+    // ADR-0168 A1: the code is the principal's, so no factor id binds it, and
+    // the liveness guard asks for ANY active factor of the same principal.
+    expect(statement).not.toContain("factor_id");
+    expect(statement).toContain("f.principal_id = ?");
+    expect(statement).toContain("f.status = 'active'");
   });
 
   test("the verify lock is a real row lock", async () => {
@@ -314,27 +317,19 @@ describe("the ordinary writes stay keyed to the human they belong to", () => {
     expect(statement).toContain("principal_id = ?");
   });
 
-  test("recovery codes are written per (principal, factor) and cleared both ways", async () => {
+  test("recovery codes are written and cleared per principal, never per factor (ADR-0168 A1)", async () => {
     const insert = await statementOf((tx) =>
-      insertRecoveryCodeHash(tx, "human-1", "f-1", "hash")
+      insertRecoveryCodeHash(tx, "human-1", "hash")
     );
 
-    expect(insert).toContain("(principal_id, factor_id, code_hash)");
+    expect(insert).toContain("(principal_id, code_hash)");
+    expect(insert).not.toContain("factor_id");
 
     const byPrincipal = await statementOf((tx) =>
       deleteRecoveryCodesForPrincipal(tx, "human-1")
     );
 
     expect(byPrincipal).toContain("WHERE principal_id = ?");
-
-    // `regenerate` replaces one factor's set; `disable` clears the human's. Two
-    // functions rather than one with a flag, because the two callers mean
-    // different things and a shared one would eventually clear too much.
-    const byFactor = await statementOf((tx) =>
-      deleteRecoveryCodesForFactor(tx, "f-1")
-    );
-
-    expect(byFactor).toContain("WHERE factor_id = ?");
   });
 
   test("a successful verify clears the cumulative lockout", async () => {

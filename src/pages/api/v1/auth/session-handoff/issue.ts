@@ -6,6 +6,7 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { resolveSessionAssurance } from "../../../../../modules/identity-access/application/mfa-session-assurance";
 import { issueHandoffCode } from "../../../../../modules/identity-access/application/session-handoff-directory";
+import { assuranceGrantOf } from "../../../../../modules/identity-access/domain/mfa-policy";
 import { resolveTenantContext } from "../../../../../modules/identity-access/application/auth-context";
 import { log } from "../../../../../lib/logging/logger";
 import {
@@ -117,7 +118,10 @@ export const POST = defineSelfServiceTenantRoute({
         requestedRedirectUri: redirectUri,
         identityId: assurance.identityId,
         sessionId: assurance.sessionId,
-        assuranceLevel: assurance.assuranceLevel,
+        assurance: assuranceGrantOf(
+          assurance.assuranceLevel,
+          assurance.steppedUpBy
+        ),
         actorTenantUserId: context.tenantUserId,
         now
       },

@@ -1232,7 +1232,7 @@ export const identityAccessModule = defineModule({
       exportable: false,
       erasure: "retain_under_obligation",
       rationale:
-        "ADR-0087 — recovery codes for the factors above, global for the same reason and out of a per-tenant answer's reach for the same reason.",
+        "ADR-0087 + ADR-0168 A1 — recovery codes owned by the principal itself, independent of factor type; global for the same reason as the factors above and out of a per-tenant answer's reach for the same reason.",
       redactedColumns: ["code_hash"]
     },
     {

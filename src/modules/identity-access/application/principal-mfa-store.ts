@@ -19,7 +19,8 @@
  *
  * ## Every query binds to one row
  *
- * Keyed on `id =`, `principal_id =`, or (for codes) `factor_id =`. There is no
+ * Keyed on `id =` or `principal_id =` (codes name no factor since `sql/442`,
+ * ADR-0168 A1). There is no
  * listing, no search, no `LIKE`, and no pagination: a scannable MFA table tells
  * an attacker who has a second factor and who does not, which is a targeting
  * list.
@@ -347,16 +348,19 @@ export async function recordFactorVerifyFailure(
   `;
 }
 
+/**
+ * Recovery codes belong to the principal and name no factor (ADR-0168 A1,
+ * `sql/442` dropped `factor_id`).
+ */
 export async function insertRecoveryCodeHash(
   tx: Bun.SQL,
   principalId: string,
-  factorId: string,
   codeHash: string
 ): Promise<void> {
   await tx`
     INSERT INTO awcms_principal_mfa_recovery_codes
-      (principal_id, factor_id, code_hash)
-    VALUES (${principalId}, ${factorId}, ${codeHash})
+      (principal_id, code_hash)
+    VALUES (${principalId}, ${codeHash})
   `;
 }
 
@@ -371,37 +375,32 @@ export async function deleteRecoveryCodesForPrincipal(
   `;
 }
 
-/** Keyed on `factor_id =`. */
-export async function deleteRecoveryCodesForFactor(
-  tx: Bun.SQL,
-  factorId: string
-): Promise<void> {
-  await tx`
-    DELETE FROM awcms_principal_mfa_recovery_codes
-    WHERE factor_id = ${factorId}
-  `;
-}
-
 /**
  * Spends one recovery code, re-asserting `used_at IS NULL` in the same statement
  * so two concurrent requests with the same code cannot both consume it. Keyed on
- * `principal_id =` and `factor_id =`.
+ * `principal_id =`.
+ *
+ * ADR-0168 A1: the code is the PRINCIPAL's, so the guard is "this principal
+ * still has an active factor of any type", not "the factor that issued this
+ * code is still active". The guard stays in the same statement so a factor
+ * disabled after the caller's unlocked read still refuses the code (the G10
+ * regression), and a person left with no factor cannot spend a code at all.
+ * The slice that adds passkeys widens this EXISTS to the passkey table.
  */
 export async function consumeRecoveryCode(
   tx: Bun.SQL,
   principalId: string,
-  factorId: string,
   codeHash: string,
   now: Date
 ): Promise<boolean> {
   const rows = (await tx`
     UPDATE awcms_principal_mfa_recovery_codes
     SET used_at = ${now}
-    WHERE principal_id = ${principalId} AND factor_id = ${factorId}
+    WHERE principal_id = ${principalId}
       AND code_hash = ${codeHash} AND used_at IS NULL
       AND EXISTS (
         SELECT 1 FROM awcms_principal_mfa_factors f
-        WHERE f.id = ${factorId} AND f.status = 'active'
+        WHERE f.principal_id = ${principalId} AND f.status = 'active'
       )
     RETURNING id
   `) as { id: string }[];

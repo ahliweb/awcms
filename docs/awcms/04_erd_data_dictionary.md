@@ -164,7 +164,7 @@ Constraint: partial unique `(principal_id, factor_type) WHERE status <> 'disable
 
 ### `awcms_principal_mfa_recovery_codes`
 
-**Implemented** (`sql/114`, ADR-0087). Single-use backup codes belonging to the principal, the same sha256 construction as `sql/024`. Important columns: `principal_id`, `factor_id` (cascades from the factor), `code_hash`, `used_at`.
+**Implemented** (`sql/114`, ADR-0087). Single-use backup codes belonging to the principal, the same sha256 construction as `sql/024`. Important columns: `principal_id`, `code_hash`, `used_at`. Since `sql/442` (ADR-0168 A1) the codes are independent of factor type: `factor_id` and its `ON DELETE CASCADE` are gone, a code is spendable while the principal has any active factor, and the set is replaced on first-factor enrolment and on regenerate, deleted only when no factor is left.
 
 Constraint: unique `(principal_id, code_hash)` — **not** a global `code_hash`, because a 40-bit collision between two unrelated humans would surface as 23505 → 500, and that error is itself a faint cross-account signal.
 

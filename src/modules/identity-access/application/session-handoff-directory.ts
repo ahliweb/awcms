@@ -12,7 +12,13 @@ import {
 } from "../domain/session-handoff";
 import { createSessionWithAssurance } from "./mfa-session-assurance";
 import { sessionCredentialCurrent } from "./session-credential-epoch";
-import type { SessionAssuranceLevel } from "../domain/mfa-policy";
+import {
+  assuranceGrantOf,
+  stepUpColumns,
+  stepUpProofFromColumns,
+  type SessionAssuranceGrant,
+  type SessionAssuranceLevel
+} from "../domain/mfa-policy";
 
 /**
  * Data layer for the BFF session handoff (ADR-0050). Every function takes an
@@ -138,7 +144,12 @@ export async function issueHandoffCode(
     requestedRedirectUri: string;
     identityId: string;
     sessionId: string;
-    assuranceLevel: SessionAssuranceLevel;
+    /**
+     * The issuing session's assurance AND how it was reached (`sql/443`,
+     * ADR-0168 A2). Snapshotted onto the code with the level, so redemption
+     * mints a session that records the same method instead of guessing one.
+     */
+    assurance: SessionAssuranceGrant;
     actorTenantUserId: string;
     now: Date;
   },
@@ -190,13 +201,17 @@ export async function issueHandoffCode(
   // a perfectly ordinary code. Supplying both from one clock makes the
   // constraint mean exactly what it says: this row's own lifetime is at most
   // 60 seconds.
+  const stepUp = stepUpColumns(input.assurance);
+
   await tx`
     INSERT INTO awcms_session_handoff_codes
       (tenant_id, client_id, code_hash, identity_id, assurance_level,
+       stepped_up_method, stepped_up_passkey_id,
        redirect_uri, issued_by_session_id, created_at, expires_at)
     VALUES (
       ${tenantId}, ${client.id}, ${hashHandoffCode(code)}, ${input.identityId},
-      ${input.assuranceLevel}, ${decision.redirectUri}, ${input.sessionId},
+      ${input.assurance.level}, ${stepUp.method}, ${stepUp.passkeyId},
+      ${decision.redirectUri}, ${input.sessionId},
       ${input.now}, ${expiresAt}
     )
   `;
@@ -214,7 +229,7 @@ export async function issueHandoffCode(
     // point of hashing it.
     attributes: {
       clientKey: client.clientKey,
-      assuranceLevel: input.assuranceLevel
+      assuranceLevel: input.assurance.level
     },
     correlationId
   });
@@ -330,8 +345,14 @@ export async function redeemHandoffCode(
           AND s.expires_at > ${input.now}
           AND ${sessionCredentialCurrent(tx)}
       )
-    RETURNING identity_id, assurance_level
-  `) as { identity_id: string; assurance_level: SessionAssuranceLevel }[];
+    RETURNING identity_id, assurance_level, stepped_up_method,
+              stepped_up_passkey_id
+  `) as {
+    identity_id: string;
+    assurance_level: SessionAssuranceLevel;
+    stepped_up_method: string | null;
+    stepped_up_passkey_id: string | null;
+  }[];
 
   const won = claimed[0];
 
@@ -342,12 +363,22 @@ export async function redeemHandoffCode(
     return { ok: false, reason: "already_redeemed" };
   }
 
+  // Never above what the login reached: a handoff must not launder an aal1
+  // login into an aal2 session — and, since ADR-0168 A2, not into an aal2
+  // session whose method cannot be shown either (`assuranceGrantOf`).
+  const grant = assuranceGrantOf(
+    won.assurance_level,
+    stepUpProofFromColumns(
+      won.assurance_level,
+      won.stepped_up_method,
+      won.stepped_up_passkey_id
+    )
+  );
+
   const session = await createSessionWithAssurance(tx, {
     tenantId,
     identityId: won.identity_id,
-    // Never above what the login reached: a handoff must not launder an aal1
-    // login into an aal2 session.
-    assuranceLevel: won.assurance_level,
+    assurance: grant,
     ttlMin: input.sessionTtlMinutes,
     now: input.now,
     // `handoff`, and NOT the origin of the session that minted the code. This
@@ -371,7 +402,7 @@ export async function redeemHandoffCode(
     message: `Session handoff code redeemed by ${input.client.clientKey}.`,
     attributes: {
       clientKey: input.client.clientKey,
-      assuranceLevel: won.assurance_level
+      assuranceLevel: grant.level
     },
     correlationId
   });
@@ -380,6 +411,6 @@ export async function redeemHandoffCode(
     ok: true,
     token: session.token,
     expiresAt: session.expiresAt,
-    assuranceLevel: won.assurance_level
+    assuranceLevel: grant.level
   };
 }

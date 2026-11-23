@@ -189,7 +189,7 @@ export const GET: APIRoute = async ({
     const created = await createSessionWithAssurance(tx, {
       tenantId: result.tenantId,
       identityId: result.identityId,
-      assuranceLevel: "aal1",
+      assurance: { level: "aal1" },
       ttlMin: policy.sessionTtlMin,
       now,
       issue: {

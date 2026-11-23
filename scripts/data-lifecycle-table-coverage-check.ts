@@ -336,7 +336,7 @@ export const BOUNDED_BY_DESIGN: readonly {
   {
     table: "awcms_principal_mfa_recovery_codes",
     reason:
-      "ADR-0087, and bounded by the table above rather than independently: exactly `RECOVERY_CODE_COUNT` (10) rows are written per factor, and every path that issues a new set deletes the old one first (`disable`, `regenerate`, administrative reset). A spent code is UPDATEd with `used_at`, never appended to, so the ceiling is 10 x live factors and does not move with traffic. An age-based purge would delete unused codes from a live set — silently shrinking the recovery path of somebody who has not needed it yet, which is precisely the person it exists for."
+      "ADR-0087 + ADR-0168 A1 (`sql/442`), and bounded by `awcms_principals` rather than independently: exactly `RECOVERY_CODE_COUNT` (10) rows are written per PRINCIPAL, and every path that issues a new set deletes the principal's old one first (first-factor enrolment, `regenerate`), while `disable` and administrative reset delete it outright. A spent code is UPDATEd with `used_at`, never appended to, so the ceiling is 10 x principals and does not move with traffic. An age-based purge would delete unused codes from a live set — silently shrinking the recovery path of somebody who has not needed it yet, which is precisely the person it exists for."
   },
   {
     table: "awcms_tenant_subscriptions",

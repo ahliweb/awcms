@@ -212,11 +212,12 @@ async function seedMember(
   await admin()`
     INSERT INTO awcms_sessions
       (tenant_id, identity_id, token_hash, expires_at, assurance_level,
-       stepped_up_at)
+       stepped_up_at, stepped_up_method)
     VALUES (${tenantId}, ${identity[0]!.id}, ${hashSessionToken(token)},
             now() + interval '1 hour',
             ${options.aal2 ? "aal2" : "aal1"},
-            ${options.aal2 ? new Date() : null})
+            ${options.aal2 ? new Date() : null},
+            ${options.aal2 ? "totp" : null})
   `;
 
   return {

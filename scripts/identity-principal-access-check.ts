@@ -90,7 +90,7 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
     // is a review decision — it is written in that ADR, not slipped in.
     //
     // The FK-join form (`<alias>.id = <other>.principal_id`) is keyed for the
-    // same reason `factor_id` is on the recovery-code list below: it can only
+    // same reason `factor_id` used to be on the recovery-code list below: it can only
     // reach the principal behind a row the outer query ALREADY resolved by its
     // own keyed predicate. It cannot address a principal the caller had not
     // already reached, which is the property this rule exists to hold — and it
@@ -114,11 +114,12 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
     allowedFiles: [
       "src/modules/identity-access/application/principal-mfa-store.ts"
     ],
-    // `factor_id =` binds to one factor's code set, which is the natural unit
-    // for delete-on-regenerate. It is still a key: it cannot address rows
-    // belonging to a factor the caller did not already resolve.
-    keyedPredicate: /\b(id|principal_id|factor_id)\s*=\s*\$\{/,
-    keyDescription: "`id = ${…}`, `principal_id = ${…}`, or `factor_id = ${…}`"
+    // `factor_id =` was a key here until `sql/442` dropped the column
+    // (ADR-0168 A1: codes belong to the principal, not to a factor). It is
+    // removed rather than left harmless, so a reader still keying on the old
+    // column is named by this gate before it is named by a SQL error.
+    keyedPredicate: /\b(id|principal_id)\s*=\s*\$\{/,
+    keyDescription: "`id = ${…}` or `principal_id = ${…}`"
   }
 ];
 

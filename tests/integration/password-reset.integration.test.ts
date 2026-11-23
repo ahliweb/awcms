@@ -131,10 +131,12 @@ async function seedSession(
 
   await getAdminSql()`
     INSERT INTO awcms_sessions
-      (id, tenant_id, identity_id, token_hash, expires_at, assurance_level)
+      (id, tenant_id, identity_id, token_hash, expires_at, assurance_level,
+       stepped_up_method)
     VALUES (
       ${id}, ${tenantId}, ${identityId}, ${crypto.randomUUID()},
-      ${new Date(NOW.getTime() + 3_600_000)}, ${assuranceLevel}
+      ${new Date(NOW.getTime() + 3_600_000)}, ${assuranceLevel},
+      ${assuranceLevel === "aal2" ? "totp" : null}
     )
   `;
 

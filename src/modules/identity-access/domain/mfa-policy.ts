@@ -130,6 +130,80 @@ export function isPrivilegedFromPermissionKeys(
 
 export type SessionAssuranceLevel = "aal1" | "aal2";
 
+/**
+ * How a session reached `aal2` — `awcms_sessions.stepped_up_method`, matching
+ * `sql/443`'s CHECK exactly (ADR-0168 A2). A recovery code is phishable and is
+ * recorded separately so a passkey-required gate can refuse it (ADR-0168 §8).
+ */
+export type StepUpMethod = "totp" | "recovery_code" | "passkey";
+
+/**
+ * What raised a session to `aal2`. A passkey proof names its credential; the
+ * others carry nothing more, so the shape mirrors the `sql/443` biconditional
+ * (`stepped_up_passkey_id` NOT NULL exactly when the method is `passkey`).
+ *
+ * The `passkey` arm exists for the type to match the column, but nothing can
+ * produce one yet: the credential table does not exist in this slice and
+ * `awcms_sessions_passkey_step_up_unavailable` refuses the value at INSERT.
+ */
+export type StepUpProof =
+  | { method: "totp" | "recovery_code" }
+  | { method: "passkey"; passkeyId: string };
+
+/**
+ * The assurance a session is minted at. `aal2` cannot be stated without saying
+ * how it was reached — the compiler makes every issuer name the proof, the way
+ * `SessionIssueContext.originAuth` has no default (Issue #1405, ADR-0168 A2).
+ */
+export type SessionAssuranceGrant =
+  { level: "aal1" } | { level: "aal2"; proof: StepUpProof };
+
+/** The two `sql/443` columns written for a grant, in one place. */
+export function stepUpColumns(grant: SessionAssuranceGrant): {
+  method: StepUpMethod | null;
+  passkeyId: string | null;
+} {
+  if (grant.level === "aal1") return { method: null, passkeyId: null };
+
+  return {
+    method: grant.proof.method,
+    passkeyId: grant.proof.method === "passkey" ? grant.proof.passkeyId : null
+  };
+}
+
+/**
+ * Reads the `sql/443` columns back into a proof, or `null` for an `aal1` row.
+ * Fails closed: an `aal2` row whose method is missing or unknown — which the
+ * CHECK forbids, so only a hand-edited row or a future value can produce it —
+ * yields `null`, the same answer as no step-up at all.
+ */
+export function stepUpProofFromColumns(
+  assuranceLevel: SessionAssuranceLevel,
+  method: string | null,
+  passkeyId: string | null
+): StepUpProof | null {
+  if (assuranceLevel !== "aal2") return null;
+  if (method === "totp" || method === "recovery_code") return { method };
+  if (method === "passkey" && passkeyId) return { method, passkeyId };
+
+  return null;
+}
+
+/**
+ * The grant a stored assurance justifies: `aal2` only when the level is `aal2`
+ * AND a proof was recovered for it. An `aal2` row whose proof cannot be read
+ * yields `aal1` — a carried assurance (a handoff) never rises above what can be
+ * shown, the same rule ADR-0050 applies to the level itself.
+ */
+export function assuranceGrantOf(
+  assuranceLevel: SessionAssuranceLevel,
+  proof: StepUpProof | null
+): SessionAssuranceGrant {
+  return assuranceLevel === "aal2" && proof
+    ? { level: "aal2", proof }
+    : { level: "aal1" };
+}
+
 export type StepUpSnapshot = {
   assuranceLevel: SessionAssuranceLevel;
   steppedUpAt: Date | null;

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](04_erd_data_dictionary.md)
 
-<!-- i18n-source-hash: sha256:9851136bb7fc6ef3e0b9e23812aad8a6d99e3e307d05cd7737d6f1d78081d083 -->
+<!-- i18n-source-hash: sha256:5f858b9c443098de4fb7fbe26bb3ed6499e5e96e2ae0c90e2f51c4f7880f8f2c -->
 
 # Bagian 4 — ERD dan Data Dictionary Detail
 
@@ -166,7 +166,7 @@ Constraint: unique parsial `(principal_id, factor_type) WHERE status <> 'disable
 
 ### `awcms_principal_mfa_recovery_codes`
 
-**Terimplementasi** (`sql/114`, ADR-0087). Backup code sekali-pakai milik principal, konstruksi sha256 yang sama dengan `sql/024`. Kolom penting: `principal_id`, `factor_id` (cascade dari faktor), `code_hash`, `used_at`.
+**Terimplementasi** (`sql/114`, ADR-0087). Backup code sekali-pakai milik principal, konstruksi sha256 yang sama dengan `sql/024`. Kolom penting: `principal_id`, `code_hash`, `used_at`. Sejak `sql/442` (ADR-0168 A1) kode tidak bergantung pada tipe faktor: `factor_id` beserta `ON DELETE CASCADE`-nya sudah dihapus, sebuah kode dapat dipakai selama principal punya faktor aktif apa pun, dan set-nya diganti saat enrolment faktor pertama dan saat regenerate, serta dihapus hanya bila tak ada faktor tersisa.
 
 Constraint: unique `(principal_id, code_hash)` — **bukan** `code_hash` global, karena tabrakan 40-bit antara dua manusia yang tak berhubungan akan muncul sebagai 23505 → 500, dan error itu sendiri sinyal lintas-akun yang samar.
 

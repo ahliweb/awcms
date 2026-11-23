@@ -233,7 +233,7 @@ export const POST: APIRoute = async ({
       const created = await createSessionWithAssurance(tx, {
         tenantId: targetTenantId,
         identityId: entry.identityId,
-        assuranceLevel: "aal1",
+        assurance: { level: "aal1" },
         ttlMin: policy.sessionTtlMin,
         now,
         issue: {

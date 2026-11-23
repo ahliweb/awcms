@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](mfa-totp-step-up.md)
 
-<!-- i18n-source-hash: sha256:217910084c97d14d6a29e0c3ac497ec11de1c0df01a2797d7c5f357fd2611892 -->
+<!-- i18n-source-hash: sha256:41db5bdf58453ca919cc00b6553b883d7b40b3f589af1ba92cc2b4920e7115d0 -->
 
 # MFA TOTP, recovery codes, dan step-up authentication
 
@@ -217,4 +217,6 @@ Jangan pernah men-commit key. Simpan di secrets manager / env deployment, bukan 
 
 ### Status faktor di bawah kunci verifikasi
 
-Kunci baris verifikasi per faktor memeriksa ulang `status = 'active'`. Faktor yang dinonaktifkan di antara pembacaan tanpa kunci dan penguncian diperlakukan sebagai tidak cocok (`MFA_CHALLENGE_INVALID` / `MFA_INVALID_CODE`), dan tidak dihitung sebagai kegagalan lockout. Compare-and-swap replay-guard dan konsumsi recovery code juga mensyaratkan faktor aktif.
+Kunci baris verifikasi per faktor memeriksa ulang `status = 'active'`. Faktor yang dinonaktifkan di antara pembacaan tanpa kunci dan penguncian diperlakukan sebagai tidak cocok (`MFA_CHALLENGE_INVALID` / `MFA_INVALID_CODE`), dan tidak dihitung sebagai kegagalan lockout. Compare-and-swap replay-guard mensyaratkan faktor aktif; konsumsi recovery code mensyaratkan principal masih punya faktor aktif bertipe apa pun (kode milik principal sejak `sql/442`, ADR-0168 A1).
+
+**Metode step-up (`sql/443`, ADR-0168 A2).** Setiap sesi mencatat bagaimana ia mencapai `aal2` di `stepped_up_method` (`totp`, `recovery_code`, atau `passkey`; NULL tepat untuk `aal1`, ditegakkan CHECK). Challenge login, penyelesaian enrolment, penebusan handoff, dan `POST /auth/mfa/step-up` semuanya menulis metode kredensial yang benar-benar cocok, dan refresh mengganti metode sebelumnya. Sesi yang sudah `aal2` sebelum migrasi dicap `recovery_code`, metode terlemah yang konsisten dengan bukti. Step-up passkey belum bisa disimpan: tabel kredensialnya belum ada, jadi constraint khusus menolak nilai itu sampai slice yang menambahkan tabel beserta FK-nya.
