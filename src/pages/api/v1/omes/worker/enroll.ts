@@ -65,6 +65,19 @@ type EnrollBody = {
   public_key?: unknown;
 };
 
+/**
+ * The pinned `worker-enrollment.response` schema requires `tenant_id` and
+ * `server_id` to match this pattern. A rejected enrollment can carry
+ * whatever an unauthenticated caller sent (nothing, or arbitrary text), so
+ * only echo a value that already conforms and otherwise answer `unknown`
+ * (issue #1185: the empty-string echo violated the contract).
+ */
+const CONTRACT_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+function contractId(value: string): string {
+  return CONTRACT_ID_PATTERN.test(value) ? value : "unknown";
+}
+
 function neutralResponse(
   status: "enrolled" | "rejected" | "token_expired",
   tenantId: string,
@@ -75,8 +88,8 @@ function neutralResponse(
 ): Response {
   return jsonResponse(
     {
-      tenant_id: tenantId,
-      server_id: serverId,
+      tenant_id: contractId(tenantId),
+      server_id: contractId(serverId),
       worker_id: workerId,
       status,
       control_center_public_key: CONTROL_CENTER_PUBLIC_KEY_PLACEHOLDER,
