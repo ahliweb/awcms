@@ -398,7 +398,15 @@ paths:
                     type: boolean
                     enum: [true]
                   data:
-                    $ref: "#/components/schemas/BlogPost"
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1241,7 +1249,15 @@ paths:
                     type: boolean
                     enum: [true]
                   data:
-                    $ref: "#/components/schemas/BlogPage"
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1652,7 +1668,15 @@ paths:
                     type: boolean
                     enum: [true]
                   data:
-                    $ref: "#/components/schemas/BlogTerm"
+                    $ref: "#/components/schemas/BlogDeleteReceipt"
+              examples:
+                softDeleted:
+                  summary: The receipt carries the id and the flag, not the deleted row
+                  value:
+                    success: true
+                    data:
+                      id: 3f6c1a52-8d0e-4b7a-9a41-2c5e7b9d1f03
+                      deleted: true
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3398,6 +3422,20 @@ components:
             region dataset is versioned; the code is the only identifier
             stable across generations). null clears it on update; absent on
             update leaves the stored value unchanged.
+    BlogDeleteReceipt:
+      type: object
+      description: >-
+        What a soft delete answers: the id that was deleted and a constant flag.
+        The deleted row is NOT returned (restore returns it).
+      required: [id, deleted]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        deleted:
+          type: boolean
+          enum: [true]
     BlogPostSummary:
       type: object
       description: |
