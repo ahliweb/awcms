@@ -124,7 +124,6 @@ function gate(): { promise: Promise<void>; open: () => void } {
   return { promise, open };
 }
 
-/** Opens the breaker "two minutes ago": by the wall clock it is now half-open (30s window). */
 /**
  * Open the breaker 120 s before `at`, i.e. past the 30 s cool-down as seen from
  * `at`. `at` MUST be the clock the code under test reads. The object-sync
