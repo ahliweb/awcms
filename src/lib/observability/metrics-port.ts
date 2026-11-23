@@ -682,6 +682,44 @@ export const METRIC_DEFINITIONS = {
     allowedLabelKeys: ["topic"],
     approxCardinality: "One series per admitted topic.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  // Wake-up hints (ADR-0154 section 2 and 7): the cross-instance LISTEN/NOTIFY
+  // freshness hint. A hint is a tenant id and a topic; neither is ever a label.
+  realtime_wake_hints_total: {
+    name: "realtime_wake_hints_total",
+    type: "counter",
+    description:
+      "NOTIFY payloads received by this instance's wake listener, by result (delivered, no_subscriber, malformed).",
+    allowedLabelKeys: ["result"],
+    approxCardinality: "Exactly 3 code-defined results.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_wake_listener_up: {
+    name: "realtime_wake_listener_up",
+    type: "gauge",
+    description:
+      "1 while this instance's LISTEN connection is established, else 0 (streams then poll on their tick).",
+    allowedLabelKeys: [],
+    approxCardinality: "Exactly 1 — unlabeled, per instance.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_wake_queue_usage: {
+    name: "realtime_wake_queue_usage",
+    type: "gauge",
+    description:
+      "Fraction (0 to 1) of PostgreSQL's NOTIFY queue in use, sampled by the wake listener with each liveness ping. A FULL queue makes writers' commits fail; alert early (0.1).",
+    allowedLabelKeys: [],
+    approxCardinality: "Exactly 1 — unlabeled, per instance.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_wake_listener_events_total: {
+    name: "realtime_wake_listener_events_total",
+    type: "counter",
+    description:
+      "Wake listener state changes away from listening, by state (connecting, down, refused).",
+    allowedLabelKeys: ["state"],
+    approxCardinality: "Exactly 3 code-defined states.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   }
 } as const satisfies Record<string, MetricDefinition>;
 

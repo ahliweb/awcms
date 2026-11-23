@@ -157,6 +157,10 @@ a staff member is "you" or "another staff member".
   replies (the inbox stores no text, ADR-0160 section 1), and a bulk-action
   toolbar (no bulk API exists).
 
+## Realtime wake-up (sql/418)
+
+The `inbox.status.progress` stream (ADR-0154) is woken across instances by a row trigger on `awcms_inbox_conversations` that notifies `{tenant id, topic}` at commit (PostgreSQL LISTEN/NOTIFY, no new service). It ships OFF (database GUC `awcms.realtime_wake` plus `REALTIME_WAKE_HINT_ENABLED`; a NOTIFY commit costs throughput, measured). It only shortens the wait before a stream's next tick: the stream still re-authorizes and reads from its cursor, so a lost hint costs latency, never correctness. See `docs/awcms/realtime-progress-streams.md`.
+
 ## Follow-ups
 
 - A people picker for "assign to another person" needs an endpoint that lists

@@ -1311,6 +1311,11 @@ export const UNTRACEABLE_EXECUTION_SITES: readonly {
  */
 export const WEB_ONLY: readonly { name: string; reason: string }[] = [
   {
+    name: "REALTIME_LISTEN_DATABASE_URL",
+    reason:
+      "a secret: the optional direct connection of the web process's realtime wake listener (Issue #1171, ADR-0154), for deployments behind PgBouncer; read only by the SSE routes' lazily started listener, never by a job"
+  },
+  {
     name: "TELEGRAM_WEBHOOK_SECRET",
     reason:
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
