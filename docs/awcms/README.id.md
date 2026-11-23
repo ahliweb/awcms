@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:991e4f8d75f134ba647964562193f1d274dbeaa533c273e43b52fd476b2a7539 -->
+<!-- i18n-source-hash: sha256:86476d506d6cd28c13a8f05d4c65e8f1fe3ecbe479037f1e9fd6b96ea557b5e4 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -144,6 +144,10 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 ## Penerbitan sosial (fondasi terimplementasi, tanpa konektor)
 
 [**Penerbitan sosial**](social-publishing.id.md) mendokumentasikan modul `social_publishing` ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md), Issue [#1145](https://github.com/ahliweb/awcms/issues/1145)): satu publikasi dengan snapshot konten immutable dan satu job per akun terhubung di belakang `SocialPublishingPort` yang sudah ada, dengan persetujuan, jadwal, antarmuka adapter provider yang peta kapabilitasnya adalah plafon dan tidak pernah hibah, dan dispatcher yang memanggil provider di luar transaksi apa pun. Tidak ada adapter provider yang dikirim (konektor adalah #1146 sampai #1151), belum ada layar admin.
+
+## Kapabilitas API LinkedIn (hanya dokumentasi, no-build)
+
+[**Kapabilitas API LinkedIn**](linkedin-api-capabilities.id.md) (Issue [#1150](https://github.com/ahliweb/awcms/issues/1150)) mencatat, dari dokumentasi resmi LinkedIn yang dibaca pada 22 November 2026, program akses untuk posting Page organisasi (Community Management API, tier Development dan Standard), alur OAuth 2.0 dan masa berlaku token, jenis konten dan batas yang didukung, aturan penyimpanan data dan penggunaan terbatas beserta konsekuensinya bagi `data_lifecycle`, peta kapabilitas `SocialPublishAdapter`, serta daftar butir belum terverifikasi dan pertanyaan untuk pemilik. **Tidak ada konektor yang dibangun**; tinjauan hukum ketentuan LinkedIn tetap pada pemilik.
 
 ## Website engagement (terimplementasi)
 
