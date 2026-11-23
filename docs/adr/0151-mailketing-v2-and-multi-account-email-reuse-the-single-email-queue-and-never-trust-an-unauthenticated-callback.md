@@ -4,7 +4,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02) Update 2026-11-24: see the Decision note at the end.
 - **Resolves:** Issue #1158 (Mailketing multi-account email management, v2 migration and CRM ownership). It is the email ADR that [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §9 left to this issue.
 - **Extends, does not supersede:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 to I13, §3 matrix, §5 credentials). It conforms to all thirteen invariants. It treats a Mailketing connection as a `channel_account` and applies the §5 amendment of ADR-0074/0133 to **tenant-owned** email accounts only. [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) (one queue per channel, purpose classes, consent independent of segments), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0103](0103-newsletter-is-its-own-module.md) (`newsletter` owns consent), [ADR-0006](0006-offline-first-sync-outbox.md) (provider I/O outside transactions), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md), ADR-0150 (Proposed in the #1144 branch) (the inbound verification gate and the "no authenticated provenance, no state change" rule).
 - **Related:** Issues #1139, #1140 (account registry), #1154, #1159, #1160, #1161, #1162, #1167, #1168, #1172; downstream `ahliweb/awcms-one` #458, #459, #461 and its `commerce` segments and campaigns (#114, #360, #362); the UI traceability draft (PR #1175, UP-01..16); the readiness pack [`docs/awcms/omnichannel-foundation.md`](../awcms/omnichannel-foundation.md) §2, §3, §5.
@@ -234,3 +234,12 @@ M12. No claim in code, UI or docs of a remote campaign, list-management or authe
 3. **#1161** webhook intake in `strict` mode, quarantine ledger and operator confirmation; `restrictive-only` and `authenticated` only after Q1 and Q6.
 4. **#1162** admin UI (v2 badge, verified sender, credit, queue status, last sync, migration warning).
 5. **awcms-one #461** after a merge-commit subtree sync.
+
+## Decision note (24 November 2026, K19.3 to K19.5 (#1478))
+
+The owner approved the orchestrator's recommendations on 24 November 2026 (mass sign-off, K19). Dated note only: the Decision above is unchanged, and the answers below are the owner's, not an agent's.
+
+- **Q1: `restrictive-only` approved (K19.3).** A bounce or unsubscribe event bound to a message id may only ADD an audited, reversible suppression. It never creates consent or a subscriber. The unauthenticated-event rule of the Decision section is unchanged.
+- **Q6: the owner asks Mailketing (K19.4)** for a signed webhook header or secret, a published source-IP list, an event id and an unsubscribe API. The `authenticated` mode waits for the vendor's answer (an external owner action); until then it stays off.
+- **Opt-out propagation (K19.5).** A provider-reported unsubscribe on a marketing message revokes the newsletter consent for that brand only; transactional and security mail is untouched.
+- Q2 to Q5 and Q7 to Q11 are not answered by this note.

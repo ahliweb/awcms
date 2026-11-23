@@ -4,7 +4,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02) Update 2026-11-24: see the Decision note at the end.
 - **Resolves:** Issue #1155 (the Telegram customer-messaging admission that [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §9 left to a separate decision)
 - **Extends:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (invariants I1 to I13 are binding here; Telegram bots and channels are account kinds of `channel_accounts`), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.md) (staff-only, one bot per deployment: **unchanged**), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) §3 and §4 (see the open question O1 on §3), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.md) (the shared field-encryption helper), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md)
 - **Related:** Issues #1139, #1140 (account registry), #1144 (inbound boundary), #1145 (publishing engine), #1156 (implementation: multi-bot accounts and conversations), #1157 (implementation: channel publishing), #1167, #1168 (Bun runtime and realtime), downstream `ahliweb/awcms-one` #460 (CRM adapter); the pack [`docs/awcms/omnichannel-foundation.md`](../awcms/omnichannel-foundation.md) §3 (capability matrix), [`docs/awcms/omnichannel-ui-ux-screen-contracts.md`](../awcms/omnichannel-ui-ux-screen-contracts.md); [`src/modules/telegram-delivery/README.md`](../../src/modules/telegram-delivery/README.md)
@@ -243,3 +243,10 @@ Names are illustrative; the implementing issue fixes the physical design. Every 
 ## Follow-up links
 
 - #1156 implements E1 and E2 and carries T-N1 to T-D1; #1157 implements publishing in `social_publishing` and carries T-P1; #1144 decides the inbound boundary this ADR plugs into; #1140 supplies the account and secret model; awcms-one #460 is the downstream CRM adapter and waits for the upstream issues **and** a subtree sync as a merge commit (ADR-0148 §10). Each is built, reviewed and gated as an ordinary change after this ADR is Accepted.
+
+## Decision note (24 November 2026, K19.10 (#1156))
+
+The owner approved the orchestrator's recommendations on 24 November 2026 (mass sign-off, K19). Dated note only: the Decision above is unchanged, and the answers below are the owner's, not an agent's.
+
+- **O3 and O10: accepted as module defaults a tenant can only LOWER (K19.10).** The retention windows and the per-bot daily limit are defaults in the module; a tenant may tighten them and never loosen them.
+- O1, O2, O4 to O9 are not answered by this note.

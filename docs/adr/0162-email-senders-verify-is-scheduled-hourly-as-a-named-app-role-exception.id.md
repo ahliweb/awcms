@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0162-email-senders-verify-is-scheduled-hourly-as-a-named-app-role-exception.md)
 
-<!-- i18n-source-hash: sha256:197cf00d6c86f5fe6b92bfa34079d42052bc8419f0083da4958bd26c9cbbc4a9 -->
+<!-- i18n-source-hash: sha256:a1877b21ee2ea457fbe855dbff2f0802dc96f28fab064c48be179fc51f631d04 -->
 
 # ADR-0162 — `email:senders:verify` dijadwalkan per jam sebagai pengecualian `awcms_app` bernama, dan job terjadwal berperan app adalah daftar tercatat yang diuji dua arah
 
 - **Status:** Diterima (jadwal dan mekanisme pengecualian); pilihan `awcms_app` sebagai role job ini bersifat sementara menunggu konfirmasi pemilik (O1)
 - **Tanggal:** 2026-11-14
-- **Pengambil keputusan:** ahliweb (pemilik). Keputusannya sendiri diambil 11 November 2026 saat ADR-0159 diterima: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). Pemilik memutuskan BAHWA job ini dijadwalkan; pilihan login `awcms_app` sebagai role-nya dibuat di PR implementasi, bukan oleh pemilik, dan **sementara** sampai pemilik mengonfirmasi (lihat O1). ADR ini karena itu tidak mengklaim tanpa kewenangan baru: untuk pertama kalinya ia menaruh login app dan key ring rahasia dalam satu container terjadwal.
+- **Pengambil keputusan:** ahliweb (pemilik). Keputusannya sendiri diambil 11 November 2026 saat ADR-0159 diterima: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). Pemilik memutuskan BAHWA job ini dijadwalkan; pilihan login `awcms_app` sebagai role-nya dibuat di PR implementasi, bukan oleh pemilik, dan **sementara** sampai pemilik mengonfirmasi (lihat O1). ADR ini karena itu tidak mengklaim tanpa kewenangan baru: untuk pertama kalinya ia menaruh login app dan key ring rahasia dalam satu container terjadwal. Pembaruan 2026-11-24: lihat Catatan keputusan di akhir.
 - **Menyelesaikan:** separuh jadwal Issue #1160 (job dan routing pengirim sudah ada; job itu `manual`).
 - **Memperluas:** [ADR-0147](0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md) (job `awcms_app` terjadwal pertama, yang dulu tunggal), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.id.md) §2 dan §6 (akun Mailketing tenant dan pengirim terverifikasi), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §5 (rahasia kanal, key ring).
 - **Terkait:** Issue #1132 (koneksi app ditahan dari setiap job crontab), [ADR-0160](0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.id.md) (job `awcms_app` terjadwal kedua).
@@ -59,3 +59,10 @@ Sisa yang diketahui: dependensi terkompromi di closure job, atau eksekusi kode d
 - **Biarkan manual.** Gagal-tertutup pada setiap pengirim tenant setelah enam jam; ditolak oleh keputusan pemilik.
 - **Jalankan di role worker.** Worker tak dapat menulis kesehatan channel-account, by design.
 - **Lebarkan grant worker untuk menulis kesehatan.** Menggugurkan alasan kesehatan hanya milik app.
+
+## Catatan keputusan (24 November 2026, K19.1 dan K19.2 (#1479))
+
+Pemilik menyetujui rekomendasi orchestrator pada 24 November 2026 (persetujuan massal, K19). Hanya catatan bertanggal: Keputusan di atas tidak berubah, dan jawaban di bawah adalah milik pemilik, bukan agen.
+
+- **O1: job pindah ke role database khusus `awcms_email_senders_verify` (K19.1)** (NOLOGIN bawaan, pola `awcms_social_dispatch` / `awcms_catalog_boundary_audit`): SELECT rahasia dibatasi akun ESP Mailketing, dan UPDATE hanya kolom. Bukan `awcms_app`. Pengecualian `awcms_app` karena itu adalah keadaan peralihan yang berakhir saat isu itu mendarat; entri daftar pengecualian dihapus dalam perubahan yang sama.
+- **DNS (K19.2):** DNS keluar diizinkan hanya dari container jobs. Bukti SPF, DKIM, dan DMARC bersifat advisory dan tidak pernah mengubah status sender.

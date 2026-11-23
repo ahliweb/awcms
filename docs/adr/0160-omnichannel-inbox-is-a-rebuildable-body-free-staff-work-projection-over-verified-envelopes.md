@@ -4,7 +4,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-11
-- **Decision maker:** ahliweb (owner), **accepted 2026-11-11** (Q1 below). This ADR records what Issue #1164 needs that [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.md) §1 did not allow as written ("a unified inbox is a presentation-only projection … it never writes"). Q2 to Q4 stay **open**, and the code keeps their fail-closed answer until the owner decides them. The implementation of Issue #1164 stays `experimental` and off by default.
+- **Decision maker:** ahliweb (owner), **accepted 2026-11-11** (Q1 below). This ADR records what Issue #1164 needs that [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.md) §1 did not allow as written ("a unified inbox is a presentation-only projection … it never writes"). Q2 to Q4 stay **open**, and the code keeps their fail-closed answer until the owner decides them. The implementation of Issue #1164 stays `experimental` and off by default. Update 2026-11-24: see the Decision note at the end.
 - **Refines:** ADR-0150 §1 and N6, only as far as §2 below; every other ADR-0150 invariant (N1 to N5, N7 to N10) and every ADR-0148 invariant (I1 to I13) stays binding.
 - **Related:** Issue #1164; [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (accounts, business scope as brand), [ADR-0152](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.md) (the Telegram envelope), [ADR-0155](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md) (the website envelope), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md) (consumers), [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md) (realtime topics), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md).
 
@@ -85,3 +85,11 @@ Each open question keeps the answer marked "Proposed" (fail-closed) in the code 
 - **Q2.** Should visibility also require the caller's channel-account assignment (owner/operator/viewer), on top of the inbox permission and the business scope? Proposed: no; the inbox permission plus scope is the boundary, and the account assignment governs operating the account.
 - **Q3.** Should an unassigned breach notify someone (for example holders of `conversations.assign`)? Proposed: no in this phase; the list filters unassigned breaches.
 - **Q4.** Internal notes: admit them later with their own retention and redaction, or never?
+
+## Decision note (24 November 2026, K19.11 to K19.13 (#1164))
+
+The owner approved the orchestrator's recommendations on 24 November 2026 (mass sign-off, K19). Dated note only: the Decision above is unchanged, and the answers below are the owner's, not an agent's.
+
+- **Q2: visibility is permission plus scope (K19.11).** No channel-account assignment condition.
+- **Q3: an unassigned SLA breach is reported as a daily summary (K19.12),** not as one e-mail per event.
+- **Q4: internal notes are deferred (K19.13).** If built, only closed codes with no free text until the controller decides a retention.

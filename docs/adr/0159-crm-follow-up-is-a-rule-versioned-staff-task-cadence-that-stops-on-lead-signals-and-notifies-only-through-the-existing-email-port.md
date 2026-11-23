@@ -4,7 +4,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-11
-- **Decision maker:** ahliweb (owner), **accepted 2026-11-11**. The implementation of Issue #1165 shipped with this ADR for review and stays `experimental` and off by default at every level; the open questions below remain open.
+- **Decision maker:** ahliweb (owner), **accepted 2026-11-11**. The implementation of Issue #1165 shipped with this ADR for review and stays `experimental` and off by default at every level; the open questions below remain open. Update 2026-11-24: see the Decision note at the end.
 - **Resolves:** Issue #1165 (configurable follow-up tasks, cadence stop rules and notification triggers)
 - **Extends:** [ADR-0153](0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.md) (N5 and the #1165 row of its downstream table: "subscribe to the lead events as stop signals; key tasks by lead id; do not store a lead copy; do not send without re-checking consent at dispatch; do not build a second approval engine"), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md) (descriptor-declared consumers), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md) (ports), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 to I13), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
 - **Related:** Issues #1163, #1166 (`crm_leads`), #1144 (inbound boundary), #1164 (conversation projection), downstream `ahliweb/awcms-one` #462
@@ -84,3 +84,12 @@ Admit `crm_follow_up` (`experimental`): its own permission namespace, the deploy
 - **O4.** Retention windows for closed tasks and settled notifications (with ADR-0153 O4).
 - **O5.** Should `tasks.read` be narrowed to "my own tasks" through an ownership grant (ADR-0063) for agents who must not see the whole queue? The same question applies to `tasks.update`, which today lets any holder complete or cancel any task of the tenant.
 - **O6.** A notice cancelled as `recipient_changed` is not re-scheduled when the lead is handed back to the same person (the `(task, kind, recipient)` key already exists). Is that acceptable, or should a hand-back re-arm the notice?
+
+## Decision note (24 November 2026, K19.6 to K19.8 (#1485))
+
+The owner approved the orchestrator's recommendations on 24 November 2026 (mass sign-off, K19). Dated note only: the Decision above is unchanged, and the answers below are the owner's, not an agent's.
+
+- **O1: v1 sends nothing to a lead (K19.6).** Outbound is admitted later through one ADR per channel, after the inbox (#1164), with consent re-checked at scheduling and at dispatch, a per-channel limit and approved templates.
+- **O2: `CrmFollowUpStopPort` is admitted together with its first producer (K19.7),** first the omnichannel reply event, then channel consent revocation.
+- **O4: closed tasks and completed notifications are deleted after 12 months (K19.8),** in line with ADR-0153 O4. A lifecycle sweep descriptor replaces the `BOUNDED_BY_DESIGN` entry.
+- O3, O5 and O6 are not answered by this note.

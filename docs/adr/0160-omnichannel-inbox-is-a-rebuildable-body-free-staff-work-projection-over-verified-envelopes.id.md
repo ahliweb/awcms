@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.md)
 
-<!-- i18n-source-hash: sha256:83d660709576bd3f8f746eaf2fd0bf69f8accb47035a51cd853db6be6fbfc510 -->
+<!-- i18n-source-hash: sha256:72f48a51c18968d8b5608cb2b0cbcb26336912f1c110b68c30392d336ccee7cd -->
 
 # ADR-0160 — Inbox omnichannel adalah proyeksi kerja staf yang dapat dibangun ulang, tanpa isi pesan, di atas envelope terverifikasi
 
 - **Status:** Diterima
 - **Tanggal:** 2026-11-11
-- **Pengambil keputusan:** ahliweb (pemilik), **diterima 2026-11-11** (Q1 di bawah). ADR ini mencatat apa yang dibutuhkan Issue #1164 tetapi tidak diizinkan [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.id.md) §1 sebagaimana tertulis ("unified inbox adalah proyeksi khusus presentasi … tidak pernah menulis"). Q2 sampai Q4 tetap **terbuka**, dan kode mempertahankan jawaban gagal-tertutupnya sampai pemilik memutuskannya. Implementasi Issue #1164 tetap `experimental` dan mati secara bawaan.
+- **Pengambil keputusan:** ahliweb (pemilik), **diterima 2026-11-11** (Q1 di bawah). ADR ini mencatat apa yang dibutuhkan Issue #1164 tetapi tidak diizinkan [ADR-0150](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.id.md) §1 sebagaimana tertulis ("unified inbox adalah proyeksi khusus presentasi … tidak pernah menulis"). Q2 sampai Q4 tetap **terbuka**, dan kode mempertahankan jawaban gagal-tertutupnya sampai pemilik memutuskannya. Implementasi Issue #1164 tetap `experimental` dan mati secara bawaan. Pembaruan 2026-11-24: lihat Catatan keputusan di akhir.
 - **Menyempurnakan:** ADR-0150 §1 dan N6, hanya sejauh §2 di bawah; setiap invarian ADR-0150 lainnya (N1 sampai N5, N7 sampai N10) dan setiap invarian ADR-0148 (I1 sampai I13) tetap mengikat.
 - **Terkait:** Issue #1164; [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (akun, business scope sebagai brand), [ADR-0152](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.id.md) (envelope Telegram), [ADR-0155](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.id.md) (envelope situs web), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md) (konsumen), [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.id.md) (topik realtime), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md).
 
@@ -87,3 +87,11 @@ Setiap pertanyaan terbuka mempertahankan jawaban "Usulan" (gagal-tertutup) di ko
 - **Q2.** Apakah visibilitas juga harus mensyaratkan penugasan akun kanal pemanggil (owner/operator/viewer), di atas permission inbox dan business scope? Usulan: tidak; permission inbox ditambah scope adalah batasnya, dan penugasan akun mengatur pengoperasian akun.
 - **Q3.** Haruskah pelanggaran yang belum ditugaskan memberi tahu seseorang (misalnya pemegang `conversations.assign`)? Usulan: tidak pada fase ini; daftar dapat difilter untuk pelanggaran yang belum ditugaskan.
 - **Q4.** Catatan internal: diadmisi kelak dengan retensi dan redaksinya sendiri, atau tidak pernah?
+
+## Catatan keputusan (24 November 2026, K19.11 sampai K19.13 (#1164))
+
+Pemilik menyetujui rekomendasi orchestrator pada 24 November 2026 (persetujuan massal, K19). Hanya catatan bertanggal: Keputusan di atas tidak berubah, dan jawaban di bawah adalah milik pemilik, bukan agen.
+
+- **Q2: visibilitas = izin ditambah scope (K19.11).** Tanpa syarat penugasan akun kanal.
+- **Q3: breach SLA yang belum ditugaskan dilaporkan sebagai ringkasan harian (K19.12),** bukan satu surel per kejadian.
+- **Q4: catatan internal ditunda (K19.13).** Bila dibangun, hanya kode tertutup tanpa teks bebas sampai pengendali memutuskan retensi.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ad06bf69d152aadb5872b33128283b944676d9b2c956dcdcd38cfa82c9ca3333 -->
+<!-- i18n-source-hash: sha256:32edb50f6392d435ddefadeed6d820436c31390c02438af7b11c245f3a2040cf -->
 
 # AWCMS — Project State & Continuation
 
@@ -409,6 +409,68 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **KEPUTUSAN 24 NOVEMBER 2026 (K19.1-K19.23), PERSETUJUAN PEMILIK.** Setelah
+  triase 75 isu, pemilik memilih "setujui semua rekomendasi" untuk ke-23 butir
+  di bawah (persetujuan massal lewat dialog pilihan baku; opsi yang tidak
+  dipilih tidak dicatat sebagai persetujuan). Berbeda dari K1-K14, ini
+  keputusan pemilik sendiri, bukan keputusan agen di bawah delegasi. Catatan
+  keputusan bertanggal ditambahkan ke ADR-0151, ADR-0152, ADR-0159, ADR-0160
+  dan ADR-0162; bagian Keputusan-nya tidak berubah. ADR-0172 Accepted di PR-nya
+  sendiri (#1481). Hanya dokumen; tanpa migrasi.
+  Email. K19.1 (#1479, ADR-0162 O1) `email:senders:verify` pindah ke role DB
+  khusus `awcms_email_senders_verify` (NOLOGIN bawaan, pola
+  `awcms_social_dispatch`), SELECT rahasia dibatasi akun ESP Mailketing, UPDATE
+  hanya kolom; bukan `awcms_app`. K19.2 DNS keluar hanya dari container jobs;
+  bukti SPF/DKIM/DMARC advisory dan tidak pernah mengubah status sender. K19.3
+  (#1478, ADR-0151 Q1) mode webhook `restrictive-only`: bounce atau unsubscribe
+  yang terikat message-id hanya boleh MENAMBAH suppression yang teraudit dan
+  dapat dibalik, tidak pernah membuat consent atau subscriber. K19.4 (ADR-0151
+  Q6) pemilik meminta Mailketing header bertanda tangan atau secret, daftar IP
+  sumber, event id, dan API unsubscribe; mode `authenticated` menunggu vendor
+  (tindakan pemilik, eksternal). K19.5 unsubscribe yang dilaporkan penyedia atas
+  surel marketing mencabut consent newsletter untuk brand itu saja; surel
+  transaksional dan keamanan tidak tersentuh.
+  CRM, Telegram, inbox. K19.6 (#1485, ADR-0159 O1) v1 tidak mengirim apa pun ke
+  lead; outbound kemudian, satu ADR per kanal, setelah inbox, dengan consent
+  dicek ulang saat penjadwalan dan saat kirim. K19.7 (O2) `CrmFollowUpStopPort`
+  diadmisi bersama produsen pertamanya. K19.8 (O4) task tertutup dan notifikasi
+  selesai dihapus setelah 12 bulan (selaras ADR-0153 O4); deskriptor sweep
+  menggantikan `BOUNDED_BY_DESIGN`. K19.9 (#1156, ADR-0148 bagian 6)
+  `contact_link_evidence` menjadi isu baru milik `crm_leads` (tabel bukti
+  bersama dengan metode deterministik tertutup; T-C2 pindah ke sana); #1156
+  ditutup setelah PR batas peran dispatcher Telegram merge. K19.10 (ADR-0152
+  O3/O10) jendela retensi dan batas harian modul adalah default yang hanya bisa
+  DITURUNKAN tenant. K19.11 (#1164, ADR-0160 Q2) visibilitas antrean = izin
+  ditambah scope, tanpa syarat penugasan akun kanal. K19.12 (Q3) breach SLA yang
+  belum ditugaskan berupa ringkasan harian, bukan satu surel per kejadian.
+  K19.13 (Q4) catatan internal ditunda; bila dibangun, hanya kode tertutup tanpa
+  teks bebas sampai ada keputusan retensi.
+  Tata kelola, kontrak, retensi. K19.14 (#1173) ditutup dengan bukti: workflow
+  mingguan `dependency-freshness.yml` plus `deps:issues:sync --create` adalah
+  mekanisme berulang dan jam umur changelog tetap di `bun run check`
+  (menggantikan K14 untuk #1173). K19.15 (#1394) awcms-astro#194 dihitung sebagai
+  permintaan konsumen; dibuka setelah #1446 merge; kanalnya konsumen mem-pin
+  `fixtures/api-contract/contract-fixtures.json` pada SHA commit immutable dan
+  memverifikasi SHA-256 bundle tertanam serta hash manifest (tanpa infrastruktur
+  baru). K19.16 (#1397) sub-isu (1), inventaris kolom PII dan peringkat 102 tabel
+  warisan, dibuka sekarang (dokumen saja, tanpa ubah ledger atau deskriptor);
+  orchestrator mengusulkan periode retensi per tabel dengan dasar tertulis,
+  pemilik menyetujui per kelompok modul.
+  ADR-0172 (#1454, PR #1481). K19.17 supervisor di dalam image (A) adalah
+  default, replika (B) hanya lintas node. K19.18 kemampuan replika Coolify pada
+  satu host belum diperiksa; jalan dengan A. K19.19 latensi pencabutan policy =
+  cek versi per request yang eksak seperti #1487, TTL 5 menit hanya cadangan.
+  K19.20 offline-LAN tetap satu proses kecuali Redis lokal ada (gagal tertutup).
+  K19.21 target ADR-0161 "2.000 rps tanpa cache per node 2 vCPU" dinyatakan ulang
+  sebagai rps origin pada rasio hit tepi yang dinyatakan. K19.22 `node:cluster`
+  bagian runtime Bun, tanpa pengecualian tertulis (Bun-only tidak berubah).
+  K19.23 nilai produksi yang direkomendasikan tetap 1 proses sampai baseline
+  mirip-produksi (#1281) ada.
+  Tindak lanjut dicatat saat dikerjakan: komentar keputusan di tiap isu, label
+  `status:diblokir` dicabut dari #1394 dan #1397, #1173 ditutup. Isu baru: tabel
+  `contact_link_evidence` milik `crm_leads`, sub-isu #1397 (1), dan pemecahan
+  ADR-0172 menjadi isu implementasi di bawah #1454.
 
 - **`email:senders:verify` DIJADWALKAN — 14 November 2026 (#1160, ADR-0162).**
   Melaksanakan keputusan pemilik 11 November 2026 (entri ADR-0159 di bawah).

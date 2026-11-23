@@ -4,7 +4,7 @@
 
 - **Status:** Accepted (the schedule and the exception mechanism); the choice of `awcms_app` as the job's role is provisional pending owner confirmation (O1)
 - **Date:** 2026-11-14
-- **Decision maker:** ahliweb (owner). The decision itself was taken on 11 November 2026 when ADR-0159 was accepted: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). The owner decided THAT it is scheduled; the choice of the `awcms_app` login to run it as was made in the implementing PR, not by the owner, and is **provisional** until the owner confirms it (see O1 and the audit addendum). This ADR therefore does not claim to add no authority: it puts the app login and the secret key ring in one scheduled container for the first time.
+- **Decision maker:** ahliweb (owner). The decision itself was taken on 11 November 2026 when ADR-0159 was accepted: "`email:senders:verify` is to be scheduled (follow-up PR)" ([`docs/PROJECT_STATE.md`](../PROJECT_STATE.md) §4). The owner decided THAT it is scheduled; the choice of the `awcms_app` login to run it as was made in the implementing PR, not by the owner, and is **provisional** until the owner confirms it (see O1 and the audit addendum). This ADR therefore does not claim to add no authority: it puts the app login and the secret key ring in one scheduled container for the first time. Update 2026-11-24: see the Decision note at the end.
 - **Resolves:** the schedule half of Issue #1160 (the job and the sender routing exist; the job was `manual`).
 - **Extends:** [ADR-0147](0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md) (the first, then single, scheduled `awcms_app` job), [ADR-0151](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md) §2 and §6 (tenant Mailketing accounts and verified senders), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §5 (channel secrets, the key ring).
 - **Related:** Issue #1132 (the app connection is withheld from every crontab job), [ADR-0160](0160-omnichannel-inbox-is-a-rebuildable-body-free-staff-work-projection-over-verified-envelopes.md) (the second scheduled `awcms_app` job).
@@ -57,3 +57,10 @@ Known residue: a compromised dependency in the job's closure, or code execution 
 - **Leave it manual.** Fails closed on every tenant sender after six hours; rejected by the owner decision.
 - **Run it on the worker role.** The worker cannot write channel-account health, by design.
 - **Widen the worker's grants to write health.** Defeats the reason health is app-only.
+
+## Decision note (24 November 2026, K19.1 and K19.2 (#1479))
+
+The owner approved the orchestrator's recommendations on 24 November 2026 (mass sign-off, K19). Dated note only: the Decision above is unchanged, and the answers below are the owner's, not an agent's.
+
+- **O1: the job moves to a dedicated database role `awcms_email_senders_verify` (K19.1)** (NOLOGIN by default, the `awcms_social_dispatch` / `awcms_catalog_boundary_audit` pattern): a SELECT on secrets restricted to the Mailketing ESP account, and a column-only UPDATE. Not `awcms_app`. The `awcms_app` exception is therefore a transitional state that ends when that issue lands; the exception list entry is removed in the same change.
+- **DNS (K19.2):** outbound DNS is allowed only from the jobs container. SPF, DKIM and DMARC evidence is advisory and never changes a sender's status.

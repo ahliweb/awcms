@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.md)
 
-<!-- i18n-source-hash: sha256:00737f07fc67ce245e4978d13052b5f979fbc83fdad7ccd5bb7e0e4045577b34 -->
+<!-- i18n-source-hash: sha256:e55ecd3dc20552a52f488cdc3836bb63bc5850472d8dcf5d2ae7d7f8c574246a -->
 
 # ADR-0152 — Engagement Telegram pelanggan adalah konteks terpisah yang diadmisi; `telegram_delivery` tetap hanya untuk staf dan tidak berubah; banyak bot per tenant diadmisi lewat `channel_accounts`
 
 - **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02) Pembaruan 2026-11-24: lihat Catatan keputusan di akhir.
 - **Menyelesaikan:** Issue #1155 (admisi pesan pelanggan Telegram yang oleh [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §9 diserahkan ke keputusan terpisah)
 - **Memperluas:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (invarian I1 sampai I13 mengikat di sini; bot dan kanal Telegram adalah jenis akun dari `channel_accounts`), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.id.md) (hanya staf, satu bot per deployment: **tidak berubah**), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.id.md) (tanpa facade, tanpa fallback), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) §3 dan §4 (lihat pertanyaan terbuka O1 tentang §3), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md) (helper enkripsi field bersama), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md)
 - **Terkait:** Issue #1139, #1140 (registri akun), #1144 (batas inbound), #1145 (mesin publikasi), #1156 (implementasi: akun multi-bot dan percakapan), #1157 (implementasi: publikasi kanal), #1167, #1168 (runtime Bun dan realtime), downstream `ahliweb/awcms-one` #460 (adapter CRM); paket [`docs/awcms/omnichannel-foundation.id.md`](../awcms/omnichannel-foundation.id.md) §3 (matriks kapabilitas), [`docs/awcms/omnichannel-ui-ux-screen-contracts.id.md`](../awcms/omnichannel-ui-ux-screen-contracts.id.md); [`src/modules/telegram-delivery/README.id.md`](../../src/modules/telegram-delivery/README.id.md)
@@ -245,3 +245,10 @@ Nama bersifat ilustratif; issue implementasi menetapkan desain fisik. Setiap tab
 ## Tautan tindak lanjut
 
 - #1156 mengimplementasikan E1 dan E2 dan membawa T-N1 sampai T-D1; #1157 mengimplementasikan publikasi di `social_publishing` dan membawa T-P1; #1144 memutuskan batas inbound yang dicolokkan ADR ini; #1140 menyediakan model akun dan secret; awcms-one #460 adalah adapter CRM downstream dan menunggu issue upstream **dan** sinkronisasi subtree sebagai merge commit (ADR-0148 §10). Masing-masing dibangun, ditinjau, dan digerbangi sebagai perubahan biasa setelah ADR ini Diterima.
+
+## Catatan keputusan (24 November 2026, K19.10 (#1156))
+
+Pemilik menyetujui rekomendasi orchestrator pada 24 November 2026 (persetujuan massal, K19). Hanya catatan bertanggal: Keputusan di atas tidak berubah, dan jawaban di bawah adalah milik pemilik, bukan agen.
+
+- **O3 dan O10: diterima sebagai default modul yang hanya bisa DITURUNKAN tenant (K19.10).** Jendela retensi dan batas harian per bot adalah default di modul; tenant boleh mengetatkannya dan tidak pernah melonggarkannya.
+- O1, O2, O4 sampai O9 tidak dijawab oleh catatan ini.

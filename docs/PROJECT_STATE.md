@@ -406,6 +406,68 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **DECISIONS OF 24 NOVEMBER 2026 (K19.1-K19.23), OWNER SIGN-OFF.** After the
+  triage of 75 issues the owner chose "approve all recommendations" for all 23
+  items below (a bulk sign-off through the standard choice dialog; options not
+  chosen are not recorded as approval). Unlike K1-K14 these are the owner's own
+  decisions, not agent decisions under delegation. Dated decision notes were
+  added to ADR-0151, ADR-0152, ADR-0159, ADR-0160 and ADR-0162; their Decision
+  sections are unchanged. ADR-0172 is Accepted in its own PR (#1481). Docs only;
+  no migration.
+  Email. K19.1 (#1479, ADR-0162 O1) `email:senders:verify` moves to a dedicated
+  database role `awcms_email_senders_verify` (NOLOGIN by default, the
+  `awcms_social_dispatch` pattern), SELECT on secrets limited to the Mailketing
+  ESP account, column-only UPDATE; not `awcms_app`. K19.2 outbound DNS only from
+  the jobs container; SPF/DKIM/DMARC evidence is advisory and never changes a
+  sender's status. K19.3 (#1478, ADR-0151 Q1) webhook mode `restrictive-only`:
+  a bounce or unsubscribe bound to a message id may only ADD an audited,
+  reversible suppression, never create consent or a subscriber. K19.4 (ADR-0151
+  Q6) the owner asks Mailketing for a signed header or secret, a source-IP list,
+  an event id and an unsubscribe API; `authenticated` mode waits for the vendor
+  (an external owner action). K19.5 a provider-reported unsubscribe on marketing
+  mail revokes newsletter consent for that brand only; transactional and
+  security mail is untouched.
+  CRM, Telegram, inbox. K19.6 (#1485, ADR-0159 O1) v1 sends nothing to a lead;
+  outbound comes later, one ADR per channel, after the inbox, with consent
+  re-checked at scheduling and at dispatch. K19.7 (O2) `CrmFollowUpStopPort` is
+  admitted with its first producer. K19.8 (O4) closed tasks and completed
+  notifications are deleted after 12 months (as ADR-0153 O4); a sweep descriptor
+  replaces `BOUNDED_BY_DESIGN`. K19.9 (#1156, ADR-0148 section 6)
+  `contact_link_evidence` becomes a new issue owned by `crm_leads` (a shared
+  evidence table with a closed deterministic method set; T-C2 moves there);
+  #1156 closes after the Telegram dispatcher role-boundary PR merges. K19.10
+  (ADR-0152 O3/O10) module retention windows and the daily limit are defaults a
+  tenant can only LOWER. K19.11 (#1164, ADR-0160 Q2) queue visibility = permission
+  plus scope, no channel-account assignment condition. K19.12 (Q3) an unassigned
+  SLA breach is a daily summary, not one e-mail per event. K19.13 (Q4) internal
+  notes are deferred; if built, closed codes only, no free text, until a
+  retention decision.
+  Governance, contract, retention. K19.14 (#1173) closed with evidence: the weekly
+  `dependency-freshness.yml` workflow plus `deps:issues:sync --create` is the
+  recurring mechanism and the changelog age clock stays in `bun run check`
+  (replaces K14 for #1173). K19.15 (#1394) awcms-astro#194 counts as a consumer
+  request; it opens after #1446 merges; the channel is the consumer pinning
+  `fixtures/api-contract/contract-fixtures.json` to an immutable commit SHA and
+  verifying the embedded bundle SHA-256 plus the manifest hash (no new
+  infrastructure). K19.16 (#1397) sub-issue (1), the PII column inventory and a
+  ranking of the 102 legacy tables, opens now (docs only, no ledger or descriptor
+  change); the orchestrator proposes a retention period per table with a written
+  basis and the owner approves per module group.
+  ADR-0172 (#1454, PR #1481). K19.17 in-image supervisor (A) is the default,
+  replicas (B) only across nodes. K19.18 Coolify replica capability on one host is
+  not examined; proceed with A. K19.19 policy revocation latency is an exact
+  per-request version check as in #1487, the 5-minute TTL only a backstop.
+  K19.20 offline-LAN stays at one process unless a local Redis exists (fail
+  closed). K19.21 the ADR-0161 "2,000 rps uncached per 2-vCPU node" target is
+  restated as origin rps at a stated edge hit ratio. K19.22 `node:cluster` is
+  part of the Bun runtime, no written exception needed (Bun-only is unchanged).
+  K19.23 the recommended production value stays 1 process until a
+  production-like baseline (#1281) exists.
+  Follow-up recorded when done: decision comments on each issue, label
+  `status:diblokir` removed from #1394 and #1397, #1173 closed. New issues: the
+  `crm_leads` `contact_link_evidence` table, #1397 sub-issue (1), and the split of
+  ADR-0172 into implementation issues under #1454.
+
 - **DECISIONS OF 22 NOVEMBER 2026 (K1-K14), DELEGATED TO THE ORCHESTRATOR.** The
   owner (ahliweb) delegated the open decisions to the orchestrator with the
   instruction "choose the best per recommendation and professional practice,

@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.md)
 
-<!-- i18n-source-hash: sha256:a8659bacc24e661ae0483deb8fdbf15a2ff3778649517a3758d6f900013eb7b6 -->
+<!-- i18n-source-hash: sha256:1d99e7bea603c44aa5b97dcb9139f34bdb982ac1c4f00dd94b9b121bceb0be41 -->
 
 # ADR-0159 — `crm_follow_up` adalah kadens tugas STAF berbasis aturan berversi yang dipicu event lead; berhenti pada sinyal lead, tidak mengirim apa pun ke lead, dan memberi notifikasi staf hanya lewat port e-mail yang sudah ada
 
 - **Status:** Diterima
 - **Tanggal:** 2026-11-11
-- **Pengambil keputusan:** ahliweb (pemilik), **diterima 2026-11-11**. Implementasi Issue #1165 dikirim bersama ADR ini untuk ditinjau dan tetap `experimental` serta mati secara bawaan di setiap tingkat; pertanyaan terbuka di bawah tetap terbuka.
+- **Pengambil keputusan:** ahliweb (pemilik), **diterima 2026-11-11**. Implementasi Issue #1165 dikirim bersama ADR ini untuk ditinjau dan tetap `experimental` serta mati secara bawaan di setiap tingkat; pertanyaan terbuka di bawah tetap terbuka. Pembaruan 2026-11-24: lihat Catatan keputusan di akhir.
 - **Menyelesaikan:** Issue #1165 (tugas tindak lanjut yang dapat dikonfigurasi, aturan berhenti kadens, dan pemicu notifikasi)
 - **Memperluas:** [ADR-0153](0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.id.md) (N5 dan baris #1165 di tabel hilirnya: "berlangganan event lead sebagai sinyal berhenti; kunci tugas dengan id lead; jangan menyimpan salinan lead; jangan mengirim tanpa memeriksa ulang consent saat dispatch; jangan membangun engine persetujuan kedua"), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (tanpa facade, tanpa fallback), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 sampai I13), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
 - **Terkait:** Issue #1163, #1166 (`crm_leads`), #1144 (batas inbound), #1164 (proyeksi percakapan), hilir `ahliweb/awcms-one` #462
@@ -86,3 +86,12 @@ Mengadmisi `crm_follow_up` (`experimental`): namespace permission sendiri, sakla
 - **O4.** Jendela retensi untuk tugas tertutup dan notifikasi yang selesai (bersama ADR-0153 O4).
 - **O5.** Haruskah `tasks.read` dipersempit menjadi "tugas saya sendiri" lewat ownership grant (ADR-0063) bagi agen yang tidak boleh melihat seluruh antrean? Pertanyaan yang sama berlaku untuk `tasks.update`, yang saat ini membolehkan pemegangnya menyelesaikan atau membatalkan tugas mana pun di tenant.
 - **O6.** Notifikasi yang dibatalkan sebagai `recipient_changed` tidak dijadwalkan ulang ketika lead dikembalikan ke orang yang sama (kunci `(task, kind, recipient)` sudah ada). Apakah itu dapat diterima, atau pengembalian harus mengaktifkan ulang notifikasi?
+
+## Catatan keputusan (24 November 2026, K19.6 sampai K19.8 (#1485))
+
+Pemilik menyetujui rekomendasi orchestrator pada 24 November 2026 (persetujuan massal, K19). Hanya catatan bertanggal: Keputusan di atas tidak berubah, dan jawaban di bawah adalah milik pemilik, bukan agen.
+
+- **O1: v1 tidak mengirim apa pun ke lead (K19.6).** Outbound diadmisi kemudian lewat satu ADR per kanal, setelah inbox (#1164), dengan consent dicek ulang saat penjadwalan dan saat kirim, batas per kanal, dan template yang disetujui.
+- **O2: `CrmFollowUpStopPort` diadmisi bersama produsen pertamanya (K19.7),** lebih dulu event balasan omnichannel, lalu pencabutan consent kanal.
+- **O4: task tertutup dan notifikasi yang selesai dihapus setelah 12 bulan (K19.8),** selaras ADR-0153 O4. Deskriptor sweep siklus hidup menggantikan entri `BOUNDED_BY_DESIGN`.
+- O3, O5 dan O6 tidak dijawab oleh catatan ini.
