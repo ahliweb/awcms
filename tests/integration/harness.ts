@@ -206,6 +206,22 @@ function ownerUrl(): string {
   return buildUrl(EPHEMERAL_DATABASE, OWNER_ROLE, OWNER_ROLE_PASSWORD);
 }
 
+/**
+ * For suites that need a SECOND database on the same cluster (the restore drill,
+ * Issue #968): the fixture-password URL of `awcms_app` / the superuser for any
+ * database name. Exported rather than re-derived so the fixture passwords stay
+ * in one place.
+ */
+export function appRoleUrlForDatabase(database: string): string {
+  return buildUrl(database, APP_ROLE_NAME, APP_ROLE_PASSWORD);
+}
+
+export function adminUrlForDatabase(database: string): string {
+  return buildUrl(database);
+}
+
+export const EPHEMERAL_DATABASE_NAME = EPHEMERAL_DATABASE;
+
 /** Connection string of the ephemeral database, as least-privilege `awcms_app`. */
 function appUrl(): string {
   return buildUrl(EPHEMERAL_DATABASE, APP_ROLE_NAME, APP_ROLE_PASSWORD);

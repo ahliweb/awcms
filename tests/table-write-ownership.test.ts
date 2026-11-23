@@ -145,7 +145,11 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_account_assignments",
       "awcms_profiles",
       "awcms_identities",
-      "awcms_tenant_users"
+      "awcms_tenant_users",
+      // #968: the restore drill's rolled-back refused-write probes, run as
+      // `awcms_app` on a restored database.
+      "awcms_booking_resources",
+      "awcms_hr_attendance_events"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {

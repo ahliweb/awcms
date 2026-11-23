@@ -49,6 +49,7 @@
     "preview": "bun --bun astro preview",
     "start": "bun ./dist/standalone-entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
+    "ops:restore-drill": "bun scripts/restore-drill.ts",
     "domain-events:deliveries:purge": "bun scripts/domain-event-deliveries-purge.ts",
     "domain-events:dispatch": "bun scripts/domain-events-dispatch.ts",
     "sync:objects:purge": "bun scripts/object-queue-purge.ts",

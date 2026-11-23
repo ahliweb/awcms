@@ -278,6 +278,18 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "functions for their verdicts and proves a direct read is refused. " +
       "Nothing it writes is ever committed: a behavioural probe of the " +
       "functions, not a second writer of posts or media."
+  })),
+  ...["awcms_booking_resources", "awcms_hr_attendance_events"].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/restore-drill.ts` `runBehaviourProbes` (Issue #968, the " +
+      "`ops:restore-drill` verification) attempts, AS `awcms_app` on a restored " +
+      "database, one cross-tenant INSERT and one UPDATE that the database must " +
+      "refuse. Each runs inside ONE transaction that it ALWAYS rolls back (it " +
+      "throws a sentinel when the write is wrongly accepted), so nothing is ever " +
+      "committed: a behavioural probe of the row policy and the append-only " +
+      "grant, not a second writer of these tables. Confined to that one function."
   }))
 ];
 
