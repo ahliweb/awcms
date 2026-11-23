@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:91e64aeadb3eb7e689a23a8c2771823b7f701facfeb425b746610fcc24c5399d -->
+<!-- i18n-source-hash: sha256:d6c8d1161a1a7a60b1dfa22a8a6fd18f85bd9b305398174bd22af85bfef33970 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1394,6 +1394,26 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   objek dimiliki role lain) setel `PAYROLL_EXPECTED_OWNERS=role1,role2` untuk
   `bun run payroll:catalog-boundary:check` (`.env.example`), jika tidak
   pemeriksaan melaporkan `payroll-owner`.
+  **Pengecualian look-alike (#1354).** Pembanding look-alike menandai relasi
+  non-keluarga yang memiliki 70% atau lebih kolom tabel wajib. Tabel riwayat
+  append-only domain lain memakai kolom generik yang sama (aktor, alasan, status
+  asal, status tujuan, waktu dibuat, tenant, id subjek) sehingga bisa tertandai
+  tanpa menyimpan data gaji. `NON_PAYROLL_LOOKALIKE_EXCEPTIONS` di
+  `src/modules/_shared/payroll-data-boundary.ts` adalah registri untuk kasus itu:
+  nama tabel persis, huruf kecil, berkualifikasi skema (`public.awcms_x`),
+  masing-masing dengan alasan minimal 20 karakter; tidak pernah pola, prefiks,
+  atau wildcard, sehingga salinan dengan nama lain tetap ditandai. Ia divalidasi
+  saat modul dimuat (alasan kosong, wildcard, nama cacat, atau tabel keluarga
+  payroll melempar galat) dan KOSONG secara bawaan. Ia hanya melewati loop
+  tumpang-tindih kolom di `scripts/lib/payroll-catalog-boundary.ts`: tabel yang
+  dikecualikan tetap tunduk pada semua aturan lain (grant, pemilik, RLS, objek
+  bernama, fungsi, publikasi), dan ambang tumpang-tindih tidak berubah. Ia
+  saudara `NON_PAYROLL_TABLE_NAME_EXCEPTIONS` (#1276) yang mengubah keanggotaan
+  KELUARGA payroll berdasarkan NAMA; yang ini tidak. **Wajib review keamanan:**
+  satu entri berarti pemelihara menyatakan "tabel ini bukan salinan data gaji",
+  jadi setiap penambahan memerlukan review keamanan di PR yang menambahkannya,
+  dengan alasan mengapa tumpang-tindihnya generik (`.github/CODEOWNERS`
+  mengarahkan berkas itu ke pemelihara).
   **Sisa (dipersempit, belum ditutup):** migrasi yang ditinjau dapat membangun
   ulang tabel payroll di balik konstruksi yang tak dimodelkan pemindai, setelah
   itu lapisan katalog MENDETEKSI (trigger hilang, foreign key hilang, kolom

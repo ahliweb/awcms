@@ -107,6 +107,7 @@ import {
   PAYROLL_INDIRECT_READ_PATTERN,
   PAYROLL_LOOKALIKE_COLUMN_SHARE,
   PAYROLL_LOOKALIKE_MIN_COLUMNS,
+  NON_PAYROLL_LOOKALIKE_EXCEPTIONS,
   PAYROLL_OWNER_REFERENCE_TABLE,
   PAYROLL_PRIVILEGED_PREDEFINED_ROLES,
   PAYROLL_PUBLICATION_EXEMPTIONS,
@@ -762,6 +763,7 @@ export type AnalyseOptions = {
   requiredTriggers?: Readonly<Record<string, readonly string[]>>;
   expectedOwners?: readonly string[];
   privilegedRoles?: readonly string[];
+  lookalikeExceptions?: Readonly<Record<string, string>>;
 };
 
 export function analysePayrollCatalog(
@@ -784,6 +786,8 @@ export function analysePayrollCatalog(
   const expectedOwners = options.expectedOwners ?? PAYROLL_EXPECTED_OWNERS;
   const privilegedRoles =
     options.privilegedRoles ?? PAYROLL_PRIVILEGED_PREDEFINED_ROLES;
+  const lookalikeExceptions =
+    options.lookalikeExceptions ?? NON_PAYROLL_LOOKALIKE_EXCEPTIONS;
   const findings: CatalogFinding[] = [];
   const add = (code: string, object: Qualified, message: string): void => {
     findings.push({ code, object, message });
@@ -1137,6 +1141,8 @@ export function analysePayrollCatalog(
 
     for (const entry of snapshot.columns) {
       if (isPayrollFamily(entry.relation)) continue;
+      // Exact qualified name only (#1354): skips THIS comparison, nothing else.
+      if (Object.hasOwn(lookalikeExceptions, entry.relation)) continue;
 
       const shared = entry.columns.filter((column) => wanted.has(column));
 

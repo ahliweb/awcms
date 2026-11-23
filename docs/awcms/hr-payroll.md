@@ -1346,6 +1346,25 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   as one role, objects owned by another) set `PAYROLL_EXPECTED_OWNERS=role1,role2`
   for `bun run payroll:catalog-boundary:check` (`.env.example`), or the check
   reports `payroll-owner`.
+  **Look-alike exceptions (#1354).** The look-alike comparison flags a non-family
+  relation sharing 70% or more of a required table's columns. An append-only
+  history table of an unrelated domain shares generic columns (actor, reason,
+  from-state, to-state, created-at, tenant, subject id) and can trip it without
+  holding pay data. `NON_PAYROLL_LOOKALIKE_EXCEPTIONS` in
+  `src/modules/_shared/payroll-data-boundary.ts` is the registry for that case:
+  exact, lower-case, schema-qualified table names (`public.awcms_x`), each with a
+  reason of at least 20 characters; never a pattern, prefix or wildcard, so a
+  copy under any other name is still flagged. It is validated when the module
+  loads (an empty reason, a wildcard, a malformed name or a payroll-family table
+  throws), and it is EMPTY by default. It skips only the column-overlap loop in
+  `scripts/lib/payroll-catalog-boundary.ts`: the excepted table stays subject to
+  every other rule (grants, owner, RLS, named objects, functions, publications),
+  and the overlap threshold is unchanged. It is the sibling of
+  `NON_PAYROLL_TABLE_NAME_EXCEPTIONS` (#1276), which changes payroll-FAMILY
+  membership by NAME; this one does not. **Security review required:** an entry
+  is the maintainer asserting "this table is not a copy of pay data", so every
+  addition needs security review in the PR that adds it, stating why the overlap
+  is generic (`.github/CODEOWNERS` routes the file to the maintainer).
   **Residuals (narrowed, not closed):** a reviewed migration can rebuild a
   payroll table behind constructs the scanner does not model, after which the
   catalog layer DETECTS (missing trigger, missing foreign key, look-alike columns,

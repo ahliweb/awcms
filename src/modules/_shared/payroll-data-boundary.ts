@@ -563,6 +563,83 @@ export function isPayrollTable(
   return matchesPayrollPattern(normalized);
 }
 
+/**
+ * Relations the catalog layer's `payroll-lookalike` comparison skips, each with
+ * the reason (Issue #1354). The comparison flags a non-family relation sharing
+ * 70% or more of a payroll table's columns; an append-only history table of an
+ * unrelated domain shares generic columns (actor, reason, from-state, to-state,
+ * created-at, tenant, subject id) and trips it without holding anything about
+ * pay. This registry is the sibling of {@link NON_PAYROLL_TABLE_NAME_EXCEPTIONS}
+ * and deliberately separate: that one changes payroll-FAMILY membership, this one
+ * only skips one comparison.
+ *
+ * Keys are EXACT, lower-cased, schema-qualified table names (`public.awcms_x`):
+ * never a pattern, a prefix or a wildcard, so a copy of a payroll table under any
+ * other name is still flagged. An excepted table stays subject to EVERY other
+ * rule (grants, RLS, owner, named objects, functions, publications): the only
+ * thing skipped is the column-overlap loop in
+ * `scripts/lib/payroll-catalog-boundary.ts`. Every entry is a security decision
+ * ("this table is not a copy of pay data") and needs security review in the PR
+ * that adds it (`hr-payroll.md` section 13). FAIL-CLOSED: empty today.
+ */
+export const NON_PAYROLL_LOOKALIKE_EXCEPTIONS: Readonly<
+  Record<string, string>
+> = {};
+
+const LOOKALIKE_EXCEPTION_NAME = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
+
+/**
+ * Validates {@link NON_PAYROLL_LOOKALIKE_EXCEPTIONS}-shaped registries (Issue
+ * #1354): exact lower-case `schema.table` names, no wildcard, a non-empty reason
+ * of at least 20 characters, and not a payroll-family table (an exception for
+ * one is meaningless and would hide a rename). Returns the problems; empty means
+ * valid.
+ */
+export function validateNonPayrollLookalikeExceptions(
+  exceptions: Readonly<Record<string, string>>
+): string[] {
+  const problems: string[] = [];
+
+  for (const [name, reason] of Object.entries(exceptions)) {
+    if (/[*%?\[\]\\]/.test(name)) {
+      problems.push(`${name}: wildcards and patterns are not allowed`);
+    } else if (!LOOKALIKE_EXCEPTION_NAME.test(name)) {
+      problems.push(
+        `${name}: must be an exact, lower-case, schema-qualified name (schema.table)`
+      );
+    }
+    if (typeof reason !== "string" || reason.trim().length < 20) {
+      problems.push(`${name}: needs a reason (at least 20 characters)`);
+    }
+    if (
+      name.startsWith("public.") &&
+      (PAYROLL_REQUIRED_TABLES.includes(name.slice("public.".length)) ||
+        isPayrollTable(name.slice("public.".length)))
+    ) {
+      problems.push(
+        `${name}: is a payroll-family table; a look-alike exception for it is meaningless`
+      );
+    }
+  }
+
+  return problems;
+}
+
+/** Throws when `exceptions` is invalid. Called at load on the registered list. */
+export function assertNonPayrollLookalikeExceptionsValid(
+  exceptions: Readonly<Record<string, string>>
+): void {
+  const problems = validateNonPayrollLookalikeExceptions(exceptions);
+
+  if (problems.length > 0) {
+    throw new Error(
+      `NON_PAYROLL_LOOKALIKE_EXCEPTIONS is invalid: ${problems.join("; ")}`
+    );
+  }
+}
+
+assertNonPayrollLookalikeExceptionsValid(NON_PAYROLL_LOOKALIKE_EXCEPTIONS);
+
 /** The payroll tables among `names`, deduplicated, in first-seen order. */
 export function findPayrollTables(names: Iterable<string>): string[] {
   const found: string[] = [];
