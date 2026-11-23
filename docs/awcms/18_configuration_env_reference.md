@@ -419,16 +419,17 @@ Planned as a reusable base module for password reset, system announcements, and
 workflow notifications (e.g. finance/procurement approvals needing multi-level
 sign-off) — provider-neutral.
 
-| Var                            | Required   | Default | Sensitive | Purpose                                                                                                                                      |
-| ------------------------------ | ---------- | ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EMAIL_ENABLED`                | –          | `false` | –         | Enable the email module                                                                                                                      |
-| `EMAIL_PROVIDER`               | if enabled | –       | –         | Email provider adapter (`log` for dev without credentials)                                                                                   |
-| `EMAIL_FROM_ADDRESS`           | if enabled | –       | –         | Default sender address                                                                                                                       |
-| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –         | Default sender name                                                                                                                          |
-| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –         | Timeout for a single send attempt (dispatcher)                                                                                               |
-| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –         | Retry attempt limit before a final `failed`                                                                                                  |
-| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –         | Mailketing API version: `v1` (default) or `v2` (opt-in, fixed host, header-only token; Issue #1159)                                          |
-| `EMAIL_MAILKETING_V2_VERIFIED` | –          | unset   | –         | Stage-2 acknowledgement for Mailketing v2; production v2 is NOT approved until the live check is done (silences the UNVERIFIED warning only) |
+| Var                               | Required   | Default       | Sensitive | Purpose                                                                                                                                                               |
+| --------------------------------- | ---------- | ------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_ENABLED`                   | –          | `false`       | –         | Enable the email module                                                                                                                                               |
+| `EMAIL_PROVIDER`                  | if enabled | –             | –         | Email provider adapter (`log` for dev without credentials)                                                                                                            |
+| `EMAIL_FROM_ADDRESS`              | if enabled | –             | –         | Default sender address                                                                                                                                                |
+| `EMAIL_FROM_NAME`                 | –          | `AWCMS`       | –         | Default sender name                                                                                                                                                   |
+| `EMAIL_SEND_TIMEOUT_MS`           | –          | `10000`       | –         | Timeout for a single send attempt (dispatcher)                                                                                                                        |
+| `EMAIL_SEND_MAX_RETRIES`          | –          | `5`           | –         | Retry attempt limit before a final `failed`                                                                                                                           |
+| `EMAIL_MAILKETING_API_VERSION`    | –          | `v1`          | –         | Mailketing API version: `v1` (default) or `v2` (opt-in, fixed host, header-only token; Issue #1159)                                                                   |
+| `EMAIL_MAILKETING_V2_AUTH_SCHEME` | –          | `x-api-token` | –         | Header carrying the Mailketing v2 token: `x-api-token` (default; live-corroborated) or `bearer`; any other value is a configuration error (Issue #1159, ADR-0151 Q12) |
+| `EMAIL_MAILKETING_V2_VERIFIED`    | –          | unset         | –         | Stage-2 acknowledgement for Mailketing v2; production v2 is NOT approved until the live check is done (silences the UNVERIFIED warning only)                          |
 
 Tenant-owned Mailketing accounts and verified senders (Issue #1160, ADR-0151
 section 2). Accounts, tokens and sender identities are `channel_accounts`

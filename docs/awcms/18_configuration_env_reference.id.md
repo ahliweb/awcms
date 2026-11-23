@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:4856dc913b15648d4570b8a30e6c4e86b83b2ca48525080121dd9ce2adfb78c7 -->
+<!-- i18n-source-hash: sha256:1083cae76aa9ed7b3d9ff118fac80dd39d3c71ca802c0e64f276dc0e4d540e3a -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -410,16 +410,17 @@ Direncanakan sebagai modul base reusable untuk password reset, system
 announcement, dan notifikasi workflow (mis. approval finance/procurement
 yang butuh persetujuan berjenjang) — provider-neutral.
 
-| Var                            | Wajib      | Default | Sensitif | Fungsi                                                                                                                                      |
-| ------------------------------ | ---------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EMAIL_ENABLED`                | –          | `false` | –        | Aktifkan modul email                                                                                                                        |
-| `EMAIL_PROVIDER`               | bila aktif | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial)                                                                                   |
-| `EMAIL_FROM_ADDRESS`           | bila aktif | –       | –        | Alamat pengirim default                                                                                                                     |
-| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –        | Nama pengirim default                                                                                                                       |
-| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –        | Timeout satu percobaan kirim (dispatcher)                                                                                                   |
-| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final                                                                                                |
-| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –        | Versi API Mailketing: `v1` (bawaan) atau `v2` (opt-in, host tetap, token hanya di header; Issue #1159)                                      |
-| `EMAIL_MAILKETING_V2_VERIFIED` | –          | kosong  | –        | Pengakuan tahap 2 untuk Mailketing v2; v2 produksi BELUM disetujui sampai pemeriksaan live selesai (hanya membungkam peringatan UNVERIFIED) |
+| Var                               | Wajib      | Default       | Sensitif | Fungsi                                                                                                                                                    |
+| --------------------------------- | ---------- | ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_ENABLED`                   | –          | `false`       | –        | Aktifkan modul email                                                                                                                                      |
+| `EMAIL_PROVIDER`                  | bila aktif | –             | –        | Adapter provider email (`log` untuk dev tanpa kredensial)                                                                                                 |
+| `EMAIL_FROM_ADDRESS`              | bila aktif | –             | –        | Alamat pengirim default                                                                                                                                   |
+| `EMAIL_FROM_NAME`                 | –          | `AWCMS`       | –        | Nama pengirim default                                                                                                                                     |
+| `EMAIL_SEND_TIMEOUT_MS`           | –          | `10000`       | –        | Timeout satu percobaan kirim (dispatcher)                                                                                                                 |
+| `EMAIL_SEND_MAX_RETRIES`          | –          | `5`           | –        | Batas percobaan retry sebelum `failed` final                                                                                                              |
+| `EMAIL_MAILKETING_API_VERSION`    | –          | `v1`          | –        | Versi API Mailketing: `v1` (bawaan) atau `v2` (opt-in, host tetap, token hanya di header; Issue #1159)                                                    |
+| `EMAIL_MAILKETING_V2_AUTH_SCHEME` | –          | `x-api-token` | –        | Header pembawa token Mailketing v2: `x-api-token` (bawaan; ada bukti live) atau `bearer`; nilai lain adalah galat konfigurasi (Issue #1159, ADR-0151 Q12) |
+| `EMAIL_MAILKETING_V2_VERIFIED`    | –          | kosong        | –        | Pengakuan tahap 2 untuk Mailketing v2; v2 produksi BELUM disetujui sampai pemeriksaan live selesai (hanya membungkam peringatan UNVERIFIED)               |
 
 Akun Mailketing milik tenant dan pengirim terverifikasi (Issue #1160, ADR-0151
 bagian 2). Akun, token, dan identitas pengirim adalah catatan

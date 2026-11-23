@@ -44,9 +44,11 @@ import {
   MAILKETING_V2_MAX_RESPONSE_BYTES,
   buildMailketingV2Headers,
   buildMailketingV2SendBody,
+  resolveMailketingV2AuthScheme,
   classifyMailketingV2Response,
   parseMailketingV2Credits,
   parseMailketingV2Senders,
+  type MailketingV2AuthScheme,
   type MailketingV2Outcome
 } from "../domain/mailketing-v2-contract";
 
@@ -91,7 +93,27 @@ export type MailketingV2ProviderConfig = {
    * tenant's.
    */
   breakerKey?: string;
+  /**
+   * Issue #1159 (ADR-0151 Q12): the header form the token travels in. Omitted =
+   * `EMAIL_MAILKETING_V2_AUTH_SCHEME` from `env` (default `x-api-token`). An
+   * unrecognised env value makes the adapter a deferred configuration error
+   * (nothing is sent), never a silent fallback.
+   */
+  authScheme?: MailketingV2AuthScheme;
 };
+
+const AUTH_SCHEME_MISCONFIGURED_HOLD_MS = 15 * 60_000;
+
+function resolveAuthScheme(
+  config: Pick<MailketingV2ProviderConfig, "authScheme" | "env">
+):
+  { ok: true; scheme: MailketingV2AuthScheme } | { ok: false; reason: string } {
+  if (config.authScheme !== undefined) {
+    return { ok: true, scheme: config.authScheme };
+  }
+
+  return resolveMailketingV2AuthScheme(config.env ?? process.env);
+}
 
 export function createSsrfGuardedMailketingTransport(
   env: NodeJS.ProcessEnv = process.env
@@ -141,6 +163,29 @@ export function createMailketingV2Provider(
     config.transport ?? createSsrfGuardedMailketingTransport(config.env);
   const clock = config.now ?? (() => new Date());
   const breaker = getProviderCircuitBreaker(config.breakerKey ?? PROVIDER_KEY);
+  const auth = resolveAuthScheme(config);
+
+  if (!auth.ok) {
+    // Fail closed AND deferred: queued mail waits for the operator to fix the
+    // variable (same shape as the resolver's other configuration errors).
+    return {
+      async send() {
+        return {
+          ok: false,
+          error: auth.reason,
+          retryable: true,
+          skipped: true,
+          holdMs: AUTH_SCHEME_MISCONFIGURED_HOLD_MS,
+          configError: true
+        };
+      },
+      async healthCheck() {
+        return { ok: false, error: auth.reason };
+      }
+    };
+  }
+
+  const authScheme = auth.scheme;
 
   type Exchange =
     | { ok: true; outcome: MailketingV2Outcome }
@@ -160,7 +205,11 @@ export function createMailketingV2Provider(
       result = await transport({
         url: `${baseUrl}${path}`,
         method,
-        headers: buildMailketingV2Headers(config.apiToken, body !== undefined),
+        headers: buildMailketingV2Headers(
+          config.apiToken,
+          body !== undefined,
+          authScheme
+        ),
         body,
         timeoutMs
       });
@@ -435,6 +484,7 @@ export function createMailketingV2AccountProbe(
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const transport =
     config.transport ?? createSsrfGuardedMailketingTransport(config.env);
+  const auth = resolveAuthScheme(config);
 
   async function read<T>(
     path: string,
@@ -442,11 +492,14 @@ export function createMailketingV2AccountProbe(
   ): Promise<MailketingV2ProbeResult<T>> {
     let result: MailketingV2TransportResult;
 
+    // An unusable scheme setting sends nothing: unknown, never "verified".
+    if (!auth.ok) return { ok: false, failure: "unavailable" };
+
     try {
       result = await transport({
         url: `${baseUrl}${path}`,
         method: "GET",
-        headers: buildMailketingV2Headers(config.apiToken, false),
+        headers: buildMailketingV2Headers(config.apiToken, false, auth.scheme),
         timeoutMs
       });
     } catch {

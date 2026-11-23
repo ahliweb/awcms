@@ -56,8 +56,13 @@ re-claim can never abort the pass. Templates are looked up once per distinct
 - `infrastructure/mailketing-v2-provider.ts` — **optional** Mailketing REST
   API **v2** adapter (Issue #1159, ADR-0151 §1), selected only by
   `EMAIL_MAILKETING_API_VERSION=v2`. `POST /api/v2/send` as JSON; the token is
-  sent in `Authorization: Bearer` **only** (never URL, query, body, log or
-  result). Egress goes through `ssrfSafeFetch` to the **fixed** host
+  sent in **one header only** (never URL, query, body, log or result):
+  `X-Api-Token` by default, or `Authorization: Bearer` when
+  `EMAIL_MAILKETING_V2_AUTH_SCHEME=bearer` (ADR-0151 Q12; an unknown value is a
+  deferred configuration error and nothing is sent). **Open decision:** the
+  default rests on live evidence from one production consumer (issue #1159
+  comment, 2026-11-14); `bearer` has none, and the vendor's canonical form is
+  confirmed only by the stage-2 check (`EMAIL_MAILKETING_V2_VERIFIED`). Egress goes through `ssrfSafeFetch` to the **fixed** host
   `https://api.mailketing.co.id` (`EMAIL_MAILKETING_API_BASE_URL` must be unset
   or exactly that origin), with `maxRedirects: 0`, a total timeout and a
   response-size cap. Classification (pure, `domain/mailketing-v2-contract.ts`):

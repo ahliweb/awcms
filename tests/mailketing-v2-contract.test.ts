@@ -15,6 +15,7 @@ import {
   classifyMailketingV2Response,
   parseRetryAfterMs,
   resolveMailketingApiVersion,
+  resolveMailketingV2AuthScheme,
   resolveMailketingV2BaseUrl
 } from "../src/modules/email/domain/mailketing-v2-contract";
 
@@ -94,9 +95,23 @@ describe("resolveMailketingV2BaseUrl (fixed allow-listed host)", () => {
 });
 
 describe("request building", () => {
-  test("the token is in the Authorization header only", () => {
+  test("the default scheme is X-Api-Token (the one with live evidence), and ONLY that header carries the token", () => {
     const headers = buildMailketingV2Headers("tok-123", true);
+    expect(headers["X-Api-Token"]).toBe("tok-123");
+    expect(headers.Authorization).toBeUndefined();
+    expect(JSON.stringify(Object.keys(headers)).toLowerCase()).not.toContain(
+      "bearer"
+    );
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(buildMailketingV2Headers("tok-123", true, "x-api-token")).toEqual(
+      headers
+    );
+  });
+
+  test("scheme bearer sends Authorization: Bearer and NOT X-Api-Token", () => {
+    const headers = buildMailketingV2Headers("tok-123", true, "bearer");
     expect(headers.Authorization).toBe("Bearer tok-123");
+    expect(headers["X-Api-Token"]).toBeUndefined();
     expect(headers["Content-Type"]).toBe("application/json");
     expect(buildMailketingV2Headers("tok-123", false)["Content-Type"]).toBe(
       undefined
@@ -252,4 +267,40 @@ describe("token header safety and the stage-2 acknowledgement flag", () => {
     expect(isMailketingV2Verified(e("true"))).toBe(true);
     expect(MAILKETING_V2_UNVERIFIED_WARNING).toMatch(/NOT approved/);
   });
+});
+
+describe("resolveMailketingV2AuthScheme (fail-closed switch, Issue #1159 / Q12)", () => {
+  const e = (v?: string) =>
+    ({ EMAIL_MAILKETING_V2_AUTH_SCHEME: v }) as unknown as NodeJS.ProcessEnv;
+
+  test("unset or blank = x-api-token", () => {
+    expect(resolveMailketingV2AuthScheme(e())).toEqual({
+      ok: true,
+      scheme: "x-api-token"
+    });
+    expect(resolveMailketingV2AuthScheme(e("  "))).toEqual({
+      ok: true,
+      scheme: "x-api-token"
+    });
+  });
+
+  test("the two known values resolve (trimmed)", () => {
+    expect(resolveMailketingV2AuthScheme(e("bearer"))).toEqual({
+      ok: true,
+      scheme: "bearer"
+    });
+    expect(resolveMailketingV2AuthScheme(e(" x-api-token "))).toEqual({
+      ok: true,
+      scheme: "x-api-token"
+    });
+  });
+
+  test.each(["Bearer", "X-Api-Token", "x_api_token", "basic", "none", "true"])(
+    "%p is rejected, never coerced, and the reason does not echo it",
+    (value) => {
+      const result = resolveMailketingV2AuthScheme(e(value));
+      expect(result.ok).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(value);
+    }
+  );
 });

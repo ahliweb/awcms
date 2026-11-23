@@ -217,6 +217,7 @@ M12. No claim in code, UI or docs of a remote campaign, list-management or authe
 - **Q10.** Is a processing agreement or addendum with Mailketing in place, and where does it process data? (controller action)
 - **Q11.** Scope of credit forecasting: a simple advisory moving average (recommended) or an enforced budget that blocks sends?
 - **Q12.** Choice between `Authorization: Bearer` and `X-Api-Token` for the v2 header. Recommendation: `Authorization: Bearer`, confirmed by the sandbox.
+  **Amendment (Issue #1159, 2026-11-23):** the recommendation is reversed for the _default_. A downstream production deployment has sent mail through v2 with `X-Api-Token` since 2026-11-12 (issue #1159 comment, 2026-11-14); `Authorization: Bearer` has no live evidence. The scheme is now configurable via `EMAIL_MAILKETING_V2_AUTH_SCHEME` (`x-api-token` default, `bearer` opt-in, fail-closed on any other value, exactly one header sent). This is consumer evidence, not the stage-2 check: the question stays **open** until `EMAIL_MAILKETING_V2_VERIFIED` is set after a live check against this adapter.
 
 ## Alternatives rejected
 

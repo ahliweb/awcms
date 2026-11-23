@@ -326,6 +326,13 @@ const RULES: readonly Rule[] = [
     type: "enum",
     values: ["v1", "v2"]
   },
+  // Issue #1159 (ADR-0151 Q12). Unset = x-api-token; anything else is an error.
+  {
+    name: "EMAIL_MAILKETING_V2_AUTH_SCHEME",
+    required: false,
+    type: "enum",
+    values: ["x-api-token", "bearer"]
+  },
 
   // Installable admin (Issue #1105). Optional branding of the Home Screen app;
   // the manifest falls back to defaults on an empty or invalid value.

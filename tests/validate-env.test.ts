@@ -328,6 +328,23 @@ describe("validateEnv", () => {
       ).toEqual([]);
     });
 
+    test("EMAIL_MAILKETING_V2_AUTH_SCHEME: x-api-token and bearer are clean, anything else is rejected", () => {
+      for (const ok of ["x-api-token", "bearer"]) {
+        expect(
+          validateEnv({ ...email, EMAIL_MAILKETING_V2_AUTH_SCHEME: ok })
+        ).toEqual([]);
+      }
+
+      for (const bad of ["Bearer", "x_api_token", "basic", "1"]) {
+        expect(
+          validateEnv({
+            ...email,
+            EMAIL_MAILKETING_V2_AUTH_SCHEME: bad
+          }).some((p) => p.startsWith("EMAIL_MAILKETING_V2_AUTH_SCHEME"))
+        ).toBe(true);
+      }
+    });
+
     test("EMAIL_MAILKETING_V2_VERIFIED must be a boolean", () => {
       expect(
         validateEnv({ ...email, EMAIL_MAILKETING_V2_VERIFIED: "yes" }).some(

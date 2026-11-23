@@ -1548,6 +1548,12 @@ export const GLOBAL_SECRETS: readonly {
       "selects the Mailketing API version (v1 default, v2 opt-in); a mode switch, not a credential"
   },
   {
+    name: "EMAIL_MAILKETING_V2_AUTH_SCHEME",
+    kind: "not-a-secret",
+    reason:
+      "selects which header (x-api-token or bearer) carries the Mailketing v2 token; a mode switch, not a credential"
+  },
+  {
     name: "EMAIL_MAILKETING_API_BASE_URL",
     kind: "not-a-secret",
     reason:
