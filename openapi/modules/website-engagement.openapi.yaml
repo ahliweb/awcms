@@ -149,6 +149,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many submissions from this address or for this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -545,6 +548,7 @@ paths:
         and a revoked source cannot be changed (`409 SOURCE_REVOKED`).
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKeyOptional"
         - name: id
           in: path
           required: true

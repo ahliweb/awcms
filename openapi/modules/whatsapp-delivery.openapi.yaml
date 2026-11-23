@@ -594,6 +594,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Too many attempts from this address for this tenant.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -676,6 +679,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts or refusals from this address for this tenant.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

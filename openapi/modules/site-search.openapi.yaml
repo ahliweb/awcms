@@ -146,6 +146,8 @@ paths:
         "429":
           description: Too many search requests from this source.
           headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
             Vary:
               description: >-
                 Always `Origin`. The limiter answers before the origin is
@@ -224,6 +226,8 @@ paths:
         "429":
           description: Too many suggestion requests from this source.
           headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
             Vary:
               description: >-
                 Always `Origin`. The limiter answers before the origin is

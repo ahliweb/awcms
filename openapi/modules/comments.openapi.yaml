@@ -82,6 +82,9 @@ paths:
                     $ref: "#/components/schemas/PublicCommentPage"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -143,6 +146,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -252,6 +258,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Per-IP rate limit exceeded.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -307,6 +316,8 @@ paths:
                       - true
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/comments/{id}/delete-request:
     post:
       operationId: requestPublicCommentDeletion

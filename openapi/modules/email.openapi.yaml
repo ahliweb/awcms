@@ -882,6 +882,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many FAILED proofs from this address (checked before any database work), or the per-callback rate after proof.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

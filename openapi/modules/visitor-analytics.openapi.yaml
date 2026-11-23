@@ -58,6 +58,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/analytics/summary:
     get:
       tags:

@@ -56,6 +56,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many subscription requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -95,6 +98,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -135,6 +141,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many requests from this source (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

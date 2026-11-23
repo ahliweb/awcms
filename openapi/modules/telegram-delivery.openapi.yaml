@@ -127,6 +127,9 @@ paths:
           description: >-
             Rate limited, per address; repeated wrong secrets from one address are
             throttled the same way.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -191,6 +194,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many link codes were requested (`RATE_LIMITED`).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:

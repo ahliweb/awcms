@@ -475,6 +475,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/setup/status:
     get:
       operationId: getSetupStatus

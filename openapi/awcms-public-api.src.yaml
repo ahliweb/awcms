@@ -147,6 +147,16 @@ components:
         minLength: 1
         maxLength: 255
         pattern: "^[!-~]{1,255}$"
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: "Deduplicates a retried HTTP request on an operation that applies the key only in some cases (the operation's description says which; where the key is not applied the header is ignored). Same bound as `IdempotencyKey`: 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs. When the operation needs the key and it is absent the refusal is `400 IDEMPOTENCY_REQUIRED` (ADR-0129 §2)."
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: "^[!-~]{1,255}$"
     SyncNodeId:
       name: X-AWCMS-Node-ID
       in: header
@@ -168,6 +178,12 @@ components:
       description: HMAC-SHA256 signature over "<timestamp>.<body>".
       schema:
         type: string
+  headers:
+    RetryAfter:
+      description: "Whole seconds until the request is worth retrying (RFC 9110 delay-seconds). Sent on rate-limit refusals. An account-lockout `429` on the same operation does not always carry it, so a client falls back to its own backoff when it is absent."
+      schema:
+        type: integer
+        minimum: 0
   responses:
     BadRequest:
       description: Validation error.
@@ -189,6 +205,21 @@ components:
             $ref: "#/components/schemas/ApiError"
     NotFound:
       description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    RateLimited:
+      description: RATE_LIMITED. The caller exceeded this operation's budget; retry after the number of seconds in `Retry-After`.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    RateLimitedNoRetryAfter:
+      description: RATE_LIMITED. The caller exceeded this operation's budget. This operation's handler does not send `Retry-After`; use your own backoff.
       content:
         application/json:
           schema:

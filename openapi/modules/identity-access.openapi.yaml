@@ -750,6 +750,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many login attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -835,6 +838,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -920,6 +926,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1059,6 +1068,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many enrolment attempts for this session/grant or source, or the person is locked out after failed password attempts (they count toward the same lockout as a failed login).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1162,6 +1174,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Rate limited per source and per session/grant, or MFA_ENROLLMENT_EXHAUSTED - five wrong codes destroyed the pending secret (a pending enrolment is also bound to the session or grant that started it, expires after 10 minutes, and is then reported as 404; start again).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1232,6 +1247,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many verification attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1355,6 +1373,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many verification attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1540,6 +1561,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many password reset requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1608,6 +1632,9 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           description: Too many password reset attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1711,6 +1738,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many password change attempts from this source, or the person is locked out by failed password attempts (a wrong currentPassword counts toward the same principal lockout as a failed login).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -1791,6 +1821,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many registration attempts from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3199,6 +3232,8 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
   /api/v1/auth/session-handoff/redeem:
     post:
       operationId: redeemSessionHandoffCode
@@ -3244,6 +3279,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
   /api/v1/auth/sessions:
     get:
       operationId: listOwnAuthSessions
@@ -3287,6 +3324,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many session requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3726,6 +3766,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many revocation requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3783,6 +3826,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many revocation requests from this source.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3819,6 +3865,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           description: Too many introspection requests from this source (RATE_LIMITED); `Retry-After` carries the window.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3860,6 +3909,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Too many requests from this source (RATE_LIMITED).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -3919,6 +3971,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          $ref: "#/components/responses/RateLimitedNoRetryAfter"
   /api/v1/auth/sso/{providerKey}/link:
     post:
       operationId: postAuthSsoLink
@@ -4947,6 +5001,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -5036,6 +5093,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
@@ -5569,6 +5629,9 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "429":
           description: Too many attempts from this source. Carries `retry-after`.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
           content:
             application/json:
               schema:
