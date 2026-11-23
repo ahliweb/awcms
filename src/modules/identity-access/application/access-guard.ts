@@ -809,13 +809,22 @@ export async function authorizeInTransaction(
   }
 
   // Issue #179 — load the tenant's active, compiled ABAC policies (tenant-keyed
-  // cache, deterministically invalidated on any policy mutation) and evaluate
+  // cache, invalidated by the database policy version on any mutation in any
+  // process — Issue #1482) and evaluate
   // them at this single chokepoint, AFTER session/tenant/module-enabled/RBAC
   // resolution. An empty policy set (the default for every tenant that has
   // authored none) makes ABAC a no-op — behavior is unchanged. `ipTrusted`
   // defaults to false (fail-closed) until a deployment wires a trusted-network
   // resolver; `env.now` is the request timestamp already threaded through here.
-  const policies = await loadActivePolicies(tx, tenantId);
+  //
+  // Issue #1482 — the cache is checked against the tenant's policy version as
+  // the principal query read it, in THIS transaction, so a policy change made
+  // by any other process or replica is honoured here without a round trip.
+  const policies = await loadActivePolicies(
+    tx,
+    tenantId,
+    principal?.abacPolicyVersion
+  );
   const evaluated = evaluateAccess(
     context,
     guard,

@@ -94,6 +94,11 @@ export const BOUNDED_BY_DESIGN: readonly {
   reason: string;
 }[] = [
   {
+    table: "awcms_abac_policy_versions",
+    reason:
+      "Issue #1482 / sql/432. At most ONE row per tenant, by primary key, overwritten in place every time the tenant's ABAC policies change and removed with the tenant (ON DELETE CASCADE): the ceiling is the number of tenants, never a function of how many changes happen. It is a cache-invalidation token, not history. An age-based purge would be actively wrong: deleting the row makes the tenant read version 0, which is safe only because the next policy write issues a fresh value — purging it buys nothing and adds a reload."
+  },
+  {
     table: "awcms_channel_accounts",
     reason:
       "ADR-0148 / Issue #1140. Every row is AUTHORED by an administrator registering an external account the tenant really operates (a page, a number, a bot), never accumulated by traffic: the ceiling is the number of accounts a business connects, and an account is soft-deleted (terminal) when it is retired. Nothing in a request path or a job inserts one."

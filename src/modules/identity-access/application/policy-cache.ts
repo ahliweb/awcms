@@ -1,35 +1,57 @@
 /**
- * Tenant-keyed ABAC policy cache (Issue #179).
+ * Tenant-keyed ABAC policy cache (Issue #179; cross-process since Issue #1482).
  *
  * The authorization chokepoint (`authorizeInTransaction`) evaluates stored
  * policies on EVERY guarded request. Re-reading + re-parsing the policy table
  * on every call would be wasteful, so active policies are compiled once per
- * tenant and cached in-process. Correctness over speed: the cache is
- * invalidated DETERMINISTICALLY the moment a policy is created/updated/enabled/
- * disabled — every mutating endpoint (the DSL surface `/api/v1/access/policies`
- * AND the flat #171 surface `/api/v1/abac/policies`) calls
- * `invalidatePolicyCache(tenantId)` AFTER its transaction commits, bumping a
- * per-tenant version so the next load re-queries. No restart, no TTL races.
+ * tenant and cached in-process.
  *
- * WHAT IS EVALUATED: ONLY DSL-managed policies. `queryAndCompile` filters
- * `is_dsl_managed = true` (sql/031), so a row authored by the flat #171 CRUD
- * (which can set neither applicability nor a condition, and would otherwise
- * present as a wildcard, always-true policy — a flat `deny` bricking the whole
- * tenant) is NEVER loaded, compiled, or evaluated. That makes the flat surface's
- * own `invalidatePolicyCache` call a HARMLESS defensive no-op: flat rows are not
- * consumed, so there is no stale snapshot for them to correct. It is kept only
- * so the wiring stays uniform if a flat row is ever promoted to DSL-managed via
- * the DSL surface. See ADR-0033 §3.
+ * ## Correctness comes from the DATABASE, not from this process (Issue #1482)
+ *
+ * Every cache entry is tagged with the tenant's POLICY VERSION — the value of
+ * `awcms_abac_policy_versions.policy_version` (sql/432). A trigger on
+ * `awcms_abac_policies` writes a fresh, never-reused value into that row in the
+ * SAME transaction as any INSERT, UPDATE, DELETE or TRUNCATE, whichever code
+ * path (DSL surface, flat #171 surface, a migration, an operator) made it.
+ *
+ * `loadActivePolicies` is given — or reads — the version INSIDE the caller's
+ * transaction and serves the cached list only when the tags are EQUAL. Any
+ * difference means somebody, in some process, changed the tenant's policies
+ * since the snapshot was taken, and the snapshot is dropped. So a new `deny`
+ * or a disabled `allow` committed by process A is honoured by process B's very
+ * next authorization: no TTL, no restart, no NOTIFY that a reconnect can lose.
+ *
+ * Why a stale snapshot can never be tagged FRESH: the version is read BEFORE
+ * the policies (same statement order in every caller; in the chokepoint it
+ * rides on the principal query, which runs first). Under READ COMMITTED a later
+ * statement sees a state at least as new as an earlier one, so the policies
+ * stored under version V are never OLDER than V. The opposite race — policies
+ * newer than their tag — only costs one unnecessary reload on the next call.
+ *
+ * Missing row = version `"0"`. A tenant reads `"0"` only while no policy write
+ * has happened since its row was created or last vanished; the first write
+ * after that writes a sequence value (always > 0), so `"0"` can never match a
+ * snapshot taken across a change.
+ *
+ * `invalidatePolicyCache(tenantId)` is kept as a LOCAL optimisation: the writing
+ * process drops its entry right after commit instead of waiting for the next
+ * version comparison. It is no longer what makes the cache correct, and a
+ * writer that forgets it is only slower, never wrong.
+ *
+ * ## What is evaluated
+ *
+ * ONLY DSL-managed policies. `queryAndCompile` filters `is_dsl_managed = true`
+ * (sql/031), so a row authored by the flat #171 CRUD (which can set neither
+ * applicability nor a condition, and would otherwise present as a wildcard,
+ * always-true policy — a flat `deny` bricking the whole tenant) is NEVER
+ * loaded, compiled, or evaluated. The trigger still bumps the version for flat
+ * writes; that costs a reload and keeps "every write invalidates" true without
+ * a carve-out. See ADR-0033 §3.
  *
  * Tenant isolation: entries are keyed by tenant id and every DB read runs
  * inside `withTenant` (RLS-enforced, non-superuser `awcms_app` role in
  * production), so one tenant's cache entry can never contain another tenant's
  * policies. The cache never reads cross-tenant.
- *
- * Scope note (documented, ADR-0033 §Cache): invalidation is per-PROCESS. In a
- * single-instance deployment this is fully deterministic. A horizontally-scaled
- * deployment would additionally need a cross-instance signal (LISTEN/NOTIFY or
- * a short TTL) — called out as a limitation, not silently assumed away.
  */
 
 import {
@@ -40,35 +62,45 @@ import {
 import type { CompiledPolicy } from "../domain/abac-evaluator";
 
 type CacheEntry = {
-  version: number;
+  /** `awcms_abac_policy_versions.policy_version` the snapshot was taken at. */
+  version: string;
   policies: CompiledPolicy[];
 };
 
 const cache = new Map<string, CacheEntry>();
-const versions = new Map<string, number>();
-
-/** Current cache version for a tenant (0 before any invalidation). Exposed for
- * observability and tests asserting deterministic invalidation. */
-export function getPolicyCacheVersion(tenantId: string): number {
-  return versions.get(tenantId) ?? 0;
-}
 
 /**
- * Invalidate a tenant's cached policies. Bumps the version and drops the entry
- * so the next `loadActivePolicies` re-queries. Call this from every endpoint
- * that creates/updates/enables/disables a policy, AFTER the mutating
- * transaction commits (so a committed change is always visible to the next
- * request and a concurrent read can never re-cache a pre-commit snapshot).
+ * Invalidate a tenant's cached policies IN THIS PROCESS. A local optimisation
+ * only (see the header): every other process learns of the change from the
+ * database version. Call it from an endpoint that changed a policy, AFTER its
+ * transaction commits.
  */
 export function invalidatePolicyCache(tenantId: string): void {
-  versions.set(tenantId, (versions.get(tenantId) ?? 0) + 1);
   cache.delete(tenantId);
 }
 
-/** Test-only: clear all cached policies and versions. */
+/** Test-only: clear all cached policies. */
 export function resetPolicyCache(): void {
   cache.clear();
-  versions.clear();
+}
+
+/**
+ * The tenant's current ABAC policy version, read in the caller's transaction.
+ * `"0"` when the tenant has no version row (no policy write since the row was
+ * created or last vanished). Returned as text: the column is `bigint`, and
+ * only equality is ever asked of it.
+ */
+export async function readPolicyVersion(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<string> {
+  const rows = (await tx`
+    SELECT policy_version::text AS policy_version
+    FROM awcms_abac_policy_versions
+    WHERE tenant_id = ${tenantId}
+  `) as { policy_version: string }[];
+
+  return rows[0]?.policy_version ?? "0";
 }
 
 type PolicyRow = {
@@ -137,16 +169,22 @@ async function queryAndCompile(
 }
 
 /**
- * Load (and cache) the tenant's ACTIVE, compiled policies. On a cache hit at
- * the current version, returns the memoized list with zero I/O; on a miss,
- * queries within the caller's tenant transaction and memoizes. The returned
- * list is treated as read-only by callers.
+ * Load (and cache) the tenant's ACTIVE, compiled policies.
+ *
+ * `observedVersion` is the tenant's policy version as the CALLER already read
+ * it in this transaction — the chokepoint gets it for free from the principal
+ * query (`ResolvedTenantPrincipal.abacPolicyVersion`). When absent, it is read
+ * here, one indexed primary-key lookup. Either way the cached list is served
+ * only when its tag EQUALS that version; otherwise the policies are queried
+ * within the caller's tenant transaction and re-memoized under the version.
+ * The returned list is treated as read-only by callers.
  */
 export async function loadActivePolicies(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  observedVersion?: string
 ): Promise<CompiledPolicy[]> {
-  const version = versions.get(tenantId) ?? 0;
+  const version = observedVersion ?? (await readPolicyVersion(tx, tenantId));
   const entry = cache.get(tenantId);
   if (entry && entry.version === version) {
     return entry.policies;

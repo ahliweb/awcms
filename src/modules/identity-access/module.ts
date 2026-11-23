@@ -1271,6 +1271,17 @@ export const identityAccessModule = defineModule({
         "ADR-0079 — attribute rules evaluated against a request. A policy describes CONDITIONS, not the people they happen to match; who it was applied to is recorded in the decision log, which answers for itself."
     },
     {
+      key: "identity_access.abac_policy_versions",
+      tableName: "awcms_abac_policy_versions",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Issue #1482 / sql/432 — one row per tenant holding an opaque sequence number that moves whenever the tenant's ABAC policies change. It records THAT a policy changed, never who changed it (the audit log answers that) and nothing about any person."
+    },
+    {
       key: "identity_access.invitation_policies",
       tableName: "awcms_invitation_policies",
       ownerModuleKey: "identity_access",

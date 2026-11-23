@@ -149,7 +149,10 @@ describe("findSharedTableWrites", () => {
       // #968: the restore drill's rolled-back refused-write probes, run as
       // `awcms_app` on a restored database.
       "awcms_booking_resources",
-      "awcms_hr_attendance_events"
+      "awcms_hr_attendance_events",
+      // Issue #1482: the policy-version probe (scripts/lib/abac-policy-version-readiness.ts).
+      "awcms_abac_policies",
+      "awcms_abac_policy_versions"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
