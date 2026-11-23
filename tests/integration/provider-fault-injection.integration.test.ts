@@ -105,7 +105,6 @@ function freshIds(): void {
   USER_B = crypto.randomUUID();
 }
 const NOW = new Date("2026-11-22T10:00:00.000Z");
-const PAST = () => new Date(Date.now() - 120_000);
 
 /** Wait (microtask/timer turns, no wall-clock budget) until `predicate` holds. */
 async function until(predicate: () => boolean, label: string): Promise<void> {
@@ -126,10 +125,19 @@ function gate(): { promise: Promise<void>; open: () => void } {
 }
 
 /** Opens the breaker "two minutes ago": by the wall clock it is now half-open (30s window). */
-function tripToHalfOpen(key: string): void {
+/**
+ * Open the breaker 120 s before `at`, i.e. past the 30 s cool-down as seen from
+ * `at`. `at` MUST be the clock the code under test reads. The object-sync
+ * dispatcher consults the breaker with its injected `now` (NOW, a fixed instant
+ * in the past), so tripping against the wall clock leaves `openedAt` AFTER that
+ * `now` and the breaker reads as still open: the pass claims nothing and no
+ * probe is ever sent (#1494).
+ */
+function tripToHalfOpen(key: string, at: Date = new Date()): void {
   const breaker = getProviderCircuitBreaker(key);
+  const openedAt = new Date(at.getTime() - 120_000);
 
-  for (let i = 0; i < 5; i += 1) breaker.recordFailure(PAST());
+  for (let i = 0; i < 5; i += 1) breaker.recordFailure(openedAt);
 }
 
 async function seedTenant(
@@ -494,7 +502,7 @@ suite("provider fault injection (#1411)", () => {
     });
 
     test("half-open, concurrent passes (two tenants, one real adapter): exactly ONE PUT reaches the provider while the probe is in flight", async () => {
-      tripToHalfOpen("object-storage");
+      tripToHalfOpen("object-storage", NOW);
       mode = "hang";
       const a = await seedObject(T_A, nodeA);
       const b = await seedObject(T_B, nodeB);
@@ -516,7 +524,7 @@ suite("provider fault injection (#1411)", () => {
     });
 
     test("breaker refusal (F1, #1432): rows the breaker refused are released with NO attempt recorded and retry_count unchanged", async () => {
-      tripToHalfOpen("object-storage");
+      tripToHalfOpen("object-storage", NOW);
       mode = "unavailable";
       const ids = [
         await seedObject(T_A, nodeA),
