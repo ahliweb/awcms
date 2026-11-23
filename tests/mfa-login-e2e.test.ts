@@ -1355,6 +1355,15 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     expect(
       await stepUpMethodOf(tenantId, challenge.body.data.token as string)
     ).toEqual({ method: "recovery_code", passkeyId: null });
+
+    // And the audit trail says so too — the factor kind, never the code.
+    const audit = (await sql`
+      SELECT attributes FROM awcms_audit_events
+      WHERE tenant_id = ${tenantId} AND action = 'mfa_challenge_verified'
+    `) as { attributes: Record<string, unknown> }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.attributes.stepUpMethod).toBe("recovery_code");
+    expect(JSON.stringify(audit[0]!.attributes)).not.toContain("LOGINRC1");
   });
 
   test("F7: login -> MFA -> stale step-up blocks admin action -> step-up -> action succeeds", async () => {
@@ -1437,6 +1446,20 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       method: "recovery_code",
       passkeyId: null
     });
+
+    const audits = (await sql`
+      SELECT action, attributes FROM awcms_audit_events
+      WHERE tenant_id = ${tenantId}
+        AND action IN ('mfa_challenge_verified', 'mfa_step_up_succeeded')
+      ORDER BY created_at, action
+    `) as { action: string; attributes: Record<string, unknown> }[];
+    expect(
+      audits.map((row) => [row.action, row.attributes.stepUpMethod])
+    ).toEqual([
+      ["mfa_challenge_verified", "totp"],
+      ["mfa_step_up_succeeded", "recovery_code"]
+    ]);
+    expect(JSON.stringify(audits)).not.toContain("RECOVERY1");
 
     // 6. Admin action now succeeds.
     const reset = await callRoute(adminResetPOST, {

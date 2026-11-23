@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](mfa-totp-step-up.md)
 
-<!-- i18n-source-hash: sha256:41db5bdf58453ca919cc00b6553b883d7b40b3f589af1ba92cc2b4920e7115d0 -->
+<!-- i18n-source-hash: sha256:783ca555ff45da38e421d3f091a18f0cfaf6595a6ef5a99ad17b7b440c03ce81 -->
 
 # MFA TOTP, recovery codes, dan step-up authentication
 
@@ -219,4 +219,4 @@ Jangan pernah men-commit key. Simpan di secrets manager / env deployment, bukan 
 
 Kunci baris verifikasi per faktor memeriksa ulang `status = 'active'`. Faktor yang dinonaktifkan di antara pembacaan tanpa kunci dan penguncian diperlakukan sebagai tidak cocok (`MFA_CHALLENGE_INVALID` / `MFA_INVALID_CODE`), dan tidak dihitung sebagai kegagalan lockout. Compare-and-swap replay-guard mensyaratkan faktor aktif; konsumsi recovery code mensyaratkan principal masih punya faktor aktif bertipe apa pun (kode milik principal sejak `sql/442`, ADR-0168 A1).
 
-**Metode step-up (`sql/443`, ADR-0168 A2).** Setiap sesi mencatat bagaimana ia mencapai `aal2` di `stepped_up_method` (`totp`, `recovery_code`, atau `passkey`; NULL tepat untuk `aal1`, ditegakkan CHECK). Challenge login, penyelesaian enrolment, penebusan handoff, dan `POST /auth/mfa/step-up` semuanya menulis metode kredensial yang benar-benar cocok, dan refresh mengganti metode sebelumnya. Sesi yang sudah `aal2` sebelum migrasi dicap `recovery_code`, metode terlemah yang konsisten dengan bukti. Step-up passkey belum bisa disimpan: tabel kredensialnya belum ada, jadi constraint khusus menolak nilai itu sampai slice yang menambahkan tabel beserta FK-nya.
+**Metode step-up (`sql/443`, ADR-0168 A2).** Setiap sesi mencatat bagaimana ia mencapai `aal2` di `stepped_up_method` (`totp`, `recovery_code`, atau `passkey`; NULL tepat untuk `aal1`, ditegakkan CHECK). Challenge login, penyelesaian enrolment, penebusan handoff, dan `POST /auth/mfa/step-up` semuanya menulis metode kredensial yang benar-benar cocok, dan refresh mengganti metode sebelumnya. Event audit `mfa_challenge_verified` dan `mfa_step_up_succeeded` membawa nilai yang sama sebagai `stepUpMethod` (jenis faktor saja, tidak pernah kodenya). Sesi yang sudah `aal2` sebelum migrasi dicap `recovery_code`, metode terlemah yang konsisten dengan bukti. Step-up passkey belum bisa disimpan: tabel kredensialnya belum ada, jadi constraint khusus menolak nilai itu sampai slice yang menambahkan tabel beserta FK-nya.

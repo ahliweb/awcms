@@ -174,6 +174,9 @@ export const POST: APIRoute = async ({
         : "Session step-up refreshed.",
       attributes: {
         rotated: rotation.rotated,
+        // The factor that was just verified (ADR-0168 A2), the value now in
+        // `stepped_up_method`: `totp` or `recovery_code`, never the code.
+        stepUpMethod: verified.proof.method,
         ipHash: hashClientIp(clientIp),
         userAgent: summarizeUserAgent(request)
       },

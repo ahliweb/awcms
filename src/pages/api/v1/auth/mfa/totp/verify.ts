@@ -193,6 +193,10 @@ export const POST: APIRoute = async ({
       message: "MFA challenge verified; aal2 session created.",
       attributes: {
         method: "mfa",
+        // Which factor actually matched (ADR-0168 A2) — the same value the new
+        // session stores in `stepped_up_method`. `method` keeps its existing
+        // meaning (how the login was completed) for anyone already querying it.
+        stepUpMethod: result.proof.method,
         ipHash: hashClientIp(clientIp),
         userAgent: summarizeUserAgent(request)
       },
