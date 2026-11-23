@@ -10,7 +10,7 @@
  * the trail ended.
  *
  * This paragraph used to say that for a real CKEditor archive that meant
- * essentially every row was residue. Measured against the SeputarBorneo
+ * essentially every row was residue. Measured against the legacy-news
  * snapshot it is 4 rows in 25,029 (0.02%), of which 2 contain an `<img>` at
  * all. The residue was never the volume here. The volume is the LEAD
  * photograph, which is a column of the legacy row and not part of the body:
@@ -119,7 +119,7 @@ export function parseLegacyMediaMap(raw: unknown): LegacyMediaMapResult {
  * different routes and had completely different bugs. `body` comes from the
  * converter's own `unmanaged_image` rejections; `featured` is a COLUMN of the
  * legacy row (`foto_berita`) that no body scan can ever see. The upload set was
- * built from `body` alone, so for the SeputarBorneo archive it reported the 2
+ * built from `body` alone, so for the legacy-news archive it reported the 2
  * inline images and missed all 25,029 lead photographs — an upload set wrong by
  * the whole archive, and wrong in the direction that reads as "almost nothing
  * to do" (ADR-0114).

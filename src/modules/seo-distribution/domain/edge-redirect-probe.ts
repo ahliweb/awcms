@@ -6,7 +6,7 @@
  *
  * That job makes ZERO HTTP requests — its own docstring says so — and asks the
  * database "is there a rule, and is there a row at the end of it". Under
- * ADR-0114 the SeputarBorneo 301s execute at the EDGE, which is not that
+ * ADR-0114 the legacy-news 301s execute at the EDGE, which is not that
  * database, so a green run there says the DB agrees with itself and nothing
  * about what a reader receives.
  *
@@ -71,7 +71,7 @@ export type HopRefusal =
  * reason is not laziness: it refuses `http:` outright unless the host is in an
  * env allow-list that is documented as "never set on a real deployment". The
  * whole premise of this job is starting from the URL a CRAWLER holds —
- * `http://www.seputarborneo.com/news/…` — so that rule would refuse the primary
+ * `http://www.legacy-news.example/news/…` — so that rule would refuse the primary
  * use case. `ssrfSafeFetch` is likewise wrong here for a different reason: it
  * follows redirects internally and returns only the final `Response`, which
  * destroys the hop-by-hop visibility this job exists to produce.

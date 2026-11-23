@@ -26,14 +26,14 @@ const ROOT = path.resolve(import.meta.dir, "..");
 const tenantRule: RedirectOutcome = {
   kind: "redirect",
   status: 301,
-  location: "https://seputarborneo.test/id/blog/seputarborneo/banjir-kobar"
+  location: "https://legacy-news.test/id/blog/legacy-tenant/banjir-kobar"
 };
 
 const retiredRewrite: RedirectOutcome = {
   kind: "redirect",
   status: 301,
   location:
-    "https://seputarborneo.test/blog/seputarborneo/48213_banjir-kobar.html"
+    "https://legacy-news.test/blog/legacy-tenant/48213_banjir-kobar.html"
 };
 
 const passthrough: RedirectOutcome = {

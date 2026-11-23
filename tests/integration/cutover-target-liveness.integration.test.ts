@@ -64,7 +64,7 @@ import { resolveTargetLiveness } from "../../scripts/blog-legacy-cutover-verify"
 import type { EffectivePublicRouteSettings } from "../../src/modules/blog-content/application/public-route-settings";
 
 const TENANT = "f4444444-4444-4444-8444-444444444444";
-const TENANT_CODE = "seputarborneo";
+const TENANT_CODE = "legacy-tenant";
 const AUTHOR = "a4444444-4444-4444-8444-444444444444";
 
 /** The default a tenant that has never touched its settings resolves to. */
@@ -79,7 +79,7 @@ async function seedFixtures(): Promise<void> {
 
   await admin`
     INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
-    VALUES (${TENANT}, ${TENANT_CODE}, 'Seputar Borneo')
+    VALUES (${TENANT}, ${TENANT_CODE}, 'Legacy Tenant')
   `;
 
   const profile = (await admin`

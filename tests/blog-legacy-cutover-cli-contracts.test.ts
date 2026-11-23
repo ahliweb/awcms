@@ -103,7 +103,7 @@ describe("a usage error FAILS the run", () => {
     // a usage error and not a fallback.
     const result = run(ARTICLE_PATHS, [
       "--tenant=11111111-1111-4111-8111-111111111111",
-      "--system=seputarborneo"
+      "--system=legacy-cms"
     ]);
 
     expect(result.code).toBe(1);

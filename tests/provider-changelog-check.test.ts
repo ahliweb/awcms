@@ -329,7 +329,7 @@ const NOT_A_PROVIDER: Record<string, readonly string[]> = {
     "redirect-normalize.invalid",
     "seo-distribution.invalid",
     "tenant.example",
-    "www.seputarborneo.com"
+    "www.legacy-news.example"
   ]
 };
 

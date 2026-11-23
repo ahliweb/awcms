@@ -55,7 +55,7 @@ import type { LegacyPostImportInput } from "../../src/modules/blog-content/appli
 const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_TENANT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AUTHOR = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const SYSTEM = "seputarborneo";
+const SYSTEM = "legacy-cms";
 
 /** March 2019 — years before any row in this test database was created. */
 const ORIGINAL_PUBLISHED_AT = new Date("2019-03-04T02:11:00.000Z");
@@ -96,7 +96,7 @@ async function seedTenants(): Promise<void> {
     INSERT INTO awcms_tenants (id, tenant_code, tenant_name, status)
     VALUES
       (${TENANT}, 'lentera', 'Lentera', 'active'),
-      (${OTHER_TENANT}, 'seputar', 'Seputar', 'active')
+      (${OTHER_TENANT}, 'other-tenant', 'Other Tenant', 'active')
     ON CONFLICT (id) DO NOTHING
   `;
 }
@@ -518,13 +518,15 @@ suite("legacy article import (integration, Issue #599)", () => {
     const map = await withTenantOrThrow(getRuntimeSql(), OTHER_TENANT, (tx) =>
       listLegacyRedirectMappings(tx, OTHER_TENANT, {
         system: SYSTEM,
-        tenantCode: "seputar",
+        tenantCode: "other-tenant",
         pathTemplate: "/news/{legacyId}_{slug}.html"
       })
     );
 
     expect(map).toHaveLength(1);
-    expect(map[0]!.targetPath).toBe("/id/blog/seputar/banjir-melanda-kobar");
+    expect(map[0]!.targetPath).toBe(
+      "/id/blog/other-tenant/banjir-melanda-kobar"
+    );
   });
 });
 
@@ -642,7 +644,7 @@ suite("legacy image mapping (integration, Issue #599)", () => {
 
   test("the registry refuses another tenant's media, and unverified media", async () => {
     await seedUploader(TENANT, UPLOADER, "lentera");
-    await seedUploader(OTHER_TENANT, OTHER_UPLOADER, "seputar");
+    await seedUploader(OTHER_TENANT, OTHER_UPLOADER, "other-tenant");
 
     const foreign = await seedMedia(OTHER_TENANT, OTHER_UPLOADER, "verified");
     const unverified = await seedMedia(TENANT, UPLOADER, "uploaded");

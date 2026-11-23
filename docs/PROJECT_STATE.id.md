@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:bb57653e12d31c932d02151e3a14307455aa5c5476d0f2b670056f26408a5ea0 -->
+<!-- i18n-source-hash: sha256:fa9bfddbe9786c7818a36a5f1ba6c75cce8e06a0826f133c92069f917be5a531 -->
 
 # AWCMS — Project State & Continuation
 
@@ -996,7 +996,7 @@ NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
   terbelah menjadi terkirim dan tercabut, dirinci di masing-masing issue.
   Pemblokir media ~25.031 unggahan / 4,1 GB larut, karena secara bawaan tak ada
   yang diimpor. Sepuluh kategori tujuan menjadi prasyarat impor selektif alih-
-  alih prasyarat platform. `data/seputarborneo-legacy/` dipertahankan sebagai
+  alih prasyarat platform. `data/legacy-news-example/` dipertahankan sebagai
   bahan rujukan. **Nasib domain legacy TIDAK diputuskan di sini** — itu
   infrastruktur, di luar kedua repositori, dan ADR-0114 sudah menaruh 301-nya di
   tepi; bila domainnya disajikan, ADR-0116 §2 memberi aturan yang wajib diikuti
@@ -1418,11 +1418,11 @@ NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
   **Karena itu peta ter-commit-nya 68 entri dan 63 aturan, dan setiap hitungan
   yang lebih awal di putaran ini (67 entri, 62 aturan, 32 mati, 27 dipindah ke
   induk) DIGANTIKAN olehnya** — hitung
-  `data/seputarborneo-legacy/rubrik-redirects.json`, yang kini di-assert sebuah
+  `data/legacy-news-example/rubrik-redirects.json`, yang kini di-assert sebuah
   test pada 68.
 
   **Tarikan CDX-nya 5.170, bukan 5.174** — di-commit apa adanya sebagai
-  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`. `showNumPages=true`
+  `ekspor Wayback CDX (kemudian dihapus dari repositori)`. `showNumPages=true`
   MEMANG menjawab **2**, tetapi hanya pada query telanjang; tambahkan `collapse`
   atau `pageSize` dan ia menjawab `-`. Kedua halaman memuat 2.975 dan 2.196,
   berjumlah 5.171 karena `collapse` diterapkan per halaman, dan gabungannya
@@ -1516,7 +1516,7 @@ NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
 
   1. **Generator id→path itu TIDAK ADA.** Artefak artikel ADR-0114 adalah tabel
      id → path post yang di-generate dari tenant;
-     `data/seputarborneo-legacy/README.md` §"The ARTICLE map is deliberately NOT
+     `data/legacy-news-example/README.md` §"The ARTICLE map is deliberately NOT
      committed" menyatakannya terus terang — _"the generator is not built yet"_.
      Tenant hidup adalah apa yang ia generate TERHADAPnya, bukan apa yang sedang
      ia tunggu.
@@ -1700,7 +1700,7 @@ NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
   menghasilkan tautan rubrik dari nilai kolom; semuanya literal ketik-tangan.
   Itu membuat himpunannya **terenumerasi dan LENGKAP, bukan sampel** — crawler
   hanya bisa menjangkau apa yang ditautkan. Jumlahnya 67, kini di-commit bersama
-  provenance-nya di `data/seputarborneo-legacy/`.
+  provenance-nya di `data/legacy-news-example/`.
 
   Dua sifat menentukan pekerjaannya, dan keduanya tak terlihat dari rencana:
 

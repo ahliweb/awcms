@@ -22,14 +22,14 @@ import {
 
 const urlset = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://seputarborneo.test/news/48213_banjir-kobar.html</loc></url>
-  <url><loc>https://seputarborneo.test/news/1_a.html?utm=x&amp;b=2</loc></url>
+  <url><loc>https://legacy-news.test/news/48213_banjir-kobar.html</loc></url>
+  <url><loc>https://legacy-news.test/news/1_a.html?utm=x&amp;b=2</loc></url>
 </urlset>`;
 
 const sitemapindex = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <sitemap><loc>https://seputarborneo.test/sitemap-1.xml</loc></sitemap>
-  <sitemap><loc>https://seputarborneo.test/sitemap-2.xml</loc></sitemap>
+  <sitemap><loc>https://legacy-news.test/sitemap-1.xml</loc></sitemap>
+  <sitemap><loc>https://legacy-news.test/sitemap-2.xml</loc></sitemap>
 </sitemapindex>`;
 
 describe("parseSitemapLocations", () => {
@@ -74,7 +74,7 @@ describe("parseSitemapLocations", () => {
 describe("parseUrlListLocations", () => {
   test("a --urls list yields the SAME locations as the equivalent <urlset>", () => {
     // The whole justification for the flag: there is no legacy sitemap for
-    // SeputarBorneo and there never was one, in the tree or in git history.
+    // legacy-news and there never was one, in the tree or in git history.
     // `--sitemap` always read a local file, so the "needs the live sitemap"
     // blocker was only ever the XML wrapper — and the two paths must produce
     // identical evidence, or the flag is a second, weaker check wearing the
@@ -82,10 +82,10 @@ describe("parseUrlListLocations", () => {
     const fromSitemap = parseSitemapLocations(urlset);
     const fromList = parseUrlListLocations(
       [
-        "# SeputarBorneo legacy corpus — assembled from a crawl, not a sitemap",
+        "# legacy-news legacy corpus — assembled from a crawl, not a sitemap",
         "",
-        "https://seputarborneo.test/news/48213_banjir-kobar.html",
-        "   https://seputarborneo.test/news/1_a.html?utm=x&b=2   ",
+        "https://legacy-news.test/news/48213_banjir-kobar.html",
+        "   https://legacy-news.test/news/1_a.html?utm=x&b=2   ",
         ""
       ].join("\n")
     );
@@ -138,7 +138,7 @@ describe("sitemapLocationPath", () => {
     // The legacy host is not this deployment's host. Comparing them would
     // reject every entry of a real legacy sitemap.
     expect(
-      sitemapLocationPath("https://seputarborneo.test/news/48213_x.html")
+      sitemapLocationPath("https://legacy-news.test/news/48213_x.html")
     ).toBe("/news/48213_x.html");
   });
 

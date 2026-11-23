@@ -8,7 +8,7 @@
  * green. Two defects, both invisible from a unit test of a pure function:
  *
  *  - **The lead photograph was never collected.** `--images` scanned body HTML
- *    only. The SeputarBorneo archive has 2 body images and 25,029 lead
+ *    only. The legacy-news archive has 2 body images and 25,029 lead
  *    photographs (`foto_berita`), so the flag whose whole job is "tell me what
  *    to upload" reported 2 — a number that reads as "almost nothing to do" and
  *    was short by ~25,029 files / 4.1 GB. `LegacyPostImportInput` had no media
@@ -81,7 +81,7 @@ function runImages(
       `--file=${archive}`,
       `--tenant=${TENANT}`,
       `--author=${AUTHOR}`,
-      "--system=seputarborneo",
+      "--system=legacy-cms",
       `--images=${out}`,
       ...extraArgs
     ],
@@ -121,7 +121,7 @@ afterAll(() => {
 
 describe("the upload set includes the lead photograph", () => {
   test("an archive whose bodies contain no image still has work to do", () => {
-    // This is the SeputarBorneo shape: clean bodies, one `foto_berita` each.
+    // This is the legacy-news shape: clean bodies, one `foto_berita` each.
     // The old scan reported an EMPTY upload set for it and the operator would
     // have concluded there was nothing to migrate.
     const archive = writeArchive("leads-only.ndjson", [

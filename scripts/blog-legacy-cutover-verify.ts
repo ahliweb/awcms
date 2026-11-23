@@ -39,7 +39,7 @@
  *
  * This job starts from the other end: a corpus of the URLs the legacy site
  * actually published — its own sitemap (`--sitemap`), or a plain list of URLs
- * (`--urls`) when there is no sitemap to have. SeputarBorneo is the second case
+ * (`--urls`) when there is no sitemap to have. legacy-news is the second case
  * and it is not exotic: no sitemap in the legacy tree, none in its git history,
  * and the live site 404s `/robots.txt` and every conventional sitemap path
  * while serving 200 itself. `--sitemap` always read a LOCAL FILE, so the
@@ -81,7 +81,7 @@
  * Two ways that gap has already bitten, both recorded in ADR-0114:
  *
  *  - **A different repo serves the target.** ADR-0113's 63 rubrik rules — over
- *    the 68 entries in `data/seputarborneo-legacy/rubrik-redirects.json`; count
+ *    the 68 entries in `data/legacy-news-example/rubrik-redirects.json`; count
  *    that file rather than trusting this comment — point at `/kategori/**`,
  *    which is served by `ahliweb/awcms-astro`, a separate `output: "static"`
  *    deployment with no middleware file at all. No lookup this job can make
@@ -91,7 +91,7 @@
  *    replayed), while this job had nothing to say about it. That is why an
  *    unlookupable destination is now `target_unverifiable` and not `ok`.
  *
- *  - **A different LAYER serves the redirect.** ADR-0114 puts the SeputarBorneo
+ *  - **A different LAYER serves the redirect.** ADR-0114 puts the legacy-news
  *    legacy 301s at the EDGE (Coolify/Varnish), the only layer that can collapse
  *    `http→https` + `www→apex` + `legacy→new` into the one hop PRD §9.2 demands.
  *    `awcms_seo_redirects` — the only table this job reads — is applied at
@@ -175,7 +175,7 @@ function usage(message: string): void {
       "  --sitemap=<path>         the LEGACY site's sitemap XML. Repeat for each child of an index.\n" +
       "  --urls=<path>            a plain list of legacy URLs instead — one per line, blank lines and\n" +
       "                           whole-line `#` comments skipped. Use this when the legacy site has no\n" +
-      "                           sitemap (SeputarBorneo never had one). Repeatable; combines with --sitemap.\n" +
+      "                           sitemap (legacy-news never had one). Repeatable; combines with --sitemap.\n" +
       "  --host=<host>            scope host-scoped rules to this verified host (optional)\n" +
       "  --limit=<n>              stop after n URLs — for a quick sample, not for a cutover decision\n" +
       "  --json=<path>            write the full per-URL report here\n\n" +
@@ -572,7 +572,7 @@ async function main(): Promise<void> {
     console.log(
       `\nAll ${rows.length} legacy URL(s) resolve in one hop to a page THIS deployment serves.\n` +
         "That is a claim about this repo's tables and routes only — no HTTP request was made,\n" +
-        "and under ADR-0114 the SeputarBorneo 301s execute at the EDGE, which this cannot see."
+        "and under ADR-0114 the legacy-news 301s execute at the EDGE, which this cannot see."
     );
   } finally {
     // Without this the pool holds its connections open and the process lingers

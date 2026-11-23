@@ -443,7 +443,7 @@ describe("a hop is not followed just because a server asked", () => {
     // The guard must not refuse the thing the job exists to do: start from the
     // `http://` URL a crawler holds.
     expect(
-      hopRefusalFor("http://www.seputarborneo.com/news/1_x.html", {
+      hopRefusalFor("http://www.legacy-news.example/news/1_x.html", {
         allowPrivateAddresses: false
       })
     ).toBeNull();
@@ -500,8 +500,8 @@ describe("the report is in corpus order, even when a URL repeats", () => {
 describe("the corpus", () => {
   test("an absolute URL is probed as given", () => {
     expect(
-      probeUrlFor("http://www.seputarborneo.com/news/1_x.html", null)
-    ).toBe("http://www.seputarborneo.com/news/1_x.html");
+      probeUrlFor("http://www.legacy-news.example/news/1_x.html", null)
+    ).toBe("http://www.legacy-news.example/news/1_x.html");
   });
 
   test("a relative entry needs an --origin, and says so by returning null", () => {

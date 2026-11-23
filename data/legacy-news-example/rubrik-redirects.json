@@ -1,10 +1,7 @@
 {
   "capturedAt": "2026-08-26",
   "source": {
-    "phpWorkingCopy": "/home/data/dev_php/seputarborneo.com",
-    "database": "docker volume seputarborneocom_db_data (utf8mb4_unicode_ci; redo log written by MariaDB 10.11.19, though docker-compose.yml declares mariadb:10.6 — a 10.6 server refuses a copy of the volume)",
-    "table": "seputa58_sbb.berita_red_tayang",
-    "totalArticles": 25029
+    "description": "Example map captured from a legacy news CMS. Provenance details are intentionally omitted from the public repository."
   },
   "entries": [
     {

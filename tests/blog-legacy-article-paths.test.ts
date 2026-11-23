@@ -114,7 +114,7 @@ describe("a row becomes a path, or it becomes a problem", () => {
     // The single most consequential line in this file. `withPublicLocalePrefix`
     // prefixes every locale including the default (`/id/hukum/x`); the
     // consuming site's `localePath` returns the path unchanged for its default
-    // and only prefixes the others. All 25,029 SeputarBorneo articles are in
+    // and only prefixes the others. All 25,029 legacy-news articles are in
     // the default locale, so using this repo's rule would 301 every one of them
     // into a 404. Its committed rubrik map says the same thing out loud —
     // `/kategori/daerah`, not `/id/kategori/daerah`.

@@ -1042,7 +1042,7 @@ NULL`, so it derives the map **from rows that exist**. Import ten articles and
   into delivered and withdrawn, enumerated on each issue. The ~25,031 uploads /
   4.1 GB media blocker dissolves, because nothing is imported by default. The
   ten destination categories become a prerequisite of a selective import rather
-  than of the platform. `data/seputarborneo-legacy/` is kept as reference
+  than of the platform. `data/legacy-news-example/` is kept as reference
   material. **The fate of the legacy domain is not decided here** — that is
   infrastructure, outside both repositories, and ADR-0114 already put the 301s
   at the edge; if the domain is served, ADR-0116 §2 gives the rule its config
@@ -1430,13 +1430,13 @@ NULL`, so it derives the map **from rows that exist**. Import ten articles and
   **The committed map is therefore 68 entries and 63 rules, and every count
   earlier in this round (67 entries, 62 rules, 32 dead, 27 reparented) is
   superseded by that** — count
-  `data/seputarborneo-legacy/rubrik-redirects.json`, which a test now asserts at 68.
+  `data/legacy-news-example/rubrik-redirects.json`, which a test now asserts at 68.
   The class was swept, not the instance: exactly one listing link literal in the
   tree lacks `.html`, the only other extensionless relative link being
   `./video/?video=5`, already out of scope.
 
   **The CDX pull is 5,170, not 5,174** — committed verbatim as
-  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`. `showNumPages=true`
+  `the Wayback CDX export (since removed from the repository)`. `showNumPages=true`
   does answer **2**, but only on the bare query; add `collapse` or `pageSize`
   and it answers `-`. The pages hold 2,975 and 2,196, summing to 5,171 because
   `collapse` is applied per page, and their union matches the un-paginated pull
@@ -1524,7 +1524,7 @@ NULL`, so it derives the map **from rows that exist**. Import ten articles and
 
   1. **The id→path generator does not exist.** ADR-0114's article artefact is an
      id → post path table generated from the tenant;
-     `data/seputarborneo-legacy/README.md` §"The ARTICLE map is deliberately NOT
+     `data/legacy-news-example/README.md` §"The ARTICLE map is deliberately NOT
      committed" says it plainly — _"the generator is not built yet"_. A live
      tenant is what it generates AGAINST, not what it is waiting for.
   2. **An HTTP-level edge verifier does not exist either, and nothing here can
@@ -1694,7 +1694,7 @@ NULL`, so it derives the map **from rows that exist**. Import ten articles and
   link from a column value; every one is a hand-typed literal. That makes the
   set **enumerable and COMPLETE rather than a sample** — a crawler could only
   reach what was linked. There are 67, now committed with provenance at
-  `data/seputarborneo-legacy/`.
+  `data/legacy-news-example/`.
 
   Two properties decide the work, and neither was visible from the plan:
 
