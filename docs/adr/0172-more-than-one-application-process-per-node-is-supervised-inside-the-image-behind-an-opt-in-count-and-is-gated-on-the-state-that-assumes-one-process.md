@@ -2,10 +2,11 @@
 
 # ADR-0172 — More than one application process per node is supervised inside the image behind an opt-in count, and is gated on the state that assumes one process
 
-- **Status:** Proposed
-- **Review:** needs the owner's decision on the questions under "Open questions". Docs only: no code, migration, OpenAPI or dependency is written before this ADR is Accepted and split into issues.
+- **Status:** Accepted
+- **Accepted:** 2026-11-24 (Q1 to Q7 answered below, K19.17 to K19.23). The default count stays 1; raising it anywhere stays gated on Decision 3 and the measurement plan.
+- **Review:** the owner answered the questions under "Open questions" on 24 November 2026 (see "Decision of 24 November 2026"). Docs only: no code, migration, OpenAPI or dependency is written until the implementation issues split from this ADR are worked.
 - **Date:** 2026-11-23
-- **Decision maker:** @ahliweb (proposed, not decided)
+- **Decision maker:** @ahliweb (owner). Q1 to Q7 decided 24 November 2026 (K19.17 to K19.23, mass sign-off of the recommendations).
 - **Related:** Issue [#1454](https://github.com/ahliweb/awcms/issues/1454) (this is its architectural remainder); PR [#1472](https://github.com/ahliweb/awcms/pull/1472) (the per-view measurements); [ADR-0161](0161-capacity-targets-are-measured-nfrs-and-the-scale-path-is-staged.md) (the 2,000 rps per 2-vCPU node target, stage S1 to S2); [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (shared rate limiting); [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md) (SSE on the existing process); [ADR-0083](0083-this-template-deploys-to-one-environment.md) (one environment); [ADR-0033](0033-abac-dynamic-policy-evaluator.md) (ABAC evaluator; its §Cache is the origin of the per-process invalidation). Operational: [`database-pooling.md`](../awcms/database-pooling.md), [`database-capacity-runbook.md`](../awcms/database-capacity-runbook.md), [`deployment-profiles.md`](../awcms/deployment-profiles.md), [`deploy-coolify.md`](../awcms/deploy-coolify.md).
 
 **Docs and governance only.** No code, schema, API, event or dependency changes. Every number in this document is a LOCAL measurement from one shared workstation (app pinned to 2 CPUs, PostgreSQL with `fsync=off`, no CDN or edge cache, one run per point). Read the shape, not the digits. Statements marked **needs verification** were not confirmed against Bun's documentation or code and must not be relied on.
@@ -116,3 +117,17 @@ Run on the #1283 harness (PR #1453) with the same app pinning, seed and tenant s
 5. **Q5, the target.** Keep "2,000 rps uncached per 2-vCPU node" in ADR-0161, or restate it as origin rps at a stated hit ratio now that processes alone cannot reach it uncached?
 6. **Q6, Bun-only.** `node:cluster` is part of the Bun runtime's Node-compatibility surface and adds no dependency or Node.js; confirm that no written exception is needed (AGENTS.md rule 11).
 7. **Q7, default count.** Should the recommended production value be the vCPU count once the gates pass, or stay 1 until the production-like baseline (#1281) exists?
+
+## Decision of 24 November 2026 (K19.17 to K19.23)
+
+The owner approved every recommendation in "Open questions". The Decision section above is unchanged; these are the answers:
+
+1. **Q1, mechanism: A.** The in-image supervisor is the default mechanism; B (replicas) is used only across nodes.
+2. **Q2, Coolify: not examined.** Whether Coolify can run several replicas on one Docker host has not been checked. Work proceeds with A first; B is reviewed if it is needed.
+3. **Q3, revocation latency: exact per-request version check.** One cheap query per request, as in #1487; the 5-minute TTL is only the backstop. Note: ABAC policy cache coherence across processes is resolved by #1487, so Decision 3.1 is satisfied by that change and only its two-process test remains here.
+4. **Q4, offline-LAN: one process** unless a local Redis is provisioned (fail closed). N > 1 with per-process rate limits is not allowed.
+5. **Q5, the target:** the ADR-0161 target "2,000 rps uncached per 2-vCPU node" is restated as origin rps at a stated edge hit ratio. Amending the wording of ADR-0161 is a follow-up doc change; this ADR does not edit it.
+6. **Q6, Bun-only:** `node:cluster` is part of the Bun runtime; no written exception is needed. The Bun-only rule is unchanged.
+7. **Q7, default count:** the recommended production value stays 1 process until a production-like baseline (#1281) exists.
+
+Acceptance of the ADR does not lift any gate: the count may exceed 1 anywhere only after Decision 3 and the measurement plan pass. Implementation is split into issues under #1454.

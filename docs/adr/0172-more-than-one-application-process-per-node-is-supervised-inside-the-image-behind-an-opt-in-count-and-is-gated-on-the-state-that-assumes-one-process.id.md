@@ -1,13 +1,14 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0172-more-than-one-application-process-per-node-is-supervised-inside-the-image-behind-an-opt-in-count-and-is-gated-on-the-state-that-assumes-one-process.md)
 
-<!-- i18n-source-hash: sha256:d62f505b61da1a57101fa8a8fe24dd057a65e4b84c36e38501a07996944851fa -->
+<!-- i18n-source-hash: sha256:751cd37c116ee27589e974d80a86195288adc8d8dd890abb47c830c21ae4316c -->
 
 # ADR-0172 — Lebih dari satu proses aplikasi per node disupervisi di dalam image dengan jumlah opt-in, dan digerbangi oleh state yang mengandaikan satu proses
 
-- **Status:** Diusulkan
-- **Tinjauan:** memerlukan keputusan pemilik atas pertanyaan di "Pertanyaan terbuka". Hanya dokumen: tidak ada kode, migrasi, OpenAPI, atau dependensi yang ditulis sebelum ADR ini Diterima dan dipecah menjadi issue.
+- **Status:** Diterima
+- **Diterima:** 2026-11-24 (Q1 sampai Q7 dijawab di bawah, K19.17 sampai K19.23). Jumlah bawaan tetap 1; menaikkannya di mana pun tetap digerbangi Keputusan 3 dan rencana pengukuran.
+- **Tinjauan:** pemilik menjawab pertanyaan di "Pertanyaan terbuka" pada 24 November 2026 (lihat "Keputusan 24 November 2026"). Hanya dokumen: tidak ada kode, migrasi, OpenAPI, atau dependensi yang ditulis sampai issue implementasi hasil pecahan ADR ini dikerjakan.
 - **Tanggal:** 2026-11-23
-- **Pengambil keputusan:** @ahliweb (diusulkan, belum diputuskan)
+- **Pengambil keputusan:** @ahliweb (pemilik). Q1 sampai Q7 diputuskan 24 November 2026 (K19.17 sampai K19.23, persetujuan massal atas rekomendasi).
 - **Terkait:** Issue [#1454](https://github.com/ahliweb/awcms/issues/1454) (ini sisa arsitekturalnya); PR [#1472](https://github.com/ahliweb/awcms/pull/1472) (pengukuran per view); [ADR-0161](0161-capacity-targets-are-measured-nfrs-and-the-scale-path-is-staged.md) (target 2.000 rps per node 2 vCPU, tahap S1 ke S2); [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (rate limiting bersama); [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md) (SSE di proses yang ada); [ADR-0083](0083-this-template-deploys-to-one-environment.md) (satu environment); [ADR-0033](0033-abac-dynamic-policy-evaluator.md) (evaluator ABAC; §Cache-nya asal invalidasi per proses). Operasional: [`database-pooling.md`](../awcms/database-pooling.md), [`database-capacity-runbook.md`](../awcms/database-capacity-runbook.md), [`deployment-profiles.md`](../awcms/deployment-profiles.md), [`deploy-coolify.md`](../awcms/deploy-coolify.md).
 
 **Hanya dokumen dan tata kelola.** Tidak ada perubahan kode, skema, API, event, atau dependensi. Setiap angka di dokumen ini adalah pengukuran LOKAL dari satu workstation bersama (aplikasi dipatok 2 CPU, PostgreSQL `fsync=off`, tanpa CDN atau cache tepi, satu run per titik). Baca bentuknya, bukan digitnya. Pernyataan bertanda **needs verification** tidak dikonfirmasi ke dokumentasi atau kode Bun dan tidak boleh diandalkan.
@@ -118,3 +119,17 @@ Dijalankan pada harness #1283 (PR #1453) dengan pemakuan aplikasi, seed, dan ben
 5. **Q5, target.** Pertahankan "2.000 rps tanpa cache per node 2 vCPU" di ADR-0161, atau nyatakan ulang sebagai rps origin pada rasio hit yang dinyatakan karena proses saja tidak mencapainya tanpa cache?
 6. **Q6, Bun-only.** `node:cluster` bagian dari permukaan kompatibilitas Node milik runtime Bun dan tidak menambah dependensi atau Node.js; konfirmasi tidak ada pengecualian tertulis yang dibutuhkan (AGENTS.md aturan 11).
 7. **Q7, jumlah bawaan.** Haruskah nilai produksi yang direkomendasikan adalah jumlah vCPU setelah gerbang lulus, atau tetap 1 sampai baseline mirip-produksi (#1281) ada?
+
+## Keputusan 24 November 2026 (K19.17 sampai K19.23)
+
+Pemilik menyetujui setiap rekomendasi di "Pertanyaan terbuka". Bagian Keputusan di atas tidak berubah; ini jawabannya:
+
+1. **Q1, mekanisme: A.** Supervisor di dalam image adalah mekanisme bawaan; B (replika) hanya lintas node.
+2. **Q2, Coolify: belum diperiksa.** Apakah Coolify dapat menjalankan beberapa replika pada satu host Docker belum dicek. Pekerjaan jalan dengan A dulu; B ditinjau bila dibutuhkan.
+3. **Q3, latensi pencabutan: cek versi per request yang eksak.** Satu query murah per request, seperti #1487; TTL 5 menit hanya cadangan. Catatan: koherensi cache kebijakan ABAC lintas proses diselesaikan #1487, sehingga Keputusan 3.1 dipenuhi perubahan itu dan hanya tes dua prosesnya yang tersisa di sini.
+4. **Q4, offline-LAN: satu proses** kecuali Redis lokal disediakan (gagal tertutup). N > 1 dengan rate limit per proses tidak diizinkan.
+5. **Q5, target:** target ADR-0161 "2.000 rps tanpa cache per node 2 vCPU" dinyatakan ulang sebagai rps origin pada rasio hit tepi yang dinyatakan. Mengubah redaksi ADR-0161 adalah perubahan dokumen susulan; ADR ini tidak menyuntingnya.
+6. **Q6, Bun-only:** `node:cluster` bagian dari runtime Bun; tidak perlu pengecualian tertulis. Aturan Bun-only tidak berubah.
+7. **Q7, jumlah bawaan:** nilai produksi yang direkomendasikan tetap 1 proses sampai baseline mirip-produksi (#1281) ada.
+
+Diterimanya ADR tidak mengangkat gerbang apa pun: jumlah baru boleh melebihi 1 di mana pun setelah Keputusan 3 dan rencana pengukuran lulus. Implementasi dipecah menjadi issue di bawah #1454.
