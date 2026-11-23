@@ -45,6 +45,17 @@
  * | `payroll-foreign-table`         | `pg_foreign_table`                                | a foreign table wears a payroll name or its options name a payroll table                                       |
  * | `dependent-on-payroll`          | `pg_depend` over policies, constraints, defaults, indexes, statistics, columns of a row type | such an object sits on a non-family table and depends on a payroll relation, function or row type |
  *
+ * Issue #1436 (ADR-0173) moved three of them from deny-list scanning to
+ * allow-lists; a `PAYROLL_CATALOG_EXEMPTIONS` entry does not silence these:
+ *
+ * | Code                                | Source of truth                                  | Fails when                                                                                                   |
+ * | ----------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+ * | `security-definer-not-allow-listed` | `pg_proc.prosecdef` + owner reach                | a non-family SECURITY DEFINER function's owner reaches payroll and it is not in `PAYROLL_SECURITY_DEFINER_ALLOWLIST` |
+ * | `security-definer-allowlist-drift`  | same + SHA-256 of the body                       | an allow-listed function's owner or body is not the one pinned                                                |
+ * | `function-body-unreadable`          | `pg_proc.prosqlbody`                             | a SQL-standard (BEGIN ATOMIC) body came back empty (fail closed); otherwise its deparsed text and its `pg_depend` calls feed every body rule |
+ * | `payroll-fingerprint-drift`         | `PAYROLL_REQUIRED_TABLE_FINGERPRINTS`            | a required table's columns, required triggers (function, tgtype) or foreign keys differ from the pin        |
+ * | `payroll-fingerprint-match`         | same, column types only                          | a non-family relation's column types are within the fingerprint's name-free tolerance                       |
+ *
  * Findings of the first four function codes are about objects that exist; the
  * check makes no judgement about intent. The fix is always the same: name the
  * object in the payroll family, or do not create it.
@@ -113,12 +124,16 @@ import {
   PAYROLL_PUBLICATION_EXEMPTIONS,
   PAYROLL_READABLE_LANGUAGES,
   PAYROLL_REQUIRED_FOREIGN_KEYS,
+  PAYROLL_REQUIRED_TABLE_FINGERPRINTS,
   PAYROLL_REQUIRED_TABLES,
   PAYROLL_REQUIRED_TRIGGERS,
+  PAYROLL_SECURITY_DEFINER_ALLOWLIST,
   PAYROLL_WORKER_EXECUTE_ALLOWLIST,
   PAYROLL_WORKER_ROLES,
   PAYROLL_WORKER_SCALAR_RETURN_TYPES,
-  isPayrollTable
+  isPayrollTable,
+  type PayrollSecurityDefinerAllowEntry,
+  type PayrollTableFingerprint
 } from "../../src/modules/_shared/payroll-data-boundary";
 
 /** `schema.name`, both unquoted and as stored (lower case unless quoted at creation). */
@@ -151,6 +166,12 @@ export type CatalogFunction = {
   /** Relations the function depends on in `pg_depend` (SQL-standard `BEGIN ATOMIC` bodies record them). */
   dependsOnRelations: Qualified[];
   executeGrantees: string[];
+  /** `pg_get_function_identity_arguments`, e.g. `p_tenant_id uuid` (Issue #1436). */
+  identity?: string;
+  /** A SQL-standard `BEGIN ATOMIC` body (`prosqlbody`); `source` is then its deparsed text (Issue #1436). */
+  atomicBody?: boolean;
+  /** Functions the function depends on in `pg_depend` (recorded for `BEGIN ATOMIC` bodies; Issue #1436). */
+  dependsOnFunctions?: Qualified[];
 };
 
 export type CatalogTrigger = {
@@ -159,6 +180,8 @@ export type CatalogTrigger = {
   function: Qualified;
   /** `pg_trigger.tgenabled`: `O` fires, `D` disabled, `R` replica only, `A` always. */
   enabled?: string;
+  /** `pg_trigger.tgtype`: timing, level and events as a bitmask (Issue #1436 fingerprint). */
+  type?: number;
 };
 
 export type CatalogGrant = {
@@ -228,8 +251,12 @@ export type CatalogNamedObject = {
 /** The columns of a relation, `name:type`, in order (Issue #1077 audit, HIGH-1). */
 export type CatalogColumns = { relation: Qualified; columns: string[] };
 
-/** A foreign key between two relations. */
-export type CatalogForeignKey = { from: Qualified; to: Qualified };
+/** A foreign key between two relations, with its referencing columns in order (Issue #1436). */
+export type CatalogForeignKey = {
+  from: Qualified;
+  to: Qualified;
+  columns?: string[];
+};
 
 export type CatalogSnapshot = {
   columns: CatalogColumns[];
@@ -316,7 +343,23 @@ export async function loadPayrollCatalogSnapshot(
            p.proretset AS returns_set,
            p.prorettype::regtype::text AS return_type,
            pg_get_userbyid(p.proowner)::text AS owner,
-           CASE WHEN l.lanname IN ('sql', 'plpgsql') THEN p.prosrc ELSE '' END AS source,
+           -- A SQL-standard body (BEGIN ATOMIC) is stored parsed, in prosqlbody,
+           -- and prosrc is empty: read its deparsed text instead (Issue #1436).
+           CASE
+             WHEN p.prosqlbody IS NOT NULL THEN COALESCE(pg_get_function_sqlbody(p.oid), '')
+             WHEN l.lanname IN ('sql', 'plpgsql') THEN p.prosrc
+             ELSE ''
+           END AS source,
+           (p.prosqlbody IS NOT NULL) AS atomic_body,
+           pg_get_function_identity_arguments(p.oid) AS identity,
+           COALESCE((
+             SELECT jsonb_agg(DISTINCT dn.nspname || '.' || dp.proname)
+             FROM pg_depend d
+             JOIN pg_proc dp ON dp.oid = d.refobjid
+             JOIN pg_namespace dn ON dn.oid = dp.pronamespace
+             WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
+               AND d.refclassid = 'pg_proc'::regclass AND dp.oid <> p.oid
+           ), '[]'::jsonb) AS depends_on_functions,
            COALESCE((
              SELECT jsonb_agg(DISTINCT rn.nspname || '.' || rc.relname)
              FROM unnest(
@@ -365,13 +408,17 @@ export async function loadPayrollCatalogSnapshot(
     row_type_relations: string[];
     depends_on_relations: string[];
     execute_grantees: string[];
+    atomic_body: boolean;
+    identity: string;
+    depends_on_functions: string[];
   }[];
 
   const triggers = (await sql`
     SELECT cn.nspname || '.' || c.relname AS relation,
            t.tgname::text AS name,
            fn.nspname || '.' || p.proname AS function,
-           t.tgenabled::text AS enabled
+           t.tgenabled::text AS enabled,
+           t.tgtype::integer AS type
     FROM pg_trigger t
     JOIN pg_class c ON c.oid = t.tgrelid
     JOIN pg_namespace cn ON cn.oid = c.relnamespace
@@ -384,6 +431,7 @@ export async function loadPayrollCatalogSnapshot(
     name: string;
     function: string;
     enabled: string;
+    type: number;
   }[];
 
   const grants = (await sql`
@@ -482,14 +530,20 @@ export async function loadPayrollCatalogSnapshot(
 
   const foreignKeys = (await sql`
     SELECT fn.nspname || '.' || f.relname AS "from",
-           tn.nspname || '.' || t.relname AS "to"
+           tn.nspname || '.' || t.relname AS "to",
+           ARRAY(
+             SELECT a.attname::text
+             FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
+             JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+             ORDER BY k.ord
+           ) AS columns
     FROM pg_constraint con
     JOIN pg_class f ON f.oid = con.conrelid
     JOIN pg_namespace fn ON fn.oid = f.relnamespace
     JOIN pg_class t ON t.oid = con.confrelid
     JOIN pg_namespace tn ON tn.oid = t.relnamespace
     WHERE con.contype = 'f'
-  `) as { from: string; to: string }[];
+  `) as { from: string; to: string; columns: string[] }[];
 
   const migrationOwnerRows = (await sql`
     SELECT pg_get_userbyid(c.relowner)::text AS owner
@@ -690,7 +744,10 @@ export async function loadPayrollCatalogSnapshot(
       source: row.source,
       rowTypeRelations: row.row_type_relations,
       dependsOnRelations: row.depends_on_relations,
-      executeGrantees: row.execute_grantees
+      executeGrantees: row.execute_grantees,
+      identity: row.identity,
+      atomicBody: row.atomic_body,
+      dependsOnFunctions: row.depends_on_functions
     })),
     triggers,
     grants,
@@ -764,7 +821,63 @@ export type AnalyseOptions = {
   expectedOwners?: readonly string[];
   privilegedRoles?: readonly string[];
   lookalikeExceptions?: Readonly<Record<string, string>>;
+  securityDefinerAllowlist?: Readonly<
+    Record<string, PayrollSecurityDefinerAllowEntry>
+  >;
+  fingerprints?: Readonly<Record<string, PayrollTableFingerprint>>;
 };
+
+/**
+ * Finding codes of the ADR-0173 allow-lists (Issue #1436). They are answered
+ * only by their own registries (`PAYROLL_SECURITY_DEFINER_ALLOWLIST`,
+ * `PAYROLL_REQUIRED_TABLE_FINGERPRINTS`); a `PAYROLL_CATALOG_EXEMPTIONS` entry
+ * for the same object does not silence them.
+ */
+export const PAYROLL_ALLOWLIST_FINDING_CODES: readonly string[] = [
+  "security-definer-not-allow-listed",
+  "security-definer-allowlist-drift",
+  "payroll-fingerprint-drift",
+  "payroll-fingerprint-match",
+  "function-body-unreadable"
+];
+
+/** `schema.name(identity arguments)`: the allow-list key of a function. */
+export function functionSignature(fn: CatalogFunction): string {
+  return `${fn.name}(${fn.identity ?? ""})`;
+}
+
+/** Lower-case hex SHA-256 of a function body as the catalog returns it. */
+export function functionBodySha256(source: string): string {
+  return new Bun.CryptoHasher("sha256").update(source).digest("hex");
+}
+
+/** Column types of `name:type` entries (the name-free part of a fingerprint). */
+function columnTypes(columns: readonly string[]): string[] {
+  return columns.map((column) => column.slice(column.indexOf(":") + 1));
+}
+
+/** Size of the symmetric difference of two multisets. */
+export function multisetDistance(
+  a: readonly string[],
+  b: readonly string[]
+): number {
+  const counts = new Map<string, number>();
+
+  for (const item of a) counts.set(item, (counts.get(item) ?? 0) + 1);
+
+  let shared = 0;
+
+  for (const item of b) {
+    const left = counts.get(item) ?? 0;
+
+    if (left > 0) {
+      shared += 1;
+      counts.set(item, left - 1);
+    }
+  }
+
+  return a.length + b.length - 2 * shared;
+}
 
 export function analysePayrollCatalog(
   snapshot: CatalogSnapshot,
@@ -788,6 +901,10 @@ export function analysePayrollCatalog(
     options.privilegedRoles ?? PAYROLL_PRIVILEGED_PREDEFINED_ROLES;
   const lookalikeExceptions =
     options.lookalikeExceptions ?? NON_PAYROLL_LOOKALIKE_EXCEPTIONS;
+  const definerAllowlist =
+    options.securityDefinerAllowlist ?? PAYROLL_SECURITY_DEFINER_ALLOWLIST;
+  const fingerprints =
+    options.fingerprints ?? PAYROLL_REQUIRED_TABLE_FINGERPRINTS;
   const findings: CatalogFinding[] = [];
   const add = (code: string, object: Qualified, message: string): void => {
     findings.push({ code, object, message });
@@ -827,8 +944,14 @@ export function analysePayrollCatalog(
       flagged.add(fn.name);
     }
 
+    // A BEGIN ATOMIC body records the functions it calls in pg_depend; the
+    // deparsed text is read as well, like any other body (Issue #1436).
+    const dependsOnFunctions = fn.dependsOnFunctions ?? [];
     const through = familyFunctions
-      .filter((family) => calls(body, family.name))
+      .filter(
+        (family) =>
+          calls(body, family.name) || dependsOnFunctions.includes(family.name)
+      )
       .map((family) => family.name);
 
     if (through.length > 0) {
@@ -848,6 +971,17 @@ export function analysePayrollCatalog(
         "function-dynamic-sql",
         fn.name,
         `${fn.name} runs dynamic SQL (EXECUTE) and is not a payroll function. The relation it touches is a string built at run time; no scan can hold it to the rule, so it may not exist outside the payroll family.`
+      );
+      flagged.add(fn.name);
+    }
+
+    // A BEGIN ATOMIC body that came back empty was not read at all: fail
+    // closed rather than pass a body no rule looked at (Issue #1436).
+    if (fn.atomicBody === true && fn.source.trim() === "") {
+      add(
+        "function-body-unreadable",
+        fn.name,
+        `${fn.name} has a SQL-standard (BEGIN ATOMIC) body that the catalog returned empty, so no rule of the payroll boundary read it.`
       );
       flagged.add(fn.name);
     }
@@ -885,8 +1019,11 @@ export function analysePayrollCatalog(
       if (flagged.has(fn.name)) continue;
 
       const body = normaliseBody(fn.source);
+      const dependsOnFunctions = fn.dependsOnFunctions ?? [];
       const callee = [...flagged].find(
-        (name) => name !== fn.name && calls(body, name)
+        (name) =>
+          name !== fn.name &&
+          (calls(body, name) || dependsOnFunctions.includes(name))
       );
 
       if (callee) {
@@ -1340,9 +1477,178 @@ export function analysePayrollCatalog(
     }
   }
 
+  // ADR-0173 (Issue #1436), rule 1: a non-family SECURITY DEFINER function
+  // whose OWNER can reach payroll runs with payroll-reaching rights whatever its
+  // body says. It is a reviewed allow-list entry, pinned to its owner and body,
+  // or a finding. The scans above try to prove a body harmless; this rule does
+  // not depend on them.
+  const reachBase = new Set<string>([
+    ...holders,
+    ...(snapshot.migrationOwner === null ? [] : [snapshot.migrationOwner]),
+    ...expectedOwners,
+    ...snapshot.grants
+      .filter((grant) => isPayrollFamily(grant.relation))
+      .map((grant) => grant.grantee),
+    ...familyFunctions
+      .filter((fn) => fn.securityDefiner && !fn.returnsTrigger)
+      .flatMap((fn) => fn.executeGrantees)
+  ]);
+  const everyoneReaches = reachBase.has("PUBLIC");
+  const reach = new Set<string>(reachBase);
+
+  // Membership is inheritance (fail-closed: NOINHERIT is not modelled).
+  for (let grew = true; grew;) {
+    grew = false;
+
+    for (const edge of snapshot.memberships) {
+      if (reach.has(edge.role) && !reach.has(edge.member)) {
+        reach.add(edge.member);
+        grew = true;
+      }
+    }
+  }
+
+  for (const fn of outside) {
+    if (!fn.securityDefiner) continue;
+
+    const signature = functionSignature(fn);
+    const entry = Object.hasOwn(definerAllowlist, signature)
+      ? definerAllowlist[signature]
+      : undefined;
+    const inReach = everyoneReaches || reach.has(fn.owner);
+
+    if (entry !== undefined) {
+      const digest = functionBodySha256(fn.source);
+
+      if (entry.owner !== fn.owner || entry.bodySha256 !== digest) {
+        add(
+          "security-definer-allowlist-drift",
+          signature,
+          `${signature} is in PAYROLL_SECURITY_DEFINER_ALLOWLIST (${entry.approvedIn}) but is no longer the object that was reviewed: owner ${fn.owner} (pinned ${entry.owner}), body sha256 ${digest} (pinned ${entry.bodySha256}). Review it again and update the entry in the same PR (ADR-0173).`
+        );
+      }
+
+      continue;
+    }
+
+    if (inReach) {
+      add(
+        "security-definer-not-allow-listed",
+        signature,
+        `${signature} is SECURITY DEFINER outside the payroll family and its owner ${fn.owner} can reach a payroll relation${everyoneReaches ? " (PUBLIC holds a payroll privilege)" : ""}, so it runs with payroll-reaching rights whatever its body says. Own it with a dedicated NOLOGIN role that holds no payroll privilege, or add a reviewed entry to PAYROLL_SECURITY_DEFINER_ALLOWLIST (ADR-0173).`
+      );
+    }
+  }
+
+  // ADR-0173 rule 3: each required payroll table is pinned by what it IS.
+  for (const [table, fingerprint] of Object.entries(fingerprints)) {
+    const qualified = `public.${table}`;
+
+    if (!snapshot.relations.some((relation) => relation.name === qualified)) {
+      continue; // payroll-table-missing already says so
+    }
+
+    const drift: string[] = [];
+    const actual = snapshot.columns.find(
+      (entry) => entry.relation === qualified
+    );
+    const pinned = new Set(fingerprint.columns);
+    const present = new Set(actual?.columns ?? []);
+    const missing = fingerprint.columns.filter(
+      (column) => !present.has(column)
+    );
+    const extra = [...present].filter((column) => !pinned.has(column));
+
+    if (missing.length > 0)
+      drift.push(`missing column(s) ${missing.join(", ")}`);
+    if (extra.length > 0) drift.push(`unpinned column(s) ${extra.join(", ")}`);
+
+    for (const pin of fingerprint.triggers) {
+      const trigger = snapshot.triggers.find(
+        (entry) => entry.relation === qualified && entry.name === pin.name
+      );
+
+      if (!trigger) continue; // payroll-trigger-missing already says so
+
+      if (trigger.function !== `public.${pin.function}`) {
+        drift.push(
+          `trigger ${pin.name} runs ${trigger.function}, pinned public.${pin.function}`
+        );
+      }
+      if (trigger.type !== pin.type) {
+        drift.push(
+          `trigger ${pin.name} has tgtype ${trigger.type ?? "unknown"}, pinned ${pin.type}`
+        );
+      }
+    }
+
+    for (const pin of fingerprint.foreignKeys) {
+      const found = snapshot.foreignKeys.some(
+        (fk) =>
+          fk.from === qualified &&
+          fk.to === `public.${pin.to}` &&
+          fk.columns !== undefined &&
+          fk.columns.join(",") === pin.columns.join(",")
+      );
+
+      if (!found) {
+        drift.push(
+          `no foreign key (${pin.columns.join(", ")}) -> public.${pin.to}`
+        );
+      }
+    }
+
+    if (drift.length > 0) {
+      add(
+        "payroll-fingerprint-drift",
+        qualified,
+        `${qualified} no longer matches its pinned fingerprint (PAYROLL_REQUIRED_TABLE_FINGERPRINTS): ${drift.join("; ")}. A schema change to a required payroll table updates the fingerprint in the same PR; anything else is the table rebuilt or replaced (ADR-0173).`
+      );
+    }
+
+    if (fingerprint.nameFreeTolerance === null) continue;
+
+    const pinnedTypes = columnTypes(fingerprint.columns);
+
+    for (const entry of snapshot.columns) {
+      if (isPayrollFamily(entry.relation)) continue;
+
+      const distance = multisetDistance(
+        pinnedTypes,
+        columnTypes(entry.columns)
+      );
+
+      if (distance <= fingerprint.nameFreeTolerance) {
+        add(
+          "payroll-fingerprint-match",
+          entry.relation,
+          `${entry.relation} is not in the payroll family but its column types are within ${distance} of the ${pinnedTypes.length}-column fingerprint of ${qualified} (tolerance ${fingerprint.nameFreeTolerance}, names ignored): it is that table under another name, with its columns renamed (ADR-0173).`
+        );
+      }
+    }
+  }
+
   return findings.filter(
-    (finding) => !Object.hasOwn(exemptions, finding.object)
+    (finding) =>
+      PAYROLL_ALLOWLIST_FINDING_CODES.includes(finding.code) ||
+      !Object.hasOwn(exemptions, finding.object)
   );
+}
+
+/** `PAYROLL_SECURITY_DEFINER_ALLOWLIST` keys naming a function the catalog no longer has (Issue #1436). */
+export function staleSecurityDefinerAllowlist(
+  snapshot: CatalogSnapshot,
+  allowlist: Readonly<
+    Record<string, PayrollSecurityDefinerAllowEntry>
+  > = PAYROLL_SECURITY_DEFINER_ALLOWLIST
+): string[] {
+  const known = new Set(
+    snapshot.functions
+      .filter((fn) => fn.securityDefiner)
+      .map((fn) => functionSignature(fn))
+  );
+
+  return Object.keys(allowlist).filter((key) => !known.has(key));
 }
 
 /** Exemptions naming an object the catalog no longer has. */

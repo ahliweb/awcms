@@ -10,10 +10,6 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
-  PAYROLL_REQUIRED_FOREIGN_KEYS,
-  PAYROLL_REQUIRED_TRIGGERS
-} from "../src/modules/_shared/payroll-data-boundary";
-import {
   findForbiddenReadImports,
   maskLiterals
 } from "../src/modules/_shared/sensitive-read-coverage";
@@ -28,6 +24,11 @@ import {
 } from "../src/modules/hr-commission/application/hr-commission-accrual-receipt";
 import type { CommissionAccrual } from "../src/modules/hr-commission/application/hr-commission-accrual-ledger";
 import type { CatalogSnapshot } from "../scripts/lib/payroll-catalog-boundary";
+import {
+  HEALTHY_PAYROLL_COLUMNS,
+  HEALTHY_PAYROLL_FOREIGN_KEYS,
+  HEALTHY_PAYROLL_TRIGGERS
+} from "./fixtures/payroll-fingerprint-snapshot";
 import {
   evaluatePayrollCatalog,
   parseExpectedOwners
@@ -264,23 +265,13 @@ describe("the scheduled catalog check, verdict", () => {
   ];
   const snapshot = (owner: string): CatalogSnapshot => ({
     migrationOwner: "migrator",
-    columns: [],
-    foreignKeys: PAYROLL_REQUIRED_FOREIGN_KEYS.map((edge) => ({
-      from: `public.${edge.from}`,
-      to: `public.${edge.to}`
-    })),
+    columns: HEALTHY_PAYROLL_COLUMNS,
+    foreignKeys: HEALTHY_PAYROLL_FOREIGN_KEYS,
     roles: [],
     namedObjects: [],
     rules: [],
     functions: [],
-    triggers: Object.entries(PAYROLL_REQUIRED_TRIGGERS).flatMap(
-      ([table, names]) =>
-        names.map((name) => ({
-          relation: `public.${table}`,
-          name,
-          function: `public.${name}_fn`
-        }))
-    ),
+    triggers: HEALTHY_PAYROLL_TRIGGERS,
     grants: [],
     inheritance: [],
     relations: TABLES.map((name) => ({

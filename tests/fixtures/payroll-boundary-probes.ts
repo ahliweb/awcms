@@ -16,6 +16,8 @@
  * The payroll table used is `awcms_hr_commission_accruals`, the only
  * payroll-boundary table that exists today.
  */
+import { PAYROLL_REQUIRED_TABLE_FINGERPRINTS } from "../../src/modules/_shared/payroll-data-boundary";
+
 export type PayrollProbe = {
   id: string;
   /** Which of the issue's evasions this is. */
@@ -28,6 +30,11 @@ export type PayrollProbe = {
 };
 
 const PAYROLL = "awcms_hr_commission_accruals";
+
+/** The ledger's column types in order, from its pinned fingerprint (Issue #1436). */
+const LEDGER_TYPES = PAYROLL_REQUIRED_TABLE_FINGERPRINTS[PAYROLL]!.columns.map(
+  (column) => column.slice(column.indexOf(":") + 1)
+);
 
 /** The ledger name with the `c` of `commission` hidden in an E'' escape. */
 const HIDDEN = String.raw`awcms_hr_\x63ommission_accruals`;
@@ -768,6 +775,112 @@ ALTER TABLE ${PAYROLL} OWNER TO awcms_probe_o3;`,
     sql: `CREATE TABLE awcms_probe_rowcol (r ${PAYROLL});`,
     staticCaught: false,
     catalogCodes: ["dependent-on-payroll"]
+  },
+  // ADR-0173 (Issue #1436): the allow-list rules. Each probe is red only
+  // because of the new rule; the mutation evidence is in the PR.
+  {
+    id: "adr0173-secdef-owned-by-migration-owner",
+    evasion:
+      "ADR-0173 rule 1: a harmless-looking SECURITY DEFINER function owned by the role that owns payroll; its body names nothing, so every body scan passes it",
+    sql: `CREATE FUNCTION awcms_probe_definer() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;`,
+    staticCaught: false,
+    catalogCodes: ["security-definer-not-allow-listed"]
+  },
+  {
+    id: "adr0173-secdef-owner-member-of-request-role",
+    evasion:
+      "ADR-0173 rule 1: a SECURITY DEFINER function owned by a dedicated role that was made a member of awcms_app (reach through membership)",
+    sql: `CREATE ROLE awcms_probe_def NOLOGIN;
+GRANT awcms_app TO awcms_probe_def;
+CREATE FUNCTION awcms_probe_def_fn() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+ALTER FUNCTION awcms_probe_def_fn() OWNER TO awcms_probe_def;`,
+    staticCaught: false,
+    catalogCodes: [
+      "payroll-role-membership",
+      "security-definer-not-allow-listed"
+    ]
+  },
+  {
+    id: "adr0173-atomic-chain",
+    evasion:
+      "ADR-0173 rule 2: a BEGIN ATOMIC body calls a function that reads payroll (prosrc is empty for a SQL-standard body)",
+    sql: `CREATE FUNCTION awcms_probe_leak2() RETURNS bigint LANGUAGE plpgsql
+  AS $$ BEGIN RETURN (SELECT count(*) FROM ${PAYROLL}); END $$;
+CREATE FUNCTION awcms_probe_atomic_chain() RETURNS bigint LANGUAGE sql
+  BEGIN ATOMIC SELECT awcms_probe_leak2(); END;`,
+    staticCaught: true,
+    catalogCodes: ["function-chain"]
+  },
+  {
+    id: "adr0173-atomic-calls-family-function",
+    evasion:
+      "ADR-0173 rule 2: a BEGIN ATOMIC body outside the family calls a payroll-family function",
+    sql: `CREATE FUNCTION awcms_hr_payroll_probe_total() RETURNS bigint LANGUAGE sql
+  AS $$ SELECT count(*) FROM ${PAYROLL} $$;
+CREATE FUNCTION awcms_probe_atomic_fam() RETURNS bigint LANGUAGE sql
+  BEGIN ATOMIC SELECT awcms_hr_payroll_probe_total(); END;`,
+    staticCaught: true,
+    catalogCodes: ["function-calls-payroll-function"]
+  },
+  {
+    id: "adr0173-fingerprint-renamed-columns",
+    evasion:
+      "ADR-0173 rule 3: a table with the ledger's shape and every column renamed (0% name overlap, so the 70% look-alike misses it); it never names the ledger, so the text layer cannot see it",
+    sql: `CREATE TABLE awcms_probe_shadow (${LEDGER_TYPES.map(
+      (type, index) => `c${String(index).padStart(2, "0")} ${type}`
+    ).join(", ")});`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-match"]
+  },
+  {
+    id: "adr0173-fingerprint-column-added",
+    evasion:
+      "ADR-0173 rule 3: a column added to the ledger without updating its pinned fingerprint",
+    sql: `ALTER TABLE ${PAYROLL} ADD COLUMN probe_note text;`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "adr0173-fingerprint-column-dropped",
+    evasion:
+      "ADR-0173 rule 3: a column dropped from the ledger without updating its pinned fingerprint",
+    sql: `ALTER TABLE ${PAYROLL} DROP COLUMN units CASCADE;`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "adr0173-fingerprint-trigger-events-narrowed",
+    evasion:
+      "ADR-0173 rule 3: the immutability trigger recreated with its own name and function but no longer firing on DELETE",
+    sql: `DROP TRIGGER ${PAYROLL}_immutable ON ${PAYROLL};
+CREATE TRIGGER ${PAYROLL}_immutable BEFORE UPDATE ON ${PAYROLL}
+  FOR EACH ROW EXECUTE FUNCTION awcms_hr_commission_accruals_guard();`,
+    staticCaught: true,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "adr0173-fingerprint-trigger-swapped",
+    evasion:
+      "ADR-0173 rule 3: the immutability trigger recreated under its own name, running a no-op family function",
+    sql: `CREATE FUNCTION awcms_hr_payroll_probe_noop() RETURNS trigger LANGUAGE plpgsql
+  AS $$ BEGIN RETURN NEW; END $$;
+DROP TRIGGER ${PAYROLL}_immutable ON ${PAYROLL};
+CREATE TRIGGER ${PAYROLL}_immutable BEFORE DELETE OR UPDATE ON ${PAYROLL}
+  FOR EACH ROW EXECUTE FUNCTION awcms_hr_payroll_probe_noop();`,
+    staticCaught: true,
+    catalogCodes: ["payroll-fingerprint-drift"]
+  },
+  {
+    id: "adr0173-fingerprint-foreign-key-dropped",
+    evasion:
+      "ADR-0173 rule 3: a foreign key of the ledger to the tenant users dropped",
+    sql: `ALTER TABLE ${PAYROLL} DROP CONSTRAINT ${PAYROLL}_paid_by_fkey;`,
+    staticCaught: false,
+    catalogCodes: ["payroll-fingerprint-drift"]
   }
 ];
 
@@ -810,6 +923,21 @@ COMMENT ON TABLE awcms_hr_payroll_probe_lines IS 'payroll-boundary: probe';
 ALTER TABLE awcms_hr_payroll_probe_lines ENABLE ROW LEVEL SECURITY;
 CREATE POLICY awcms_hr_payroll_probe_policy ON awcms_hr_payroll_probe_lines
   USING (EXISTS (SELECT 1 FROM ${PAYROLL}));`
+  },
+  {
+    id: "adr0173-definer-with-a-dedicated-owner",
+    sql: `CREATE ROLE awcms_probe_owner NOLOGIN;
+CREATE FUNCTION awcms_probe_owned() RETURNS integer
+  LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+  AS $$ SELECT 1 $$;
+REVOKE ALL ON FUNCTION awcms_probe_owned() FROM PUBLIC;
+ALTER FUNCTION awcms_probe_owned() OWNER TO awcms_probe_owner;`
+  },
+  {
+    id: "adr0173-atomic-body-outside-payroll",
+    sql: `CREATE TABLE awcms_probe_ok2 (id int);
+CREATE FUNCTION awcms_probe_ok2_count() RETURNS bigint LANGUAGE sql
+  BEGIN ATOMIC SELECT count(*) FROM awcms_probe_ok2; END;`
   },
   {
     id: "ordinary-objects",

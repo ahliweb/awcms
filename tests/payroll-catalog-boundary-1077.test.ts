@@ -13,7 +13,7 @@ import { describe, expect, test } from "bun:test";
 import {
   PAYROLL_INDIRECT_READ_PATTERN,
   PAYROLL_OWNED_NON_PAYROLL_TABLES,
-  PAYROLL_REQUIRED_FOREIGN_KEYS,
+  PAYROLL_REQUIRED_TABLE_FINGERPRINTS,
   PAYROLL_REQUIRED_TRIGGERS,
   PAYROLL_REQUIRED_TABLES
 } from "../src/modules/_shared/payroll-data-boundary";
@@ -26,6 +26,11 @@ import {
   staleCatalogExemptions,
   type CatalogSnapshot
 } from "../scripts/lib/payroll-catalog-boundary";
+import {
+  HEALTHY_PAYROLL_COLUMNS,
+  HEALTHY_PAYROLL_FOREIGN_KEYS,
+  HEALTHY_PAYROLL_TRIGGERS
+} from "./fixtures/payroll-fingerprint-snapshot";
 import {
   findPayrollOwnershipGaps,
   findPayrollSqlLeaks
@@ -45,25 +50,14 @@ const REQUIRED: CatalogSnapshot["relations"] = [ACCRUALS, TRANSITIONS].map(
 );
 
 const REQUIRED_FKS: CatalogSnapshot["foreignKeys"] =
-  PAYROLL_REQUIRED_FOREIGN_KEYS.map((edge) => ({
-    from: `public.${edge.from}`,
-    to: `public.${edge.to}`
-  }));
+  HEALTHY_PAYROLL_FOREIGN_KEYS;
 
-const REQUIRED_TRIGGERS: CatalogSnapshot["triggers"] = Object.entries(
-  PAYROLL_REQUIRED_TRIGGERS
-).flatMap(([table, names]) =>
-  names.map((name) => ({
-    relation: `public.${table}`,
-    name,
-    function: `public.${name}_fn`
-  }))
-);
+const REQUIRED_TRIGGERS: CatalogSnapshot["triggers"] = HEALTHY_PAYROLL_TRIGGERS;
 
 function snapshot(partial: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
   return {
     migrationOwner: "owner",
-    columns: [],
+    columns: HEALTHY_PAYROLL_COLUMNS,
     foreignKeys: REQUIRED_FKS,
     roles: [],
     namedObjects: [],
@@ -348,14 +342,32 @@ describe("M2 - helpers whose body never names the table", () => {
         })
       )
     ).toEqual([]);
+    // Owned by a dedicated role that holds no payroll privilege, so the
+    // ADR-0173 reach rule has nothing to say and the exemption covers the rest.
+    expect(
+      analysePayrollCatalog(
+        snapshot({
+          functions: [
+            fn("awcms_leak", {
+              securityDefiner: true,
+              source: body,
+              owner: "awcms_leak_definer"
+            })
+          ]
+        }),
+        { exemptions: { "public.awcms_leak": "reviewed: a constant message" } }
+      )
+    ).toEqual([]);
+    // Owned by the migration owner, it reaches payroll: a catalog exemption
+    // does NOT silence that (Issue #1436), only the definer allow-list does.
     expect(
       analysePayrollCatalog(
         snapshot({
           functions: [fn("awcms_leak", { securityDefiner: true, source: body })]
         }),
         { exemptions: { "public.awcms_leak": "reviewed: a constant message" } }
-      )
-    ).toEqual([]);
+      ).map((finding) => finding.code)
+    ).toEqual(["security-definer-not-allow-listed"]);
   });
 
   test("catalog: a view over such a function inherits the finding", () => {
@@ -1123,7 +1135,11 @@ DROP FUNCTION awcms_cp();`).join()
 
 describe("re-verification audit of #1077", () => {
   const table = "awcms_hr_commission_accruals";
-  const columns = Array.from({ length: 12 }, (_, i) => `c${i}:text`);
+  // The ledger's real columns: the snapshot's ledger must match its pinned
+  // fingerprint (Issue #1436) for the look-alike rule to be tested alone.
+  const columns = [
+    ...PAYROLL_REQUIRED_TABLE_FINGERPRINTS.awcms_hr_commission_accruals!.columns
+  ];
 
   test("catalog: a required trigger that exists but is disabled is refused (HIGH-2)", () => {
     const triggers = REQUIRED_TRIGGERS.map((trigger) =>
@@ -1147,15 +1163,24 @@ describe("re-verification audit of #1077", () => {
   });
 
   test("catalog: the transition log must still reference the ledger (HIGH-1)", () => {
+    // The pinned fingerprints (Issue #1436) miss every other foreign key too.
     expect(codes(snapshot({ foreignKeys: [] }))).toEqual([
-      "payroll-fk-missing"
+      "payroll-fk-missing",
+      "payroll-fingerprint-drift",
+      "payroll-fingerprint-drift"
     ]);
   });
 
   test("catalog: a non-family relation with the ledger's columns is the ledger renamed or copied (HIGH-1)", () => {
     const withColumns = (extra: CatalogSnapshot["columns"]) =>
       snapshot({
-        columns: [{ relation: ACCRUALS, columns }, ...extra]
+        columns: [
+          ...HEALTHY_PAYROLL_COLUMNS.filter(
+            (entry) => entry.relation !== ACCRUALS
+          ),
+          { relation: ACCRUALS, columns },
+          ...extra
+        ]
       });
 
     expect(
@@ -1164,7 +1189,7 @@ describe("re-verification audit of #1077", () => {
           { relation: "public.awcms_probe_x", columns: [...columns] }
         ])
       )
-    ).toEqual(["payroll-lookalike"]);
+    ).toEqual(["payroll-lookalike", "payroll-fingerprint-match"]);
     // Renaming a column or two does not hide it.
     expect(
       codes(

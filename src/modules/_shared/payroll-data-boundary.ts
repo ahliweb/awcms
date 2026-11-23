@@ -257,19 +257,252 @@ export const PAYROLL_EXPECTED_OWNERS: readonly string[] = [];
 export const PAYROLL_OWNER_REFERENCE_TABLE = "awcms_schema_migrations";
 
 /**
+ * The STABLE FINGERPRINT of each required payroll table (Issue #1436,
+ * ADR-0173): what the table IS, independent of what it is called.
+ *
+ * - `columns`: every column as `name:type` (`format_type` without typmod), as
+ *   a set. A migration that adds, drops, renames or retypes a column of a
+ *   required table updates this list in the same PR; the catalog check fails
+ *   (`payroll-fingerprint-drift`) until it does.
+ * - `triggers`: every required trigger with the function it runs and its
+ *   `pg_trigger.tgtype` bitmask (timing, level, events).
+ * - `foreignKeys`: every foreign key the table declares, by target table and
+ *   referencing columns, in order.
+ * - `nameFreeTolerance`: how many columns a NON-family relation may differ by,
+ *   counting column TYPES only (a multiset, names ignored), and still be this
+ *   table under another name (`payroll-fingerprint-match`). A rebuild that
+ *   renames every column keeps every type. `null` means the shape is not
+ *   distinctive enough to match without names: the transition log's nine
+ *   generic columns sit within one column of ordinary status logs, so it is
+ *   held by its foreign key to the ledger (`dependent-on-payroll`) and its
+ *   trigger instead. A tolerance is only set where the migrated catalog keeps a
+ *   margin of more than twice the tolerance to every other relation (asserted
+ *   by `tests/integration/payroll-catalog-boundary.integration.test.ts`).
+ *
+ * Keyed by bare table name; the key set is {@link PAYROLL_REQUIRED_TABLES}.
+ */
+export type PayrollTableFingerprint = {
+  columns: readonly string[];
+  triggers: readonly { name: string; function: string; type: number }[];
+  foreignKeys: readonly { to: string; columns: readonly string[] }[];
+  nameFreeTolerance: number | null;
+};
+
+const TS = "timestamp with time zone";
+
+export const PAYROLL_REQUIRED_TABLE_FINGERPRINTS: Readonly<
+  Record<string, PayrollTableFingerprint>
+> = {
+  awcms_hr_commission_accruals: {
+    columns: [
+      "id:uuid",
+      "tenant_id:uuid",
+      "employment_id:uuid",
+      "rule_id:uuid",
+      "rule_key:text",
+      "rule_version:integer",
+      "source_type:text",
+      "source_ref:text",
+      "source_line:text",
+      "operation:text",
+      "calculation:text",
+      "base_amount:numeric",
+      "units:integer",
+      "rate:numeric",
+      "fixed_amount:numeric",
+      "amount:numeric",
+      "currency_code:character",
+      `occurred_at:${TS}`,
+      "occurred_on:date",
+      "request_digest:text",
+      "correlation_id:text",
+      "status:text",
+      `created_at:${TS}`,
+      "created_by:uuid",
+      `approved_at:${TS}`,
+      "approved_by:uuid",
+      `released_at:${TS}`,
+      "released_by:uuid",
+      `paid_at:${TS}`,
+      "paid_by:uuid",
+      "payment_reference:text",
+      `voided_at:${TS}`,
+      "voided_by:uuid",
+      "void_reason_code:text",
+      "beneficiary_tenant_user_id:uuid"
+    ],
+    triggers: [
+      {
+        name: "awcms_hr_commission_accruals_born_valid",
+        function: "awcms_hr_commission_accruals_insert_guard",
+        type: 7
+      },
+      {
+        name: "awcms_hr_commission_accruals_immutable",
+        function: "awcms_hr_commission_accruals_guard",
+        type: 27
+      },
+      {
+        name: "awcms_hr_commission_accruals_log_birth",
+        function: "awcms_hr_commission_accruals_log",
+        type: 5
+      },
+      {
+        name: "awcms_hr_commission_accruals_log_change",
+        function: "awcms_hr_commission_accruals_log",
+        type: 17
+      }
+    ],
+    foreignKeys: [
+      { to: "awcms_tenants", columns: ["tenant_id"] },
+      { to: "awcms_tenant_users", columns: ["tenant_id", "approved_by"] },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "beneficiary_tenant_user_id"]
+      },
+      { to: "awcms_tenant_users", columns: ["tenant_id", "created_by"] },
+      { to: "awcms_tenant_users", columns: ["tenant_id", "paid_by"] },
+      { to: "awcms_tenant_users", columns: ["tenant_id", "released_by"] },
+      { to: "awcms_tenant_users", columns: ["tenant_id", "voided_by"] },
+      { to: "awcms_hr_employments", columns: ["tenant_id", "employment_id"] },
+      { to: "awcms_hr_commission_rules", columns: ["tenant_id", "rule_id"] }
+    ],
+    nameFreeTolerance: 3
+  },
+  awcms_hr_commission_transitions: {
+    columns: [
+      "id:uuid",
+      "seq:bigint",
+      "tenant_id:uuid",
+      "accrual_id:uuid",
+      "from_status:text",
+      "to_status:text",
+      "actor_tenant_user_id:uuid",
+      "reason_code:text",
+      `occurred_at:${TS}`
+    ],
+    triggers: [
+      {
+        name: "awcms_hr_commission_transitions_guard",
+        function: "awcms_hr_commission_transitions_guard",
+        type: 31
+      }
+    ],
+    foreignKeys: [
+      { to: "awcms_tenants", columns: ["tenant_id"] },
+      {
+        to: "awcms_tenant_users",
+        columns: ["tenant_id", "actor_tenant_user_id"]
+      },
+      {
+        to: "awcms_hr_commission_accruals",
+        columns: ["tenant_id", "accrual_id"]
+      }
+    ],
+    nameFreeTolerance: null
+  }
+};
+
+/**
  * Foreign keys between required payroll tables that must exist (Issue #1077
  * audit, HIGH-1): when the real ledger is renamed away, the log that references
- * it follows the rename, so the edge to the family name disappears.
+ * it follows the rename, so the edge to the family name disappears. Derived
+ * from {@link PAYROLL_REQUIRED_TABLE_FINGERPRINTS} (the edges whose target is a
+ * payroll table), so there is one list to change.
  */
 export const PAYROLL_REQUIRED_FOREIGN_KEYS: readonly {
   from: string;
   to: string;
-}[] = [
-  {
-    from: "awcms_hr_commission_transitions",
-    to: "awcms_hr_commission_accruals"
+  columns: readonly string[];
+}[] = Object.entries(PAYROLL_REQUIRED_TABLE_FINGERPRINTS).flatMap(
+  ([from, fingerprint]) =>
+    fingerprint.foreignKeys
+      .filter((edge) =>
+        Object.hasOwn(PAYROLL_REQUIRED_TABLE_FINGERPRINTS, edge.to)
+      )
+      .map((edge) => ({ from, to: edge.to, columns: edge.columns }))
+);
+
+/**
+ * Non-family SECURITY DEFINER functions accepted although their owner can
+ * reach a payroll relation (Issue #1436, ADR-0173). The allow-list replaces
+ * "prove the body does not read payroll" with "every function that runs with
+ * payroll-reaching rights is a reviewed entry".
+ *
+ * A function is IN REACH when its owner is, directly or through role
+ * membership, a role that owns a payroll relation or family function, the
+ * migration-ledger owner, an expected owner, a grantee on a payroll relation,
+ * an EXECUTE grantee of a family SECURITY DEFINER function, a privileged
+ * predefined role, a superuser or a BYPASSRLS role. Such a function that is not
+ * listed here fails the catalog check (`security-definer-not-allow-listed`).
+ * The repository's convention is the way out that needs no entry: own the
+ * function with a dedicated `NOLOGIN` role that holds no payroll privilege
+ * (every SECURITY DEFINER function in `sql/` does).
+ *
+ * Key: `schema.name(identity arguments)` exactly as
+ * `pg_get_function_identity_arguments` prints them. Each entry pins the
+ * reviewed object: `owner` and `bodySha256` (SHA-256 of the body the catalog
+ * returns: `prosrc`, or the deparsed `BEGIN ATOMIC` body). A changed owner or
+ * body is `security-definer-allowlist-drift`; an entry whose function is gone
+ * is reported stale. `PAYROLL_CATALOG_EXEMPTIONS` does NOT cover these two
+ * codes: this list is the only route.
+ *
+ * Who may add an entry is ADR-0173 (Q1). EMPTY today.
+ */
+export type PayrollSecurityDefinerAllowEntry = {
+  /** Why this function needs payroll-reaching rights (at least 40 characters). */
+  reason: string;
+  /** The issue or ADR that reviewed it: `#NNN` or `ADR-NNNN`. */
+  approvedIn: string;
+  /** The owner role the review saw. */
+  owner: string;
+  /** Lower-case hex SHA-256 of the body the review saw. */
+  bodySha256: string;
+};
+
+export const PAYROLL_SECURITY_DEFINER_ALLOWLIST: Readonly<
+  Record<string, PayrollSecurityDefinerAllowEntry>
+> = {};
+
+/** Problems with an allow-list (empty means valid). */
+export function validatePayrollSecurityDefinerAllowlist(
+  allowlist: Readonly<Record<string, PayrollSecurityDefinerAllowEntry>>
+): string[] {
+  const problems: string[] = [];
+
+  for (const [key, entry] of Object.entries(allowlist)) {
+    if (!/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\([^()]*\)$/.test(key)) {
+      problems.push(
+        `${key}: must be schema.name(identity arguments), lower case, unquoted`
+      );
+    }
+    if (isPayrollTable(key.slice(key.indexOf(".") + 1, key.indexOf("(")))) {
+      problems.push(
+        `${key}: a payroll-family function needs no entry; remove it`
+      );
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim().length < 40) {
+      problems.push(`${key}: needs a reason (at least 40 characters)`);
+    }
+    if (!/^(?:#\d+|ADR-\d{4})$/.test(entry.approvedIn ?? "")) {
+      problems.push(`${key}: approvedIn must be #NNN or ADR-NNNN`);
+    }
+    if (
+      typeof entry.owner !== "string" ||
+      entry.owner.length === 0 ||
+      PAYROLL_FORBIDDEN_OWNERS.includes(entry.owner)
+    ) {
+      problems.push(
+        `${key}: owner must be named and must not be a runtime role (${PAYROLL_FORBIDDEN_OWNERS.join(", ")})`
+      );
+    }
+    if (!/^[0-9a-f]{64}$/.test(entry.bodySha256 ?? "")) {
+      problems.push(`${key}: bodySha256 must be 64 lower-case hex characters`);
+    }
   }
-];
+
+  return problems;
+}
 
 /**
  * A non-family relation that shares at least this share of a required payroll
@@ -294,19 +527,19 @@ export const PAYROLL_PRIVILEGED_PREDEFINED_ROLES: readonly string[] = [
 /**
  * Triggers every required payroll table must carry (Issue #1077 audit, H1): a
  * look-alike table created under the family name after the real one was renamed
- * away has none of them. Keyed by bare table name.
+ * away has none of them. Keyed by bare table name. Derived from
+ * {@link PAYROLL_REQUIRED_TABLE_FINGERPRINTS} (Issue #1436).
  */
 export const PAYROLL_REQUIRED_TRIGGERS: Readonly<
   Record<string, readonly string[]>
-> = {
-  awcms_hr_commission_accruals: [
-    "awcms_hr_commission_accruals_born_valid",
-    "awcms_hr_commission_accruals_immutable",
-    "awcms_hr_commission_accruals_log_birth",
-    "awcms_hr_commission_accruals_log_change"
-  ],
-  awcms_hr_commission_transitions: ["awcms_hr_commission_transitions_guard"]
-};
+> = Object.fromEntries(
+  Object.entries(PAYROLL_REQUIRED_TABLE_FINGERPRINTS).map(
+    ([table, fingerprint]) => [
+      table,
+      fingerprint.triggers.map((trigger) => trigger.name)
+    ]
+  )
+);
 
 /** Function languages the catalog layer can read the body of. */
 export const PAYROLL_READABLE_LANGUAGES: readonly string[] = ["sql", "plpgsql"];
@@ -544,6 +777,31 @@ export function assertNonPayrollExceptionsValid(
 }
 
 assertNonPayrollExceptionsValid(NON_PAYROLL_TABLE_NAME_EXCEPTIONS);
+
+/** Load-time consistency of the ADR-0173 registries (Issue #1436). */
+function assertPayrollAllowListsValid(): void {
+  const problems = validatePayrollSecurityDefinerAllowlist(
+    PAYROLL_SECURITY_DEFINER_ALLOWLIST
+  );
+  const fingerprinted = Object.keys(PAYROLL_REQUIRED_TABLE_FINGERPRINTS);
+
+  if (
+    fingerprinted.length !== PAYROLL_REQUIRED_TABLES.length ||
+    !PAYROLL_REQUIRED_TABLES.every((table) => fingerprinted.includes(table))
+  ) {
+    problems.push(
+      "PAYROLL_REQUIRED_TABLE_FINGERPRINTS must have exactly one entry per PAYROLL_REQUIRED_TABLES table"
+    );
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `payroll allow-lists are invalid (ADR-0173): ${problems.join("; ")}`
+    );
+  }
+}
+
+assertPayrollAllowListsValid();
 
 /**
  * True when `name` is a payroll table (or a member of the payroll family).

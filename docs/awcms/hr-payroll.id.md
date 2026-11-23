@@ -1421,8 +1421,9 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   helper di atas terbatas; tabel non-keluarga dengan RLS mati yang diberi grant
   ke `awcms_worker` atau `PUBLIC` tidak ditandai secara umum (terlalu banyak
   tabel global yang sah), hanya bila menyerupai tabel payroll wajib; pembangunan
-  ulang kolom-demi-kolom yang mengubah lebih dari 30% kolom ledger lolos dari
-  pemeriksaan tiruan; SLOT replikasi logis PostgreSQL tidak dibaca (slot dengan plugin
+  ulang kolom-demi-kolom yang mengubah lebih dari 30% NAMA kolom ledger lolos dari
+  pemeriksaan tiruan 70%, tetapi tidak lagi dari sidik jari tanpa-nama kecuali
+  juga mengubah lebih dari tiga TIPE kolom (ADR-0173, di bawah); SLOT replikasi logis PostgreSQL tidak dibaca (slot dengan plugin
   decoding membaca WAL, jadi setiap baris payroll, tanpa publication maupun entri
   ACL; slot milik operator dan tidak ada di lapisan katalog); dan superuser
   dipercaya secara definisi. Selain itu: katalog tidak membaca objek
@@ -1443,6 +1444,41 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   berkas, bukan di setiap jalur handler.
   Pengecualian ada di `PAYROLL_CATALOG_EXEMPTIONS` (kosong; jalan keluarnya
   adalah nama keluarga payroll).
+- _Allow-list sebagai ganti pemindaian deny-list (Issue #1436, ADR-0173)._ Tiga
+  aturan katalog tidak lagi bergantung pada pembuktian bahwa sebuah badan
+  fungsi tidak berbahaya.
+  (1) Fungsi `SECURITY DEFINER` non-keluarga yang PEMILIK-nya menjangkau payroll
+  (pemilik relasi payroll atau fungsi keluarga, pemilik ledger migrasi,
+  `PAYROLL_EXPECTED_OWNERS`, penerima grant pada relasi payroll, penerima
+  EXECUTE atas fungsi SECURITY DEFINER keluarga, `pg_read_all_data` dan
+  sejenisnya, superuser atau role `BYPASSRLS`, atau anggota salah satunya
+  secara transitif) adalah temuan (`security-definer-not-allow-listed`) kecuali
+  menjadi entri `PAYROLL_SECURITY_DEFINER_ALLOWLIST`, berkunci
+  `schema.name(identity args)` dan dipatok pada pemiliknya serta SHA-256 badan
+  fungsinya; pemilik atau badan yang berubah adalah
+  `security-definer-allowlist-drift`, fungsi yang hilang adalah entri basi.
+  `PAYROLL_CATALOG_EXEMPTIONS` tidak membungkam kode-kode ini. Daftarnya
+  KOSONG: setiap fungsi SECURITY DEFINER di `sql/` dimiliki role `NOLOGIN`
+  khusus yang tidak memegang hak payroll apa pun, dan itulah jalan keluar
+  yang tidak butuh entri. (2) Badan standar SQL (`BEGIN ATOMIC`, atau
+  `RETURN expr`) dibaca dari `pg_get_function_sqlbody` (`prosrc`-nya kosong)
+  dan edge `pg_depend`-nya ke fungsi lain dihitung sebagai panggilan, sehingga
+  aturan badan, panggilan-keluarga, dan rantai melihatnya; badan atomik yang
+  kembali kosong adalah `function-body-unreadable`.
+  (3) Setiap tabel payroll wajib dipatok oleh
+  `PAYROLL_REQUIRED_TABLE_FINGERPRINTS` (setiap kolom dengan tipenya, setiap
+  trigger wajib dengan fungsi dan `tgtype`-nya, setiap foreign key dengan
+  kolomnya): perbedaan adalah `payroll-fingerprint-drift`, jadi perubahan
+  skema pada tabel wajib memperbarui sidik jarinya di PR yang sama, dan trigger
+  yang dibuat ulang dengan namanya sendiri tetapi fungsi lain atau event lebih
+  sedikit ikut tertangkap. Relasi non-keluarga yang TIPE kolomnya (nama
+  diabaikan) berada dalam `nameFreeTolerance` sidik jari ledger adalah
+  `payroll-fingerprint-match` (toleransi 3; tabel biasa terdekat di katalog
+  termigrasi berjarak 7, dan tes integrasi menjaga marginnya di atas dua kali
+  toleransi). Sembilan kolom generik log transisi hanya berjarak satu kolom
+  dari log status biasa, jadi ia tidak punya toleransi tanpa-nama dan tetap
+  dijaga oleh foreign key-nya ke ledger dan trigger-nya. Siapa yang boleh
+  menambah entri allow-list adalah ADR-0173 Q1 (menunggu keputusan pemilik).
 - _Hasil mutasi tersamar (Issue #1095, keputusan pemilik K3 22 Nov 2026)._
   `POST /api/v1/hr-commission/accruals/{id}/approve|release|pay|void` dan
   `CommissionAccrualPort` in-process (kontrak `commission_accrual` **2.0.0**,

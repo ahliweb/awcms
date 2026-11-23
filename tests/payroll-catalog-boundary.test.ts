@@ -14,11 +14,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import {
-  PAYROLL_REQUIRED_FOREIGN_KEYS,
-  PAYROLL_REQUIRED_TRIGGERS,
-  PAYROLL_WORKER_EXECUTE_ALLOWLIST
-} from "../src/modules/_shared/payroll-data-boundary";
+import { PAYROLL_WORKER_EXECUTE_ALLOWLIST } from "../src/modules/_shared/payroll-data-boundary";
 import { findPayrollSqlLeaks } from "../scripts/payroll-sql-boundary-check";
 import {
   analysePayrollCatalog,
@@ -26,6 +22,11 @@ import {
   staleCatalogExemptions,
   type CatalogSnapshot
 } from "../scripts/lib/payroll-catalog-boundary";
+import {
+  HEALTHY_PAYROLL_COLUMNS,
+  HEALTHY_PAYROLL_FOREIGN_KEYS,
+  HEALTHY_PAYROLL_TRIGGERS
+} from "./fixtures/payroll-fingerprint-snapshot";
 import {
   dollarQuotedBodies,
   foldStringConcatenation,
@@ -217,25 +218,14 @@ export const REQUIRED_RELATIONS: CatalogSnapshot["relations"] = [
 }));
 
 const REQUIRED_FKS: CatalogSnapshot["foreignKeys"] =
-  PAYROLL_REQUIRED_FOREIGN_KEYS.map((edge) => ({
-    from: `public.${edge.from}`,
-    to: `public.${edge.to}`
-  }));
+  HEALTHY_PAYROLL_FOREIGN_KEYS;
 
-const REQUIRED_TRIGGERS: CatalogSnapshot["triggers"] = Object.entries(
-  PAYROLL_REQUIRED_TRIGGERS
-).flatMap(([table, names]) =>
-  names.map((name) => ({
-    relation: `public.${table}`,
-    name,
-    function: `public.${name}_fn`
-  }))
-);
+const REQUIRED_TRIGGERS: CatalogSnapshot["triggers"] = HEALTHY_PAYROLL_TRIGGERS;
 
 function snapshot(partial: Partial<CatalogSnapshot>): CatalogSnapshot {
   return {
     migrationOwner: "owner",
-    columns: [],
+    columns: HEALTHY_PAYROLL_COLUMNS,
     foreignKeys: REQUIRED_FKS,
     roles: [],
     namedObjects: [],
@@ -371,10 +361,13 @@ describe("catalog analyser", () => {
       })
     );
 
+    // The SECURITY DEFINER function is owned by the migration owner, which
+    // reaches payroll, and is not allow-listed (ADR-0173, Issue #1436).
     expect(found).toEqual([
       "function-payroll-row-type",
       "function-reads-payroll",
-      "relation-over-leaking-function"
+      "relation-over-leaking-function",
+      "security-definer-not-allow-listed"
     ]);
   });
 

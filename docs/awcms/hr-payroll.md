@@ -1372,7 +1372,7 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   finite; a non-family table with RLS off that is granted to `awcms_worker` or
   `PUBLIC` is not flagged in general (too many legitimate global tables), only
   when it looks like a required payroll table; a column-for-column rebuild that
-  changes more than 30% of the ledger's columns evades the look-alike check; PostgreSQL logical
+  changes more than 30% of the ledger's column NAMES evades the 70% look-alike check, but no longer the name-free fingerprint unless it also changes more than three column TYPES (ADR-0173, below); PostgreSQL logical
   replication SLOTS are not read (a slot with a decoding plugin reads WAL, so
   every payroll row, without a publication or an ACL entry; the slots belong to
   the operator and are not in the catalog layer); and a superuser is trusted by
@@ -1393,6 +1393,38 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   the audit call is in the file, not on every handler path.
   Exemptions are `PAYROLL_CATALOG_EXEMPTIONS` (empty; the way out is the payroll
   family name).
+- _Allow-lists instead of deny-list scanning (Issue #1436, ADR-0173)._ Three
+  catalog rules no longer depend on proving a body harmless.
+  (1) A non-family `SECURITY DEFINER` function whose OWNER reaches payroll (the
+  owner of a payroll relation or family function, the migration-ledger owner,
+  `PAYROLL_EXPECTED_OWNERS`, a grantee on a payroll relation, an EXECUTE grantee
+  of a family SECURITY DEFINER function, `pg_read_all_data` and friends, a
+  superuser or `BYPASSRLS` role, or a member of any of these, transitively) is a
+  finding (`security-definer-not-allow-listed`) unless it is an entry of
+  `PAYROLL_SECURITY_DEFINER_ALLOWLIST`, keyed `schema.name(identity args)` and
+  pinned to its owner and the SHA-256 of its body; a changed owner or body is
+  `security-definer-allowlist-drift`, a vanished function a stale entry.
+  `PAYROLL_CATALOG_EXEMPTIONS` does not silence these codes. The list is EMPTY:
+  every SECURITY DEFINER function in `sql/` is owned by a dedicated `NOLOGIN`
+  role that holds no payroll privilege, which is the way out that needs no
+  entry. (2) A SQL-standard body (`BEGIN ATOMIC`, or `RETURN expr`) is read from
+  `pg_get_function_sqlbody` (its `prosrc` is empty) and its `pg_depend` edges to
+  other functions count as calls, so the body, family-call and chain rules see
+  it; an atomic body that comes back empty is `function-body-unreadable`.
+  (3) Each required payroll table is pinned by
+  `PAYROLL_REQUIRED_TABLE_FINGERPRINTS` (every column with its type, each
+  required trigger with its function and `tgtype`, each foreign key with its
+  columns): a difference is `payroll-fingerprint-drift`, so a schema change to a
+  required table updates the fingerprint in the same PR, and a trigger recreated
+  under its own name with another function or fewer events is caught. A
+  non-family relation whose column TYPES (names ignored) are within the
+  fingerprint's `nameFreeTolerance` of the ledger is `payroll-fingerprint-match`
+  (tolerance 3; the nearest ordinary table in the migrated catalog is 7 away,
+  and an integration test keeps the margin above twice the tolerance). The
+  transition log's nine generic columns are within one column of ordinary
+  status logs, so it has no name-free tolerance and stays held by its foreign
+  key to the ledger and its trigger. Who may add an allow-list entry is
+  ADR-0173 Q1 (owner decision pending).
 - _Masked mutation results (Issue #1095, owner decision K3 of 2026-11-22)._
   `POST /api/v1/hr-commission/accruals/{id}/approve|release|pay|void` and the
   in-process `CommissionAccrualPort` (contract `commission_accrual` **2.0.0**, a

@@ -15,6 +15,7 @@ import {
   analysePayrollCatalog,
   loadPayrollCatalogSnapshot,
   staleCatalogExemptions,
+  staleSecurityDefinerAllowlist,
   type CatalogSnapshot
 } from "./payroll-catalog-boundary";
 
@@ -59,8 +60,14 @@ export function evaluatePayrollCatalog(
     expectedOwners: [...PAYROLL_EXPECTED_OWNERS, ...configuredOwners]
   });
   const stale = staleCatalogExemptions(snapshot);
+  // ADR-0173: an allow-list entry for a function that is gone is stale too.
+  const staleDefiners = staleSecurityDefinerAllowlist(snapshot);
 
-  if (findings.length === 0 && stale.length === 0) {
+  if (
+    findings.length === 0 &&
+    stale.length === 0 &&
+    staleDefiners.length === 0
+  ) {
     return {
       ok: true,
       findingCodes: [],
@@ -106,6 +113,12 @@ export function evaluatePayrollCatalog(
     );
   }
 
+  for (const signature of staleDefiners) {
+    lines.push(
+      `  - stale PAYROLL_SECURITY_DEFINER_ALLOWLIST entry: ${signature} is no longer a SECURITY DEFINER function.`
+    );
+  }
+
   return {
     ok: false,
     lines,
@@ -115,7 +128,7 @@ export function evaluatePayrollCatalog(
       object: finding.object,
       message: finding.message
     })),
-    staleExemptions: stale,
+    staleExemptions: [...stale, ...staleDefiners],
     expectedOwnersMissing
   };
 }
