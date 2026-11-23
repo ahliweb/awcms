@@ -502,6 +502,8 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
     const first = await create({}, undefined, key);
 
     expect(first.status).toBe(201);
+    // The response that carries the token is never stored by a browser or cache.
+    expect(first.response.headers.get("cache-control")).toBe("no-store");
     expect(first.body.data.revealed).toBe(true);
     expect(first.body.data.token).toMatch(
       /^wes1\.[0-9a-f-]{36}\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/
@@ -543,6 +545,7 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
     const newSecret = rotated.body.data.token.split(".")[3] as string;
 
     expect(rotated.status).toBe(200);
+    expect(rotated.response.headers.get("cache-control")).toBe("no-store");
     expect(rotated.body.data.revealed).toBe(true);
     expect(newSecret).not.toBe(secret);
     expect(

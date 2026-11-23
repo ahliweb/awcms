@@ -362,6 +362,41 @@ suite("website engagement screens (#1153, ADR-0155)", () => {
     return { other, mine, theirs, mySubmission, theirSubmission };
   }
 
+  test("the host picker offers only this tenant's live domains, and only to a manager (#1477)", async () => {
+    const { other } = await twoTenants();
+    const domain = async (tenant: string, hostname: string, deleted = false) =>
+      (
+        (await admin()`
+          INSERT INTO awcms_tenant_domains
+            (tenant_id, hostname, normalized_hostname, domain_type, status,
+             verification_token_hash, deleted_at)
+          VALUES (${tenant}, ${hostname}, ${hostname}, 'custom_domain', 'active',
+                  'SECRET-VERIFICATION-HASH', ${deleted ? new Date() : null})
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+    const mine = await domain(tenantId, "picker.owner-site.example");
+
+    await domain(tenantId, "gone.owner-site.example", true);
+    await domain(other, "picker.other-site.example");
+
+    const readOnly = await seedUser(tenantId, "picker-ro", [READ_SOURCES]);
+    const manager = await seedUser(tenantId, "picker-mgr", [
+      READ_SOURCES,
+      MANAGE_SOURCES
+    ]);
+    const asManager = await sourcesAs(manager.token);
+
+    if (typeof asManager === "string") throw new Error("unreachable");
+
+    expect(asManager.domains).toEqual([
+      { id: mine, hostname: "picker.owner-site.example" }
+    ]);
+    // No verification material, and nothing offered to a viewer who cannot use it.
+    expect(JSON.stringify(asManager)).not.toContain("SECRET-VERIFICATION-HASH");
+    expect(await sourcesAs(readOnly.token)).toMatchObject({ domains: [] });
+  });
+
   test("default-deny: no role, and the other screen's key alone, get nothing", async () => {
     await twoTenants();
     const noRole = await seedUser(tenantId, "norole", []);

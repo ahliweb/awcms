@@ -11386,3 +11386,84 @@ msgstr[0] "{count} pemberitahuan staf"
 msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] "{count} aturan"
+
+msgid "A revoked source cannot be changed."
+msgstr "Sumber yang sudah dicabut tidak dapat diubah."
+
+msgid "Cancel editing"
+msgstr "Batal mengubah"
+
+msgid "Check the form: a code of 2 to 40 lower-case letters, digits, dashes or underscores starting with a letter, a name, a consent copy version, and at least one accepted kind."
+msgstr "Periksa formulir: kode 2 sampai 40 huruf kecil, angka, tanda hubung atau garis bawah yang diawali huruf, sebuah nama, versi teks persetujuan, dan sedikitnya satu jenis yang diterima."
+
+msgid "Copied."
+msgstr "Tersalin."
+
+msgid "Copy this access token now"
+msgstr "Salin token akses ini sekarang"
+
+msgid "Copy token"
+msgstr "Salin token"
+
+msgid "Could not copy. Select the token and copy it by hand."
+msgstr "Gagal menyalin. Pilih token lalu salin secara manual."
+
+msgid "Could not save the source. Please try again."
+msgstr "Sumber tidak dapat disimpan. Silakan coba lagi."
+
+msgid "Edit website"
+msgstr "Ubah situs web"
+
+msgid "I have saved it"
+msgstr "Sudah saya simpan"
+
+msgid "Lower-case letters, digits, dashes and underscores. It cannot be changed afterwards."
+msgstr "Huruf kecil, angka, tanda hubung dan garis bawah. Tidak dapat diubah setelahnya."
+
+msgid "Nothing to change."
+msgstr "Tidak ada yang diubah."
+
+msgid "No website is registered yet."
+msgstr "Belum ada situs web terdaftar."
+
+msgid "One of the chosen hosts is no longer a domain of this tenant. Reload the page."
+msgstr "Salah satu host yang dipilih bukan lagi domain tenant ini. Muat ulang halaman."
+
+msgid "Register a website"
+msgstr "Daftarkan situs web"
+
+msgid "Rotate the token of {name}? The current token stops working immediately, with no grace period, and the website must be given the new one."
+msgstr "Putar token {name}? Token saat ini langsung tidak berlaku, tanpa masa tenggang, dan situs web harus diberi token baru."
+
+msgid "Rotate token"
+msgstr "Putar token"
+
+msgid "Save source"
+msgstr "Simpan sumber"
+
+msgid "Saving needs a signed-in person; a machine credential cannot do it."
+msgstr "Penyimpanan memerlukan orang yang masuk; kredensial mesin tidak dapat melakukannya."
+
+msgid "That source code is already in use."
+msgstr "Kode sumber itu sudah dipakai."
+
+msgid "The action failed. Please try again."
+msgstr "Tindakan gagal. Silakan coba lagi."
+
+msgid "The key configuration for website engagement is not valid on this deployment, so a token cannot be issued."
+msgstr "Konfigurasi kunci untuk interaksi situs web tidak valid pada deployment ini, sehingga token tidak dapat diterbitkan."
+
+msgid "The version label of the consent text this website shows next to its form. It is stored with every submission."
+msgstr "Label versi teks persetujuan yang ditampilkan situs web ini di samping formulirnya. Disimpan bersama setiap kiriman."
+
+msgid "This is the only time the token is shown. It cannot be read back later: if it is lost, rotate the source to get a new one."
+msgstr "Token hanya ditampilkan sekali ini. Tidak dapat dibaca kembali nanti: bila hilang, putar sumber untuk mendapatkan yang baru."
+
+msgid "This request was already completed and its token was shown before. Rotate the source to get a new token."
+msgstr "Permintaan ini sudah selesai dan tokennya pernah ditampilkan. Putar sumber untuk mendapatkan token baru."
+
+msgid "This tenant has no domains yet. A source without hosts refuses every request until you add some."
+msgstr "Tenant ini belum punya domain. Sumber tanpa host menolak setiap permintaan sampai Anda menambahkannya."
+
+msgid "Turn the anti-abuse challenge off for this source? Submissions will then rely on the access token, the host check, the honeypot, the fill time and the rate limits alone."
+msgstr "Matikan tantangan anti-penyalahgunaan untuk sumber ini? Kiriman akan hanya mengandalkan token akses, pemeriksaan host, honeypot, waktu pengisian dan batas laju."

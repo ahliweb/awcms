@@ -1399,8 +1399,16 @@ export const READER_BUDGET_BYTES = 39_000;
  * sign-in downloads the login script alone (7,036 B), not the encoder. The
  * total rises a little more than the code it adds because a split chunk costs
  * its own import glue.
+ *
+ * **Raised for Issue #1477** (website-engagement source management): +5,360 B
+ * (392,355 -> 397,715), measured 397,575 B on a clean build. The cost is the
+ * `/admin/website-engagement/sources` script (create, edit, pause, rotate and
+ * the one-time token panel; 5,968 B, up from the revoke-only script), the pure
+ * model `src/lib/ui/website-engagement-sources-model.ts` and the sentences the
+ * form needs. The lifecycle helpers stay in `admin-form-client.ts`. Margin 140 B,
+ * as above.
  */
-export const APP_BUDGET_BYTES = 392_355;
+export const APP_BUDGET_BYTES = 397_715;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

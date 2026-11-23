@@ -46,9 +46,10 @@ function stamps(input: {
  * detail and `/sources`) land with the `navigation` entries in this same change
  * (ADR-0021 criterion 1; a nav entry without a page is a permanent 404). The
  * screens read through the API's own directory functions and show MASKED
- * contact details only; the audited reveal, source creation, host editing and
- * token rotation stay API-only (the token is shown once, which needs its own
- * screen contract). The module has no deployment on/off switch: it is off for a
+ * contact details only; source creation, editing, pausing and token rotation
+ * are on `/sources` (Issue #1477; the token is shown once, in a panel the
+ * client fills from the response and clears on dismissal), while the audited
+ * reveal stays API-only. The module has no deployment on/off switch: it is off for a
  * tenant until a source exists, and with the key rings refused the intake
  * answers 503 and the screens say so.
  */

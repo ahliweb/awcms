@@ -249,6 +249,11 @@ export async function runIdempotent(
       },
       meta: {}
     },
-    { status: produced.status }
+    {
+      status: produced.status,
+      // The one response that carries a token must never be stored by a
+      // browser, proxy or edge cache.
+      ...(produced.reveal ? { headers: { "cache-control": "no-store" } } : {})
+    }
   );
 }
