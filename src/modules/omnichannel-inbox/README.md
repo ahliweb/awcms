@@ -163,10 +163,33 @@ The `inbox.status.progress` stream (ADR-0154) is woken across instances by a row
 
 ## Follow-ups
 
-- A people picker for "assign to another person" needs an endpoint that lists
-  eligible assignees; a business-scope picker for scoped SLA policies.
+- A business-scope picker for scoped SLA policies (the people picker for
+  "assign to another person" shipped with #1486, see below).
 - A realtime "inbox hint" topic (ADR-0154 registry), an outbound "reply queued"
   event from the channel modules to replace the manual response record, and
   WhatsApp inbound once it exists.
 - If `data_lifecycle` ever gains a per-tenant retention override, the rebuild
   window must follow it.
+
+## Eligible-assignee picker (Issue #1486)
+
+`GET /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees` lists the
+staff who could be assigned that conversation, for the "assign to another
+person" picker on `/admin/omnichannel-inbox/[id]`.
+
+- Needs `conversations.assign`, a signed-in person and **visibility of the
+  conversation**; unknown, foreign and invisible are one `404`.
+- It is the **set form of `assigneeEligibility`**: an active person
+  (`principal_kind = 'user'`) holding `conversations.update` on a tenant-wide
+  grant and, if scope-confined (including a confinement that has not started),
+  covering the conversation's scope or an ancestor. An ineligible colleague is
+  absent, exactly like one who does not exist: it is never a staff directory.
+  The assignment endpoint still re-checks at write time.
+- Items are `{ tenantUserId, displayName }` only, keyset-paginated by display
+  name (`limit` 1-50, default 25, opaque `cursor`). A withdrawn customer's
+  conversation yields an empty list.
+- The query lives in `identity-access`
+  (`application/eligible-staff-directory.ts`, `listEligibleStaff`) and is
+  parameterised by permission key and scope, so another module's picker (the
+  `crm_follow_up` rule editor, #1484/#1486) reuses it behind its **own** route,
+  guard and visibility rule rather than this one.

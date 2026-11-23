@@ -16229,6 +16229,32 @@ Requires `omnichannel_inbox.conversations.assign`, a signed-in person, `Idempote
 | 409    | `VERSION_CONFLICT` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope)                                                           |
 | 422    | `ASSIGNEE_NOT_ELIGIBLE`.                      | [`ApiError`](#standard-error-envelope)                                                           |
 
+### `GET /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees` — List the staff who could be assigned a conversation
+
+- **operationId**: `listOmnichannelInboxEligibleAssignees`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.assign`, a signed-in person and visibility of the conversation (business scope); unknown, foreign and invisible are one `404`. Returns ONLY people who pass the assignment rule (an active person holding `conversations.update` on a tenant-wide grant and, if scope-confined, covering the conversation's business scope or an ancestor), so it is never a staff directory: an ineligible colleague is absent, exactly like one who does not exist. A withdrawn customer's conversation yields an empty list. Keyset-paginated by display name; the items carry a display name and the tenant user id and nothing else. The assignment endpoint re-checks eligibility at write time.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+| `limit`            | query  | no       | integer       |             |
+| `cursor`           | query  | no       | string        |             |
+
+**Responses**
+
+| Status | Description                     | Schema                                                                                 |
+| ------ | ------------------------------- | -------------------------------------------------------------------------------------- |
+| 200    | One page of eligible assignees. | [`OmnichannelInboxEligibleAssigneeList`](#schema-omnichannelinboxeligibleassigneelist) |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope)                                                 |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope)                                                 |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope)                                                 |
+| 404    | Resource not found.             | [`ApiError`](#standard-error-envelope)                                                 |
+
 ### `POST /api/v1/omnichannel-inbox/conversations/{id}/responses` — Record that the customer was answered through the arrival channel
 
 - **operationId**: `recordOmnichannelInboxResponse`
@@ -21542,6 +21568,32 @@ A conversation: opaque references (the account-scoped Telegram contact id or the
       "tagIds": [],
       "version": 0
     }
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxEligibleAssigneeList
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "tenantUserId": "00000000-0000-0000-0000-000000000000",
+        "displayName": "string"
+      }
+    ],
+    "nextCursor": "string"
   },
   "meta": "(operation-specific payload)"
 }

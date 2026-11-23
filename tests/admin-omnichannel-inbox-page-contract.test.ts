@@ -326,13 +326,37 @@ describe("the actions", () => {
     expect(script).not.toContain("sessionStorage");
   });
 
-  test("'assign to another person' has no endpoint behind it and is DISABLED with its reason", () => {
+  test("'assign to another person' is a picker over the eligible-assignees endpoint, never a raw id box (#1486)", () => {
+    const script = detail.slice(detail.indexOf("<script>"));
+
+    // The list comes from the endpoint that applies the assignment rule.
+    expect(script).toContain("/eligible-assignees");
+    expect(script).toContain("nextCursor");
+    // The pick goes through the SAME assignment call (Idempotency-Key +
+    // expectedVersion), not a second write path.
+    expect(script).toMatch(/\.js-inbox-assign-selected[\s\S]*assign\(/);
+    // Names are written as text, never as markup.
+    expect(script).toContain("option.textContent = item.displayName");
+    expect(script).not.toContain("innerHTML");
+    // The control is disabled only for an unreachable customer.
     expect(detail).toMatch(
-      /<button[^>]*\sdisabled\s[^>]*aria-describedby="omnichannel-assign-other-why"/
+      /js-inbox-load-assignees[\s\S]{0,120}disabled=\{!reachable\}/
     );
-    expect(detail).toContain('id="omnichannel-assign-other-why"');
-    // No control posts an arbitrary assignee id.
+    // No control lets a person type an arbitrary assignee id.
     expect(detail).not.toMatch(/name="assignee/);
+    expect(detail).not.toContain("omnichannel-assign-other-why");
+  });
+
+  test("the eligible-assignees route is gated on `assign`, person-only, and reads through the shared directory (#1486)", () => {
+    const route = read(
+      "src/pages/api/v1/omnichannel-inbox/conversations/[id]/eligible-assignees.ts"
+    );
+
+    expect(route).toContain("OMNICHANNEL_INBOX_GUARDS.assignConversations");
+    expect(route).toContain("personOnlyRefusal(");
+    expect(route).toContain("getVisibleConversationScope(");
+    expect(route).toContain("listEligibleStaff(");
+    expect(route).toContain("ASSIGNEE_PERMISSION_KEY");
   });
 
   test("a customer who cannot be answered disables the writes", () => {

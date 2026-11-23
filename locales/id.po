@@ -9693,8 +9693,17 @@ msgstr "Belum ada label. Administrator yang membuatnya."
 msgid "No tags yet."
 msgstr "Belum ada label."
 
-msgid "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
-msgstr "Belum tersedia: belum ada daftar orang yang memenuhi syarat menjadi penerima tugas. Mereka dapat menugaskan percakapan ke dirinya sendiri."
+msgid "Loading the people who can be assigned…"
+msgstr "Memuat orang yang dapat ditugaskan…"
+
+msgid "Nobody else is eligible to be assigned this conversation."
+msgstr "Tidak ada orang lain yang memenuhi syarat untuk ditugaskan percakapan ini."
+
+msgid "Could not load the list of people. Please try again."
+msgstr "Tidak dapat memuat daftar orang. Silakan coba lagi."
+
+msgid "Load more"
+msgstr "Muat lebih banyak"
 
 msgid "Omnichannel inbox"
 msgstr "Kotak masuk omnichannel"

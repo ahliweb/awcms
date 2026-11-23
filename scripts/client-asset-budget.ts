@@ -1393,6 +1393,15 @@ export const READER_BUDGET_BYTES = 39_000;
  * was locked out of the page before this (the code was shown as "sign in
  * failed" with a correct password). Margin 140 B, as above.
  *
+ * **Raised for Issue #1486** (the omnichannel inbox's eligible-assignee picker):
+ * +1,261 B (392,355 -> 393,616), measured 393,476 B on a clean build. The cost is
+ * the picker markup's server-rendered sentences (as `data-msg-*` attributes) and
+ * its client logic in `/admin/omnichannel-inbox/[id]`'s script: a paged GET of
+ * the new `eligible-assignees` endpoint, option rendering with `textContent`,
+ * and the pick routed through the SAME `assign()` call as "assign to me" (no
+ * second write path, nothing copied from another screen). It replaces a
+ * disabled placeholder button. Margin 140 B, as above.
+ *
  * This gate sums EVERY emitted file, so it cannot see who loads what. The QR
  * encoder is a separate chunk (`enrolment-qr.*.js`, 6,405 B) fetched by a
  * dynamic `import()` only once `MFA_ENROLLMENT_REQUIRED` arrives: a normal
@@ -1410,8 +1419,12 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * Rebase note: `main` had moved to 393,025 B, so this branch's own raise
+ * (+1,261 B, written against 392,355 B) is stacked on it, giving
+ * 394,286 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 394_286;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
