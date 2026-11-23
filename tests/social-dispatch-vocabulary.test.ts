@@ -8,7 +8,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { facebookPagesAdapter } from "../src/modules/social-publishing/infrastructure/facebook-pages-adapter";
 import {
+  ADMITTED_ADAPTER_ERROR_CODES,
+  ADMITTED_EXTERNAL_POST_ID_PATTERN,
+  ADMITTED_EXTERNAL_POST_URL_PREFIX,
+  SOCIAL_DISPATCH_FAILURE_CODES,
+  SOCIAL_DISPATCH_PROVIDERS,
   SOCIAL_DISPATCH_ALLOWED_PHRASES,
   SOCIAL_DISPATCH_AUDIT_ACTIONS,
   SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS,
@@ -92,6 +98,54 @@ describe("social dispatch vocabulary (L1)", () => {
 
     for (const message of Object.values(SOCIAL_DISPATCH_AUDIT_MESSAGES)) {
       expect(DISPATCHER).not.toContain(message);
+    }
+  });
+
+  test("every failure-code literal the dispatcher writes is in the enumerated list (re-audit L1)", () => {
+    const literals = [...DISPATCHER.matchAll(/"([A-Z][A-Z0-9_]{2,63})"/g)].map(
+      (match) => match[1]!
+    );
+
+    expect(literals.length).toBeGreaterThan(10);
+
+    for (const code of literals) {
+      expect(SOCIAL_DISPATCH_FAILURE_CODES, code).toContain(code);
+    }
+  });
+
+  test("the admitted adapter's codes, post id pattern and post URL host are the ones the policies pin", () => {
+    expect([...facebookPagesAdapter.errorCodes].sort()).toEqual(
+      [...ADMITTED_ADAPTER_ERROR_CODES].sort()
+    );
+    expect(facebookPagesAdapter.externalPostIdPattern.source).toBe(
+      ADMITTED_EXTERNAL_POST_ID_PATTERN
+    );
+    expect(facebookPagesAdapter.postUrlHosts).toEqual([
+      new URL(ADMITTED_EXTERNAL_POST_URL_PREFIX).hostname
+    ]);
+    expect(SOCIAL_DISPATCH_PROVIDERS).toContain(facebookPagesAdapter.provider);
+  });
+
+  test("every failure-code list in sql/427 is exactly the enumerated list", () => {
+    for (const marker of [
+      "OR failure_code IN (",
+      "OR error_code IN (",
+      "OR (attributes ->> 'code') IN (",
+      "OR (attributes ->> 'failureCode') IN (",
+      "AND (payload ->> 'failureCode') IN ("
+    ]) {
+      const from = MIGRATION.indexOf(marker);
+
+      expect(from, marker).toBeGreaterThan(0);
+
+      const close = MIGRATION.indexOf(
+        ")",
+        MIGRATION.indexOf("(", from + marker.length - 1) + 1
+      );
+      const body = MIGRATION.slice(from + marker.length, close);
+      const listed = [...body.matchAll(/'([A-Z0-9_]+)'/g)].map((m) => m[1]!);
+
+      expect(listed, marker).toEqual([...SOCIAL_DISPATCH_FAILURE_CODES]);
     }
   });
 });

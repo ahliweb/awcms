@@ -1,0 +1,35 @@
+-- social_publishing -- session timeouts for the dedicated dispatch role (the
+-- re-audit of #1483, Low-2). Forward-only.
+--
+-- ## The gap
+--
+-- `awcms_social_report_credential_rejected` (sql/426) takes `FOR UPDATE` on the
+-- account row. A compromised dispatcher could call it inside a transaction and
+-- then hold that transaction open (idle, or in a long statement): an operator's
+-- disconnect or revoke of the same account, as the app role, then WAITS for the
+-- lock for as long as the dispatcher likes. The app's own statement timeout
+-- does not end the dispatcher's transaction. The role had no timeout of its own
+-- (`rolconfig` empty).
+--
+-- ## The fix
+--
+-- Two role-level settings, applied by the server at LOGIN of this role:
+--
+--   * `idle_in_transaction_session_timeout = 15s`: a transaction left idle
+--     ends the session;
+--   * `transaction_timeout = 30s` (PostgreSQL 17+): no transaction of the role,
+--     busy or idle, lives longer.
+--
+-- The dispatcher never needs more: every transaction it opens is a short claim,
+-- pre-send check or finalise step, and the provider call runs OUTSIDE any
+-- transaction (ADR-0157 section 4). A role-level setting applies only when a
+-- session logs in AS the role (`ALTER ROLE ... SET` is read at connection
+-- start, not on `SET ROLE`), which is exactly how the job connects
+-- (`assertConnectedAsDedicatedRole` requires session_user = the role).
+-- `security:readiness` pins both values exactly and refuses a per-database
+-- override that relaxes them.
+--
+-- No explicit BEGIN/COMMIT: the migration runner wraps each file.
+
+ALTER ROLE awcms_social_dispatch SET idle_in_transaction_session_timeout = '15s';
+ALTER ROLE awcms_social_dispatch SET transaction_timeout = '30s';

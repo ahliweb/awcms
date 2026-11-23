@@ -13,8 +13,15 @@
  * added here without a migration (or the reverse) fails readiness instead of
  * failing the dispatcher's finalise transaction in production.
  *
- * Pure: no I/O, no imports. Changing a value is a migration AND an edit here.
+ * Pure: no I/O, type-only imports. Changing a value is a migration AND an edit
+ * here.
+ *
+ * What a closed vocabulary does NOT remove (the re-audit of #1483): a role that
+ * may choose among valid values (which code, which attempt number, which valid
+ * post id) can still encode a few bits per row. The bound removes free text,
+ * not every covert channel; the residual is stated in the module README.
  */
+import type { PublisherUnavailableReason } from "../../_shared/ports/channel-account-port";
 
 /** Fixed, code-defined phrases: a provider body or a thrown message never reaches a row. */
 export const SOCIAL_DISPATCH_PHRASES = {
@@ -101,3 +108,115 @@ export const SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS: readonly string[] = [
   "failureCode",
   "accountDegraded"
 ];
+
+/**
+ * The six providers the social tables admit (sql/330). Closed, so a `provider`
+ * value in an audit row or an event payload cannot carry text.
+ */
+export const SOCIAL_DISPATCH_PROVIDERS: readonly string[] = [
+  "facebook",
+  "instagram",
+  "threads",
+  "tiktok",
+  "youtube",
+  "linkedin"
+];
+
+/** Every value of {@link PublisherUnavailableReason}; the compile-time check below keeps it exhaustive. */
+export const PUBLISHER_UNAVAILABLE_REASONS = [
+  "CHANNEL_ACCOUNTS_DISABLED",
+  "ACCOUNT_NOT_FOUND",
+  "NOT_A_WHATSAPP_SENDER",
+  "ACCOUNT_PENDING",
+  "ACCOUNT_DEGRADED",
+  "ACCOUNT_REVOKED",
+  "ACCOUNT_DISABLED",
+  "CONNECTION_NOT_ACTIVE",
+  "CONNECTION_EXPIRED",
+  "CAPABILITY_DENIED",
+  "RISK_ACKNOWLEDGEMENT_REQUIRED",
+  "PROVIDER_ADAPTER_DISABLED",
+  "CREDENTIAL_UNAVAILABLE",
+  "SECRET_STORE_UNAVAILABLE",
+  "CONTAINER_BINDING_INVALID",
+  "NOT_A_PUBLISHER"
+] as const satisfies readonly PublisherUnavailableReason[];
+
+type MissingReason = Exclude<
+  PublisherUnavailableReason,
+  (typeof PUBLISHER_UNAVAILABLE_REASONS)[number]
+>;
+/** Fails to compile when the port gains a reason this list does not name. */
+export const PUBLISHER_REASONS_ARE_EXHAUSTIVE: MissingReason extends never
+  ? true
+  : MissingReason = true;
+
+/** The codes the dispatcher itself decides (its own verdicts and the fallbacks of `sanitizeCode`). */
+const DISPATCHER_CODES = [
+  "ADAPTER_ERROR",
+  "CIRCUIT_OPEN",
+  "CREDENTIAL_UNAVAILABLE",
+  "HOLD_EXHAUSTED",
+  "INVALID_POST_ID",
+  "LEASE_EXPIRED_UNKNOWN",
+  "MEDIA_RIGHTS_REVOKED",
+  "MEDIA_UNAVAILABLE",
+  "NEEDS_REAUTH",
+  "OUTCOME_UNKNOWN",
+  "PROVIDER_ADAPTER_UNAVAILABLE",
+  "PROVIDER_TIMEOUT",
+  "RATE_LIMITED",
+  "REJECTED",
+  "RETRIES_EXHAUSTED",
+  "SOURCE_CHECK_UNAVAILABLE",
+  "SOURCE_RETRACTED"
+] as const;
+
+/**
+ * The error codes of every ADMITTED adapter (`SocialPublishAdapter.errorCodes`).
+ * Only Facebook today; a test holds this list equal to the adapter's own. A
+ * second connector (#1147) adds its codes here and in a migration.
+ */
+export const ADMITTED_ADAPTER_ERROR_CODES: readonly string[] = [
+  "FB_TOKEN_INVALID",
+  "FB_PERMISSION_DENIED",
+  "FB_RATE_LIMITED",
+  "FB_TEMPORARY_OUTAGE",
+  "FB_DUPLICATE_POST",
+  "FB_POLICY_BLOCK",
+  "FB_INVALID_PARAMETER",
+  "FB_MEDIA_REJECTED",
+  "FB_REQUEST_REJECTED",
+  "FB_UPSTREAM_UNKNOWN",
+  "FB_RESPONSE_UNREADABLE",
+  "FB_NETWORK_NOT_SENT",
+  "FB_ANSWER_LOST",
+  "FB_PAGE_ID_INVALID",
+  "FB_MEDIA_INVALID",
+  "FB_VARIANT_UNSUPPORTED"
+];
+
+/**
+ * Every failure code the role may write (`failure_code`, `error_code`, the
+ * audit `code`/`failureCode`, the `job.failed` event's `failureCode`): the
+ * dispatcher's own codes, the admitted adapters' codes, and `ACCOUNT_<reason>`
+ * / `HELD_<reason>` for every publisher reason. Sorted, deduplicated.
+ */
+export const SOCIAL_DISPATCH_FAILURE_CODES: readonly string[] = [
+  ...new Set([
+    ...DISPATCHER_CODES,
+    ...ADMITTED_ADAPTER_ERROR_CODES,
+    ...PUBLISHER_UNAVAILABLE_REASONS.map((reason) =>
+      `ACCOUNT_${reason}`.slice(0, 64)
+    ),
+    ...PUBLISHER_UNAVAILABLE_REASONS.map((reason) =>
+      `HELD_${reason}`.slice(0, 64)
+    )
+  ])
+].sort();
+
+/** The post id shape of the admitted adapters (Facebook: `<page>_<post>`). */
+export const ADMITTED_EXTERNAL_POST_ID_PATTERN = "^[0-9]{1,32}_[0-9]{1,32}$";
+
+/** The post URL the admitted adapter stores: exactly this prefix followed by the post id. */
+export const ADMITTED_EXTERNAL_POST_URL_PREFIX = "https://www.facebook.com/";
