@@ -608,7 +608,7 @@ async function collectTransitiveLatest(): Promise<
     HELD_BACK.filter((entry) => entry.transitive).map(async (entry) => {
       try {
         const body = (await fetchJson(
-          `https://registry.npmjs.org/${entry.packageName.replace("/", "%2F")}/latest`
+          `https://registry.npmjs.org/${encodeURIComponent(entry.packageName)}/latest`
         )) as { version?: unknown };
 
         result[entry.packageName] =
