@@ -6,7 +6,7 @@
  * missing from the `runtime` stage means the corresponding read silently
  * (or loudly) fails in every production container built from this file.
  *
- * The concrete incident this guards against: `omes-cms.ahlikoding.com`
+ * The concrete incident this guards against: a production deployment
  * shipped with the runtime image missing
  * `src/modules/omes-control/contracts/v1` (the vendored OMES contract
  * snapshot). `/admin/omes/arsitektur` rendered but its data never loaded

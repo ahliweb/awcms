@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:bb57653e12d31c932d02151e3a14307455aa5c5476d0f2b670056f26408a5ea0 -->
+<!-- i18n-source-hash: sha256:b05171fd9d783e14f644879e9b44c5e82b4ac42aec0490b6b7c0e7267d8b2af4 -->
 
 # AWCMS — Project State & Continuation
 
@@ -376,8 +376,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     sesi administrator, dan tombolnya akan jadi kontrol yang tak bisa dipakai browser
     mana pun — kegagalannya terbaca sebagai bug, bukan salah kategori.
 
-- **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
-  `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
+- **Dua environment ter-deploy nyata** — produksi `awcms.example.com`, staging
+  `awcms-staging.example.com` (Coolify, host yang sama, DB & secret terpisah). Staging
   ter-migrasi penuh (69 per 2026-07-26; repo kini memuat 90 migrasi — angka ini bergerak,
   verifikasi dengan `ls sql/`) dan berjalan sebagai role least-privilege terpisah. Rincian,
   termasuk jebakan "user Coolify itu superuser sehingga RLS inert", di
@@ -2559,7 +2559,7 @@ to the database.`
   PUTARAN CUTOVER di bawah ditutup dengan "yang tersisa pada #599 bukan kode —
   menjalankan job-nya butuh `.htaccess` legacy dan ekspor sitemap, yang tidak
   ada di kedua repo". Paruh pertamanya kini TIDAK berlaku lagi. Berkasnya ada di
-  `/home/data/dev_php/seputarborneo.com/.htaccess`, salinan kerja situs legacy
+  `<legacy-working-copy>/.htaccess`, salinan kerja situs legacy
   yang duduk BERSEBELAHAN dengan repo ini, dan membacanya menggerakkan #599
   tanpa menggerakkan satu baris kode aplikasi pun.
 
@@ -4359,7 +4359,7 @@ offsetSuffix)` bersama. **Salinannya dua puluh SATU, bukan dua puluh**: tiga lag
 
   ### P0 — sedang menyebabkan kehilangan senyap SEKARANG
   1. **31 dari 32 target job TIDAK PERNAH berjalan di produksi.** `crontab -l` di
-     `dinkes-prod` hanya memuat satu: `email:dispatch` tiap 5 menit. Ini BUKAN
+     host produksi hanya memuat satu: `email:dispatch` tiap 5 menit. Ini BUKAN
      pengulangan catatan "image produksi tak bisa menjalankan job" — mitigasi
      `run-job.sh` sudah ada dan bekerja; yang tidak ada adalah **jadwalnya**.
 
@@ -4387,14 +4387,14 @@ offsetSuffix)` bersama. **Salinannya dua puluh SATU, bukan dua puluh**: tiga lag
   3. **NOL backup terjadwal.** `scheduled_database_backups` Coolify kosong; tiap
      backup yang ada diambil tangan (yang terbaru: `awcms-pre-128-20260814`,
      diverifikasi `pg_restore -l`, 1.549 objek). Host ini SUDAH punya polanya
-     untuk `hermes`: backup harian + push ke maxio + verifikasi mingguan. Salin
+     untuk layanan lain: backup harian + push off-host + verifikasi mingguan. Salin
      pola itu untuk `awcms`, termasuk **uji restore**, karena backup yang tak
      pernah dipulihkan adalah dugaan, bukan cadangan.
 
   ### P1 — cacat yang KELUARANNYA sudah salah di produksi
   4. **`url.origin` aplikasi memakai skema `http` di situs `https`, dan itu
      BOCOR ke keluaran.** Terverifikasi: `curl https://…/blog/ahliweb/feed.xml`
-     mengembalikan `<link>http://awcms.ahlikoding.com/…</link>` untuk tiap entri.
+     mengembalikan `<link>http://awcms.example.com/…</link>` untuk tiap entri.
 
      > **KOREKSI (15 Agu 2026) — buktinya salah, dan angkanya juga.** Putaran ini
      > semula menyimpulkan bahwa canonical HTML "kebetulan benar (`https`) karena
@@ -4506,7 +4506,7 @@ must-revalidate` untuk browser. **Jangan** menyimpulkan cache mati dari
       terstruktur JSON, `setLogSink` tersedia sebagai titik ekstensi — tetapi
       tidak ada sink yang dikonfigurasi, jadi log berhenti di stdout container
       dan LENYAP saat tiap deploy mengganti container. Kirim keluar host (host
-      ini sudah melakukannya untuk `hermes`).
+      ini sudah melakukannya untuk layanan lain).
 
   15. **Tidak ada alarm laju-error, dan itu terbukti mahal.** Pengalih bahasa
       menjawab 403 untuk SETIAP pengguna selama berjam-jam dan tidak ada yang
@@ -4550,7 +4550,7 @@ must-revalidate` untuk browser. **Jangan** menyimpulkan cache mati dari
   semuanya terverifikasi:
 
   1. `awcms_tenant_domains` hanya punya SATU baris, dan itu host LAIN
-     (`coba.ahlikoding.com`), `is_primary = false`, `status =
+     (`coba.example.com`), `is_primary = false`, `status =
 pending_verification`.
   2. Maka `resolveTenantPrimaryHost` mengembalikan `null`, dan
      `sitemap.xml`/`feed.xml`/`rss.xml` **404 sesuai desain** (fail-closed, tak
@@ -4772,7 +4772,7 @@ Accept-Language` membatasi fan-out pada dua tetapi tak bisa melihat klik
 
   **Mitigasi yang dipasang hari ini (host, BUKAN di repo):** image kedua
   `awcms-jobs:<versi>` dibangun dari sumber yang sama (`scripts/` + `src/` +
-  `sql/`), plus `/home/admin1/awcms-jobs/run-job.sh` yang membaca env dari
+  `sql/`), plus `<jobs-dir>/run-job.sh` yang membaca env dari
   container app yang SEDANG berjalan (nama container berubah tiap deploy, jadi
   ia di-resolve bukan di-hardcode) dan menjalankan target apa pun di jaringan
   `coolify`. Cron pertama yang memakainya: `*/5` `email:dispatch`.
@@ -4787,7 +4787,7 @@ awcms-jobs, repository does not exist`. Jadi bukan hasil basi yang
   menyesatkan, melainkan cron yang mati keras — lebih berisik, dan itu
   keberuntungan.
 
-  Konteks build-nya (direktori biasa di `/home/admin1/awcms-jobs/`) selamat
+  Konteks build-nya (direktori biasa di `<jobs-dir>/`) selamat
   dari prune, jadi `run-job.sh` kini **membangun ulang image sendiri saat
   hilang** alih-alih bergantung pada seseorang yang ingat. Rebuild ~55 detik,
   dan cron `*/5` menyerapnya tanpa terlihat.
@@ -4799,7 +4799,7 @@ awcms-jobs, repository does not exist`. Jadi bukan hasil basi yang
   benar-benar diam-diam. Perbaikan yang benar adalah stage `jobs` di
   `Dockerfile.production` yang diterbitkan `release.yml` bersama image
   runtime, sehingga versi job dan versi app tidak BISA menyimpang. Sampai itu
-  ada, **segarkan konteks `/home/admin1/awcms-jobs/` setiap rilis** — langkah
+  ada, **segarkan konteks `<jobs-dir>/` setiap rilis** — langkah
   ini tertulis di skill `awcms-deploy`.
 
 - **PUTARAN 14 Agustus 2026 (ketiga puluh) — rilis v9.0.0, dan empat dokumen
@@ -5774,7 +5774,7 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
   [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md).
 
   **Repo ini punya tepat satu deployment hidup: production di
-  `awcms.ahlikoding.com`.** Tidak ada staging — bukan hanya "tidak punya
+  `awcms.example.com`.** Tidak ada staging — bukan hanya "tidak punya
   sendiri": profilnya pun sudah tidak ada, lihat dua paragraf berikutnya.
   Alasannya diberikan pemilik dan dituliskan utuh di ADR: repo ini **template**;
   deployment hidupnya menunjukkan dan memvalidasi template, bukan melayani
@@ -5863,11 +5863,11 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
   mode verify-only). Itu mitigasi, **bukan pengganti setara**.
 
   **Infrastruktur: SELESAI 11 Agustus 2026, v8.0.0 hidup di produksi.**
-  Diverifikasi, bukan diklaim: `https://awcms.ahlikoding.com/api/v1/health`
+  Diverifikasi, bukan diklaim: `https://awcms.example.com/api/v1/health`
   menjawab `moduleCount: 22` (v7.0.0 menjawab 21), `/` menjawab **200**
   (halaman landing, bukan 404 lagi), tag image container
   `1d9534f1717282440376263f8e18c8b812a8b997` = commit rilis `v8.0.0` persis, dan
-  `awcms-staging.ahlikoding.com` kini **503** karena tak ada lagi router yang
+  `awcms-staging.example.com` kini **503** karena tak ada lagi router yang
   menyebutnya. `awcms_app` diperiksa `rolsuper=f, rolbypassrls=f`, jadi FORCE RLS
   di 124 tabel benar-benar berlaku.
 
@@ -5891,7 +5891,7 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
 
   **Backup diambil dan DIVERIFIKASI lebih dulu, sebelum apa pun dihapus:**
 
-  - berkas `/home/admin1/backups/awcms/awcms-preprod-20260811-090628.dump`
+  - berkas `<backup-dir>/awcms-preprod-20260811-090628.dump`
   - sha256 `08f677c5f13d7386c77dd41841090b60f95159550bdab3e90b7bfb6353a0bd68`
   - **di-restore-drill ke database scratch** (`awcms_tenants` = 1 baris terbaca
     dari hasil restore) — bukan sekadar `pg_dump` yang exit 0.
@@ -5903,7 +5903,7 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
   melepaskan latihan pra-produksi untuk migrasi, sehingga backup yang TERBUKTI
   bisa di-restore adalah satu-satunya jaring yang tersisa — dan jaring yang
   belum pernah ditarik bukan jaring. Ia juga satu-satunya salinan data yang
-  pernah dilayani `awcms.ahlikoding.com` selama periode putaran keenam,
+  pernah dilayani `awcms.example.com` selama periode putaran keenam,
   ketika domain produksi berjalan di atas database staging.
 
   **Jebakan yang dibuat sendiri saat membongkar, dan cara ia ketahuan.**
@@ -5919,8 +5919,8 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
 
   **DUA sisa staging yang TIDAK bisa/tidak boleh dihapus, dan alasannya:**
 
-  1. **Record DNS `awcms-staging.ahlikoding.com` masih ada.** Token Cloudflare di
-     host hanya ber-scope zona `dinkes.top`, jadi zona `ahlikoding.com` di luar
+  1. **Record DNS `awcms-staging.example.com` masih ada.** Token Cloudflare di
+     host hanya ber-scope zona DNS lain, jadi zona produksi di luar
      jangkauan. Hostname-nya sendiri sudah mati (503, tak ada router). Hapus
      record-nya secara manual untuk menuntaskan.
   2. **Role Postgres `awcms_staging` sengaja DIPERTAHANKAN.** Ia adalah
@@ -5932,7 +5932,7 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
 
   **Titik-lanjut.** Verifikasi produksi selalu kepada
   `applications`/`standalone_postgresqls` Coolify, **bukan kepada `curl`** —
-  pelajaran putaran keenam yang menyesatkan berjam-jam: `https://awcms.ahlikoding.com`
+  pelajaran putaran keenam yang menyesatkan berjam-jam: `https://awcms.example.com`
   menjawab 200 dan sehat sepanjang waktu produksi tidak ada. Job
   `sign-attest-publish` v8.0.0 menunggu approval maintainer di environment
   `release`; image-nya sendiri sudah terbit karena job `build` mendahului
@@ -5945,10 +5945,10 @@ origin/main` pada PR bertumpuk akan konflik — yang benar
 
   **Temuan terbesar tidak ada di repo ini.** Environment **produksi awcms sudah
   tidak ada**: tabel `applications` Coolify tak punya baris untuk
-  `got4etcblum9kowdv4mrixqo` (bukan soft-delete — barisnya hilang), dan
+  `<app-uuid>` (bukan soft-delete — barisnya hilang), dan
   `standalone_postgresqls` tak punya database produksi, hanya `awcms_staging`.
   Sementara itu `awcms-staging-varnish` memasang rule Traefik
-  ``Host(`awcms-staging.ahlikoding.com`) || Host(`awcms.ahlikoding.com`)`` —
+  ``Host(`awcms-staging.example.com`) || Host(`awcms.example.com`)`` —
   jadi **domain produksi dilayani staging, memakai database staging**
   (`APP_ENV=staging`). Yang berjalan adalah commit rilis v7.0.0 (`ea25fff6`),
   **90 commit di belakang HEAD**; image v7.0.1 ter-build tapi tak pernah
@@ -7368,10 +7368,10 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
     **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
 - **Environment ter-deploy — SELESAI, tiga fase setara.** Produksi
-  `awcms.ahlikoding.com`, staging `awcms-staging.ahlikoding.com`, dan
+  `awcms.example.com`, staging `awcms-staging.example.com`, dan
   development lokal kini identik: migrasi **70**, 118 tabel, 197 permission, RLS
   `ENABLE`+`FORCE` 109/118, runtime sebagai `awcms_app` (bukan superuser), owner
-  `admin@ahlikoding.com` dengan role `owner` 197/197 (angka-angka itu potret saat
+  `admin@example.com` dengan role `owner` 197/197 (angka-angka itu potret saat
   fase disetarakan; per 5 Agustus 2026 repo memuat **90** migrasi dan **203**
   permission — verifikasi dengan `ls sql/` dan katalog, jangan kutip dari sini), dan
   `PUBLIC_DEFAULT_TENANT_*` di-pin per fase. Isolasi dibuktikan sebagai

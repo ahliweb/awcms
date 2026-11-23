@@ -374,8 +374,8 @@ pioneered directly here after the ADR-0047 freeze.)
     an administrator session, and a button for them would be a control no browser
     could use — its failure would read as a bug, not as a category error.
 
-- **Two really deployed environments** — production `awcms.ahlikoding.com`, staging
-  `awcms-staging.ahlikoding.com` (Coolify, the same host, separate DB & secrets). Staging is
+- **Two really deployed environments** — production `awcms.example.com`, staging
+  `awcms-staging.example.com` (Coolify, the same host, separate DB & secrets). Staging is
   fully migrated (69 as of 2026-07-26; the repo now holds 90 migrations — this number moves,
   verify it with `ls sql/`) and runs as a separate least-privilege role. Details,
   including the "the Coolify user is a superuser so RLS is inert" trap, are in
@@ -2510,7 +2510,7 @@ to the database.`
   The CUTOVER ROUND below closed with "what remains on #599 is not code —
   running the jobs needs the legacy `.htaccess` and a sitemap export, which
   exist in neither repo". The first half of that is no longer true. The file is
-  at `/home/data/dev_php/seputarborneo.com/.htaccess`, a working copy of the
+  at `<legacy-working-copy>/.htaccess`, a working copy of the
   legacy site sitting beside this repo, and reading it moves #599 without
   moving a line of application code.
 
@@ -4257,7 +4257,7 @@ busy)` clause, gated on the permanently-zero counter, could never print.
 
   ### P0 — causing silent loss RIGHT NOW
   1. **31 of the 32 job targets NEVER run in production.** `crontab -l` on
-     `dinkes-prod` holds exactly one: `email:dispatch` every 5 minutes. This is NOT
+     the production host holds exactly one: `email:dispatch` every 5 minutes. This is NOT
      a repeat of the "the production image cannot run jobs" note — the
      `run-job.sh` mitigation exists and works; what is missing is **the schedule**.
 
@@ -4285,14 +4285,14 @@ busy)` clause, gated on the permanently-zero counter, could never print.
   3. **ZERO scheduled backups.** Coolify's `scheduled_database_backups` is empty; every
      backup that exists was taken by hand (the most recent: `awcms-pre-128-20260814`,
      verified with `pg_restore -l`, 1,549 objects). This host ALREADY has the pattern
-     for `hermes`: a daily backup + push to maxio + weekly verification. Copy
+     for another service: a daily backup + off-host push + weekly verification. Copy
      that pattern for `awcms`, including a **restore test**, because a backup that has
      never been restored is a guess, not a spare.
 
   ### P1 — defects whose OUTPUT is already wrong in production
   4. **The application's `url.origin` uses the `http` scheme on an `https` site, and that
      LEAKS into the output.** Verified: `curl https://…/blog/ahliweb/feed.xml`
-     returns `<link>http://awcms.ahlikoding.com/…</link>` for every entry.
+     returns `<link>http://awcms.example.com/…</link>` for every entry.
 
      > **CORRECTION (15 Aug 2026) — the evidence was wrong, and so was the number.** This round
      > originally concluded that the HTML canonical was "accidentally right (`https`) because
@@ -4404,7 +4404,7 @@ must-revalidate` for the browser. **Do not** conclude the cache is dead from
       structured JSON, `setLogSink` is available as an extension point — but
       no sink is configured, so the logs stop at the container's stdout
       and VANISH when each deploy replaces the container. Ship them off the host (this host
-      already does that for `hermes`).
+      already does that for another service).
 
   15. **There is no error-rate alarm, and that has proven expensive.** The language switcher
       answered 403 for EVERY user for hours and nothing told
@@ -4448,7 +4448,7 @@ must-revalidate` for the browser. **Do not** conclude the cache is dead from
   all verified:
 
   1. `awcms_tenant_domains` has only ONE row, and it is a DIFFERENT host
-     (`coba.ahlikoding.com`), `is_primary = false`, `status =
+     (`coba.example.com`), `is_primary = false`, `status =
 pending_verification`.
   2. So `resolveTenantPrimaryHost` returns `null`, and
      `sitemap.xml`/`feed.xml`/`rss.xml` **404 by design** (fail-closed, never
@@ -4657,7 +4657,7 @@ Accept-Language` bounds the fan-out at two but cannot see an explicit click,
 
   **The mitigation installed today (on the host, NOT in the repo):** a second image
   `awcms-jobs:<version>` built from the same source (`scripts/` + `src/` +
-  `sql/`), plus `/home/admin1/awcms-jobs/run-job.sh`, which reads the env from the
+  `sql/`), plus `<jobs-dir>/run-job.sh`, which reads the env from the
   app container that is CURRENTLY running (the container name changes with every deploy, so
   it is resolved, not hardcoded) and runs any target on the
   `coolify` network. The first cron entry to use it: `*/5` `email:dispatch`.
@@ -4672,7 +4672,7 @@ awcms-jobs, repository does not exist`. So it is not a misleading stale
   result but a cron that dies hard — noisier, and that is
   luck.
 
-  Its build context (an ordinary directory at `/home/admin1/awcms-jobs/`) survives
+  Its build context (an ordinary directory at `<jobs-dir>/`) survives
   the prune, so `run-job.sh` now **rebuilds the image itself when it is
   missing** instead of depending on somebody remembering. The rebuild takes ~55 seconds,
   and the `*/5` cron absorbs it invisibly.
@@ -4684,7 +4684,7 @@ awcms-jobs, repository does not exist`. So it is not a misleading stale
   genuinely silently. The correct fix is a `jobs` stage in
   `Dockerfile.production` published by `release.yml` alongside the runtime
   image, so the job version and the app version CANNOT diverge. Until that
-  exists, **refresh the `/home/admin1/awcms-jobs/` context on every release** — this
+  exists, **refresh the `<jobs-dir>/` context on every release** — this
   step is written down in the `awcms-deploy` skill.
 
 - **ROUND of 14 August 2026 (the thirtieth) — release v9.0.0, and four documents
@@ -5659,7 +5659,7 @@ origin/main` on a stacked PR will conflict — the correct one is
   [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md).
 
   **This repo has exactly one live deployment: production at
-  `awcms.ahlikoding.com`.** There is no staging — and not merely "we do not have one
+  `awcms.example.com`.** There is no staging — and not merely "we do not have one
   ourselves": the profile itself no longer exists, see the next two paragraphs.
   The reason was given by the owner and written out in full in the ADR: this repo is a **template**;
   its live deployment demonstrates and validates the template, it does not serve a
@@ -5748,11 +5748,11 @@ origin/main` on a stacked PR will conflict — the correct one is
   in verify-only mode). That is a mitigation, **not an equivalent replacement**.
 
   **Infrastructure: DONE 11 August 2026, v8.0.0 is live in production.**
-  Verified, not claimed: `https://awcms.ahlikoding.com/api/v1/health`
+  Verified, not claimed: `https://awcms.example.com/api/v1/health`
   answers `moduleCount: 22` (v7.0.0 answered 21), `/` answers **200**
   (the landing page, no longer a 404), the container image tag
   `1d9534f1717282440376263f8e18c8b812a8b997` = exactly the `v8.0.0` release commit, and
-  `awcms-staging.ahlikoding.com` is now a **503** because no router names it
+  `awcms-staging.example.com` is now a **503** because no router names it
   any more. `awcms_app` was checked as `rolsuper=f, rolbypassrls=f`, so the FORCE RLS
   on 124 tables genuinely applies.
 
@@ -5776,7 +5776,7 @@ origin/main` on a stacked PR will conflict — the correct one is
 
   **A backup was taken and VERIFIED first, before anything was deleted:**
 
-  - file `/home/admin1/backups/awcms/awcms-preprod-20260811-090628.dump`
+  - file `<backup-dir>/awcms-preprod-20260811-090628.dump`
   - sha256 `08f677c5f13d7386c77dd41841090b60f95159550bdab3e90b7bfb6353a0bd68`
   - **restore-drilled into a scratch database** (`awcms_tenants` = 1 row read back
     from the restored result) — not merely a `pg_dump` that exited 0.
@@ -5788,7 +5788,7 @@ origin/main` on a stacked PR will conflict — the correct one is
   gives up the pre-production rehearsal for migrations, so a backup PROVEN
   to be restorable is the only net that remains — and a net that
   has never been pulled is not a net. It is also the only copy of the data
-  `awcms.ahlikoding.com` ever served during the sixth round's period,
+  `awcms.example.com` ever served during the sixth round's period,
   when the production domain was running on top of the staging database.
 
   **A self-inflicted trap during teardown, and how it was noticed.**
@@ -5804,8 +5804,8 @@ origin/main` on a stacked PR will conflict — the correct one is
 
   **TWO staging remnants that CANNOT/MUST NOT be deleted, and why:**
 
-  1. **The DNS record `awcms-staging.ahlikoding.com` still exists.** The Cloudflare token on the
-     host is scoped only to the `dinkes.top` zone, so the `ahlikoding.com` zone is out of
+  1. **The DNS record `awcms-staging.example.com` still exists.** The Cloudflare token on the
+     host is scoped only to a different DNS zone, so the production zone is out of
      reach. The hostname itself is already dead (503, no router). Delete
      the record manually to finish the job.
   2. **The Postgres role `awcms_staging` is deliberately KEPT.** It is the
@@ -5817,7 +5817,7 @@ origin/main` on a stacked PR will conflict — the correct one is
 
   **Continuation point.** Always verify production against Coolify's
   `applications`/`standalone_postgresqls`, **not against `curl`** —
-  the sixth round's lesson that misled for hours: `https://awcms.ahlikoding.com`
+  the sixth round's lesson that misled for hours: `https://awcms.example.com`
   answered 200 and looked healthy the whole time production did not exist. The v8.0.0
   `sign-attest-publish` job is waiting for maintainer approval in the
   `release` environment; its image is already published because the `build` job precedes
@@ -5830,10 +5830,10 @@ origin/main` on a stacked PR will conflict — the correct one is
 
   **The biggest finding is not in this repo.** The awcms **production environment no
   longer exists**: Coolify's `applications` table has no row for
-  `got4etcblum9kowdv4mrixqo` (not a soft-delete — the row is gone), and
+  `<app-uuid>` (not a soft-delete — the row is gone), and
   `standalone_postgresqls` has no production database, only `awcms_staging`.
   Meanwhile `awcms-staging-varnish` installs the Traefik rule
-  ``Host(`awcms-staging.ahlikoding.com`) || Host(`awcms.ahlikoding.com`)`` —
+  ``Host(`awcms-staging.example.com`) || Host(`awcms.example.com`)`` —
   so **the production domain is served by staging, using the staging database**
   (`APP_ENV=staging`). What is running is the v7.0.0 release commit (`ea25fff6`),
   **90 commits behind HEAD**; the v7.0.1 image was built but never
@@ -7253,10 +7253,10 @@ NULL`, so a public search for pages **always** returns zero rows — on top of t
     **NOT YET:** `newsletter`, `social-publishing` (which activates the publish hook that is
     currently a no-op in `blog-content`).
 - **Deployed environments — DONE, three equalised phases.** Production
-  `awcms.ahlikoding.com`, staging `awcms-staging.ahlikoding.com`, and
+  `awcms.example.com`, staging `awcms-staging.example.com`, and
   local development are now identical: migration **70**, 118 tables, 197 permissions, RLS
   `ENABLE`+`FORCE` on 109/118, the runtime as `awcms_app` (not a superuser), owner
-  `admin@ahlikoding.com` with the `owner` role at 197/197 (those numbers are a snapshot from when
+  `admin@example.com` with the `owner` role at 197/197 (those numbers are a snapshot from when
   the phases were equalised; as of 5 August 2026 the repo holds **90** migrations and **203**
   permissions — verify with `ls sql/` and the catalogue, do not quote from here), and
   `PUBLIC_DEFAULT_TENANT_*` pinned per phase. Isolation was proven as

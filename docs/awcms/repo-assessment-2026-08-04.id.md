@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](repo-assessment-2026-08-04.md)
 
-<!-- i18n-source-hash: sha256:b5931840cc17a0ceea4ba1558be1401804196278ea4f78af5b5943b804a8730b -->
+<!-- i18n-source-hash: sha256:e766dfc6794633388281b08734618c65ffe1d8cf0639f6173f26b2135d2739ca -->
 
 # Asesmen repo `awcms` — 4 Agustus 2026
 
@@ -496,7 +496,7 @@ statis tanpa sesi. Biayanya satu baris dan satu asersi.
 > `content-encoding: gzip`:
 >
 > ```
-> $ curl -sSI -H 'Accept-Encoding: gzip, br' https://awcms.ahlikoding.com/api/v1/health
+> $ curl -sSI -H 'Accept-Encoding: gzip, br' https://awcms.example.com/api/v1/health
 > content-encoding: gzip
 > server: cloudflare
 > ```
@@ -569,7 +569,7 @@ mana pun, karena ia hanya muncul ketika ketiga lapisan berjalan bersama.
 Pada satu permintaan yang sama ke staging:
 
 ```
-$ curl -sSI https://awcms-staging.ahlikoding.com/robots.txt
+$ curl -sSI https://awcms-staging.example.com/robots.txt
 cache-control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
 x-edge-cache-skip: surface_not_declared     <- aplikasi: Varnish tak meng-cache ini
 age: 182

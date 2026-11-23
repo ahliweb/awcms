@@ -57,7 +57,7 @@ shift
 IMAGE="${AWCMS_JOBS_IMAGE:-}"
 REGISTRY_IMAGE="${AWCMS_JOBS_REGISTRY:-ghcr.io/ahliweb/awcms-jobs}"
 TAG="${AWCMS_JOBS_TAG:-latest}"
-CONTEXT="${AWCMS_JOBS_CONTEXT:-/home/admin1/awcms-jobs}"
+CONTEXT="${AWCMS_JOBS_CONTEXT:-${HOME}/awcms-jobs}"
 APP_FILTER="${AWCMS_APP_FILTER:-n3gg3qudm91kqdy62znmyxuq}"
 NETWORK="${AWCMS_DOCKER_NETWORK:-coolify}"
 

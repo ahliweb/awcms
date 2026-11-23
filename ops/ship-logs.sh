@@ -10,7 +10,7 @@
 # are debugging are deleted by the deploy that fixed it, which is the worst
 # possible moment to lose them.
 #
-# In-container rotation (`max-size`/`max-file`, as `hermes` uses) does not help:
+# In-container rotation (`max-size`/`max-file`) does not help:
 # it bounds a file that is discarded whole.
 #
 # WHAT THIS DOES
@@ -27,11 +27,11 @@
 # answering it quietly. `setLogSink` in the app remains the seam for a real SIEM.
 #
 # Install:
-#   scp ops/ship-logs.sh dinkes-prod:/home/admin1/awcms-jobs/ && chmod +x
-#   crontab:  * * * * * /home/admin1/awcms-jobs/ship-logs.sh >> …/ship-logs.log 2>&1
+#   scp ops/ship-logs.sh <prod-host>:<jobs-dir>/ && chmod +x
+#   crontab:  * * * * * <jobs-dir>/ship-logs.sh >> …/ship-logs.log 2>&1
 set -uo pipefail
 
-DEST="${AWCMS_LOG_DEST:-/home/admin1/logs/awcms}"
+DEST="${AWCMS_LOG_DEST:-${HOME}/logs/awcms}"
 APP_FILTER="${AWCMS_APP_FILTER:-n3gg3qudm91kqdy62znmyxuq}"
 KEEP_DAYS="${AWCMS_LOG_KEEP_DAYS:-30}"
 MARKER="${DEST}/.current-container"

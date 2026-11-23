@@ -71,7 +71,7 @@ misconfigurations that report success:
 2. **Compression comes from an OUTER layer, and this repo does not check it.**
    The repo compresses nothing (zero in the application, zero `do_gzip` in
    `infra/varnish/default.vcl`, zero Traefik `compress` middleware). The
-   `ahlikoding.com` deployment still compresses because **Cloudflare** sits in
+   the production deployment still compresses because **Cloudflare** sits in
    front — the deployed topology is `Cloudflare (proxied) -> Traefik :443 -> varnish
 -> app`, written in [`environments.md`](../../../docs/awcms/environments.md)
    §Edge cache. **A deployment of this template outside a compressing CDN gets no
@@ -109,11 +109,11 @@ bun run db:pool:health    # pool healthy against the target DB
 > `error: Script not found` there; there is no in-process scheduler as a second
 > path. The running deployment uses a second image `awcms-jobs:<version>`
 > (built from `scripts/` + `src/` + `sql/`) invoked by
-> `/home/admin1/awcms-jobs/run-job.sh <target>` from cron. **Coolify DELETES
+> `<jobs-dir>/run-job.sh <target>` from cron. **Coolify DELETES
 > that image every time the app is deployed** (it prunes images not used by any
 > container) — which is why `run-job.sh` rebuilds it itself when missing
 > (~55 seconds). What is NOT automatic: the build context
-> `/home/admin1/awcms-jobs/` is a SNAPSHOT of the source, so **refresh it every
+> `<jobs-dir>/` is a SNAPSHOT of the source, so **refresh it every
 > release** — the auto-rebuild fixes deletion, not staleness, and a job version
 > left behind will run OLD code against a NEW schema silently. Details +
 > remaining debt: `docs/PROJECT_STATE.md` §4.

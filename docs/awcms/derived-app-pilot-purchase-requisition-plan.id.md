@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](derived-app-pilot-purchase-requisition-plan.md)
 
-<!-- i18n-source-hash: sha256:46bedc29d3f4214919744b7bbad33ec27c3c003dfe1c4f7b84919ddf3d5661ff -->
+<!-- i18n-source-hash: sha256:0a878979bba1070ae4dfc6a20dfdb762ebe19294c87113bed33f2e14bb290f4d -->
 
 # Rencana Pilot Turunan #187 — Purchase Requisition (`awcms-erp-pilot`), Increment 1
 
@@ -245,7 +245,7 @@ maturity promotion.
 ### Fase A — Repo turunan (vendor)
 
 1. Buat repo GitHub **`ahliweb/awcms-erp-pilot`** (private) + checkout lokal
-   (mis. `/home/data/dev_bun/awcms-erp-pilot`).
+   (mis. `<erp-pilot-checkout>`).
 2. Vendor base awcms v5.1.1: salin tree (git snapshot bersih, tanpa `.git` base),
    init git baru, `bun install`. Rename `package.json` name → `awcms-erp-pilot`
    (version 0.1.0). Pertahankan semua gate/skills/CI/docker.

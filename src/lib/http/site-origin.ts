@@ -10,8 +10,8 @@
  * this repo read `X-Forwarded-Proto`, so nothing corrected it, and the wrong
  * scheme LEAKED into output. Verified in production, not inferred:
  *
- *     curl https://awcms.ahlikoding.com/blog/ahliweb/feed.xml
- *     → <link>http://awcms.ahlikoding.com/…</link>   for every entry
+ *     curl https://awcms.example.com/blog/example/feed.xml
+ *     → <link>http://awcms.example.com/…</link>   for every entry
  *
  * It also produced the canonical/`og:url` pair that looked like evidence of two
  * independent URL builders and was not: both come from ONE variable, both leave
@@ -38,7 +38,7 @@
  *
  * 2. **`APP_URL`'s scheme.** `APP_URL` is REQUIRED (`scripts/validate-env.ts`)
  *    and is the operator's own statement of how the site is reached. It is the
- *    load-bearing fallback: production has `APP_URL=https://awcms.ahlikoding.com`
+ *    load-bearing fallback: production has `APP_URL=https://awcms.example.com`
  *    and does NOT set `PUBLIC_TRUST_PROXY`, so this branch — not the header one
  *    — is what actually corrects the live defect. A fix that only worked with
  *    proxy trust enabled would have shipped and changed nothing.

@@ -492,7 +492,7 @@ is one line and one assertion.
 > return `content-encoding: gzip`:
 >
 > ```
-> $ curl -sSI -H 'Accept-Encoding: gzip, br' https://awcms.ahlikoding.com/api/v1/health
+> $ curl -sSI -H 'Accept-Encoding: gzip, br' https://awcms.example.com/api/v1/health
 > content-encoding: gzip
 > server: cloudflare
 > ```
@@ -563,7 +563,7 @@ code, because it only appears when all three layers run together.
 On one and the same request to staging:
 
 ```
-$ curl -sSI https://awcms-staging.ahlikoding.com/robots.txt
+$ curl -sSI https://awcms-staging.example.com/robots.txt
 cache-control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
 x-edge-cache-skip: surface_not_declared     <- application: Varnish does not cache this
 age: 182

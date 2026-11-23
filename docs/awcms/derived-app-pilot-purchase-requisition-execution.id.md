@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](derived-app-pilot-purchase-requisition-execution.md)
 
-<!-- i18n-source-hash: sha256:602069856f9fee5cc20b77ef702d71bf3b37f22329d58d026e8fe4404e8118a0 -->
+<!-- i18n-source-hash: sha256:e73ec08f490590d660ff69e3fac0254b9e7dff5bbfd505cbab28411886e15029 -->
 
 # Runbook Eksekusi Increment-1 — Pilot Turunan #187 (`awcms-erp-pilot`, Purchase Requisition)
 
@@ -173,7 +173,7 @@ Temuan yang mengubah rencana level-atas — hasil verifikasi ke kode:
 ## 3. Fase A — Scaffold repo turunan (vendor)
 
 1. Buat repo GitHub **`ahliweb/awcms-erp-pilot`** (private) + checkout lokal
-   (mis. `/home/data/dev_bun/awcms-erp-pilot`).
+   (mis. `<erp-pilot-checkout>`).
 2. **Vendor base v5.1.1**: salin snapshot tree base bersih (tanpa `.git` base),
    `git init` baru, `bun install`. Ubah `package.json` `name` → `awcms-erp-pilot`,
    `version` `0.1.0`. Pertahankan semua gate/skills/CI/Dockerfile.production.

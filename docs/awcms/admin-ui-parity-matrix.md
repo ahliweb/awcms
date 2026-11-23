@@ -45,8 +45,7 @@ against each row below:**
 ## 2. Validated baseline
 
 Independently re-verified on this branch against
-`/home/data/dev_bun/awcms-one` (local checkout of `ahliweb/awcms-one`,
-`apps/cms` embeds this repo's admin surface):
+a local checkout of the consumer product repo (`apps/cms` embeds this repo's admin surface):
 
 | File                                                           | Result                                                                                                                                                                                                                                                  |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

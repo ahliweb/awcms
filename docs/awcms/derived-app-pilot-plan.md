@@ -106,7 +106,7 @@ base/dependency, not 38 issues from scratch.
 ## PRD/SRS outline
 
 The full PRD/SRS **already exists** at
-`/home/data/dev_bun/awpos/docs/awpos/02_prd_detail_per_modul.md` (PRD) and
+`docs/awpos/02_prd_detail_per_modul.md` (PRD) and
 `03_srs_detail_per_modul.md` (SRS) — this document does not duplicate it,
 it only summarises for pilot-decision context:
 

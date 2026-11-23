@@ -315,7 +315,7 @@ const NOT_A_PROVIDER: Record<string, readonly string[]> = {
     "a.co",
     "abc123.r2.cloudflarestorage.com",
     "app.example.com.evil.test",
-    "awcms.ahlikoding.com",
+    "awcms.example.com",
     "cms.example",
     "evil.com",
     "evil.test",

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:1779a2b141e28da756526ab70e5fb0ef67a4e459b0b2b8191f0017fba04ae0b9 -->
+<!-- i18n-source-hash: sha256:811c148e80bb1bcb87517ad4727e5cbfb72183f64ea564125989cc9a4fa4d9af -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 
@@ -27,9 +27,9 @@
 
 ## Satu environment
 
-| Environment    | Domain                 | `APP_ENV`    | Catatan                                                                         |
-| -------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- |
-| **Production** | `awcms.ahlikoding.com` | `production` | Satu-satunya deployment hidup repo ini. Data nyata, integrasi keluar **AKTIF**. |
+| Environment    | Domain              | `APP_ENV`    | Catatan                                                                         |
+| -------------- | ------------------- | ------------ | ------------------------------------------------------------------------------- |
+| **Production** | `awcms.example.com` | `production` | Satu-satunya deployment hidup repo ini. Data nyata, integrasi keluar **AKTIF**. |
 
 Development bukan baris kedua yang hilang dari tabel itu. Ia
 `http://localhost:4321` dengan `APP_ENV=development`, hidup di workstation, dan
@@ -53,7 +53,7 @@ yang sudah **diverifikasi bisa di-restore** sebelum tiap migrasi diterapkan
 pengganti setara.
 
 Deployment-nya berjalan di host Docker yang sama dengan aplikasi lain
-(`192.42.84.46`), dikelola Coolify, di belakang Traefik yang memegang
+(`<server-ip>`), dikelola Coolify, di belakang Traefik yang memegang
 `:80`/`:443` dan menerbitkan TLS lewat resolver `letsencrypt`.
 
 > **Aturan yang tetap berlaku bagi siapa pun yang menjalankan lebih dari satu
@@ -74,17 +74,17 @@ host, 11 Agustus 2026:
 - **Tidak ada database produksi** di `standalone_postgresqls`. Satu-satunya yang
   ada adalah `awcms_staging`.
 - Container `awcms-staging-varnish` memasang rule Traefik yang mencocokkan
-  **kedua** host: ``Host(`awcms-staging.ahlikoding.com`) ||
-Host(`awcms.ahlikoding.com`)``. Domain produksi karena itu dilayani
+  **kedua** host: ``Host(`awcms-staging.example.com`) ||
+Host(`awcms.example.com`)``. Domain produksi karena itu dilayani
   **deployment staging, di atas database staging**, dengan `APP_ENV=staging`.
 
 Dari situ satu kalimat yang layak dihafal: **respons 200 di
-`awcms.ahlikoding.com` bukan bukti produksi hidup.** Sepanjang keadaan di atas
+`awcms.example.com` bukan bukti produksi hidup.** Sepanjang keadaan di atas
 domain itu menjawab 200, sehat, tanpa keluhan. Verifikasi kepada
 `applications`/`standalone_postgresqls` — bukan kepada `curl`.
 
 Akibatnya untuk membaca dokumen ini hari ini: **setiap pengukuran langsung
-terhadap `awcms.ahlikoding.com` mengukur deployment `awcms-staging-*` itu.**
+terhadap `awcms.example.com` mengukur deployment `awcms-staging-*` itu.**
 Bagian bertanda "produksi" di bawah menggambarkan bentuk yang ditegakkan
 kembali, beserta bukti dari saat ia terakhir benar-benar berjalan — bukan
 pengamatan hari ini. Rule Traefik dua-host itu wajib dicabut ketika produksi
@@ -151,7 +151,7 @@ deploy pertama tiap environment.
 | ------------------------- | ------------------------- | ------------------------- |
 | `tenant_code`             | `development`             | `ahliweb`                 |
 | `PUBLIC_DEFAULT_TENANT_*` | pin ke tenant lokal       | pin ke tenant `ahliweb`   |
-| Login owner               | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    |
+| Login owner               | `admin@example.com`       | `admin@example.com`       |
 | Password owner            | **sendiri**               | **sendiri**               |
 | Role                      | `owner` (system, 197/197) | `owner` (system, 197/197) |
 
@@ -356,7 +356,7 @@ login rusak dengan `redirect_uri_mismatch`, bukan sekadar tautan yang jelek.
 
 ```bash
 APP_ENV=production
-APP_URL=https://awcms.ahlikoding.com
+APP_URL=https://awcms.example.com
 ```
 
 Instalasi turunan yang menjalankan environment kedua mendaftarkan **satu
@@ -365,9 +365,9 @@ environment itu dipakai — bukan sesudah alurnya gagal.
 
 ## DNS
 
-Zona `ahlikoding.com` ada di Cloudflare (NS `dilbert`/`katja`).
-`awcms.ahlikoding.com` menunjuk ke `192.42.84.46`. Record
-`awcms-staging.ahlikoding.com` masih ada dan menunjuk host yang sama — sisa
+Zona `example.com` ada di Cloudflare.
+`awcms.example.com` menunjuk ke `<server-ip>`. Record
+`awcms-staging.example.com` masih ada dan menunjuk host yang sama — sisa
 topologi lama, dan pada 11 Agustus 2026 justru hostname itulah yang
 deployment-nya melayani kedua domain (§Keadaan yang dikoreksi). Record itu ikut
 dibongkar bersama sumber daya bernama sama; ia tidak menandakan sebuah profil.
@@ -376,8 +376,7 @@ Setelah record ada, TLS terbit otomatis lewat Traefik — tidak ada konfigurasi
 lain. Sejak 2026-07-25 resolver `letsencrypt` di Traefik pakai **tantangan
 DNS-01 via Cloudflare** (bukan HTTP-01 lagi), jadi status proxy record
 (DNS-only vs proxied/orange cloud) **tidak memengaruhi** penerbitan/renewal
-sertifikat — keduanya jalan sama saja. Detail perubahan dan alasannya ada di
-`docs/12-cloudflare-proxy-dns01.md` pada repo `serv-dinkesdocker`.
+sertifikat — keduanya jalan sama saja.
 
 ### Subdomain tenant (asumsi — konfirmasi sebelum dipakai)
 
@@ -387,15 +386,15 @@ yang belum ditetapkan pemilik repo. Yang paling koheren dengan domain di atas:
 
 ```bash
 TENANT_DOMAIN_DNS_PROVIDER=cloudflare
-TENANT_DOMAIN_PLATFORM_ROOT_DOMAIN=awcms.ahlikoding.com
-TENANT_DOMAIN_SERVING_TARGET=awcms.ahlikoding.com
+TENANT_DOMAIN_PLATFORM_ROOT_DOMAIN=awcms.example.com
+TENANT_DOMAIN_SERVING_TARGET=awcms.example.com
 TENANT_DOMAIN_SERVING_RECORD_TYPE=CNAME
 ```
 
-→ subdomain tenant berbentuk `<tenant>.awcms.ahlikoding.com`.
+→ subdomain tenant berbentuk `<tenant>.awcms.example.com`.
 
 Ini **asumsi yang ditulis eksplisit**, bukan keputusan yang sudah diambil.
-Alternatifnya adalah root `ahlikoding.com` (memberi `<tenant>.ahlikoding.com`),
+Alternatifnya adalah root `example.com` (memberi `<tenant>.example.com`),
 yang lebih pendek tetapi menaruh namespace tenant di zona yang dipakai bersama
 aplikasi lain di host itu. Adapter **menolak** hostname di luar root yang
 dikonfigurasi, jadi memilih root yang salah bukan lubang keamanan — hanya
@@ -446,7 +445,7 @@ sendiri), nol middleware `compress` Traefik yang dideklarasikan repo. Yang
 memancar dari sini hanyalah `Vary: Accept-Encoding` pada respons yang bisa
 di-cache — sebuah janji tentang caching, bukan tindakan mengompresi.
 
-Dibuktikan probe 4 Agustus 2026: **kedua** hostname `ahlikoding.com` yang
+Dibuktikan probe 4 Agustus 2026: **kedua** hostname `example.com` yang
 menjawab saat itu mengirim `content-encoding: gzip`, karena keduanya proxied
 Cloudflare. Jadi klaim "tidak ada kompresi di mana pun" salah untuk apa yang
 pembaca terima, dan benar untuk apa yang repo ini miliki.
@@ -494,11 +493,11 @@ cron host sebagai container one-shot — `Dockerfile.production` tidak mengirim
 (masalah dan pola yang sama dengan migrasi di bawah):
 
 ```
-* * * * * /home/admin1/awcms-prod-varnish/purge-runner.sh
+* * * * * <varnish-dir>/purge-runner.sh
 ```
 
 > **Per 11 Agustus 2026 container Varnish yang berada di depan
-> `awcms.ahlikoding.com` adalah `awcms-staging-varnish`**, bukan milik produksi —
+> `awcms.example.com` adalah `awcms-staging-varnish`**, bukan milik produksi —
 > lihat §Keadaan yang dikoreksi. Container itu termasuk yang dibongkar; cron dan
 > endpoint purge di atas adalah bentuk yang ditegakkan kembali bersama
 > produksinya.
@@ -534,7 +533,7 @@ Setiap bug di lapisan ini melapor sukses sambil tidak bekerja. Yang sah hanya:
 | baris antrean                     | `done attempts=1` |
 
 > **Peringatan — tabel di atas mengukur Varnish, dan Varnish BUKAN tier yang
-> menjawab pembaca.** Host `ahlikoding.com` proxied Cloudflare, jadi tier
+> menjawab pembaca.** Host `example.com` proxied Cloudflare, jadi tier
 > penjawab pembaca adalah **Cloudflare** — dibuktikan probe 4 Agustus 2026
 > (`cf-cache-status: HIT` plus header `age:`). Baca `cf-cache-status`/`age`
 > juga, bukan hanya `X-Cache`; dan `MISS` pasca-purge di Varnish **tidak
@@ -664,13 +663,13 @@ policy yang menyaring dan policy yang inert.
 
 ## Status nyata (11 Agustus 2026)
 
-| Hal                            | Status                                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| App Coolify produksi           | ❌ baris `got4etcblum9kowdv4mrixqo` **tidak ada** di `applications` — bukan soft-delete                                |
-| Database produksi              | ❌ tidak ada di `standalone_postgresqls`; satu-satunya yang ada `awcms_staging` (sedang dibongkar)                     |
-| `https://awcms.ahlikoding.com` | ⚠️ menjawab **200** — tetapi dilayani `awcms-staging-varnish` (rule Traefik dua host) di atas database `awcms_staging` |
-| Development lokal              | ✅ paritas dev↔prod ditegakkan sejak 2026-07-26 (§Development lokal); angkanya diukur ulang, bukan dikutip             |
-| Halaman akar `/`               | ✅ halaman landing informasional (ADR-0083); catch-all `[...path].ts` tetap 404 bersih untuk path tak dikenal          |
+| Hal                         | Status                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| App Coolify produksi        | ❌ baris `got4etcblum9kowdv4mrixqo` **tidak ada** di `applications` — bukan soft-delete                                |
+| Database produksi           | ❌ tidak ada di `standalone_postgresqls`; satu-satunya yang ada `awcms_staging` (sedang dibongkar)                     |
+| `https://awcms.example.com` | ⚠️ menjawab **200** — tetapi dilayani `awcms-staging-varnish` (rule Traefik dua host) di atas database `awcms_staging` |
+| Development lokal           | ✅ paritas dev↔prod ditegakkan sejak 2026-07-26 (§Development lokal); angkanya diukur ulang, bukan dikutip             |
+| Halaman akar `/`            | ✅ halaman landing informasional (ADR-0083); catch-all `[...path].ts` tetap 404 bersih untuk path tak dikenal          |
 
 Pengukuran berikut berasal dari topologi dua-environment yang **sudah tidak
 ada** dan dipertahankan sebagai bukti historis, bukan status: mode `auto`
@@ -683,7 +682,7 @@ isolasi RLS `0/1/0` terbukti di bawah `awcms_app` pada tanggal yang sama.
 - **Tegakkan kembali app + database produksi**, lalu **bongkar app, database,
   dan Varnish bernama `awcms-staging-*`** beserta rule Traefik dua-host yang
   dipasangnya (pekerjaan infrastruktur, di luar repo ini). Sampai keduanya
-  selesai, `awcms.ahlikoding.com` melayani database `awcms_staging` — bukan
+  selesai, `awcms.example.com` melayani database `awcms_staging` — bukan
   data produksi.
 - Setelah database produksi baru berdiri: jalankan `bun run config:validate` +
   `bun run security:readiness`, buktikan `0/1/0` sebagai `awcms_app`, dan jalankan

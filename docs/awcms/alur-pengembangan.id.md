@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:69a7ada7963f0d7c602222e8ac95e7d5b1d4dfc77aa0aa1a650a14525abf6527 -->
+<!-- i18n-source-hash: sha256:1d2cebc7b1abcd57f456838f2e5a553ed19f2f6fe247197736485f99dc9fa9a6 -->
 
 # Alur pengembangan AWCMS
 
@@ -495,7 +495,7 @@ Baca langkah ini bersama alur generik, tanpa meregangkan salah satunya:
   men-supersede ADR-0083. Ia tidak pernah dilakukan dengan mengedit dokumen
   proses, menambah `ModuleDeploymentProfile`, atau mendirikan environment diam-diam.
 - **Yang tidak berlaku:** tingkatan staging untuk **reference deployment repo
-  ini** (satu-satunya deployment produksinya, `awcms.ahlikoding.com`).
+  ini** (satu-satunya deployment produksinya).
 - **Yang TIDAK dilarang:** repo konsumen atau turunan menjalankan environment
   pra-produksinya sendiri. ADR-0083 §Konsekuensi menyatakan instalasi semacam itu
   memakai `development`, atau deployment `production` kedua yang terikat kontrak

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](absorb-awcms-mini-backbone-roadmap.md)
 
-<!-- i18n-source-hash: sha256:86c78d9a3d1c1376ec8ccdd6939563e31316cc459af9ba46acd781a2d719df99 -->
+<!-- i18n-source-hash: sha256:3781af0547a13743cb92953248a28e44b3bc3ab5cbd80276e53a474e80767931 -->
 
 # Roadmap Penyerapan Tulang Punggung awcms-mini → awcms
 
@@ -21,7 +21,7 @@
 > [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
 > (modul domain hidup **langsung** di `src/modules/`, tanpa repo turunan).
 >
-> `awcms-mini` (`/home/data/dev_react/awcms-mini`) boleh dibaca sebagai referensi
+> `awcms-mini` (`<mini-checkout>`) boleh dibaca sebagai referensi
 > sejarah. Ia **bukan** "repo sumber port": kapabilitas yang diinginkan dibangun di
 > sini lewat ADR admission-nya sendiri (ADR-0055 §1).
 

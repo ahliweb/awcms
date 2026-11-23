@@ -258,7 +258,7 @@ maturity promotion.
 ### Phase A — Derived repo (vendor)
 
 1. Create the GitHub repo **`ahliweb/awcms-erp-pilot`** (private) + a local
-   checkout (e.g. `/home/data/dev_bun/awcms-erp-pilot`).
+   checkout (e.g. `<erp-pilot-checkout>`).
 2. Vendor base awcms v5.1.1: copy the tree (a clean git snapshot, without the
    base `.git`), init a new git, `bun install`. Rename the `package.json` name →
    `awcms-erp-pilot` (version 0.1.0). Keep every gate/skill/CI/docker.

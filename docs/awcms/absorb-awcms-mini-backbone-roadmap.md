@@ -19,7 +19,7 @@
 > [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
 > (domain modules live **directly** in `src/modules/`, with no derived repo).
 >
-> `awcms-mini` (`/home/data/dev_react/awcms-mini`) may be read as a historical
+> `awcms-mini` (`<mini-checkout>`) may be read as a historical
 > reference. It is **not** a "port source repo": a desired capability is built here
 > through its own admission ADR (ADR-0055 §1).
 
