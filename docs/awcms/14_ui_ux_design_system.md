@@ -130,6 +130,25 @@ Rules:
 - **No layout shift** — animate only `opacity`/`transform`/colour/`box-shadow`, never `width`/`height`/`top`/`left`.
 - **The entrance of main content that is already visible at SSR should be `transform`-only (e.g. `translateY`), not from `opacity: 0`.** An axe-core scan can read half-transparent text mid-animation as a contrast violation if it happens to scan before the animation finishes. The login card (`login.astro`) uses `@keyframes auth-card-rise` (translateY-only) as the canonical example. An `opacity:0` fade (e.g. the `.fade-in-up` utility) is still fine for elements revealed **after** load (post-action banners/dialogs) or for secondary elements — avoid it only for the main text content of auth/entry screens.
 
+### Deployment brand override (`brand/tokens.override.json`)
+
+A deployment can change its brand colours without editing `src/styles/tokens.css`, which stays upstream-owned. Create the optional file `brand/tokens.override.json` (Issue #1355):
+
+```json
+{
+  "light": { "color-primary": "#1d4ed8", "color-primary-strong": "#1e3a8a" },
+  "dark": { "color-primary": "#93c5fd" }
+}
+```
+
+- Only the families `--color-primary*`, `--color-info*` and `--color-sidebar*` can be overridden, and only tokens that already exist in `tokens.css`. An unknown or non-allow-listed token, a value that is not a 6-digit hex colour, or any other top-level key fails the build and `design:token-contrast:check`, listing every problem.
+- Both schemes are optional. `light` writes into the `:root` block; `dark` writes into `:root[data-theme="dark"]`. A token you give only under `light` keeps its shipped dark value when the shipped dark block restates it, so give both when the brand needs it.
+- The override is appended to `tokens.css` at build time (a Vite transform in `astro.config.mjs`), so it ships inside the same external stylesheet: no inline style, no CSP change, no extra request, admin and public pages alike.
+- `bun run design:token-contrast:check` measures the EFFECTIVE values (shipped plus override), so a brand that drops a registered pair below WCAG 2.1 AA fails `bun run check`. The pair registry is unchanged.
+- With no file, the output is identical to a build without the feature.
+- The override is deployment data, not upstream code growth: `build:asset-budget:check` does not count the bytes it adds (it discounts the exact length of the generated override CSS from the stylesheet that carries it), so using it never requires editing the budget. The override size is bounded by the allow-list and hex-only values; non-override growth is still caught.
+- Out of scope: new tokens, per-tenant runtime theming (that is the `theming` module), typography and spacing.
+
 ## Component library
 
 The base components are planned to live in `src/components/ui`, used across personas and across ERP modules.

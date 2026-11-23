@@ -50,6 +50,15 @@
  */
 import { readFile } from "node:fs/promises";
 
+import { safeErrorDetail } from "../src/lib/logging/error-sanitizer";
+import {
+  BRAND_OVERRIDE_FILE,
+  BrandOverrideError,
+  parseBrandOverride,
+  resolveEffectiveThemes,
+  type BrandOverride
+} from "../src/lib/ui/brand-token-override";
+
 const TOKENS_FILE = "src/styles/tokens.css";
 
 /** WCAG 2.1 AA for normal-size text (1.4.3). */
@@ -367,62 +376,6 @@ function contrastRatio(foreground: string, background: string): number {
  */
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-/**
- * Extracts `--name: value;` declarations from ONE block, located by its opening
- * selector. Deliberately not a CSS parser: the file is ours, its shape is
- * stable, and a dependency-free reader is the whole point of a Bun-only repo
- * that ships two runtime packages.
- */
-function readBlock(source: string, selector: string): Map<string, string> {
-  /*
-   * Anchored to the START OF A LINE, which is not a detail.
-   *
-   * A plain `indexOf(':root[data-theme="dark"]')` matched the mention of that
-   * selector inside this file's own header COMMENT, 200 lines above the rule.
-   * The block it then read was the comment's tail, which declares no tokens —
-   * so the dark theme silently inherited every light value and the gate
-   * reported light-theme numbers under a "dark" label. It was green for the
-   * wrong reason in one direction and red for the wrong reason in the other.
-   */
-  const anchored = new RegExp(
-    `^${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-    "m"
-  );
-  const found = anchored.exec(source);
-
-  if (found === null) {
-    throw new Error(
-      `${TOKENS_FILE}: block \`${selector}\` not found at the start of a line. This gate reads that block by name; if it was renamed, update this script rather than deleting the assertion.`
-    );
-  }
-
-  const start = found.index;
-  const open = source.indexOf("{", start);
-  const close = source.indexOf("\n}", open);
-
-  if (open === -1 || close === -1) {
-    throw new Error(`${TOKENS_FILE}: could not delimit block \`${selector}\`.`);
-  }
-
-  const body = source.slice(open + 1, close);
-  const declarations = new Map<string, string>();
-
-  for (const match of body.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi)) {
-    const [, name, value] = match;
-
-    // Both groups are non-optional in the pattern, so this never trips at
-    // runtime; it is here because `noUncheckedIndexedAccess` types them as
-    // possibly-undefined and a `!` would assert rather than handle.
-    if (name === undefined || value === undefined) {
-      continue;
-    }
-
-    declarations.set(name, value.trim());
-  }
-
-  return declarations;
-}
-
 type Theme = { readonly name: string; readonly tokens: Map<string, string> };
 
 function resolve(
@@ -454,17 +407,36 @@ function resolve(
 async function main(): Promise<void> {
   const source = await readFile(TOKENS_FILE, "utf8");
 
-  const light = readBlock(source, ":root {");
-  const darkOverrides = readBlock(source, ':root[data-theme="dark"]');
+  /*
+   * Effective values: shipped tokens with the deployment brand override
+   * (#1355) layered on as the cascade does it. No override file = exactly the
+   * shipped values, so the report is unchanged. `--brand=<file>` points at
+   * another file (used by the tests); an explicit path must exist.
+   */
+  const explicit = process.argv
+    .find((arg) => arg.startsWith("--brand="))
+    ?.slice("--brand=".length);
+  const brandFile = explicit ?? BRAND_OVERRIDE_FILE;
+  let override: BrandOverride | null = null;
 
-  // The dark block is an OVERRIDE layer, exactly as the cascade applies it: a
-  // token the dark block does not restate keeps its light value. Measuring the
-  // dark block alone would silently skip every inherited token.
-  const dark = new Map(light);
+  if (explicit !== undefined || (await Bun.file(brandFile).exists())) {
+    try {
+      override = parseBrandOverride(
+        JSON.parse(await readFile(brandFile, "utf8")),
+        source
+      );
+    } catch (error) {
+      const detail =
+        error instanceof BrandOverrideError
+          ? error.message
+          : `${brandFile}: ${safeErrorDetail(error)}`;
 
-  for (const [name, value] of darkOverrides) {
-    dark.set(name, value);
+      console.error(`design:token-contrast:check FAILED — ${detail}`);
+      process.exit(1);
+    }
   }
+
+  const { light, dark } = resolveEffectiveThemes(source, override);
 
   const themes: readonly Theme[] = [
     { name: "light", tokens: light },

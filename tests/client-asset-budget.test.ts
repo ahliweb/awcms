@@ -19,6 +19,7 @@ import path from "node:path";
 import {
   APP_BUDGET_BYTES,
   classifyAsset,
+  discountBrandOverride,
   evaluateBudget,
   formatFailure,
   measureClientAssets,
@@ -427,5 +428,60 @@ describe("the real budget constants and registry", () => {
     expect(
       Object.values(PUBLIC_ASSET_AUDIENCE).filter((a) => a === "reader").length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("brand override discount (#1355)", () => {
+  const tokens = Bun.file("src/styles/tokens.css").text();
+
+  async function fullOverrideBytes(): Promise<number> {
+    const {
+      BRAND_OVERRIDE_FAMILIES,
+      parseBrandOverride,
+      renderBrandOverrideCss,
+      readTokenBlock
+    } = await import("../src/lib/ui/brand-token-override");
+    const source = await tokens;
+    const names = [...readTokenBlock(source, ":root {").keys()].filter((n) =>
+      BRAND_OVERRIDE_FAMILIES.some((f) => n === f || n.startsWith(`${f}-`))
+    );
+    const all = Object.fromEntries(names.map((n) => [n, "#abcdef"]));
+    const css = renderBrandOverrideCss(
+      parseBrandOverride({ light: all, dark: all }, source)
+    );
+
+    return Buffer.byteLength(css);
+  }
+
+  test("the override is bounded: every allow-listed token in both schemes stays small", async () => {
+    expect(await fullOverrideBytes()).toBeLessThan(2_500);
+  });
+
+  test("a full override does not fail the app budget, but non-override growth still does", async () => {
+    const overrideBytes = await fullOverrideBytes();
+    const carrier = "_astro/motion.x.css";
+    const at = (bytes: number) => ({
+      totalBytes: bytes,
+      files: [{ path: carrier, bytes }]
+    });
+    const budget = {
+      ...BUDGET,
+      appBudgetBytes: 1_000,
+      perFileCssBudgetBytes: 1_000_000
+    };
+    const run = (bytes: number, discount: number) =>
+      evaluateBudget(
+        discountBrandOverride(at(bytes), new Set([carrier]), discount),
+        budget,
+        {}
+      );
+
+    // exactly at budget before the override: passes with the override added
+    expect(run(1_000 + overrideBytes, overrideBytes).overApp).toBe(false);
+    // one non-override byte over: still caught
+    expect(run(1_001 + overrideBytes, overrideBytes).overApp).toBe(true);
+    // no override: identical behaviour
+    expect(run(1_001, 0).overApp).toBe(true);
+    expect(run(1_000, 0).overApp).toBe(false);
   });
 });

@@ -1,5 +1,45 @@
 import { defineConfig } from "astro/config";
 import node from "@astrojs/node";
+import { existsSync, readFileSync } from "node:fs";
+import {
+  BRAND_OVERRIDE_FILE,
+  applyBrandOverrideToTokensCss,
+  parseBrandOverride
+} from "./src/lib/ui/brand-token-override.ts";
+
+// Deployment brand override (#1355): optional `brand/tokens.override.json`
+// is appended to `src/styles/tokens.css` itself, so it ships inside the same
+// external stylesheet (CSP untouched). No file = source returned unchanged.
+// An invalid file throws and fails the build with every problem listed.
+function brandTokens() {
+  const tokensPath = "/src/styles/tokens.css";
+  let override = null;
+
+  return {
+    name: "awcms-brand-tokens",
+    enforce: "pre",
+    buildStart() {
+      override = null;
+      if (!existsSync(BRAND_OVERRIDE_FILE)) return;
+      override = parseBrandOverride(
+        JSON.parse(readFileSync(BRAND_OVERRIDE_FILE, "utf8")),
+        readFileSync(`.${tokensPath}`, "utf8")
+      );
+      this.addWatchFile(
+        new URL(BRAND_OVERRIDE_FILE, `file://${process.cwd()}/`).pathname
+      );
+    },
+    transform(code, id) {
+      if (
+        override === null ||
+        id.split("?")[0].endsWith(tokensPath) === false
+      ) {
+        return null;
+      }
+      return { code: applyBrandOverrideToTokensCss(code, override), map: null };
+    }
+  };
+}
 
 // SSR di atas Bun via adapter @astrojs/node (standalone) — pengecualian
 // Bun-only yang tersanksi (ADR-0002; docs/awcms/10_template_kode_coding_standard.md
@@ -38,5 +78,6 @@ export default defineConfig({
   site: "http://localhost:4321",
   build: {
     inlineStylesheets: "never"
-  }
+  },
+  vite: { plugins: [brandTokens()] }
 });
