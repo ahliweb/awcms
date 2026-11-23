@@ -22,21 +22,20 @@
  * caller's tenant-scoped transaction (RLS `FORCE`), so another tenant's account
  * and an unknown id are one answer: `ACCOUNT_NOT_FOUND`.
  */
-import {
-  PUBLISH_CREDENTIAL_REJECTED_REASON,
-  type ChannelAccountPort,
-  type ChannelEmailAccountDirectoryPort,
-  type ChannelEmailSenderPort,
-  type EmailAccountSummary,
-  type ChannelPublisherHealthPort,
-  type ChannelPublisherPort,
-  type EmailSenderUnavailableReason,
-  type PublisherUnavailableReason,
-  type ResolveEmailSenderResult,
-  type ResolvePublisherResult,
-  type ResolveWhatsappSenderResult,
-  type SenderUnavailableReason,
-  type WhatsappSenderProvider
+import type {
+  ChannelAccountPort,
+  ChannelEmailAccountDirectoryPort,
+  ChannelEmailSenderPort,
+  EmailAccountSummary,
+  ChannelPublisherHealthPort,
+  ChannelPublisherPort,
+  EmailSenderUnavailableReason,
+  PublisherUnavailableReason,
+  ResolveEmailSenderResult,
+  ResolvePublisherResult,
+  ResolveWhatsappSenderResult,
+  SenderUnavailableReason,
+  WhatsappSenderProvider
 } from "../../_shared/ports/channel-account-port";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import {
@@ -574,12 +573,16 @@ export function createChannelAccountPortAdapter(
     /**
      * Issue #1146: the provider refused a publisher's credential. The same
      * transition `recordAccountHealth` makes for a `failing` report (connected
-     * -> degraded, a fixed reason, the latest health row), written here with the
-     * few columns the social dispatcher's role holds (`sql/373`) instead of
-     * through `fetchAccountRecord`, which reads columns that role is not granted
-     * (the display name among them). Its RESTRICTIVE policies refuse anything
-     * else: only a live social account, only `connected` -> `degraded`, only a
-     * `failing` health row.
+     * -> degraded, a fixed reason, the latest health row).
+     *
+     * The #1145 credential-path review (HIGH): the write is ONE call of the
+     * fixed-body SECURITY DEFINER function `awcms_social_report_credential_rejected`
+     * (`sql/426`). The dispatcher's role holds no UPDATE on the accounts and no
+     * write on the health table any more: with a column grant it could set
+     * `version = 2147483647` and make the account impossible to disconnect or
+     * revoke. The function writes only constants (`failing`, the fixed reason,
+     * `now()`, `version + 1` on a real `connected` -> `degraded` step) for a
+     * live Facebook Page of the transaction tenant.
      */
     async reportPublishCredentialRejected(tx, input) {
       const accounts = (await tx`
@@ -596,29 +599,17 @@ export function createChannelAccountPortAdapter(
         return { recorded: false };
       }
 
-      await tx`
-        INSERT INTO awcms_channel_account_health
-          (tenant_id, account_id, state, reason_code, checked_at)
-        VALUES (${input.tenantId}, ${account.id}, 'failing',
-                ${PUBLISH_CREDENTIAL_REJECTED_REASON}, now())
-        ON CONFLICT (tenant_id, account_id) DO UPDATE
-        SET state = EXCLUDED.state, reason_code = EXCLUDED.reason_code,
-            checked_at = EXCLUDED.checked_at, updated_at = now()
-      `;
-      const degraded = (await tx`
-        UPDATE awcms_channel_accounts
-        SET status = 'degraded',
-            status_reason = ${PUBLISH_CREDENTIAL_REJECTED_REASON},
-            updated_at = now(), version = version + 1
-        WHERE tenant_id = ${input.tenantId} AND id = ${account.id}
-          AND status = 'connected' AND deleted_at IS NULL
-      `) as unknown[] & { count?: number };
+      const reported = (await tx`
+        SELECT awcms_social_report_credential_rejected(
+          ${input.tenantId}::uuid, ${account.id}::uuid
+        ) AS code
+      `) as { code: string }[];
 
       // The #1271 audit, L5: `recorded` says whether THIS call moved the
-      // account to `degraded` (one row updated), not merely that a health row
-      // was written. An account already degraded, revoked or disabled answers
-      // `false`, and the audit row's `accountDegraded` says the same.
-      return { recorded: (degraded.count ?? 0) === 1 };
+      // account to `degraded`, not merely that a health row was written. An
+      // account already degraded, revoked or disabled answers `false`
+      // (`UNCHANGED`), and the audit row's `accountDegraded` says the same.
+      return { recorded: reported[0]?.code === "DEGRADED" };
     }
   };
 }

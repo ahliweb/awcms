@@ -1,0 +1,103 @@
+/**
+ * The CLOSED vocabulary of free-text values the social dispatcher writes as
+ * `awcms_social_dispatch` (the #1145 credential-path review, L1).
+ *
+ * A column grant says WHICH columns the role may write, not WHAT VALUES. Before
+ * `sql/427` the role could write anything up to 300 characters into
+ * `awcms_social_publish_jobs.last_error` and
+ * `awcms_social_publish_attempts.error_message`, and any message and any
+ * attributes into its own audit rows, so a compromised dispatcher could copy a
+ * decrypted token into a row the app role, backups and exports all read. The
+ * RESTRICTIVE policies of `sql/427` now accept only the values listed here, and
+ * `security:readiness` builds its exact pins from these same lists: a phrase
+ * added here without a migration (or the reverse) fails readiness instead of
+ * failing the dispatcher's finalise transaction in production.
+ *
+ * Pure: no I/O, no imports. Changing a value is a migration AND an edit here.
+ */
+
+/** Fixed, code-defined phrases: a provider body or a thrown message never reaches a row. */
+export const SOCIAL_DISPATCH_PHRASES = {
+  PUBLISHED: "Published.",
+  PROVIDER_ADAPTER_UNAVAILABLE: "No adapter is registered for this provider.",
+  ADAPTER_ERROR: "The provider adapter failed unexpectedly.",
+  PROVIDER_TIMEOUT: "The provider did not answer in time.",
+  INVALID_POST_ID:
+    "The provider reported a post this adapter cannot identify: the post may exist. An operator must check before it is sent again.",
+  UNKNOWN_OUTCOME:
+    "The outcome is unknown: the post may already exist. An operator must check before it is sent again.",
+  CIRCUIT_OPEN: "The provider was failing; the attempt was not made.",
+  RETRIES_EXHAUSTED: "The retry budget is spent.",
+  HOLD_EXHAUSTED: "The account stayed unavailable for too long.",
+  NEEDS_REAUTH: "The account must be re-authorised.",
+  REJECTED: "The provider refused this content.",
+  SOURCE_RETRACTED:
+    "The source article is no longer published; nothing was sent.",
+  MEDIA_UNAVAILABLE:
+    "The media object is no longer available; nothing was sent.",
+  MEDIA_RIGHTS_REVOKED:
+    "The media object's rights no longer clear it; nothing was sent.",
+  SOURCE_CHECK_UNAVAILABLE:
+    "Whether the source may still be published could not be checked; nothing was sent."
+} as const satisfies Record<string, string>;
+
+const ACCOUNT_PHRASE = "The account cannot publish.";
+const HELD_PHRASE = "Waiting for the account to be usable.";
+const FALLBACK_PHRASE = "The attempt did not succeed.";
+
+/** The phrase stored for a failure code. Never echoes the code or any adapter text. */
+export function phraseFor(code: string): string {
+  if (Object.hasOwn(SOCIAL_DISPATCH_PHRASES, code)) {
+    return SOCIAL_DISPATCH_PHRASES[
+      code as keyof typeof SOCIAL_DISPATCH_PHRASES
+    ];
+  }
+  if (code.startsWith("ACCOUNT_")) return ACCOUNT_PHRASE;
+  if (code.startsWith("HELD_")) return HELD_PHRASE;
+
+  return FALLBACK_PHRASE;
+}
+
+/** Every value `phraseFor` can return: what `last_error` and `error_message` may hold when the role writes them. */
+export const SOCIAL_DISPATCH_ALLOWED_PHRASES: readonly string[] = [
+  ...Object.values(SOCIAL_DISPATCH_PHRASES),
+  ACCOUNT_PHRASE,
+  HELD_PHRASE,
+  FALLBACK_PHRASE
+];
+
+/** The audit messages of the dispatcher, keyed by where they are written. */
+export const SOCIAL_DISPATCH_AUDIT_MESSAGES = {
+  LEASE_LOST:
+    "A social publish job lost its lease while in flight; its outcome is unknown and it waits for an operator.",
+  ACCOUNT_UNAVAILABLE:
+    "A social publish job failed because its account cannot publish.",
+  PUBLISHED: "A social publish job was accepted by the provider.",
+  OUTCOME_UNKNOWN:
+    "A social publish job's outcome is unknown; it waits for an operator and will not be retried automatically.",
+  SOURCE_WITHDRAWN:
+    "A social publish job was stopped before sending: its source can no longer be published.",
+  FAILED: "A social publish job failed."
+} as const satisfies Record<string, string>;
+
+/** The three audit actions the dispatcher writes. */
+export const SOCIAL_DISPATCH_AUDIT_ACTIONS: readonly string[] = [
+  "social_publishing.job.published",
+  "social_publishing.job.failed",
+  "social_publishing.job.outcome_unknown"
+];
+
+/**
+ * The only attribute keys a dispatcher audit row may carry, each with its value
+ * shape (enforced by `sql/427`): two uuids, a provider key, an attempt number,
+ * two failure codes and a boolean. No key can hold free text.
+ */
+export const SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS: readonly string[] = [
+  "publicationId",
+  "accountId",
+  "provider",
+  "attemptNo",
+  "code",
+  "failureCode",
+  "accountDegraded"
+];

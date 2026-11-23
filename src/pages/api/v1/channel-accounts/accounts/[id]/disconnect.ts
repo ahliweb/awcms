@@ -21,9 +21,12 @@ type Prepared = { id: string; idempotencyKey: string };
  * account becomes `revoked`, its OWN stored credential is erased (hard delete),
  * and its webhook subscriptions are revoked. Effective on the next use: every
  * capability check reads the status, so nothing sends or publishes as this
- * account again. It does not call the provider (revoking at the provider is the
- * connector's job) and it does not touch a shared connection (revoke the
- * connection for that). High-risk: audited at `warning`, `Idempotency-Key`
+ * account again. When it was the LAST live account on its OAuth connection, the
+ * connection is revoked too and its token ciphertexts deleted
+ * (`connectionRevoked`; the #1145 credential-path review, MEDIUM-4); a
+ * connection still serving another account is left alone (revoke the
+ * connection for that). It does not call the provider (revoking at the provider
+ * is the connector's job). High-risk: audited at `warning`, `Idempotency-Key`
  * required.
  */
 export const POST = defineTenantRoute<Prepared>({
@@ -82,15 +85,25 @@ export const POST = defineTenantRoute<Prepared>({
           resourceType: "channel_account",
           resourceId: prepared.id,
           severity: "warning",
-          message: "Channel account disconnected; stored credential erased.",
-          attributes: { credentialErased: result.credentialErased }
+          // The #1145 credential-path review, MEDIUM-4: the message no longer
+          // claims an erasure it did not make. What was erased is in the
+          // attributes: the account's own credential and, when it was the last
+          // live account on its OAuth connection, the connection's grant.
+          message: result.connectionRevoked
+            ? "Channel account disconnected; its own credential and its connection's grant were erased."
+            : "Channel account disconnected.",
+          attributes: {
+            credentialErased: result.credentialErased,
+            connectionRevoked: result.connectionRevoked
+          }
         });
 
         return {
           status: 200,
           body: {
             account: result.account,
-            credentialErased: result.credentialErased
+            credentialErased: result.credentialErased,
+            connectionRevoked: result.connectionRevoked
           }
         };
       }

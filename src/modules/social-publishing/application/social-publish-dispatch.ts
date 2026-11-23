@@ -97,6 +97,11 @@ import type {
 } from "../domain/social-publish-adapter";
 import type { MediaSnapshot } from "../domain/social-publish-content";
 import {
+  SOCIAL_DISPATCH_AUDIT_MESSAGES,
+  SOCIAL_DISPATCH_PHRASES,
+  phraseFor
+} from "../domain/social-dispatch-vocabulary";
+import {
   acceptExternalPostId,
   acceptExternalPostUrl
 } from "../domain/social-publish-post-reference";
@@ -236,30 +241,7 @@ function zero(): DispatchSocialPublishResult {
   };
 }
 
-/** Fixed, code-defined phrases: a provider body or a thrown message never reaches a row. */
-const PHRASES: Record<string, string> = {
-  PUBLISHED: "Published.",
-  PROVIDER_ADAPTER_UNAVAILABLE: "No adapter is registered for this provider.",
-  ADAPTER_ERROR: "The provider adapter failed unexpectedly.",
-  PROVIDER_TIMEOUT: "The provider did not answer in time.",
-  INVALID_POST_ID:
-    "The provider reported a post this adapter cannot identify: the post may exist. An operator must check before it is sent again.",
-  UNKNOWN_OUTCOME:
-    "The outcome is unknown: the post may already exist. An operator must check before it is sent again.",
-  CIRCUIT_OPEN: "The provider was failing; the attempt was not made.",
-  RETRIES_EXHAUSTED: "The retry budget is spent.",
-  HOLD_EXHAUSTED: "The account stayed unavailable for too long.",
-  NEEDS_REAUTH: "The account must be re-authorised.",
-  REJECTED: "The provider refused this content.",
-  SOURCE_RETRACTED:
-    "The source article is no longer published; nothing was sent.",
-  MEDIA_UNAVAILABLE:
-    "The media object is no longer available; nothing was sent.",
-  MEDIA_RIGHTS_REVOKED:
-    "The media object's rights no longer clear it; nothing was sent.",
-  SOURCE_CHECK_UNAVAILABLE:
-    "Whether the source may still be published could not be checked; nothing was sent."
-};
+const PHRASES = SOCIAL_DISPATCH_PHRASES;
 
 /** The terminal verdicts of the source re-check: the job is never sent and never retried by the dispatcher. */
 type SourceWithdrawnCode = "SOURCE_RETRACTED" | MediaPublicationRefusal;
@@ -281,14 +263,6 @@ const SOURCE_WITHDRAWN_CODES: ReadonlySet<string> =
     "MEDIA_UNAVAILABLE",
     "MEDIA_RIGHTS_REVOKED"
   ]);
-
-function phraseFor(code: string): string {
-  if (PHRASES[code]) return PHRASES[code]!;
-  if (code.startsWith("ACCOUNT_")) return "The account cannot publish.";
-  if (code.startsWith("HELD_")) return "Waiting for the account to be usable.";
-
-  return "The attempt did not succeed.";
-}
 
 /** An adapter-supplied code is shape-checked before it can touch a CHECK constraint or a row. */
 function sanitizeCode(
@@ -536,8 +510,7 @@ async function reconcileExpiredLease(
     resourceType: "social_publish_job",
     resourceId: row.id,
     severity: "warning",
-    message:
-      "A social publish job lost its lease while in flight; its outcome is unknown and it waits for an operator.",
+    message: SOCIAL_DISPATCH_AUDIT_MESSAGES.LEASE_LOST,
     attributes: {
       publicationId: row.publication_id,
       accountId: row.channel_account_id,
@@ -643,7 +616,7 @@ async function failBeforeAttempt(
     resourceType: "social_publish_job",
     resourceId: row.id,
     severity: "warning",
-    message: "A social publish job failed because its account cannot publish.",
+    message: SOCIAL_DISPATCH_AUDIT_MESSAGES.ACCOUNT_UNAVAILABLE,
     attributes: {
       publicationId: row.publication_id,
       accountId: row.channel_account_id,
@@ -722,7 +695,7 @@ async function finalise(
         resourceType: "social_publish_job",
         resourceId: job.id,
         severity: "info",
-        message: "A social publish job was accepted by the provider.",
+        message: SOCIAL_DISPATCH_AUDIT_MESSAGES.PUBLISHED,
         attributes: {
           publicationId: job.publication_id,
           accountId: job.channel_account_id,
@@ -767,8 +740,7 @@ async function finalise(
         resourceType: "social_publish_job",
         resourceId: job.id,
         severity: "warning",
-        message:
-          "A social publish job's outcome is unknown; it waits for an operator and will not be retried automatically.",
+        message: SOCIAL_DISPATCH_AUDIT_MESSAGES.OUTCOME_UNKNOWN,
         attributes: {
           publicationId: job.publication_id,
           accountId: job.channel_account_id,
@@ -888,8 +860,8 @@ async function finalise(
       resourceId: job.id,
       severity: "warning",
       message: SOURCE_WITHDRAWN_CODES.has(finalCode)
-        ? "A social publish job was stopped before sending: its source can no longer be published."
-        : "A social publish job failed.",
+        ? SOCIAL_DISPATCH_AUDIT_MESSAGES.SOURCE_WITHDRAWN
+        : SOCIAL_DISPATCH_AUDIT_MESSAGES.FAILED,
       attributes: {
         publicationId: job.publication_id,
         accountId: job.channel_account_id,

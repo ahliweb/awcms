@@ -60,6 +60,13 @@ import {
   probeChannelAccountsClaimGuards
 } from "./lib/channel-accounts-claim-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
+import { findDedicatedRoleMembershipFindings } from "./lib/dedicated-role-membership";
+import {
+  SOCIAL_DISPATCH_ALLOWED_PHRASES,
+  SOCIAL_DISPATCH_AUDIT_ACTIONS,
+  SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS,
+  SOCIAL_DISPATCH_AUDIT_MESSAGES
+} from "../src/modules/social-publishing/domain/social-dispatch-vocabulary";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
@@ -2546,11 +2553,13 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
       "parent_account_id",
       "secret_id",
       "status",
-      "deleted_at",
-      // sql/373 (Issue #1146): `version = version + 1` of the degrade report.
-      "version"
-    ],
-    UPDATE: ["status", "status_reason", "updated_at", "version"]
+      "deleted_at"
+      // sql/426 (the #1145 credential-path review, HIGH): no `version` read
+      // and NO UPDATE any more. The degrade report is the fixed-body SECURITY
+      // DEFINER `awcms_social_report_credential_rejected`; with the old
+      // column UPDATE the role could set `version = 2147483647` and make the
+      // account impossible to disconnect or revoke.
+    ]
   },
   awcms_channel_account_capabilities: {
     SELECT: [
@@ -2568,11 +2577,7 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
   // this role and nothing else (the dedicated-role job class).
   awcms_tenants: { SELECT: ["id", "status"] },
   awcms_tenant_modules: { SELECT: ["tenant_id", "module_key", "enabled"] },
-  awcms_channel_account_health: {
-    SELECT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
-    INSERT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
-    UPDATE: ["state", "reason_code", "checked_at", "updated_at"]
-  },
+  // sql/426: NO grant on awcms_channel_account_health (the definer writes it).
   awcms_social_publications: {
     SELECT: [
       "id",
@@ -2716,17 +2721,29 @@ export function normalizePolicyExpression(expression: string): string {
 const SIX_SOCIAL_PROVIDERS =
   "ARRAY['facebook'::text, 'instagram'::text, 'threads'::text, 'tiktok'::text, 'youtube'::text, 'linkedin'::text]";
 
-/** sql/358: what `awcms_social_dispatch` may see. */
+/** A PostgreSQL text array in its canonical deparse: `ARRAY['a'::text, 'b''c'::text]`. */
+function deparsedTextArray(values: readonly string[]): string {
+  return `ARRAY[${values.map((value) => `'${value.replace(/'/g, "''")}'::text`).join(", ")}]`;
+}
+
+const UUID_SHAPE =
+  "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text";
+const ALLOWED_PHRASES_ARRAY = deparsedTextArray(
+  SOCIAL_DISPATCH_ALLOWED_PHRASES
+);
+
+/** sql/358, narrowed by sql/427 (MEDIUM-1, L3): what `awcms_social_dispatch` may see. */
 export const SOCIAL_DISPATCH_PINNED_POLICIES: readonly PinnedPolicy[] = [
   {
+    // The #1145 credential-path review, MEDIUM-1 + L3 (sql/427): only what the
+    // credential adapter decrypts. An `active` grant, a `connected` account, a
+    // granted publish capability, of the one admitted connector (Facebook).
     table: "awcms_channel_secrets",
     policy: "awcms_channel_secrets_social_dispatch_publish",
     role: SOCIAL_DISPATCH_ROLE,
     command: "r",
     expression:
-      "((purpose = 'provider_access_token'::text) AND (EXISTS ( SELECT 1 FROM ((awcms_channel_provider_connections c JOIN awcms_channel_accounts a ON (((a.tenant_id = c.tenant_id) AND (a.connection_id = c.id) AND (a.provider = c.provider)))) JOIN awcms_channel_account_capabilities k ON (((k.tenant_id = a.tenant_id) AND (k.account_id = a.id)))) WHERE ((c.tenant_id = awcms_channel_secrets.tenant_id) AND (c.access_secret_id = awcms_channel_secrets.id) AND (c.provider = ANY (" +
-      SIX_SOCIAL_PROVIDERS +
-      ")) AND (c.grant_state = ANY (ARRAY['active'::text, 'expired'::text])) AND (a.deleted_at IS NULL) AND (a.status = ANY (ARRAY['connected'::text, 'degraded'::text])) AND (k.capability = 'publish'::text) AND (k.state = 'granted'::text)))))"
+      "((purpose = 'provider_access_token'::text) AND (EXISTS ( SELECT 1 FROM ((awcms_channel_provider_connections c JOIN awcms_channel_accounts a ON (((a.tenant_id = c.tenant_id) AND (a.connection_id = c.id) AND (a.provider = c.provider)))) JOIN awcms_channel_account_capabilities k ON (((k.tenant_id = a.tenant_id) AND (k.account_id = a.id)))) WHERE ((c.tenant_id = awcms_channel_secrets.tenant_id) AND (c.access_secret_id = awcms_channel_secrets.id) AND (c.provider = 'facebook'::text) AND (c.grant_state = 'active'::text) AND (a.deleted_at IS NULL) AND (a.status = 'connected'::text) AND (k.capability = 'publish'::text) AND (k.state = 'granted'::text)))))"
   },
   {
     table: "awcms_channel_accounts",
@@ -2744,18 +2761,42 @@ export const SOCIAL_DISPATCH_PINNED_POLICIES: readonly PinnedPolicy[] = [
   }
 ];
 
-const SOCIAL_ACCOUNT_OF_HEALTH_ROW =
-  "(EXISTS ( SELECT 1 FROM awcms_channel_accounts a WHERE ((a.tenant_id = awcms_channel_account_health.tenant_id) AND (a.id = awcms_channel_account_health.account_id) AND (a.provider = ANY (" +
-  SIX_SOCIAL_PROVIDERS +
-  ")) AND (a.deleted_at IS NULL))))";
 const SOCIAL_DISPATCH_EVENT_TYPES =
   "ARRAY['awcms.social_publishing.job.published'::text, 'awcms.social_publishing.job.failed'::text]";
 
+/** The sql/427 audit-row bound (L1), built from the dispatcher's vocabulary. */
+const SOCIAL_DISPATCH_AUDIT_CHECK = [
+  "(module_key = 'social_publishing'::text)",
+  `(action = ANY (${deparsedTextArray(SOCIAL_DISPATCH_AUDIT_ACTIONS)}))`,
+  "(resource_type = 'social_publish_job'::text)",
+  `(resource_id ~ ${UUID_SHAPE})`,
+  "(severity = ANY (ARRAY['info'::text, 'warning'::text]))",
+  "(actor_tenant_user_id IS NULL)",
+  "(actor_tenant_id IS NULL)",
+  "(delegated_grant_id IS NULL)",
+  `((correlation_id IS NULL) OR (correlation_id ~ ${UUID_SHAPE}))`,
+  `(message = ANY (${deparsedTextArray(Object.values(SOCIAL_DISPATCH_AUDIT_MESSAGES))}))`,
+  "(jsonb_typeof(attributes) = 'object'::text)",
+  `((attributes - ${deparsedTextArray(SOCIAL_DISPATCH_AUDIT_ATTRIBUTE_KEYS)}) = '{}'::jsonb)`,
+  `((NOT (attributes ? 'publicationId'::text)) OR ((attributes ->> 'publicationId'::text) ~ ${UUID_SHAPE}))`,
+  `((NOT (attributes ? 'accountId'::text)) OR ((attributes ->> 'accountId'::text) ~ ${UUID_SHAPE}))`,
+  "((NOT (attributes ? 'provider'::text)) OR ((attributes ->> 'provider'::text) ~ '^[a-z][a-z0-9_]{1,31}$'::text))",
+  "((NOT (attributes ? 'attemptNo'::text)) OR ((jsonb_typeof((attributes -> 'attemptNo'::text)) = 'number'::text) AND ((attributes ->> 'attemptNo'::text) ~ '^[0-9]{1,4}$'::text)))",
+  "((NOT (attributes ? 'code'::text)) OR ((attributes ->> 'code'::text) ~ '^[A-Z][A-Z0-9_]{2,63}$'::text))",
+  "((NOT (attributes ? 'failureCode'::text)) OR ((attributes ->> 'failureCode'::text) ~ '^[A-Z][A-Z0-9_]{2,63}$'::text))",
+  "((NOT (attributes ? 'accountDegraded'::text)) OR (jsonb_typeof((attributes -> 'accountDegraded'::text)) = 'boolean'::text))"
+].join(" AND ");
+
 /**
- * sql/373 (Issue #1146): the row and value bounds of every WRITE the social
+ * sql/373 (Issue #1146), bounded further by sql/426 and sql/427 (the #1145
+ * credential-path review): the row and value bounds of every WRITE the social
  * dispatcher makes once the whole job runs as `awcms_social_dispatch`. Each is
  * pinned with its USING and its WITH CHECK, exactly: a widened status list, a
- * dropped provider test or a `true OR` on either side is a finding.
+ * dropped provider test, a `true OR` on either side, or a phrase, message or
+ * attribute key outside the vocabulary of
+ * `social-dispatch-vocabulary.ts` is a finding. The account and health writes
+ * are no longer here: sql/426 revoked them for the definer function pinned in
+ * `SOCIAL_DISPATCH_DEFINER_FUNCTIONS`.
  */
 export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
   {
@@ -2765,32 +2806,25 @@ export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
     command: "w",
     expression:
       "(status = ANY (ARRAY['queued'::text, 'retry_wait'::text, 'publishing'::text]))",
-    withCheck:
-      "(status = ANY (ARRAY['queued'::text, 'publishing'::text, 'retry_wait'::text, 'published'::text, 'failed'::text, 'needs_reconciliation'::text]))"
+    withCheck: `((status = ANY (ARRAY['queued'::text, 'publishing'::text, 'retry_wait'::text, 'published'::text, 'failed'::text, 'needs_reconciliation'::text])) AND ((last_error IS NULL) OR (last_error = ANY (${ALLOWED_PHRASES_ARRAY}))))`
   },
   {
-    table: "awcms_channel_accounts",
-    policy: "awcms_channel_accounts_social_dispatch_degrade",
+    // L1 (sql/427): the attempt ledger's free text is a fixed phrase.
+    table: "awcms_social_publish_attempts",
+    policy: "awcms_social_publish_attempts_social_dispatch_insert",
     role: SOCIAL_DISPATCH_ROLE,
-    command: "w",
-    expression: `((provider = ANY (${SIX_SOCIAL_PROVIDERS})) AND (deleted_at IS NULL) AND (status = 'connected'::text))`,
-    withCheck: `((provider = ANY (${SIX_SOCIAL_PROVIDERS})) AND (deleted_at IS NULL) AND (status = 'degraded'::text))`
+    command: "a",
+    expression: "",
+    withCheck: `((error_message IS NULL) OR (error_message = ANY (${ALLOWED_PHRASES_ARRAY})))`
   },
   {
-    table: "awcms_channel_account_health",
-    policy: "awcms_channel_account_health_social_dispatch",
-    role: SOCIAL_DISPATCH_ROLE,
-    command: "*",
-    expression: SOCIAL_ACCOUNT_OF_HEALTH_ROW,
-    withCheck: `((state = 'failing'::text) AND ${SOCIAL_ACCOUNT_OF_HEALTH_ROW})`
-  },
-  {
+    // L1 (sql/427): only the dispatcher's own audit rows, in its vocabulary.
     table: "awcms_audit_events",
     policy: "awcms_audit_events_social_dispatch_insert",
     role: SOCIAL_DISPATCH_ROLE,
     command: "a",
     expression: "",
-    withCheck: "(module_key = 'social_publishing'::text)"
+    withCheck: `(${SOCIAL_DISPATCH_AUDIT_CHECK})`
   },
   {
     table: "awcms_domain_events",
@@ -3057,11 +3091,12 @@ export async function pinTriggerFunction(
 class RollbackProbe extends Error {}
 
 /**
- * The behavioural half of the sql/358 pin (M-1 of the #1261 audit): in ONE
- * transaction that is always rolled back, seed a throwaway tenant with one
- * secret the role SHOULD see and five it must not (an unreferenced token, a
- * WhatsApp connection token behind a publish-granted account, a denied
- * capability, a revoked account, a refresh token), `SET LOCAL ROLE
+ * The behavioural half of the sql/358 pin (M-1 of the #1261 audit), narrowed
+ * by sql/427: in ONE transaction that is always rolled back, seed a throwaway
+ * tenant with one secret the role SHOULD see and eight it must not (an
+ * unreferenced token, a WhatsApp connection token behind a publish-granted
+ * account, a denied capability, a revoked account, a refresh token, a degraded
+ * account, an expired grant, an Instagram account), `SET LOCAL ROLE
  * awcms_social_dispatch`, and require that exactly the first is visible.
  *
  * It needs to assume the role. A connection that cannot (the usual
@@ -3108,12 +3143,14 @@ export async function probeSocialDispatchSecretVisibility(
         status: string;
         purpose: string;
         capability: "granted" | "denied";
+        grantState?: string;
       }): Promise<string> => {
         const secretId = await secret(input.purpose);
         const connection = (await tx`
           INSERT INTO awcms_channel_provider_connections
             (tenant_id, provider, auth_mode, grant_state, access_secret_id)
-          VALUES (${tenant}, ${input.provider}, 'oauth2', 'active', ${secretId})
+          VALUES (${tenant}, ${input.provider}, 'oauth2',
+                  ${input.grantState ?? "active"}, ${secretId})
           RETURNING id
         `) as { id: string }[];
         const created = (await tx`
@@ -3175,6 +3212,32 @@ export async function probeSocialDispatchSecretVisibility(
         purpose: "provider_refresh_token",
         capability: "granted"
       });
+      // The #1145 credential-path review, MEDIUM-1 + L3 (sql/427): a token the
+      // adapter never decrypts is not visible either. A degraded account (the
+      // provider just refused its token), an expired grant, and a social
+      // provider with no admitted connector.
+      await account({
+        provider: "facebook",
+        kind: "page",
+        status: "degraded",
+        purpose: "provider_access_token",
+        capability: "granted"
+      });
+      await account({
+        provider: "facebook",
+        kind: "page",
+        status: "connected",
+        purpose: "provider_access_token",
+        capability: "granted",
+        grantState: "expired"
+      });
+      await account({
+        provider: "instagram",
+        kind: "professional_account",
+        status: "connected",
+        purpose: "provider_access_token",
+        capability: "granted"
+      });
 
       await tx.unsafe(`SET LOCAL ROLE ${SOCIAL_DISPATCH_ROLE}`);
 
@@ -3198,7 +3261,7 @@ export async function probeSocialDispatchSecretVisibility(
   if (visible.length !== 1 || visible[0] !== expected) {
     return {
       ran: true,
-      finding: `awcms_social_dispatch saw ${visible.length} secret(s) where exactly the one live, publish-granted social access token was expected (the row policies admit WhatsApp, refresh, unreferenced, denied or revoked secrets, or hide the legitimate one)`
+      finding: `awcms_social_dispatch saw ${visible.length} secret(s) where exactly the one live, publish-granted Facebook access token was expected (the row policies admit WhatsApp, refresh, unreferenced, denied, revoked, degraded, expired-grant or unadmitted-provider secrets, or hide the legitimate one)`
     };
   }
 
@@ -3481,13 +3544,17 @@ export async function probeWorkerPurgeDeleteFloors(
  * jobs (queued, failed, needs_reconciliation), `SET LOCAL ROLE
  * awcms_social_dispatch`, and require that:
  *
- *   - the legitimate writes work: claim the queued job, degrade the live
- *     Facebook account, record a failing health row, write this module's audit
+ *   - the legitimate writes work: claim the queued job, report the live
+ *     Facebook account's credential rejected through the sql/426 definer (and
+ *     the account is then degraded with exactly the fixed reason, version + 1
+ *     and a failing health row), store a fixed phrase, write a vocabulary audit
  *     row (positive controls, so a probe that refuses EVERYTHING does not pass);
  *   - the role cannot send a failed or unknown job again, cannot cancel a job,
- *     cannot put a degraded account back to `connected`, cannot touch a WhatsApp
- *     or revoked account, cannot write an `ok` health row, another module's
- *     audit row, or another module's event.
+ *     cannot write the account or its health row directly (no
+ *     `version = 2147483647`, no free reason, no back-dated `checked_at`), the
+ *     definer refuses another tenant and leaves revoked and WhatsApp accounts
+ *     alone, and no token-shaped text reaches `last_error`, `error_message` or
+ *     an audit row (sql/427), nor another module's audit row or event.
  *
  * Skipped (and said so) when the connection cannot assume the role.
  */
@@ -3527,6 +3594,14 @@ export async function probeSocialDispatchWriteBoundary(
           `) as { id: string }[]
         )[0]!.id;
       const facebook = await account("facebook", "page", "connected");
+      const facebookVersion = Number(
+        (
+          (await tx`
+            SELECT version FROM awcms_channel_accounts
+            WHERE tenant_id = ${tenant} AND id = ${facebook}
+          `) as { version: number }[]
+        )[0]!.version
+      );
       const otherFacebook = await account("facebook", "page", "connected");
       const whatsapp = await account(
         "whatsapp_cloud",
@@ -3706,75 +3781,233 @@ export async function probeSocialDispatchWriteBoundary(
           `
         )
       );
-      expectRows(
-        "degrading a live Facebook account",
-        await attempt(
+      // The #1145 credential-path review, HIGH (sql/426): no direct write on
+      // the account or its health row is left to the role, whatever the value.
+      for (const [what, statement] of [
+        [
+          "degrading a live Facebook account directly",
           () => tx`
             UPDATE awcms_channel_accounts SET status = 'degraded'
             WHERE tenant_id = ${tenant} AND id = ${facebook} RETURNING id
           `
-        ),
-        1
-      );
-      expectRefused(
-        "putting a degraded account back to connected",
-        await attempt(
+        ],
+        [
+          "setting a live account's version to 2147483647 (un-revocable account)",
           () => tx`
-            UPDATE awcms_channel_accounts SET status = 'connected'
+            UPDATE awcms_channel_accounts
+            SET status = 'degraded', version = 2147483647
             WHERE tenant_id = ${tenant} AND id = ${facebook} RETURNING id
           `
-        )
-      );
-      expectRefused(
-        "degrading a WhatsApp account",
-        await attempt(
+        ],
+        [
+          "writing a free status_reason",
+          () => tx`
+            UPDATE awcms_channel_accounts SET status_reason = 'EAAG-probe-token'
+            WHERE tenant_id = ${tenant} AND id = ${facebook} RETURNING id
+          `
+        ],
+        [
+          "degrading a WhatsApp account directly",
           () => tx`
             UPDATE awcms_channel_accounts SET status = 'degraded'
             WHERE tenant_id = ${tenant} AND id = ${whatsapp} RETURNING id
           `
-        )
-      );
-      expectRefused(
-        "reviving a revoked account",
-        await attempt(
+        ],
+        [
+          "reviving a revoked account",
           () => tx`
-            UPDATE awcms_channel_accounts SET status = 'degraded'
+            UPDATE awcms_channel_accounts SET status = 'connected'
             WHERE tenant_id = ${tenant} AND id = ${revoked} RETURNING id
           `
-        )
-      );
-      expectRows(
-        "recording a failing health row",
-        await attempt(
+        ],
+        [
+          "recording a health row directly",
           () => tx`
             INSERT INTO awcms_channel_account_health
               (tenant_id, account_id, state, reason_code, checked_at)
             VALUES (${tenant}, ${otherFacebook}, 'failing', 'PROBE', now())
           `
+        ],
+        [
+          "back-dating a health row's checked_at",
+          () => tx`
+            UPDATE awcms_channel_account_health
+            SET checked_at = now() - interval '10 years'
+            WHERE tenant_id = ${tenant} RETURNING account_id
+          `
+        ]
+      ] as [string, () => Promise<unknown[]>][]) {
+        expectRefused(what, await attempt(statement));
+      }
+
+      /** The definer report, in a savepoint; its code, or `refused`. */
+      const report = async (
+        accountId: string,
+        tenantArgument: string = tenant
+      ): Promise<string> => {
+        try {
+          return await tx.savepoint(async () => {
+            const rows = (await tx`
+              SELECT awcms_social_report_credential_rejected(
+                ${tenantArgument}::uuid, ${accountId}::uuid
+              ) AS code
+            `) as { code: string }[];
+
+            return rows[0]?.code ?? "none";
+          });
+        } catch {
+          return "refused";
+        }
+      };
+      const expectCode = (what: string, got: string, want: string) => {
+        if (got !== want)
+          failures.push(`${what} answered ${got}, expected ${want}`);
+      };
+
+      expectCode(
+        "reporting a live Facebook account's credential rejected",
+        await report(facebook),
+        "DEGRADED"
+      );
+      expectCode(
+        "reporting it again (already degraded)",
+        await report(facebook),
+        "UNCHANGED"
+      );
+      expectCode(
+        "reporting a revoked account",
+        await report(revoked),
+        "UNCHANGED"
+      );
+      expectCode(
+        "reporting a WhatsApp account",
+        await report(whatsapp),
+        "NOT_A_PUBLISHER"
+      );
+      expectCode(
+        "reporting with another tenant's id",
+        await report(facebook, crypto.randomUUID()),
+        "refused"
+      );
+
+      // L1 (sql/427): the free text the role writes is a fixed phrase, the
+      // audit row is in the dispatcher's vocabulary.
+      expectRows(
+        "storing a fixed phrase as last_error",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs
+            SET last_error = 'The provider did not answer in time.'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
         ),
         1
       );
       expectRefused(
-        "recording an ok health row",
+        "storing a token as last_error",
         await attempt(
           () => tx`
-            INSERT INTO awcms_channel_account_health
-              (tenant_id, account_id, state, reason_code, checked_at)
-            VALUES (${tenant}, ${facebook}, 'ok', NULL, now())
+            UPDATE awcms_social_publish_jobs SET last_error = 'EAAG-probe-token'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
           `
         )
       );
       expectRows(
-        "writing this module's audit row",
+        "recording an attempt with a fixed phrase",
         await attempt(
           () => tx`
-            INSERT INTO awcms_audit_events
-              (tenant_id, module_key, action, resource_type, severity, message)
-            VALUES (${tenant}, 'social_publishing', 'probe', 'probe', 'info',
-                    'probe')
+            INSERT INTO awcms_social_publish_attempts
+              (tenant_id, job_id, attempt_no, outcome, error_code, error_message)
+            VALUES (${tenant}, ${queued}, 1, 'retryable', 'PROVIDER_TIMEOUT',
+                    'The provider did not answer in time.')
           `
         ),
         1
+      );
+      expectRefused(
+        "recording an attempt with a token as error_message",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_social_publish_attempts
+              (tenant_id, job_id, attempt_no, outcome, error_code, error_message)
+            VALUES (${tenant}, ${queued}, 2, 'retryable', 'PROVIDER_TIMEOUT',
+                    'EAAG-probe-token')
+          `
+        )
+      );
+
+      const auditRow = (over: {
+        action?: string;
+        message?: string;
+        attributes?: Record<string, unknown>;
+        actor?: string | null;
+      }) => ({
+        tenant_id: tenant,
+        module_key: "social_publishing",
+        action: over.action ?? "social_publishing.job.failed",
+        resource_type: "social_publish_job",
+        resource_id: queued,
+        severity: "warning",
+        message: over.message ?? SOCIAL_DISPATCH_AUDIT_MESSAGES.FAILED,
+        attributes: over.attributes ?? {
+          publicationId: publication,
+          accountId: facebook,
+          provider: "facebook",
+          attemptNo: 1,
+          failureCode: "NEEDS_REAUTH",
+          accountDegraded: true
+        },
+        actor_tenant_user_id: over.actor ?? null
+      });
+      const insertAudit = (row: ReturnType<typeof auditRow>) =>
+        attempt(
+          () => tx`
+            INSERT INTO awcms_audit_events
+              (tenant_id, module_key, action, resource_type, resource_id,
+               severity, message, attributes, actor_tenant_user_id)
+            SELECT e.tenant_id, e.module_key, e.action, e.resource_type,
+                   e.resource_id, e.severity, e.message, e.attributes,
+                   e.actor_tenant_user_id
+            FROM jsonb_to_record(${row}::jsonb) AS e (
+              tenant_id uuid, module_key text, action text, resource_type text,
+              resource_id text, severity text, message text, attributes jsonb,
+              actor_tenant_user_id uuid
+            )
+          `
+        );
+
+      expectRows(
+        "writing this module's audit row",
+        await insertAudit(auditRow({})),
+        1
+      );
+      expectRefused(
+        "an audit row carrying a token attribute",
+        await insertAudit(
+          auditRow({ attributes: { token: "EAAG-probe-token" } })
+        )
+      );
+      expectRefused(
+        "an audit row with a token in a known attribute",
+        await insertAudit(
+          auditRow({
+            attributes: { failureCode: "NEEDS_REAUTH", provider: "EAAG-probe" }
+          })
+        )
+      );
+      expectRefused(
+        "an audit row with a free message",
+        await insertAudit(auditRow({ message: "token EAAG-probe-token" }))
+      );
+      expectRefused(
+        "an audit row with another action",
+        await insertAudit(
+          auditRow({ action: "social_publishing.publication.approved" })
+        )
+      );
+      expectRefused(
+        "an audit row attributed to a person",
+        await insertAudit(auditRow({ actor: crypto.randomUUID() }))
       );
       expectRefused(
         "writing another module's audit row",
@@ -3849,6 +4082,46 @@ export async function probeSocialDispatchWriteBoundary(
         )
       );
 
+      // What the definer actually wrote, read back as the probing connection.
+      await tx.unsafe("RESET ROLE");
+
+      const after = (await tx`
+        SELECT a.id, a.status, a.status_reason, a.version,
+               h.state, h.reason_code
+        FROM awcms_channel_accounts a
+        LEFT JOIN awcms_channel_account_health h
+          ON h.tenant_id = a.tenant_id AND h.account_id = a.id
+        WHERE a.tenant_id = ${tenant}
+      `) as {
+        id: string;
+        status: string;
+        status_reason: string | null;
+        version: number;
+        state: string | null;
+        reason_code: string | null;
+      }[];
+      const row = (id: string) =>
+        after.find((candidate) => candidate.id === id);
+      const degraded = row(facebook);
+
+      if (
+        degraded?.status !== "degraded" ||
+        degraded.status_reason !== "PUBLISH_CREDENTIAL_REJECTED" ||
+        Number(degraded.version) !== facebookVersion + 1 ||
+        degraded.state !== "failing" ||
+        degraded.reason_code !== "PUBLISH_CREDENTIAL_REJECTED"
+      ) {
+        failures.push(
+          `the definer report did not write exactly its constants (got ${JSON.stringify(degraded)}; expected degraded, PUBLISH_CREDENTIAL_REJECTED, version ${facebookVersion + 1}, a failing health row)`
+        );
+      }
+      if (row(revoked)?.status !== "revoked") {
+        failures.push("the definer report moved a revoked account");
+      }
+      if (row(whatsapp)?.status !== "connected" || row(whatsapp)?.state) {
+        failures.push("the definer report touched a WhatsApp account");
+      }
+
       throw new RollbackProbe();
     });
   } catch (error) {
@@ -3863,7 +4136,7 @@ export async function probeSocialDispatchWriteBoundary(
   if (failures.length > 0) {
     return {
       ran: true,
-      finding: `awcms_social_dispatch write boundary (sql/373) does not hold: ${failures.join("; ")}`
+      finding: `awcms_social_dispatch write boundary (sql/373, sql/426, sql/427) does not hold: ${failures.join("; ")}`
     };
   }
 
@@ -3921,6 +4194,8 @@ export type PinnedDefinerFunction = {
   owner: string;
   executors: readonly string[];
   body: string;
+  /** `pg_proc.provolatile`; defaults to `s` (STABLE, a read-only answer). A writer is `v`. */
+  volatility?: "s" | "v";
 };
 
 export const SOCIAL_SOURCE_CHECK_FUNCTIONS: readonly PinnedDefinerFunction[] = [
@@ -3935,6 +4210,71 @@ export const SOCIAL_SOURCE_CHECK_FUNCTIONS: readonly PinnedDefinerFunction[] = [
     owner: SOCIAL_SOURCE_CHECK_ROLE,
     executors: [SOCIAL_DISPATCH_ROLE],
     body: "DECLARE v_status text; v_rights text; v_copyright text; BEGIN IF p_tenant_id IS NULL OR p_media_object_id IS NULL OR p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.current_tenant_id', true), '')::uuid THEN RAISE EXCEPTION 'awcms_social_source_media_state: the tenant is not the transaction tenant' USING ERRCODE = '42501'; END IF; SELECT m.status, m.rights_verification_status, m.copyright_status INTO v_status, v_rights, v_copyright FROM awcms_news_media_objects AS m WHERE m.tenant_id = p_tenant_id AND m.id = p_media_object_id AND m.deleted_at IS NULL; IF NOT FOUND OR v_status IS NULL OR v_status NOT IN ('verified', 'attached') THEN RETURN 'MEDIA_UNAVAILABLE'; END IF; IF v_rights IS DISTINCT FROM 'verified' OR v_copyright IS NULL OR v_copyright NOT IN ( 'owned', 'licensed', 'public_domain', 'permission_granted', 'fair_use' ) THEN RETURN 'MEDIA_RIGHTS_REVOKED'; END IF; RETURN 'AVAILABLE'; END;"
+  }
+];
+
+/**
+ * sql/426 (the #1145 credential-path review, HIGH): the NOLOGIN, memberless
+ * owner of the dispatcher's "credential rejected" report. Column privileges on
+ * exactly what the body reads and writes; no table-level privilege.
+ */
+export const SOCIAL_CREDENTIAL_REPORT_ROLE = "awcms_social_credential_report";
+
+export const SOCIAL_CREDENTIAL_REPORT_ROLE_GRANTS: Record<string, string[]> =
+  {};
+
+export const SOCIAL_CREDENTIAL_REPORT_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS =
+  {
+    awcms_channel_accounts: {
+      SELECT: [
+        "tenant_id",
+        "id",
+        "provider",
+        "account_kind",
+        "status",
+        "deleted_at",
+        "version"
+      ],
+      UPDATE: ["status", "status_reason", "updated_at", "version"]
+    },
+    awcms_channel_account_health: {
+      SELECT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
+      INSERT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
+      UPDATE: ["state", "reason_code", "checked_at", "updated_at"]
+    }
+  };
+
+/**
+ * The one write the dispatcher makes on the account model (sql/426): every
+ * value is a constant of the body, so the role states a fact ("the provider
+ * refused this account's credential") and cannot choose a version, a reason or
+ * a timestamp. Pinned exactly, VOLATILE (it writes).
+ */
+export const SOCIAL_DISPATCH_DEFINER_FUNCTIONS: readonly PinnedDefinerFunction[] =
+  [
+    {
+      signature: "awcms_social_report_credential_rejected(uuid,uuid)",
+      owner: SOCIAL_CREDENTIAL_REPORT_ROLE,
+      executors: [SOCIAL_DISPATCH_ROLE],
+      volatility: "v",
+      body: "DECLARE v_status text; BEGIN IF p_tenant_id IS NULL OR p_account_id IS NULL OR p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.current_tenant_id', true), '')::uuid THEN RAISE EXCEPTION 'awcms_social_report_credential_rejected: the tenant is not the transaction tenant' USING ERRCODE = '42501'; END IF; SELECT a.status INTO v_status FROM awcms_channel_accounts AS a WHERE a.tenant_id = p_tenant_id AND a.id = p_account_id AND a.provider = 'facebook' AND a.account_kind = 'page' AND a.deleted_at IS NULL FOR UPDATE; IF NOT FOUND THEN RETURN 'NOT_A_PUBLISHER'; END IF; INSERT INTO awcms_channel_account_health (tenant_id, account_id, state, reason_code, checked_at) VALUES (p_tenant_id, p_account_id, 'failing', 'PUBLISH_CREDENTIAL_REJECTED', now()) ON CONFLICT (tenant_id, account_id) DO UPDATE SET state = EXCLUDED.state, reason_code = EXCLUDED.reason_code, checked_at = EXCLUDED.checked_at, updated_at = now(); IF v_status IS DISTINCT FROM 'connected' THEN RETURN 'UNCHANGED'; END IF; UPDATE awcms_channel_accounts SET status = 'degraded', status_reason = 'PUBLISH_CREDENTIAL_REJECTED', updated_at = now(), version = version + 1 WHERE tenant_id = p_tenant_id AND id = p_account_id AND status = 'connected' AND deleted_at IS NULL; RETURN 'DEGRADED'; END;"
+    }
+  ];
+
+/**
+ * L2 of the #1145 credential-path review: the sql/373 guard that keeps the
+ * role from flipping `dedupe_key_supported` on an in-flight job (and so from
+ * re-sending a post whose provider does not dedupe). It used to be caught only
+ * by the behavioural probe, which does not run on the usual production
+ * readiness connection (`awcms_app`); now its body is pinned exactly too.
+ */
+export const SOCIAL_DISPATCH_TRIGGERS: readonly PinnedTrigger[] = [
+  {
+    table: "awcms_social_publish_jobs",
+    trigger: "awcms_social_publish_jobs_dedupe_flag_guard",
+    fn: "awcms_social_publish_jobs_dedupe_flag_guard",
+    events: "update",
+    body: "BEGIN IF current_user = 'awcms_social_dispatch' AND NEW.dedupe_key_supported IS DISTINCT FROM OLD.dedupe_key_supported AND NOT ( OLD.status IN ('queued', 'retry_wait') AND NEW.status = 'publishing' ) THEN RAISE EXCEPTION 'the social dispatcher sets dedupe_key_supported only when it claims a job' USING ERRCODE = '23514'; END IF; RETURN NEW; END;"
   }
 ];
 
@@ -3981,7 +4321,11 @@ export async function pinDefinerFunction(
   const differences: string[] = [];
 
   if (!row.definer) differences.push("not SECURITY DEFINER");
-  if (row.volatility !== "s") differences.push("not STABLE");
+  if (row.volatility !== (pin.volatility ?? "s")) {
+    differences.push(
+      (pin.volatility ?? "s") === "s" ? "not STABLE" : "not VOLATILE"
+    );
+  }
   if (row.language !== "plpgsql") differences.push("not plpgsql");
   if (!row.returns_text || row.returns_set) {
     differences.push("does not return one text");
@@ -4383,6 +4727,10 @@ export type WorkerSetupRoleGrantsPolicy = {
   socialSourceCheckColumns?: typeof WORKER_COLUMN_GRANTS;
   /** Optional: defaults to `SOCIAL_SOURCE_CHECK_FUNCTIONS`. */
   socialSourceCheckFunctions?: readonly PinnedDefinerFunction[];
+  /** Optional: defaults to `SOCIAL_CREDENTIAL_REPORT_COLUMN_GRANTS`. */
+  socialCredentialReportColumns?: typeof WORKER_COLUMN_GRANTS;
+  /** Optional: defaults to `SOCIAL_DISPATCH_DEFINER_FUNCTIONS`. */
+  socialDispatchFunctions?: readonly PinnedDefinerFunction[];
 };
 
 /**
@@ -4402,7 +4750,9 @@ export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolic
     socialDispatchColumns: SOCIAL_DISPATCH_COLUMN_GRANTS,
     socialSourceCheck: SOCIAL_SOURCE_CHECK_ROLE_GRANTS,
     socialSourceCheckColumns: SOCIAL_SOURCE_CHECK_COLUMN_GRANTS,
-    socialSourceCheckFunctions: SOCIAL_SOURCE_CHECK_FUNCTIONS
+    socialSourceCheckFunctions: SOCIAL_SOURCE_CHECK_FUNCTIONS,
+    socialCredentialReportColumns: SOCIAL_CREDENTIAL_REPORT_COLUMN_GRANTS,
+    socialDispatchFunctions: SOCIAL_DISPATCH_DEFINER_FUNCTIONS
   };
 }
 
@@ -4453,6 +4803,10 @@ export async function checkWorkerSetupRoleGrants(
     {
       role: SOCIAL_SOURCE_CHECK_ROLE,
       grants: policy?.socialSourceCheck ?? SOCIAL_SOURCE_CHECK_ROLE_GRANTS
+    },
+    {
+      role: SOCIAL_CREDENTIAL_REPORT_ROLE,
+      grants: SOCIAL_CREDENTIAL_REPORT_ROLE_GRANTS
     }
   ];
 
@@ -4559,6 +4913,12 @@ export async function checkWorkerSetupRoleGrants(
         role: SOCIAL_SOURCE_CHECK_ROLE,
         columns:
           policy?.socialSourceCheckColumns ?? SOCIAL_SOURCE_CHECK_COLUMN_GRANTS
+      },
+      {
+        role: SOCIAL_CREDENTIAL_REPORT_ROLE,
+        columns:
+          policy?.socialCredentialReportColumns ??
+          SOCIAL_CREDENTIAL_REPORT_COLUMN_GRANTS
       }
     ]) {
       if (!present.includes(role)) {
@@ -4788,6 +5148,33 @@ export async function checkWorkerSetupRoleGrants(
         if (finding) findings.push(finding);
       }
 
+      // sql/426 (the #1145 credential-path review, HIGH): the account and
+      // health writes are ONE fixed-body definer function, pinned exactly.
+      const dispatchFunctions =
+        policy?.socialDispatchFunctions ?? SOCIAL_DISPATCH_DEFINER_FUNCTIONS;
+
+      for (const pin of dispatchFunctions) {
+        const finding = await pinDefinerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      // L2 of the same review: the dedupe-flag guard, pinned exactly.
+      for (const pin of SOCIAL_DISPATCH_TRIGGERS) {
+        const finding = await pinTriggerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      // MEDIUM-2 of the same review: the role is a member of nothing, and only
+      // allow-listed roles may SET ROLE to it or inherit from it.
+      findings.push(
+        ...(await findDedicatedRoleMembershipFindings(
+          sql,
+          SOCIAL_DISPATCH_ROLE
+        ))
+      );
+
       const writeProbe = await probeSocialDispatchWriteBoundary(sql);
 
       if (writeProbe.finding) findings.push(writeProbe.finding);
@@ -4840,9 +5227,11 @@ export async function checkWorkerSetupRoleGrants(
       // itself: the closure of what the role can reach through a definer is
       // exactly the reviewed list.
       const reviewedFunctions = new Set(
-        (
-          policy?.socialSourceCheckFunctions ?? SOCIAL_SOURCE_CHECK_FUNCTIONS
-        ).map((pin) => pin.signature)
+        [
+          ...(policy?.socialSourceCheckFunctions ??
+            SOCIAL_SOURCE_CHECK_FUNCTIONS),
+          ...dispatchFunctions
+        ].map((pin) => pin.signature)
       );
       const reachable = (await sql`
         SELECT p.oid::regprocedure::text AS signature,
@@ -4850,6 +5239,7 @@ export async function checkWorkerSetupRoleGrants(
                p.prosecdef AS definer
         FROM pg_proc p
         WHERE p.proowner = to_regrole(${SOCIAL_SOURCE_CHECK_ROLE})::oid
+           OR p.proowner = to_regrole(${SOCIAL_CREDENTIAL_REPORT_ROLE})::oid
            OR (p.prosecdef
                AND has_function_privilege(${SOCIAL_DISPATCH_ROLE}, p.oid, 'EXECUTE'))
         ORDER BY 1
@@ -4861,7 +5251,9 @@ export async function checkWorkerSetupRoleGrants(
         findings.push(
           row.owner === SOCIAL_SOURCE_CHECK_ROLE
             ? `function ${row.signature} is owned by ${SOCIAL_SOURCE_CHECK_ROLE} and is not a reviewed pin (it runs with that role's reads of the posts and media objects)`
-            : `SECURITY DEFINER function ${row.signature} (owner ${row.owner}) is executable by ${SOCIAL_DISPATCH_ROLE} and is not a reviewed pin`
+            : row.owner === SOCIAL_CREDENTIAL_REPORT_ROLE
+              ? `function ${row.signature} is owned by ${SOCIAL_CREDENTIAL_REPORT_ROLE} and is not a reviewed pin (it runs with that role's writes of the accounts and their health)`
+              : `SECURITY DEFINER function ${row.signature} (owner ${row.owner}) is executable by ${SOCIAL_DISPATCH_ROLE} and is not a reviewed pin`
         );
       }
 
@@ -5262,7 +5654,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts). The SAME column is read by the separate role awcms_social_dispatch (sql/358, Issue #1145, ADR-0157 section 6), under its OWN restrictive policy (awcms_channel_secrets_social_dispatch_publish: only the provider_access_token of a facebook, instagram, threads, tiktok, youtube or linkedin connection whose grant is active or expired and that a connected or degraded account with a granted publish capability uses; security:readiness pins it). That role ships NOLOGIN, no job holds its connection string or the key ring for it yet, and awcms_worker's view does not widen."
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted only to the jobs that decrypt (each with its own role or row policy). What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts). The SAME column is read by the separate role awcms_social_dispatch (sql/358, Issue #1145, ADR-0157 section 6), under its OWN restrictive policy (awcms_channel_secrets_social_dispatch_publish, narrowed by sql/427: only the provider_access_token of a facebook connection whose grant is active and that a connected account with a granted publish capability uses; security:readiness pins and probes it). That role ships NOLOGIN; social-publishing:dispatch connects only as it (SOCIAL_PUBLISHING_DATABASE_URL, no fallback, refused at start when the role is a member of any other role) and holds the key ring, composing the credential path only when SOCIAL_PUBLISHING_FACEBOOK_ENABLED=true. awcms_worker's view does not widen."
 };
 
 /**
@@ -5633,6 +6025,10 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   // of the social dispatcher; column SELECT on the posts and media columns
   // their bodies read, nothing else.
   "awcms_social_source_check",
+  // sql/426 (the #1145 credential-path review, HIGH): owns the social
+  // dispatcher's "credential rejected" report; column privileges on the account
+  // status columns and the health row, nothing else.
+  "awcms_social_credential_report",
   "awcms_telegram_bootstrap"
 ];
 
@@ -8261,6 +8657,10 @@ export async function checkTelegramEngagementDispatchRole(options?: {
       }
     }
 
+    // The #1145 credential-path review, MEDIUM-2 (same helper as the social
+    // dispatcher): a member of no role, and no unlisted member.
+    findings.push(...(await findDedicatedRoleMembershipFindings(sql, role)));
+
     // ...and what the policies DO, as the role, in a rolled-back transaction.
     const probe = await probeTelegramEngagementDispatchRole(sql);
 
@@ -8426,7 +8826,7 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
           name,
           severity,
           status: "fail",
-          evidence: `The readiness connection cannot assume ${skipped.join(", ")}: their rolled-back behavioural probes did NOT run and only the exact policy pins guarded them. Run security:readiness once with a superuser or a member of those roles to prove what the policies allow and refuse.`
+          evidence: `The readiness connection cannot assume ${skipped.join(", ")}: their rolled-back behavioural probes did NOT run and only the exact policy pins guarded them. Run security:readiness once with a superuser, or with a member of those roles that is listed in SECURITY_READINESS_DEDICATED_ROLE_MEMBERS (any other member of a dedicated role is itself a finding), to prove what the policies allow and refuse.`
         };
   } catch (error) {
     return {

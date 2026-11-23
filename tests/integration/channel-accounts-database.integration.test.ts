@@ -390,7 +390,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
 
       expect(
         await inTenant(T1, (tx) => deleteAccount(tx, store, T1, U1, id))
-      ).toEqual({ outcome: "deleted" });
+      ).toEqual({ outcome: "deleted", connectionRevoked: false });
       expect((await page(T2, U2, "recyclable")).outcome).toBe("created");
     });
 
