@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 291   |
+| Migrations                          | 292   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
@@ -356,6 +356,7 @@
 | 289 | `sql/415_awcms_email_messages_worker_update_columns.sql`               |
 | 290 | `sql/442_awcms_principal_recovery_codes_factor_independent.sql`        |
 | 291 | `sql/443_awcms_session_step_up_method.sql`                             |
+| 292 | `sql/446_awcms_session_handoff_step_up_freshness.sql`                  |
 
 ### Tables & Row-Level Security
 

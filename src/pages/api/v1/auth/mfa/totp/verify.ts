@@ -171,7 +171,8 @@ export const POST: APIRoute = async ({
       tenantId,
       identityId,
       // TOTP or recovery code, whichever actually matched (ADR-0168 A2).
-      assurance: { level: "aal2", proof: result.proof },
+      // The factor was verified in this request: the step-up instant is now.
+      assurance: { level: "aal2", proof: result.proof, steppedUpAt: now },
       ttlMin: policy.sessionTtlMin,
       now,
       issue: {

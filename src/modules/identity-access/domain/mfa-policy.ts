@@ -156,7 +156,33 @@ export type StepUpProof =
  * `SessionIssueContext.originAuth` has no default (Issue #1405, ADR-0168 A2).
  */
 export type SessionAssuranceGrant =
-  { level: "aal1" } | { level: "aal2"; proof: StepUpProof };
+  | { level: "aal1" }
+  | {
+      level: "aal2";
+      proof: StepUpProof;
+      /**
+       * When that proof was presented. A path that has JUST verified a factor
+       * passes its own `now`; a path that CARRIES an earlier assurance (a
+       * handoff) passes the original stamp. Required, not defaulted: a default
+       * of `now` is exactly how a carried assurance used to come out fresher
+       * than the step-up behind it. `createSessionWithAssurance` also clamps it
+       * to `now`, so a stamp can never be minted in the future.
+       */
+      steppedUpAt: Date;
+    };
+
+/**
+ * The `stepped_up_at` a grant justifies at instant `now`: never later than the
+ * proof itself and never later than `now`; `null` for `aal1`.
+ */
+export function grantedStepUpAt(
+  grant: SessionAssuranceGrant,
+  now: Date
+): Date | null {
+  if (grant.level === "aal1") return null;
+
+  return grant.steppedUpAt.getTime() < now.getTime() ? grant.steppedUpAt : now;
+}
 
 /** The two `sql/443` columns written for a grant, in one place. */
 export function stepUpColumns(grant: SessionAssuranceGrant): {
@@ -191,16 +217,18 @@ export function stepUpProofFromColumns(
 
 /**
  * The grant a stored assurance justifies: `aal2` only when the level is `aal2`
- * AND a proof was recovered for it. An `aal2` row whose proof cannot be read
+ * AND a proof AND its original step-up instant were recovered. Anything less
  * yields `aal1` — a carried assurance (a handoff) never rises above what can be
- * shown, the same rule ADR-0050 applies to the level itself.
+ * shown, neither in level (ADR-0050) nor in freshness: the carried stamp is the
+ * ORIGINAL one, so a stale step-up stays stale on the other side.
  */
 export function assuranceGrantOf(
   assuranceLevel: SessionAssuranceLevel,
-  proof: StepUpProof | null
+  proof: StepUpProof | null,
+  steppedUpAt: Date | null
 ): SessionAssuranceGrant {
-  return assuranceLevel === "aal2" && proof
-    ? { level: "aal2", proof }
+  return assuranceLevel === "aal2" && proof && steppedUpAt
+    ? { level: "aal2", proof, steppedUpAt }
     : { level: "aal1" };
 }
 

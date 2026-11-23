@@ -14,6 +14,7 @@ import { createSessionWithAssurance } from "./mfa-session-assurance";
 import { sessionCredentialCurrent } from "./session-credential-epoch";
 import {
   assuranceGrantOf,
+  grantedStepUpAt,
   stepUpColumns,
   stepUpProofFromColumns,
   type SessionAssuranceGrant,
@@ -202,15 +203,20 @@ export async function issueHandoffCode(
   // constraint mean exactly what it says: this row's own lifetime is at most
   // 60 seconds.
   const stepUp = stepUpColumns(input.assurance);
+  // The issuing session's ORIGINAL step-up instant (`sql/446`), clamped to the
+  // mint instant. Without it redemption stamped `now`, so a hop through a BFF
+  // turned a stale step-up into a fresh one.
+  const steppedUpAt = grantedStepUpAt(input.assurance, input.now);
 
   await tx`
     INSERT INTO awcms_session_handoff_codes
       (tenant_id, client_id, code_hash, identity_id, assurance_level,
-       stepped_up_method, stepped_up_passkey_id,
+       stepped_up_method, stepped_up_passkey_id, stepped_up_at,
        redirect_uri, issued_by_session_id, created_at, expires_at)
     VALUES (
       ${tenantId}, ${client.id}, ${hashHandoffCode(code)}, ${input.identityId},
       ${input.assurance.level}, ${stepUp.method}, ${stepUp.passkeyId},
+      ${steppedUpAt},
       ${decision.redirectUri}, ${input.sessionId},
       ${input.now}, ${expiresAt}
     )
@@ -346,12 +352,13 @@ export async function redeemHandoffCode(
           AND ${sessionCredentialCurrent(tx)}
       )
     RETURNING identity_id, assurance_level, stepped_up_method,
-              stepped_up_passkey_id
+              stepped_up_passkey_id, stepped_up_at
   `) as {
     identity_id: string;
     assurance_level: SessionAssuranceLevel;
     stepped_up_method: string | null;
     stepped_up_passkey_id: string | null;
+    stepped_up_at: Date | null;
   }[];
 
   const won = claimed[0];
@@ -365,14 +372,18 @@ export async function redeemHandoffCode(
 
   // Never above what the login reached: a handoff must not launder an aal1
   // login into an aal2 session — and, since ADR-0168 A2, not into an aal2
-  // session whose method cannot be shown either (`assuranceGrantOf`).
+  // session whose method cannot be shown either (`assuranceGrantOf`) — and
+  // never FRESHER than the issuing session's step-up: the original
+  // `stepped_up_at` is carried, so a step-up that was stale before the hop is
+  // stale after it.
   const grant = assuranceGrantOf(
     won.assurance_level,
     stepUpProofFromColumns(
       won.assurance_level,
       won.stepped_up_method,
       won.stepped_up_passkey_id
-    )
+    ),
+    won.stepped_up_at ? new Date(won.stepped_up_at) : null
   );
 
   const session = await createSessionWithAssurance(tx, {

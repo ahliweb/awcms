@@ -258,7 +258,11 @@ export const POST: APIRoute = async ({
         tenantId,
         identityId: auth.identityId,
         // The enrolment was just confirmed with a TOTP code (ADR-0168 A2).
-        assurance: { level: "aal2", proof: { method: "totp" } },
+        assurance: {
+          level: "aal2",
+          proof: { method: "totp" },
+          steppedUpAt: now
+        },
         ttlMin: policy.sessionTtlMin,
         now,
         issue: {

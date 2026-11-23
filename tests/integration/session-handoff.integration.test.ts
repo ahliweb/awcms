@@ -18,6 +18,8 @@
  *
  * Gated on `DATABASE_URL` (harness §Gating).
  */
+import { readFileSync } from "node:fs";
+
 import {
   afterAll,
   beforeAll,
@@ -29,6 +31,7 @@ import {
 
 import {
   getAdminSql,
+  getOwnerSql,
   getRuntimeSql,
   integrationEnabled,
   resetDatabase,
@@ -36,7 +39,15 @@ import {
   teardownIntegrationDatabase
 } from "./harness";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
-import { hashSessionToken } from "../../src/lib/auth/session-token";
+import {
+  generateSessionToken,
+  hashSessionToken
+} from "../../src/lib/auth/session-token";
+import {
+  requireStepUp,
+  resolveSessionAssurance
+} from "../../src/modules/identity-access/application/mfa-session-assurance";
+import { assuranceGrantOf } from "../../src/modules/identity-access/domain/mfa-policy";
 import {
   hashBffClientSecret,
   hashHandoffCode
@@ -120,7 +131,11 @@ async function issue(
       // An aal2 code snapshots HOW the session got there (ADR-0168 A2).
       assurance:
         assurance === "aal2"
-          ? { level: "aal2", proof: { method: "totp" } }
+          ? {
+              level: "aal2",
+              proof: { method: "totp" },
+              steppedUpAt: new Date()
+            }
           : { level: "aal1" },
       actorTenantUserId: userId,
       now: new Date()
@@ -149,6 +164,71 @@ async function redeem(tenantId: string, code: string) {
       now: new Date()
     });
   });
+}
+
+/**
+ * A live aal2 session that stepped up `ageMs` ago, issued a code through the
+ * same path the route uses (`resolveSessionAssurance` -> `assuranceGrantOf`),
+ * redeemed. Returns the stamps on both sides and the step-up gate's verdict on
+ * the redeemed session.
+ */
+async function handoffFromStepUpAged(ageMs: number) {
+  const now = new Date();
+  const steppedUpAt = new Date(now.getTime() - ageMs);
+  const token = generateSessionToken();
+
+  await getAdminSql()`
+    INSERT INTO awcms_sessions
+      (tenant_id, identity_id, token_hash, expires_at, assurance_level,
+       stepped_up_at, stepped_up_method, last_authenticated_at)
+    VALUES (${TENANT_A}, ${seeded[TENANT_A]!.identityId},
+            ${hashSessionToken(token)}, now() + interval '8 hours', 'aal2',
+            ${steppedUpAt}, 'totp', ${steppedUpAt})
+  `;
+
+  const code = await withTenantOrThrow(
+    getRuntimeSql(),
+    TENANT_A,
+    async (tx) => {
+      const source = await resolveSessionAssurance(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        now
+      );
+      const issued = await issueHandoffCode(tx, TENANT_A, {
+        clientKey: CLIENT_KEY,
+        requestedRedirectUri: REDIRECT_URI,
+        identityId: source!.identityId,
+        sessionId: source!.sessionId,
+        assurance: assuranceGrantOf(
+          source!.assuranceLevel,
+          source!.steppedUpBy,
+          source!.steppedUpAt
+        ),
+        actorTenantUserId: USER_A,
+        now
+      });
+      expect(issued.ok).toBe(true);
+      return issued.ok ? issued.code : "";
+    }
+  );
+
+  const redeemed = await redeem(TENANT_A, code);
+  expect(redeemed.ok && redeemed.assuranceLevel).toBe("aal2");
+  const newToken = redeemed.ok ? redeemed.token : "";
+
+  const gate = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+    requireStepUp(tx, TENANT_A, hashSessionToken(newToken), new Date(), 900)
+  );
+  const stamps = (await getAdminSql()`
+    SELECT s.stepped_up_at AS session_at, c.stepped_up_at AS code_at
+    FROM awcms_sessions s, awcms_session_handoff_codes c
+    WHERE s.tenant_id = ${TENANT_A} AND s.token_hash = ${hashSessionToken(newToken)}
+      AND c.tenant_id = ${TENANT_A} AND c.code_hash = ${hashHandoffCode(code)}
+  `) as { session_at: Date; code_at: Date }[];
+
+  return { steppedUpAt, gate, stamps: stamps[0]! };
 }
 
 const suite = integrationEnabled ? describe : describe.skip;
@@ -330,6 +410,58 @@ suite("BFF session handoff", () => {
     expect(rows[0]!.stepped_up_method).toBeNull();
   });
 
+  test("a handoff never refreshes step-up freshness: a stale step-up stays stale after the hop", async () => {
+    const { steppedUpAt, gate, stamps } = await handoffFromStepUpAged(
+      3 * 3600_000
+    );
+
+    // The ORIGINAL instant travels: on the code and on the minted session.
+    expect(new Date(stamps.code_at).getTime()).toBe(steppedUpAt.getTime());
+    expect(new Date(stamps.session_at).getTime()).toBe(steppedUpAt.getTime());
+    // And the gate that reads it refuses, exactly as it refused the source.
+    expect(gate.ok).toBe(false);
+    expect(gate.ok ? 0 : gate.denied.status).toBe(403);
+  });
+
+  test("a recent step-up survives the hop, still at its original instant", async () => {
+    const { steppedUpAt, gate, stamps } = await handoffFromStepUpAged(60_000);
+
+    expect(new Date(stamps.session_at).getTime()).toBe(steppedUpAt.getTime());
+    expect(gate.ok).toBe(true);
+  });
+
+  test("the database refuses an aal2 code without a step-up instant, or one later than its mint", async () => {
+    const insert = (level: string, at: Date | null, method: string | null) =>
+      getAdminSql()`
+        INSERT INTO awcms_session_handoff_codes
+          (tenant_id, client_id, code_hash, identity_id, assurance_level,
+           stepped_up_method, stepped_up_at, redirect_uri,
+           issued_by_session_id, created_at, expires_at)
+        VALUES (${TENANT_A}, ${seeded[TENANT_A]!.clientId},
+                ${hashHandoffCode(crypto.randomUUID())},
+                ${seeded[TENANT_A]!.identityId}, ${level}, ${method}, ${at},
+                ${REDIRECT_URI}, ${seeded[TENANT_A]!.sessionId},
+                now(), now() + interval '30 seconds')
+      `;
+    const constraintOf = async (run: () => Promise<unknown>) => {
+      try {
+        await run();
+        return null;
+      } catch (error) {
+        return /constraint "([^"]+)"/.exec(String(error))?.[1] ?? String(error);
+      }
+    };
+
+    expect(await constraintOf(() => insert("aal2", null, "totp"))).toBe(
+      "awcms_session_handoff_codes_stepped_up_at_level_check"
+    );
+    expect(
+      await constraintOf(() =>
+        insert("aal2", new Date(Date.now() + 3600_000), "totp")
+      )
+    ).toBe("awcms_session_handoff_codes_stepped_up_at_not_after_mint_check");
+  });
+
   test("a wrong client secret authenticates nothing", async () => {
     await withTenantOrThrow(getRuntimeSql(), TENANT_A, async (tx) => {
       expect(
@@ -415,5 +547,76 @@ suite("BFF session handoff", () => {
     // And tenant A's code is still spendable: the cross-tenant attempt must not
     // have consumed it.
     expect((await redeem(TENANT_A, code)).ok).toBe(true);
+  });
+
+  // Runs LAST: it rebuilds `sql/446` in place.
+  test("sql/446 replay as the NOBYPASSRLS owner carries live codes' original instant, and downgrades what it cannot match", async () => {
+    const admin = getAdminSql();
+    await admin.unsafe(`
+      ALTER TABLE awcms_session_handoff_codes
+        DROP CONSTRAINT awcms_session_handoff_codes_stepped_up_at_level_check,
+        DROP CONSTRAINT awcms_session_handoff_codes_stepped_up_at_not_after_mint_check,
+        DROP COLUMN stepped_up_at;
+    `);
+
+    const stale = new Date(Date.now() - 3 * 3600_000);
+    const issuer = (await admin`
+      INSERT INTO awcms_sessions
+        (tenant_id, identity_id, token_hash, expires_at, assurance_level,
+         stepped_up_at, stepped_up_method)
+      VALUES (${TENANT_B}, ${seeded[TENANT_B]!.identityId},
+              ${hashSessionToken(generateSessionToken())},
+              now() + interval '1 hour', 'aal2', ${stale}, 'totp')
+      RETURNING id
+    `) as { id: string }[];
+
+    const seedCode = (hash: string, sessionId: string) => admin`
+      INSERT INTO awcms_session_handoff_codes
+        (tenant_id, client_id, code_hash, identity_id, assurance_level,
+         stepped_up_method, redirect_uri, issued_by_session_id,
+         created_at, expires_at)
+      VALUES (${TENANT_B}, ${seeded[TENANT_B]!.clientId}, ${hash},
+              ${seeded[TENANT_B]!.identityId}, 'aal2', 'totp', ${REDIRECT_URI},
+              ${sessionId}, now(), now() + interval '30 seconds')
+    `;
+    await seedCode(hashHandoffCode("matched"), issuer[0]!.id);
+    await seedCode(hashHandoffCode("orphan"), crypto.randomUUID());
+
+    const reserved = await getOwnerSql().reserve();
+    try {
+      await reserved.unsafe(
+        readFileSync(
+          "sql/446_awcms_session_handoff_step_up_freshness.sql",
+          "utf8"
+        )
+      );
+    } finally {
+      reserved.release();
+    }
+
+    const rows = (await admin`
+      SELECT code_hash, assurance_level, stepped_up_method, stepped_up_at
+      FROM awcms_session_handoff_codes
+      WHERE tenant_id = ${TENANT_B}
+      ORDER BY assurance_level
+    `) as {
+      code_hash: string;
+      assurance_level: string;
+      stepped_up_method: string | null;
+      stepped_up_at: Date | null;
+    }[];
+
+    expect(rows).toHaveLength(2);
+    // Unmatched: never given an invented instant, downgraded instead.
+    expect(rows[0]).toEqual({
+      code_hash: hashHandoffCode("orphan"),
+      assurance_level: "aal1",
+      stepped_up_method: null,
+      stepped_up_at: null
+    });
+    // Matched: the issuing session's ORIGINAL (stale) instant.
+    expect(rows[1]!.code_hash).toBe(hashHandoffCode("matched"));
+    expect(rows[1]!.assurance_level).toBe("aal2");
+    expect(new Date(rows[1]!.stepped_up_at!).getTime()).toBe(stale.getTime());
   });
 });

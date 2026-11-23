@@ -27,6 +27,7 @@ import {
 } from "./session-credential-epoch";
 import {
   evaluateStepUp,
+  grantedStepUpAt,
   stepUpColumns,
   stepUpProofFromColumns,
   type SessionAssuranceGrant,
@@ -190,7 +191,10 @@ export async function createSessionWithAssurance(
   const tokenHash = hashSessionToken(token);
   const expiresAt = new Date(input.now.getTime() + input.ttlMin * 60_000);
   const assuranceLevel = input.assurance.level;
-  const steppedUpAt = assuranceLevel === "aal2" ? input.now : null;
+  // The proof's own instant, clamped to `now` — NOT `now` for every aal2
+  // grant: a carried assurance (handoff) must not come out fresher than the
+  // step-up behind it.
+  const steppedUpAt = grantedStepUpAt(input.assurance, input.now);
   const stepUp = stepUpColumns(input.assurance);
 
   await tx`
@@ -259,7 +263,12 @@ export async function stepUpSession(
     const created = await createSessionWithAssurance(tx, {
       tenantId: input.tenantId,
       identityId: input.session.identityId,
-      assurance: { level: "aal2", proof: input.proof },
+      // A factor was verified in this request, so the stamp IS `now`.
+      assurance: {
+        level: "aal2",
+        proof: input.proof,
+        steppedUpAt: input.now
+      },
       ttlMin: input.ttlMin,
       now: input.now,
       issue: {
@@ -276,7 +285,11 @@ export async function stepUpSession(
     };
   }
 
-  const stepUp = stepUpColumns({ level: "aal2", proof: input.proof });
+  const stepUp = stepUpColumns({
+    level: "aal2",
+    proof: input.proof,
+    steppedUpAt: input.now
+  });
 
   await tx`
     UPDATE awcms_sessions

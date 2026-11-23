@@ -118,9 +118,12 @@ export const POST = defineSelfServiceTenantRoute({
         requestedRedirectUri: redirectUri,
         identityId: assurance.identityId,
         sessionId: assurance.sessionId,
+        // The ORIGINAL step-up instant travels with the code, so the redeemed
+        // session is exactly as fresh as this one — never refreshed by the hop.
         assurance: assuranceGrantOf(
           assurance.assuranceLevel,
-          assurance.steppedUpBy
+          assurance.steppedUpBy,
+          assurance.steppedUpAt
         ),
         actorTenantUserId: context.tenantUserId,
         now
