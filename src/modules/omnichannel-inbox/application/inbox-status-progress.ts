@@ -183,7 +183,8 @@ export async function resolveInboxStatusVisibility(
     context.auth.context,
     context.auth.grantedPermissionKeys,
     INBOX_LIST_GUARD,
-    context.now
+    context.now,
+    context.auth.abacPolicyVersion
   );
 
   if (!mayList) {

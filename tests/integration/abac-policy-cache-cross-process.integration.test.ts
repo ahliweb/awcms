@@ -26,10 +26,12 @@
  */
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
   expect,
+  setSystemTime,
   test
 } from "bun:test";
 
@@ -46,7 +48,10 @@ import {
 import { countQueries } from "./query-budget";
 import { OWNER_GRANT_EXCLUDED_PERMISSION_KEYS } from "../../src/modules/_shared/owner-grant-exclusions";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
-import { authorizeInTransaction } from "../../src/modules/identity-access/application/access-guard";
+import {
+  authorizeInTransaction,
+  evaluateFieldAccessInTransaction
+} from "../../src/modules/identity-access/application/access-guard";
 import {
   insertAbacPolicy,
   setAbacPolicyActive,
@@ -58,6 +63,7 @@ import {
 } from "../../src/modules/identity-access/application/abac-admin";
 import {
   loadActivePolicies,
+  POLICY_CACHE_MAX_AGE_MS,
   readPolicyVersion,
   resetPolicyCache
 } from "../../src/modules/identity-access/application/policy-cache";
@@ -204,6 +210,10 @@ describe("ABAC policy cache across processes (Issue #1482)", () => {
     await resetDatabase();
     resetPolicyCache();
     await seed();
+  });
+
+  afterEach(() => {
+    setSystemTime();
   });
 
   test("runs as the real awcms_app login, or not at all", () => {
@@ -472,5 +482,101 @@ describe("ABAC policy cache across processes (Issue #1482)", () => {
     expect(
       await refused((tx) => tx`SELECT nextval('awcms_abac_policy_version_seq')`)
     ).toBe("42501");
+  });
+  test("a change the version cannot see (a restore reissuing a version) is bounded by the cache's age", async () => {
+    if (!ready()) return;
+
+    // B caches the empty policy set at the current version.
+    expect((await authorizeInB()).allowed).toBe(true);
+
+    // The M1 shape of a logical restore / PITR: a deny appears while the
+    // tenant's version reads exactly what B cached. Reproduced by writing the
+    // row with ordinary triggers off (replica mode), so the version row is
+    // left untouched — the equality check is blind to it by construction.
+    await getAdminSql().begin(async (tx) => {
+      await tx`SET LOCAL session_replication_role = replica`;
+      await tx`
+        INSERT INTO awcms_abac_policies
+          (tenant_id, policy_code, effect, module_key, activity_code, action,
+           dsl_version, priority, conditions, is_active, is_dsl_managed)
+        VALUES (${TENANT}, 't1482.restored-deny', 'deny', ${GUARD.moduleKey},
+                ${GUARD.activityCode}, ${GUARD.action}, 1, 100,
+                ${ALWAYS}::jsonb, true, true)
+      `;
+    });
+
+    // Within the bound B still serves its snapshot: this is the residual the
+    // restore runbook (deploy/backup/README.md step 6) closes outright.
+    expect((await authorizeInB()).allowed).toBe(true);
+
+    // Past the bound the snapshot is reloaded whatever the version says.
+    setSystemTime(new Date(Date.now() + POLICY_CACHE_MAX_AGE_MS + 1000));
+    expect((await authorizeInB()).allowed).toBe(false);
+  });
+
+  test("an entry from the future (clock stepped back) is not served", async () => {
+    if (!ready()) return;
+
+    const real = Date.now();
+
+    setSystemTime(new Date(real + 60_000));
+    expect((await authorizeInB()).allowed).toBe(true);
+
+    await getAdminSql().begin(async (tx) => {
+      await tx`SET LOCAL session_replication_role = replica`;
+      await tx`
+        INSERT INTO awcms_abac_policies
+          (tenant_id, policy_code, effect, module_key, activity_code, action,
+           dsl_version, priority, conditions, is_active, is_dsl_managed)
+        VALUES (${TENANT}, 't1482.restored-deny', 'deny', ${GUARD.moduleKey},
+                ${GUARD.activityCode}, ${GUARD.action}, 1, 100,
+                ${ALWAYS}::jsonb, true, true)
+      `;
+    });
+
+    setSystemTime(new Date(real));
+    expect((await authorizeInB()).allowed).toBe(false);
+  });
+
+  test("a field-access follow-up in the same transaction costs no query when handed the version", async () => {
+    if (!ready()) return;
+
+    const run = (passVersion: boolean) =>
+      withTenantOrThrow(getAppRoleSql(), TENANT, async (tx) => {
+        const auth = await authorizeInTransaction(
+          tx,
+          TENANT,
+          tokenHash,
+          new Date(),
+          GUARD
+        );
+
+        if (!auth.allowed) throw new Error("fixture owner must be allowed");
+        expect(auth.abacPolicyVersion).toBeDefined();
+
+        return countQueries(tx, (counting) =>
+          evaluateFieldAccessInTransaction(
+            counting,
+            TENANT,
+            auth.context,
+            auth.grantedPermissionKeys,
+            {
+              moduleKey: "visitor_analytics",
+              activityCode: "raw_detail",
+              action: "read"
+            },
+            new Date(),
+            passVersion ? auth.abacPolicyVersion : undefined
+          )
+        );
+      });
+
+    await run(true); // warm the cache
+    const handed = await run(true);
+    const unhanded = await run(false);
+
+    expect(handed.result).toBe(true);
+    expect(handed.queries).toBe(0);
+    expect(unhanded.queries).toBe(1);
   });
 });

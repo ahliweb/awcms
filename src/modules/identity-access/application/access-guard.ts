@@ -119,6 +119,14 @@ export type AuthorizeResult =
       allowed: true;
       context: TenantContext;
       grantedPermissionKeys: Set<string>;
+      /**
+       * The tenant's ABAC policy version this decision was made at (Issue
+       * #1482), read in THIS transaction. A caller asking a follow-up ABAC
+       * question in the SAME transaction (`evaluateFieldAccessInTransaction`)
+       * passes it on so the cache check costs no further query. Never carry it
+       * into another transaction.
+       */
+      abacPolicyVersion?: string;
     }
   | {
       allowed: false;
@@ -954,7 +962,8 @@ export async function authorizeInTransaction(
     // so `evaluateFieldAccessInTransaction` cannot be handed a credential's
     // context and treat it as a session by omission.
     context: machine ? { ...context, viaMachineCredential: true } : context,
-    grantedPermissionKeys
+    grantedPermissionKeys,
+    abacPolicyVersion: principal?.abacPolicyVersion
   };
 }
 
@@ -986,9 +995,20 @@ export async function evaluateFieldAccessInTransaction(
   context: TenantContext,
   grantedPermissionKeys: ReadonlySet<string>,
   fieldGuard: AccessRequest,
-  now: Date
+  now: Date,
+  /**
+   * `AuthorizeResult.abacPolicyVersion` from the authorization made in THIS
+   * transaction (Issue #1482). Supplied, the policy cache check costs no query;
+   * omitted, the version is read here (one primary-key lookup). Never pass a
+   * version read in another transaction.
+   */
+  observedPolicyVersion?: string
 ): Promise<boolean> {
-  const policies = await loadActivePolicies(tx, tenantId);
+  const policies = await loadActivePolicies(
+    tx,
+    tenantId,
+    observedPolicyVersion
+  );
   const decision = evaluateAccess(
     context,
     fieldGuard,

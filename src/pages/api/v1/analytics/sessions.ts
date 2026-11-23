@@ -79,7 +79,8 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
       auth.context,
       auth.grantedPermissionKeys,
       RAW_DETAIL_GUARD,
-      now
+      now,
+      auth.abacPolicyVersion
     );
 
     const page = await listVisitorSessions(tx, tenantId, cursor ?? undefined);
