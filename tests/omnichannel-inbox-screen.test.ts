@@ -19,6 +19,8 @@ import {
   clockToMinutes,
   minutesToClock,
   openDays,
+  parsePolicyScope,
+  policyScopeValue,
   rebuildResumePoint
 } from "../src/lib/ui/omnichannel-inbox-screen";
 import {
@@ -96,6 +98,57 @@ describe("the policy form body", () => {
       buildPolicyBody({ ...fields, opensAt: "17:00", closesAt: "09:00" })
     ).toBeNull();
     expect(buildPolicyBody({ ...fields, opensAt: "nine" })).toBeNull();
+  });
+});
+
+describe("the policy scope picker", () => {
+  const fields = {
+    name: "Brand A hours",
+    timezone: "Asia/Jakarta",
+    firstResponseMinutes: 30,
+    nextResponseMinutes: 120,
+    openWeekdays: [1, 2, 3],
+    opensAt: "09:00",
+    closesAt: "17:00",
+    holidays: ""
+  };
+  const id = "0b9c1c2e-3d4f-4a5b-8c6d-7e8f9a0b1c2d";
+
+  test("an empty or absent value is the tenant default and sends no businessScope", () => {
+    expect(buildPolicyBody({ ...fields, scope: "" })).not.toHaveProperty(
+      "businessScope"
+    );
+    expect(buildPolicyBody(fields)).not.toHaveProperty("businessScope");
+  });
+
+  test("a picked scope round-trips to the API's {type, id} and its own validator accepts it", () => {
+    const scope = { type: "business_unit", id };
+
+    expect(parsePolicyScope(policyScopeValue(scope))).toEqual(scope);
+
+    const body = buildPolicyBody({
+      ...fields,
+      scope: policyScopeValue(scope)
+    })!;
+
+    expect(body.businessScope).toEqual(scope);
+
+    const validated = validateSlaPolicyCreateBody(body);
+
+    expect(validated.valid).toBe(true);
+  });
+
+  test("a value the picker never offers is refused, never widened to the whole tenant", () => {
+    for (const bad of [
+      "business_unit",
+      `Business:${id}`,
+      `business_unit:not-a-uuid`,
+      `:${id}`,
+      `x:${id}:y`
+    ]) {
+      expect(parsePolicyScope(bad)).toBeUndefined();
+      expect(buildPolicyBody({ ...fields, scope: bad })).toBeNull();
+    }
   });
 });
 

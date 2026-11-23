@@ -20,15 +20,22 @@ import {
   type ActivityView,
   type ConversationView
 } from "./conversation-directory";
+import {
+  readInboxStatusSnapshot,
+  resolveInboxStatusVisibility,
+  type InboxStatusSnapshot
+} from "./inbox-status-progress";
 import { visibilityFor } from "./route-support";
 import { listSlaPolicies, type SlaPolicyView } from "./sla-policy-directory";
 import { listTags, type TagView } from "./tag-directory";
 import { isOmnichannelInboxEnabled } from "../domain/inbox-config";
 import { CONVERSATION_STATUSES, SOURCE_KINDS } from "../domain/inbox-constants";
 import { validateListConversationsQuery } from "../domain/inbox-validation";
-import type {
-  InboxAccessContext,
-  InboxGuard
+import {
+  loadInboxScopeAccess,
+  type InboxAccessContext,
+  type InboxGuard,
+  type ScopeRef
 } from "../infrastructure/channel-accounts-access";
 
 /** `can()` of `loadAdminScreen`: the chokepoint, one boolean per probe. */
@@ -84,13 +91,43 @@ export type InboxListData = {
   tags: TagView[];
   me: string;
   canSeeSettings: boolean;
+  /**
+   * The live-counts panel's first state (Issue #1164 / #1171): the REST
+   * snapshot the stream also serves, or `null` when the caller lacks
+   * `status.read` (no panel, not a panel of zeros).
+   */
+  status: InboxStatusSnapshot | null;
 };
+
+/**
+ * The live-counts snapshot for a caller who holds `status.read`: the same
+ * permission and the same visibility rule as the snapshot and stream routes
+ * (`resolveInboxStatusVisibility`), so the panel is never more generous than
+ * the stream behind it. Counts and ids only; no body, no customer identifier.
+ */
+export async function loadInboxStatusPanel(input: {
+  context: InboxAccessContext;
+  statusGuard: InboxGuard;
+  can: InboxCan;
+}): Promise<InboxStatusSnapshot | null> {
+  const { context, statusGuard, can } = input;
+
+  if (!(await can(statusGuard))) return null;
+
+  const visibility = await resolveInboxStatusVisibility(context);
+
+  return visibility === null
+    ? null
+    : readInboxStatusSnapshot(context, visibility, 20);
+}
 
 export async function loadInboxList(input: {
   context: InboxAccessContext;
   filters: InboxListFilters;
   readGuard: InboxGuard;
   settingsGuard: InboxGuard;
+  /** The live-counts guard; when omitted the screen has no panel. */
+  statusGuard?: InboxGuard;
   can: InboxCan;
 }): Promise<InboxListData> {
   const { context, filters, readGuard, settingsGuard, can } = input;
@@ -105,7 +142,8 @@ export async function loadInboxList(input: {
       more: false,
       tags: [],
       me,
-      canSeeSettings: false
+      canSeeSettings: false,
+      status: null
     };
   }
 
@@ -145,7 +183,14 @@ export async function loadInboxList(input: {
     more,
     tags: await listTags(context.tx, context.tenantId),
     me,
-    canSeeSettings: await can(settingsGuard)
+    canSeeSettings: await can(settingsGuard),
+    status: input.statusGuard
+      ? await loadInboxStatusPanel({
+          context,
+          statusGuard: input.statusGuard,
+          can
+        })
+      : null
   };
 }
 
@@ -207,7 +252,55 @@ export type InboxSettingsData = {
   canConfigurePolicies: boolean;
   canConfigureTags: boolean;
   canRebuild: boolean;
+  /**
+   * What the policy form's "Applies to" picker offers (Issue #1164): the
+   * business scopes the tenant's channel accounts actually carry, narrowed for
+   * a scope-confined caller to those they cover for `sla_policies.configure`;
+   * `confined` hides the tenant-default choice, which the endpoint refuses a
+   * confined caller. A hint for the form only: the endpoint re-authorises the
+   * scope it is given (`authorizePolicyScope`) and stays the authority.
+   */
+  policyScopes: { confined: boolean; options: ScopeRef[] };
 };
+
+/** The most scopes the picker offers; a tenant with more names one through the API. */
+export const POLICY_SCOPE_OPTION_LIMIT = 100;
+
+export async function loadPolicyScopeOptions(
+  context: InboxAccessContext,
+  configureGuard: InboxGuard
+): Promise<{ confined: boolean; options: ScopeRef[] }> {
+  const access = await loadInboxScopeAccess();
+
+  // Fail closed: no access rules loaded means nothing selectable.
+  if (!access) return { confined: true, options: [] };
+
+  const confined = await access.isConfined(context);
+  const rows = (await context.tx`
+    SELECT DISTINCT business_scope_type AS type, business_scope_id::text AS id
+    FROM awcms_channel_accounts
+    WHERE tenant_id = ${context.tenantId}
+      AND deleted_at IS NULL
+      AND business_scope_type IS NOT NULL
+      AND business_scope_id IS NOT NULL
+    ORDER BY business_scope_type, business_scope_id::text
+    LIMIT ${POLICY_SCOPE_OPTION_LIMIT}
+  `) as ScopeRef[];
+
+  if (!confined) return { confined: false, options: rows };
+
+  const covered = new Set(
+    // One page render, not a timer: the decisions are logged like any other.
+    (await access.coveredScopes(context, configureGuard)).map(
+      (scope) => `${scope.type}:${scope.id}`
+    )
+  );
+
+  return {
+    confined: true,
+    options: rows.filter((row) => covered.has(`${row.type}:${row.id}`))
+  };
+}
 
 export async function loadInboxSettings(input: {
   context: InboxAccessContext;
@@ -227,7 +320,8 @@ export async function loadInboxSettings(input: {
       tags: null,
       canConfigurePolicies: false,
       canConfigureTags: false,
-      canRebuild: false
+      canRebuild: false,
+      policyScopes: { confined: true, options: [] }
     };
   }
 
@@ -249,6 +343,9 @@ export async function loadInboxSettings(input: {
     tags,
     canConfigurePolicies: await can(input.slaConfigureGuard),
     canConfigureTags: await can(input.tagsConfigureGuard),
-    canRebuild: await can(input.projectionConfigureGuard)
+    canRebuild: await can(input.projectionConfigureGuard),
+    policyScopes: (await can(input.slaConfigureGuard))
+      ? await loadPolicyScopeOptions(context, input.slaConfigureGuard)
+      : { confined: true, options: [] }
   };
 }

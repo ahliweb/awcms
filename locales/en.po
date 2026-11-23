@@ -9587,9 +9587,6 @@ msgstr ""
 msgid "Any response state"
 msgstr ""
 
-msgid "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
-msgstr ""
-
 msgid "Assigned"
 msgstr ""
 
@@ -9699,9 +9696,6 @@ msgid "Lower-case letters, digits, hyphen or underscore."
 msgstr ""
 
 msgid "Monday"
-msgstr ""
-
-msgid "New default policy"
 msgstr ""
 
 msgid "Newest inbound first. A conversation here is a work item over an opaque reference: to read or answer the customer, use the channel it arrived through, then record the response on the conversation."
@@ -11443,3 +11437,27 @@ msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "Work right now"
+msgstr ""
+
+msgid "Counts of active conversations you may see. They update while this page is open, and fall back to a refresh button if the live connection is unavailable. Only counts are shown here; open a conversation from the list below."
+msgstr ""
+
+msgid "Awaiting a reply"
+msgstr ""
+
+msgid "Refresh counts"
+msgstr ""
+
+msgid "{open} open, {pending} pending, {awaitingReply} awaiting a reply, {unassigned} unassigned, {slaBreached} overdue"
+msgstr ""
+
+msgid "New policy"
+msgstr ""
+
+msgid "Replaces the active policy for the scope you pick. A policy for one business scope applies to the conversations of that scope's channel accounts; the whole-tenant default applies to the rest."
+msgstr ""
+
+msgid "You are limited to business scopes, and none you cover has a channel account yet, so there is nothing to choose."
+msgstr ""

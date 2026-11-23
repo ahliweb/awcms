@@ -1643,4 +1643,128 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
       tags: null
     });
   });
+
+  test("#1164 live counts: the screen's status snapshot is scope-confined, permission-gated, switch-aware and carries no customer reference", async () => {
+    const brandA = await seedOffice("lc-a");
+    const brandB = await seedOffice("lc-b");
+    const [cA, cB, cWide] = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID()
+    ];
+
+    await telegramInbound(tenantId, await seedBot(tenantId, brandA), cA);
+    await telegramInbound(tenantId, await seedBot(tenantId, brandB), cB);
+    await telegramInbound(tenantId, await seedBot(tenantId, null), cWide);
+    await dispatch(tenantId);
+
+    const STATUS_KEY = "omnichannel_inbox.status.read";
+    const statusGuard = G("status", "read");
+    const confined = await seedUser(tenantId, "lc-confined", [
+      READ,
+      STATUS_KEY
+    ]);
+    const wide = await seedUser(tenantId, "lc-wide", [READ, STATUS_KEY]);
+    const noStatus = await seedUser(tenantId, "lc-nostatus", [READ]);
+    await holdScope(confined.tenantUserId, brandA);
+
+    const listFor = (token: string, withGuard = true) =>
+      screen(token, SCREEN.read, ({ context, can }) =>
+        loadInboxList({
+          context,
+          filters: {},
+          readGuard: SCREEN.read,
+          settingsGuard: SCREEN.slaRead,
+          ...(withGuard ? { statusGuard } : {}),
+          can
+        })
+      );
+    const statusOf = (data: unknown) =>
+      (data as { status: { counts: Record<string, number> } | null }).status;
+
+    const mine = statusOf(await listFor(confined.token));
+    const all = statusOf(await listFor(wide.token));
+
+    // A brand-A viewer counts brand A only; the tenant-wide viewer counts all.
+    expect(mine?.counts).toMatchObject({ open: 1, unassigned: 1 });
+    expect(all?.counts).toMatchObject({ open: 3, unassigned: 3 });
+
+    // No `status.read`: no panel at all (null), not a panel of zeros.
+    expect(statusOf(await listFor(noStatus.token))).toBeNull();
+    // A screen that does not ask for the panel renders none.
+    expect(statusOf(await listFor(wide.token, false))).toBeNull();
+
+    // A hint, not a preview: no opaque customer reference in the payload.
+    const payload = JSON.stringify(await listFor(wide.token));
+    const snapshot = JSON.stringify(
+      ((await listFor(wide.token)) as { status: unknown }).status
+    );
+
+    expect(payload).toContain(cA);
+    for (const ref of [cA, cB, cWide]) expect(snapshot).not.toContain(ref);
+
+    // The switch: OFF yields no panel.
+    delete process.env.OMNICHANNEL_INBOX_ENABLED;
+    expect(statusOf(await listFor(wide.token))).toBeNull();
+  });
+
+  test("#1164 SLA scope picker: offers only scopes the tenant's accounts carry, narrowed for a confined caller, fail-closed without configure", async () => {
+    const brandA = await seedOffice("sp-a");
+    const brandB = await seedOffice("sp-b");
+
+    await seedBot(tenantId, brandA);
+    await seedBot(tenantId, brandB);
+    await seedBot(tenantId, null);
+
+    const wide = await seedUser(tenantId, "sp-wide", ALL);
+    const confined = await seedUser(tenantId, "sp-confined", [
+      READ,
+      "omnichannel_inbox.sla_policies.read",
+      "omnichannel_inbox.sla_policies.configure"
+    ]);
+    const readOnly = await seedUser(tenantId, "sp-ro", [
+      "omnichannel_inbox.sla_policies.read"
+    ]);
+    await holdScope(confined.tenantUserId, brandA);
+
+    const settingsFor = (token: string) =>
+      screen(token, SCREEN.slaRead, ({ context, can }) =>
+        loadInboxSettings({
+          context,
+          slaReadGuard: SCREEN.slaRead,
+          conversationsReadGuard: SCREEN.read,
+          slaConfigureGuard: SCREEN.slaConfigure,
+          tagsConfigureGuard: SCREEN.tagsConfigure,
+          projectionConfigureGuard: SCREEN.projectionConfigure,
+          can
+        })
+      );
+    const scopesOf = async (token: string) =>
+      (
+        (await settingsFor(token)) as {
+          policyScopes: {
+            confined: boolean;
+            options: { type: string; id: string }[];
+          };
+        }
+      ).policyScopes;
+
+    const wideScopes = await scopesOf(wide.token);
+
+    expect(wideScopes.confined).toBe(false);
+    expect(wideScopes.options.map((o) => o.id).sort()).toEqual(
+      [brandA, brandB].sort()
+    );
+
+    const mine = await scopesOf(confined.token);
+
+    expect(mine.confined).toBe(true);
+    expect(mine.options.map((o) => o.id)).toEqual([brandA]);
+
+    // No `configure`: no picker data at all, and confined (no default choice).
+    expect(await scopesOf(readOnly.token)).toEqual({
+      confined: true,
+      options: []
+    });
+  });
 });

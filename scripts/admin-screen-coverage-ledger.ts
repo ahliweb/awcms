@@ -343,13 +343,5 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // which claims these keys and removes them from this ledger in that change.
   "email.provider_events.approve",
   "email.webhook.configure",
-  "email.webhook.read",
-
-  // omnichannel_inbox live counts (1) — Issue #1171, ADR-0154 task 3. API-first:
-  // `GET /api/v1/omnichannel-inbox/progress` (snapshot) and `.../progress/stream`
-  // (SSE) exist and are tested; the inbox pages render on the server and poll
-  // nothing, so a live-counts panel on `/admin/omnichannel-inbox` (reusing
-  // `delivery-progress-client.ts`) is the recorded follow-up. It claims this key
-  // and removes it from this ledger in that change.
-  "omnichannel_inbox.status.read"
+  "email.webhook.read"
 ];

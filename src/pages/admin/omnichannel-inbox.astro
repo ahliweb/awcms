@@ -87,6 +87,16 @@ const READ_GUARD = {
   activityCode: "conversations",
   action: "read"
 } as const;
+/**
+ * The live-counts panel (Issue #1164 / #1171, ADR-0154): its snapshot and its
+ * stream are `status.read` endpoints, so the panel is rendered only for a
+ * holder; the counts follow that permission and the caller's business scope.
+ */
+const STATUS_GUARD = {
+  moduleKey: "omnichannel_inbox",
+  activityCode: "status",
+  action: "read"
+} as const;
 /** Only to decide whether to LINK to the settings screen; that screen gates itself. */
 const SLA_READ_GUARD = {
   moduleKey: "omnichannel_inbox",
@@ -125,6 +135,7 @@ const screen = await loadAdminScreen({
       filters: query.filters,
       readGuard: READ_GUARD,
       settingsGuard: SLA_READ_GUARD,
+      statusGuard: STATUS_GUARD,
       can
     }),
   onError: (error) => {
@@ -141,6 +152,7 @@ const canRead = screen.state !== "denied";
 const loadError = screen.state === "error";
 const data = screen.state === "allowed" ? screen.data : null;
 const deploymentEnabled = data === null ? true : data.enabled;
+const status = data?.status ?? null;
 const conversations: ConversationView[] = data?.conversations ?? [];
 const tags: TagView[] = data?.tags ?? [];
 const tagLabel = (id: string) =>
@@ -258,6 +270,76 @@ const summary = filtered
           </>
         )}
       </p>
+
+      {status !== null && (
+        <section
+          class="admin-subsection"
+          aria-labelledby="omnichannel-inbox-live-title"
+          id="omnichannel-inbox-live"
+          data-delivery-progress
+          data-stream-url="/api/v1/omnichannel-inbox/progress/stream"
+          data-snapshot-url="/api/v1/omnichannel-inbox/progress"
+          data-count-keys="open,pending,awaitingReply,unassigned,slaBreached"
+          data-connection="stale"
+          data-label-live={t("Live")}
+          data-label-reconnecting={t("Reconnecting…")}
+          data-label-stale={t("Not live — showing the state as of {time}")}
+          data-label-revoked={t(
+            "Your access to this progress ended. Reload the page to see what you can still view."
+          )}
+          data-label-summary={t(
+            "{open} open, {pending} pending, {awaitingReply} awaiting a reply, {unassigned} unassigned, {slaBreached} overdue"
+          )}
+        >
+          <h3 class="admin-subsection-title" id="omnichannel-inbox-live-title">
+            {t("Work right now")}
+          </h3>
+          <p class="page-description">
+            {t(
+              "Counts of active conversations you may see. They update while this page is open, and fall back to a refresh button if the live connection is unavailable. Only counts are shown here; open a conversation from the list below."
+            )}
+          </p>
+          <p class="page-description">
+            <strong>{t("Connection")}:</strong>{" "}
+            <span data-progress-state>
+              {t("Not live — showing the state as of {time}", {
+                time: formatUtcMinute(status.at)
+              })}
+            </span>
+          </p>
+          <dl class="admin-detail-list" id="omnichannel-inbox-live-counts">
+            <dt>{t("Open")}</dt>
+            <dd data-progress-count="open">{status.counts.open}</dd>
+            <dt>{t("Pending")}</dt>
+            <dd data-progress-count="pending">{status.counts.pending}</dd>
+            <dt>{t("Awaiting a reply")}</dt>
+            <dd data-progress-count="awaitingReply">
+              {status.counts.awaitingReply}
+            </dd>
+            <dt>{t("Unassigned")}</dt>
+            <dd data-progress-count="unassigned">{status.counts.unassigned}</dd>
+            <dt>{t("Overdue")}</dt>
+            <dd data-progress-count="slaBreached">
+              {status.counts.slaBreached}
+            </dd>
+          </dl>
+          <p
+            class="visually-hidden"
+            aria-live="polite"
+            aria-atomic="true"
+            data-progress-announce
+          ></p>
+          <div>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-progress-refresh
+            >
+              {t("Refresh counts")}
+            </button>
+          </div>
+        </section>
+      )}
 
       {data.more && (
         <p class="state-notice" id="omnichannel-inbox-truncated">
@@ -480,3 +562,15 @@ const summary = filtered
     </section>
   )}
 </AdminLayout>
+
+<script>
+  import { mountDeliveryProgress } from "../../lib/ui/delivery-progress-client";
+
+  // Issue #1164 — the live work-counts panel (rendered only for a caller who
+  // holds `status.read`). It works with no stream: see the module header.
+  for (const panel of document.querySelectorAll<HTMLElement>(
+    "[data-delivery-progress]"
+  )) {
+    mountDeliveryProgress(panel);
+  }
+</script>

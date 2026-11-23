@@ -64,11 +64,37 @@ export type PolicyFormFields = {
   closesAt: string;
   /** One `YYYY-MM-DD` per line. */
   holidays: string;
+  /** The picker's value: `""` = the tenant default, else `type:uuid`. */
+  scope?: string;
 };
 
+const SCOPE_VALUE =
+  /^([a-z][a-z0-9_]*):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
 /**
- * The request body for `POST /sla-policies` (tenant default, `businessScope`
- * omitted), or `null` when the fields are not a usable window. The server
+ * The picker's `type:uuid` value as the API's `businessScope`, `null` for the
+ * tenant default (empty), or `undefined` for a value the picker never offers
+ * (never sent: the form refuses it rather than silently widening a policy to
+ * the whole tenant).
+ */
+export function parsePolicyScope(
+  value: string | undefined
+): { type: string; id: string } | null | undefined {
+  if (value === undefined || value === "") return null;
+
+  const match = SCOPE_VALUE.exec(value);
+
+  return match ? { type: match[1]!, id: match[2]! } : undefined;
+}
+
+/** The picker's option value for a scope. */
+export function policyScopeValue(scope: { type: string; id: string }): string {
+  return `${scope.type}:${scope.id}`;
+}
+
+/**
+ * The request body for `POST /sla-policies` (tenant default when `businessScope`
+ * is omitted), or `null` when the fields are not a usable window. The server
  * validates again and stays the authority; this only avoids a round trip for
  * the obvious mistakes (no open day, closing before opening).
  */
@@ -79,7 +105,12 @@ export function buildPolicyBody(fields: PolicyFormFields): {
   nextResponseMinutes: number;
   workingHours: ({ start: number; end: number } | null)[];
   holidays: string[];
+  businessScope?: { type: string; id: string };
 } | null {
+  const scope = parsePolicyScope(fields.scope);
+
+  if (scope === undefined) return null;
+
   const start = clockToMinutes(fields.opensAt);
   const end = clockToMinutes(fields.closesAt);
 
@@ -104,7 +135,8 @@ export function buildPolicyBody(fields: PolicyFormFields): {
           .map((line) => line.trim())
           .filter((line) => line.length > 0)
       )
-    ]
+    ],
+    ...(scope === null ? {} : { businessScope: scope })
   };
 }
 

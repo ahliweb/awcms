@@ -1399,8 +1399,18 @@ export const READER_BUDGET_BYTES = 39_000;
  * sign-in downloads the login script alone (7,036 B), not the encoder. The
  * total rises a little more than the code it adds because a split chunk costs
  * its own import glue.
+ *
+ * **Raised for Issue #1164** (the inbox live work-counts panel and the SLA
+ * policy scope picker): +735 B (392,355 -> 393,090), measured 392,946 B on a
+ * clean build (+731 B over the 392,215 B of `main`). The list screen gains a
+ * small page script that mounts the EXISTING `delivery-progress-client.ts`
+ * (stream, polling fallback, refresh, text connection state, rate-limited
+ * announcements: nothing is copied), which gains a `data-count-keys` option so
+ * the same module serves another topic's counters, plus two pure helpers
+ * (`parsePolicyScope`, `policyScopeValue`) the settings script reuses for the
+ * picker. Margin 144 B, as above.
  */
-export const APP_BUDGET_BYTES = 392_355;
+export const APP_BUDGET_BYTES = 393_090;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

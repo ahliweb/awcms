@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:83aa2a344d74ea1a0ab77497037f11b31b7a4495ddabd6cdd72a84260f1c3c65 -->
+<!-- i18n-source-hash: sha256:24b9645e287290222be78ae8487daba8d20623d098fab11e75d2760472c399d3 -->
 
 # `omnichannel_inbox`
 
@@ -146,6 +146,13 @@ Telegram: staf disebut "Anda" atau "staf lain".
   didorong ke SQL; pencarian dan urutan atas baris yang dimuat (maksimal 200,
   dengan pemberitahuan bila lebih banyak dan tanpa total yang tak bisa
   dipertanggungjawabkan).
+  Panel **jumlah pekerjaan** (terbuka, tertunda, menunggu balasan, belum
+  ditugaskan, terlambat) tampil bagi pemegang `status.read`: dirender di server,
+  lalu mengikuti SSE `progress/stream` (ADR-0154) dan mundur ke tombol muat ulang
+  serta polling terbatas, sehingga tetap bekerja saat hint lintas-instance
+  mati (stream berdetak sendiri). Hanya jumlah, dibatasi lingkup seperti
+  daftar; "ditugaskan ke saya" bukan hitungan stream (bersifat per-pelaku),
+  pakai filter penerima tugas.
 - `/admin/omnichannel-inbox/{id}` — status, label, tenggat, dan riwayat
   append-only; ubah status, atur label, catat respons (`conversations.update`),
   tugaskan ke saya / batalkan penugasan (`conversations.assign`,
@@ -154,8 +161,10 @@ Telegram: staf disebut "Anda" atau "staf lain".
   penerima tugas.
 - `/admin/omnichannel-inbox/settings` — kebijakan SLA (daftar; buat bawaan
   tenant, pensiunkan), katalog label (buat, hapus), dan bangun ulang proyeksi.
-  Kebijakan untuk satu lingkup bisnis ditulis lewat API; pemilih lingkup adalah
-  tindak lanjut.
+  Kebijakan baru memilih cakupannya: bawaan seluruh tenant (tidak ditawarkan
+  kepada pemanggil yang dibatasi lingkup) atau lingkup bisnis yang dibawa salah
+  satu akun kanal tenant, dipersempit bagi pemanggil terbatas ke lingkup yang
+  mereka jangkau. Endpoint tetap mengotorisasi ulang lingkup yang diterimanya.
 
 ## Keputusan terbuka
 

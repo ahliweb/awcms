@@ -136,7 +136,13 @@ a staff member is "you" or "another staff member".
 - `/admin/omnichannel-inbox` — the queue (ADR-0149 data page): filters for
   status, assignee (me / unassigned), overdue, source and tag pushed to SQL;
   search and sort over the loaded rows (at most 200, with a notice when more
-  exist and no total it cannot stand behind).
+  exist and no total it cannot stand behind). A **work-counts panel** (open,
+  pending, awaiting a reply, unassigned, overdue) is shown to holders of
+  `status.read`: it renders the snapshot on the server, then follows the
+  `progress/stream` SSE (ADR-0154) and falls back to a refresh button and
+  bounded polling, so it works with the cross-instance wake-up hint off (the
+  stream ticks on its own). Counts only, scope-confined like the list; "assigned
+  to me" is not a stream count (it would be per-actor), use the assignee filter.
 - `/admin/omnichannel-inbox/{id}` — state, tags, deadline and the append-only
   history; change status, set tags, record a response (`conversations.update`),
   assign to me / unassign (`conversations.assign`, `Idempotency-Key`). Every
@@ -144,8 +150,10 @@ a staff member is "you" or "another staff member".
   disabled**: no endpoint lists the eligible assignees.
 - `/admin/omnichannel-inbox/settings` — SLA policies (list; create the tenant
   default, retire), the tag catalogue (create, delete) and the projection
-  rebuild. Policies for one business scope are written through the API; the
-  scope picker is a follow-up.
+  rebuild. A new policy picks its scope: the whole-tenant default (not offered
+  to a scope-confined caller) or a business scope that one of the tenant's
+  channel accounts carries, narrowed for a confined caller to the scopes they
+  cover. The endpoint re-authorises whatever scope it receives.
 
 ## Open decisions
 

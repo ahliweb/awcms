@@ -31,7 +31,10 @@ import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
 import { weekdayLabel } from "../../../lib/i18n/labels/omnichannel-inbox";
 import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
-import { openDays } from "../../../lib/ui/omnichannel-inbox-screen";
+import {
+  openDays,
+  policyScopeValue
+} from "../../../lib/ui/omnichannel-inbox-screen";
 import { loadInboxSettings } from "../../../modules/omnichannel-inbox/application/screen-loaders";
 import type { SlaPolicyView } from "../../../modules/omnichannel-inbox/application/sla-policy-directory";
 import type { TagView } from "../../../modules/omnichannel-inbox/application/tag-directory";
@@ -112,6 +115,7 @@ const data = screen.state === "allowed" ? screen.data : null;
 const deploymentEnabled = data === null ? true : data.enabled;
 const policies: SlaPolicyView[] = data?.policies ?? [];
 const tags: TagView[] | null = data?.tags ?? null;
+const policyScopes = data?.policyScopes ?? { confined: true, options: [] };
 
 function scopeText(scope: { type: string; id: string } | null): string {
   return scope === null
@@ -231,6 +235,12 @@ function weekText(policy: SlaPolicyView): string {
                     </td>
                     <td data-label={t("Applies to")}>
                       {scopeText(policy.businessScope)}
+                      {policy.businessScope !== null && (
+                        <span class="cell-muted">
+                          {" "}
+                          {policy.businessScope.id.slice(0, 8)}
+                        </span>
+                      )}
                     </td>
                     <td data-label={t("First response")}>
                       {tn(
@@ -310,13 +320,42 @@ function weekText(policy: SlaPolicyView): string {
               class="admin-subsection-title"
               id="omnichannel-policy-form-title"
             >
-              {t("New default policy")}
+              {t("New policy")}
             </h3>
             <p class="admin-field-hint">
               {t(
-                "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
+                "Replaces the active policy for the scope you pick. A policy for one business scope applies to the conversations of that scope's channel accounts; the whole-tenant default applies to the rest."
               )}
             </p>
+            <div class="admin-field">
+              <label class="field-label" for="omnichannel-policy-scope">
+                {t("Applies to")}
+              </label>
+              <select
+                class="field-input"
+                id="omnichannel-policy-scope"
+                name="scope"
+              >
+                {!policyScopes.confined && (
+                  <option value="">{t("Whole tenant (default)")}</option>
+                )}
+                {policyScopes.options.map((scope) => (
+                  <option value={policyScopeValue(scope)}>
+                    {t("Scope: {type}", {
+                      type: scope.type.replaceAll("_", " ")
+                    })}{" "}
+                    {scope.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+              {policyScopes.confined && policyScopes.options.length === 0 && (
+                <p class="admin-field-hint" id="omnichannel-policy-scope-none">
+                  {t(
+                    "You are limited to business scopes, and none you cover has a channel account yet, so there is nothing to choose."
+                  )}
+                </p>
+              )}
+            </div>
             <div class="admin-field">
               <label class="field-label" for="omnichannel-policy-name">
                 {t("Name")}
@@ -642,7 +681,8 @@ function weekText(policy: SlaPolicyView): string {
       openWeekdays: data.getAll("weekday").map(Number),
       opensAt: String(data.get("opens") ?? ""),
       closesAt: String(data.get("closes") ?? ""),
-      holidays: String(data.get("holidays") ?? "")
+      holidays: String(data.get("holidays") ?? ""),
+      scope: String(data.get("scope") ?? "")
     });
 
     if (body === null) {

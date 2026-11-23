@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import {
   ANNOUNCE_INTERVAL_MS,
   backoffDelayMs,
+  parseCountKeys,
   parseProgressCounts,
   shouldAnnounce
 } from "../src/lib/ui/delivery-progress-client";
@@ -32,6 +33,32 @@ describe("parseProgressCounts", () => {
         counts: { sent: -1, failed: 1.5, queued: "4", expired: 2, other: 9 }
       })
     ).toEqual({ expired: 2 });
+  });
+});
+
+describe("a panel with its own count keys (the inbox work counts)", () => {
+  const keys = ["open", "pending", "unassigned", "slaBreached"];
+
+  test("reads only the declared keys", () => {
+    expect(
+      parseProgressCounts(
+        { v: 1, counts: { open: 4, unassigned: 2, slaBreached: 1, sent: 9 } },
+        keys
+      )
+    ).toEqual({ open: 4, unassigned: 2, slaBreached: 1 });
+  });
+
+  test("parseCountKeys falls back to the delivery statuses and drops malformed names", () => {
+    expect(parseCountKeys(undefined)).toContain("sent");
+    expect(parseCountKeys("  ")).toContain("failed");
+    expect(parseCountKeys("open, bad key,slaBreached,<x>")).toEqual([
+      "open",
+      "slaBreached"
+    ]);
+    expect(parseCountKeys("!!,??")).toContain("queued");
+    expect(
+      parseCountKeys(Array.from({ length: 40 }, (_, i) => `k${i}`).join(","))
+    ).toHaveLength(12);
   });
 });
 

@@ -9552,9 +9552,6 @@ msgstr "Siapa saja"
 msgid "Any response state"
 msgstr "Semua status respons"
 
-msgid "Applies to the whole tenant and replaces the active default. A policy for one business scope is written through the API."
-msgstr "Berlaku untuk seluruh tenant dan menggantikan kebijakan bawaan yang aktif. Kebijakan untuk satu lingkup bisnis ditulis lewat API."
-
 msgid "Assigned"
 msgstr "Ditugaskan"
 
@@ -9659,9 +9656,6 @@ msgstr "Huruf kecil, angka, tanda hubung, atau garis bawah."
 
 msgid "Monday"
 msgstr "Senin"
-
-msgid "New default policy"
-msgstr "Kebijakan bawaan baru"
 
 msgid "Newest inbound first. A conversation here is a work item over an opaque reference: to read or answer the customer, use the channel it arrived through, then record the response on the conversation."
 msgstr "Masuk terbaru lebih dulu. Percakapan di sini adalah butir kerja atas referensi buram: untuk membaca atau menjawab pelanggan, gunakan kanal tempat percakapan itu masuk, lalu catat responsnya pada percakapan."
@@ -11386,3 +11380,27 @@ msgstr[0] "{count} pemberitahuan staf"
 msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] "{count} aturan"
+
+msgid "Work right now"
+msgstr "Pekerjaan saat ini"
+
+msgid "Counts of active conversations you may see. They update while this page is open, and fall back to a refresh button if the live connection is unavailable. Only counts are shown here; open a conversation from the list below."
+msgstr "Jumlah percakapan aktif yang boleh Anda lihat. Angka diperbarui selama halaman ini terbuka, dan memakai tombol muat ulang bila koneksi langsung tidak tersedia. Di sini hanya jumlah yang ditampilkan; buka percakapan dari daftar di bawah."
+
+msgid "Awaiting a reply"
+msgstr "Menunggu balasan"
+
+msgid "Refresh counts"
+msgstr "Muat ulang jumlah"
+
+msgid "{open} open, {pending} pending, {awaitingReply} awaiting a reply, {unassigned} unassigned, {slaBreached} overdue"
+msgstr "{open} terbuka, {pending} tertunda, {awaitingReply} menunggu balasan, {unassigned} belum ditugaskan, {slaBreached} terlambat"
+
+msgid "New policy"
+msgstr "Kebijakan baru"
+
+msgid "Replaces the active policy for the scope you pick. A policy for one business scope applies to the conversations of that scope's channel accounts; the whole-tenant default applies to the rest."
+msgstr "Menggantikan kebijakan aktif untuk cakupan yang Anda pilih. Kebijakan untuk satu lingkup bisnis berlaku bagi percakapan akun kanal lingkup itu; bawaan seluruh tenant berlaku bagi sisanya."
+
+msgid "You are limited to business scopes, and none you cover has a channel account yet, so there is nothing to choose."
+msgstr "Akses Anda dibatasi pada lingkup bisnis, dan belum ada akun kanal pada lingkup yang Anda jangkau, sehingga tidak ada yang bisa dipilih."

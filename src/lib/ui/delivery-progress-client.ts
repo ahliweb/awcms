@@ -34,15 +34,36 @@ export const PROGRESS_STATUSES = [
   "expired"
 ] as const;
 
-export type ProgressCounts = Partial<
-  Record<(typeof PROGRESS_STATUSES)[number], number>
->;
+/**
+ * Counts by key. The default keys are the delivery statuses; a panel for
+ * another topic names its own keys in `data-count-keys` (comma-separated, each
+ * `[A-Za-z][A-Za-z0-9_]*`), so the inbox's work counts reuse this module
+ * instead of shipping a second copy of the stream, polling and announce logic.
+ */
+export type ProgressCounts = Partial<Record<string, number>>;
+
+const COUNT_KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+
+/** The keys a panel declares, or the delivery statuses when it declares none. */
+export function parseCountKeys(raw: string | undefined): readonly string[] {
+  if (raw === undefined || raw.trim() === "") return PROGRESS_STATUSES;
+
+  const keys = raw
+    .split(",")
+    .map((key) => key.trim())
+    .filter((key) => COUNT_KEY.test(key));
+
+  return keys.length === 0 ? PROGRESS_STATUSES : keys.slice(0, 12);
+}
 
 export const ANNOUNCE_INTERVAL_MS = 10_000;
 export const POLL_INTERVAL_MS = 30_000;
 
 /** Reads `counts` from a v1 frame or snapshot; anything else is ignored, never trusted. */
-export function parseProgressCounts(raw: unknown): ProgressCounts | null {
+export function parseProgressCounts(
+  raw: unknown,
+  keys: readonly string[] = PROGRESS_STATUSES
+): ProgressCounts | null {
   if (typeof raw !== "object" || raw === null) return null;
 
   const envelope = raw as { v?: unknown; counts?: unknown };
@@ -57,11 +78,11 @@ export function parseProgressCounts(raw: unknown): ProgressCounts | null {
 
   const counts: ProgressCounts = {};
 
-  for (const status of PROGRESS_STATUSES) {
-    const value = (envelope.counts as Record<string, unknown>)[status];
+  for (const key of keys) {
+    const value = (envelope.counts as Record<string, unknown>)[key];
 
     if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
-      counts[status] = value;
+      counts[key] = value;
     }
   }
 
@@ -103,12 +124,14 @@ export function mountDeliveryProgress(root: HTMLElement): () => void {
     "[data-progress-refresh]"
   );
   const label = (key: string) => root.dataset[key] ?? "";
+  const keys = parseCountKeys(root.dataset.countKeys);
 
   let source: EventSource | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let errorAttempts = 0;
   let lastAnnouncedAt: number | null = null;
+  let lastSummary = "";
   let lastUpdatedAt = new Date();
   let state: ConnectionState = "stale";
   let disposed = false;
@@ -145,24 +168,34 @@ export function mountDeliveryProgress(root: HTMLElement): () => void {
     for (const cell of root.querySelectorAll<HTMLElement>(
       "[data-progress-count]"
     )) {
-      const key = cell.dataset.progressCount as keyof ProgressCounts;
-      const value = counts[key];
+      const value = counts[cell.dataset.progressCount ?? ""];
 
       if (value !== undefined) cell.textContent = String(value);
     }
 
     if (announce && shouldAnnounce(lastAnnouncedAt, Date.now(), false)) {
-      announce.textContent = label("labelSummary")
-        .replace("{sent}", String(counts.sent ?? 0))
-        .replace("{failed}", String(counts.failed ?? 0))
-        .replace(
-          "{waiting}",
-          String(
-            (counts.queued ?? 0) +
-              (counts.retry_wait ?? 0) +
-              (counts.sending ?? 0)
-          )
-        );
+      // Every `{key}` of the panel's own count keys, plus the delivery
+      // panel's derived `{waiting}`; a key the frame lacks reads as 0.
+      let summary = label("labelSummary").replace(
+        "{waiting}",
+        String(
+          (counts.queued ?? 0) +
+            (counts.retry_wait ?? 0) +
+            (counts.sending ?? 0)
+        )
+      );
+
+      for (const key of keys) {
+        summary = summary.replaceAll(`{${key}}`, String(counts[key] ?? 0));
+      }
+
+      // An unchanged summary is not re-spoken: a counter that ticks every few
+      // seconds while nothing moved must stay silent for a screen-reader user.
+      if (summary !== lastSummary) {
+        announce.textContent = summary;
+        lastSummary = summary;
+      }
+
       lastAnnouncedAt = Date.now();
     }
 
@@ -189,7 +222,7 @@ export function mountDeliveryProgress(root: HTMLElement): () => void {
       if (!response.ok) return false;
 
       const body = (await response.json()) as { data?: unknown };
-      const counts = parseProgressCounts(body.data);
+      const counts = parseProgressCounts(body.data, keys);
 
       if (counts) render(counts);
 
@@ -254,7 +287,8 @@ export function mountDeliveryProgress(root: HTMLElement): () => void {
     stream.addEventListener("progress", (event) => {
       try {
         const counts = parseProgressCounts(
-          JSON.parse((event as MessageEvent<string>).data)
+          JSON.parse((event as MessageEvent<string>).data),
+          keys
         );
 
         if (counts) render(counts);

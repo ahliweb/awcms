@@ -61,6 +61,7 @@ describe("the screens gate on keys that really exist", () => {
   test("each literal guard equals the module's own guard constant", () => {
     expect(literalGuard(list, "READ_GUARD")).toEqual(G.readConversations);
     expect(literalGuard(list, "SLA_READ_GUARD")).toEqual(G.readSlaPolicies);
+    expect(literalGuard(list, "STATUS_GUARD")).toEqual(G.readStatus);
     expect(literalGuard(detail, "READ_GUARD")).toEqual(G.readConversations);
     expect(literalGuard(detail, "UPDATE_GUARD")).toEqual(G.updateConversations);
     expect(literalGuard(detail, "ASSIGN_GUARD")).toEqual(G.assignConversations);
@@ -346,6 +347,80 @@ describe("the actions", () => {
 
       expect(script).toContain('from "../../../lib/ui/admin-form-client"');
     }
+  });
+});
+
+describe("the live work-counts panel (Issue #1164 / #1171)", () => {
+  test("it is gated on status.read, fed by the topic's own snapshot, and the loader is the one the stream uses", () => {
+    expect(list).toContain("statusGuard: STATUS_GUARD");
+    expect(list).toContain("status !== null");
+    expect(loaders).toContain("can(statusGuard)");
+    expect(loaders).toContain("resolveInboxStatusVisibility(context)");
+    expect(loaders).toContain("readInboxStatusSnapshot(context, visibility");
+  });
+
+  test("it points at the status endpoints that enforce status.read", () => {
+    expect(list).toContain(
+      'data-stream-url="/api/v1/omnichannel-inbox/progress/stream"'
+    );
+    expect(list).toContain(
+      'data-snapshot-url="/api/v1/omnichannel-inbox/progress"'
+    );
+    expect(read("src/pages/api/v1/omnichannel-inbox/progress.ts")).toContain(
+      "OMNICHANNEL_INBOX_GUARDS.readStatus"
+    );
+    expect(
+      read("src/pages/api/v1/omnichannel-inbox/progress/stream.ts")
+    ).toContain("defineProgressSseRoute");
+  });
+
+  test("every counter the panel names is a key the snapshot really carries", () => {
+    const keys = /data-count-keys="([^"]+)"/.exec(list)![1]!.split(",");
+    const types = read(
+      "src/modules/omnichannel-inbox/application/inbox-status-progress.ts"
+    );
+    const block = /export type InboxStatusCounts = \{([^}]+)\}/.exec(
+      types
+    )![1]!;
+
+    for (const key of keys) {
+      expect(block).toContain(`${key}:`);
+      expect(list).toContain(`data-progress-count="${key}"`);
+    }
+  });
+
+  test("it is a polite live region, shows a refresh fallback and a TEXT connection state, and carries no message data", () => {
+    expect(list).toContain('aria-live="polite"');
+    expect(list).toContain("data-progress-refresh");
+    expect(list).toContain("data-progress-state");
+    expect(list).toContain("data-label-revoked");
+    // Counts only: no per-conversation data rendered from the snapshot.
+    expect(list).not.toContain("status.recent");
+  });
+
+  test("its script imports the shared module so the CSP allows it, and mounts only panels the server rendered", () => {
+    const script = list.slice(list.indexOf("<script>"));
+
+    expect(script).toContain('from "../../lib/ui/delivery-progress-client"');
+    expect(script).toContain('"[data-delivery-progress]"');
+  });
+});
+
+describe("the SLA policy scope picker (Issue #1164)", () => {
+  test("it offers only scopes the loader derived, and hides the tenant default from a confined caller", () => {
+    expect(settings).toContain('name="scope"');
+    expect(settings).toContain("!policyScopes.confined");
+    expect(settings).toContain("policyScopes.options.map");
+    expect(loaders).toContain("loadPolicyScopeOptions(");
+    expect(loaders).toContain("access.coveredScopes(");
+    // Fail closed when the access rules do not load.
+    expect(loaders).toContain("confined: true, options: []");
+  });
+
+  test("the endpoint still re-authorises the scope it is given", () => {
+    expect(
+      read("src/pages/api/v1/omnichannel-inbox/sla-policies/index.ts")
+    ).toContain("authorizePolicyScope(");
   });
 });
 
