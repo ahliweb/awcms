@@ -541,7 +541,9 @@ export function evaluateHeldBack(
       entry,
       status: "active",
       latest,
-      note: `held at ${entry.heldVersion}, latest ${latest}`
+      note: entry.transitive
+        ? `held at ${entry.heldVersion}, a newer release ${latest} is available — check whether the release condition is met: ${entry.releaseCondition ?? "(none recorded)"}`
+        : `held at ${entry.heldVersion}, latest ${latest}`
     };
   });
 }
@@ -595,6 +597,29 @@ function readPackageJson(root: string): {
   optionalDependencies?: Record<string, string>;
 } {
   return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+}
+
+async function collectTransitiveLatest(): Promise<
+  Record<string, string | undefined>
+> {
+  const result: Record<string, string | undefined> = {};
+
+  await Promise.all(
+    HELD_BACK.filter((entry) => entry.transitive).map(async (entry) => {
+      try {
+        const body = (await fetchJson(
+          `https://registry.npmjs.org/${encodeURIComponent(entry.packageName)}/latest`
+        )) as { version?: unknown };
+
+        result[entry.packageName] =
+          typeof body.version === "string" ? body.version : undefined;
+      } catch {
+        result[entry.packageName] = undefined;
+      }
+    })
+  );
+
+  return result;
 }
 
 async function collectOutdated(root: string): Promise<Section<OutdatedData>> {
@@ -813,6 +838,12 @@ export function buildManifest(input: {
   advisories: Section<AdvisoryData>;
   bun: Section<BunPinData>;
   images: ImageReport[];
+  /**
+   * Registry `latest` per transitive held-back package; a missing/undefined
+   * value means the registry could not be read (the entry is then
+   * `unverified`, not a pass).
+   */
+  transitiveLatest?: Record<string, string | undefined>;
 }): FreshnessManifest {
   const today = input.generatedAt.slice(0, 10);
   const outdatedRows =
@@ -821,6 +852,12 @@ export function buildManifest(input: {
   const heldBack = evaluateHeldBack(HELD_BACK, today, (packageName) => {
     if (packageName === "bun") {
       return input.bun.status === "ok" ? input.bun.data.latest : undefined;
+    }
+
+    // `bun outdated` does not list transitive packages: asking it would read
+    // every pin as "no longer behind". Their latest comes from the registry.
+    if (HELD_BACK.find((e) => e.packageName === packageName)?.transitive) {
+      return input.transitiveLatest?.[packageName];
     }
 
     if (!outdatedRows) {
@@ -1061,12 +1098,14 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const root = path.resolve(import.meta.dirname, "..");
 
-  const [outdated, advisories, bun, images] = await Promise.all([
-    collectOutdated(root),
-    collectAdvisories(root),
-    collectBun(root),
-    collectImages(root)
-  ]);
+  const [outdated, advisories, bun, images, transitiveLatest] =
+    await Promise.all([
+      collectOutdated(root),
+      collectAdvisories(root),
+      collectBun(root),
+      collectImages(root),
+      collectTransitiveLatest()
+    ]);
 
   const manifest = buildManifest({
     generatedAt: new Date().toISOString(),
@@ -1074,7 +1113,8 @@ async function main(): Promise<void> {
     outdated,
     advisories,
     bun,
-    images
+    images,
+    transitiveLatest
   });
 
   const json = `${JSON.stringify(manifest, null, 2)}\n`;

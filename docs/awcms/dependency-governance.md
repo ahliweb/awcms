@@ -282,15 +282,21 @@ something no longer true. Drift nobody has evaluated yet does not belong here (i
 the backlog), and an advisory that cannot be fixed goes in
 `scripts/dependency-audit-exceptions.ts`.
 
-### Pinned transitive overrides that are not in the register
+### Transitive holds (`transitive: true`)
 
-The register above is evaluated against `bun outdated`, which lists **direct**
-dependencies only; an entry for a transitive package would always read "no longer
-behind" and be reported stale. A transitive package held on purpose is therefore
-pinned in `package.json` `overrides` and recorded here, with its release condition:
+`bun outdated` lists **direct** dependencies only, so a plain entry for a transitive
+package would always read "no longer behind" and be reported stale. A transitive
+package held on purpose is therefore pinned to an exact version in `package.json`
+`overrides` **and** registered with `transitive: true` and a `releaseCondition`
+(what must be true to lift the pin). The register is the single source: this
+document does not list individual holds. Today: `@astrojs/compiler-rs` (Issue
+#1367; see [`deploy-coolify.md`](deploy-coolify.md) §"Build host: CPU without AVX").
 
-| Package                | Pinned | Why                                                                                                                                                                                                                | Release condition                                                                                      |
-| ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `@astrojs/compiler-rs` | 0.5.2  | The 0.5.3 binding `@astrojs/compiler-binding-linux-x64-gnu` crashes `astro build` with SIGILL on x86-64 CPUs without AVX (Issue #1367). 0.5.3 was still the registry `latest` when the pin was added (2026-11-22). | A binding release that runs on the x86-64 baseline, verified by `bun run build` on a host without AVX. |
-
-See [`deploy-coolify.md`](deploy-coolify.md) §"Build host: CPU without AVX".
+- **Offline gate** (`bun run deps:held-back:check`, part of `bun run check`): every
+  `overrides` entry with an _exact_ version must have a matching transitive entry;
+  every transitive entry must match an exact `overrides` pin and the version
+  `bun.lock` resolves. Range overrides (`^8.5.23`) are security floors, not holds,
+  and are ignored. A mismatch is red with a message naming the package.
+- **Weekly report** (`deps:freshness`, online): the latest version of a transitive
+  entry is read from the npm registry, and when a newer release exists the row says
+  "check whether the release condition is met".

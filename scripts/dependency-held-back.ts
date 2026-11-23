@@ -45,6 +45,23 @@ export type HeldBackEntry = {
    * with a vague reason cannot be re-evaluated; the reviewer has to redo it.
    */
   reason: string;
+  /**
+   * `true` for a package that is NOT a direct dependency but is pinned through
+   * `package.json` `overrides` (Issue #1367). `bun outdated` lists direct
+   * dependencies only, so a transitive entry is evaluated differently: the
+   * resolved version comes from `bun.lock`, the latest from the npm registry
+   * (online report only). The offline gate `bun run deps:held-back:check`
+   * requires every EXACT-version override to have such an entry and vice versa
+   * (`scripts/dependency-held-back-check.ts`). Range overrides (`^x.y.z`) are
+   * security floors, not holds, and do not belong here.
+   */
+  transitive?: true;
+  /**
+   * Required when `transitive` is set: what must be true before the pin can be
+   * lifted, so the weekly report can say "check whether this is met" instead of
+   * only "a newer version exists".
+   */
+  releaseCondition?: string;
   /** Who decided, and who re-justifies it. */
   owner: string;
   /** ISO date (YYYY-MM-DD). Re-justify by then or remove. */
@@ -62,6 +79,20 @@ export const HELD_BACK: readonly HeldBackEntry[] = [
       "the family-compatibility manifest declares, so it is a support-contract decision under " +
       "ADR-0032, not a side effect of a pin bump (stated in the #1172 / #1176 pin-bump changeset). " +
       "The held version here is the FLOOR, not the pin.",
+    owner: "ahliweb",
+    reviewDate: "2027-01-24"
+  },
+  {
+    packageName: "@astrojs/compiler-rs",
+    transitive: true,
+    heldVersion: "0.5.2",
+    reason:
+      "The 0.5.3 binding `@astrojs/compiler-binding-linux-x64-gnu` crashes `astro build` with SIGILL on " +
+      "x86-64 CPUs without AVX (Issue #1367). 0.5.3 was still the registry `latest` when the pin was " +
+      "added (2026-11-22). Pinned through package.json `overrides`; see deploy-coolify.md " +
+      '"Build host: CPU without AVX".',
+    releaseCondition:
+      "A binding release that runs on the x86-64 baseline, verified by `bun run build` on a host without AVX.",
     owner: "ahliweb",
     reviewDate: "2027-01-24"
   }
