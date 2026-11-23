@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(sync-storage): the R2 object uploader now has a `skipped` outcome and stops conflating local faults with provider health (#1432). (F1) A breaker refusal (open, or the half-open probe held) no longer spends a retry: the row goes back to `pending` for 30 s and is counted as `deferred` in the dispatch result, like email/WhatsApp/Telegram/push. (F2) Missing file, checksum mismatch and unconfined path are validated BEFORE the breaker permit is taken, so they fail the row without recording a failure on the shared `object-storage` breaker (five broken rows used to open it for every tenant). (F3) A `Retry-After` on 429/503 lengthens the backoff (never shortens it, clamped to 60 minutes); the parser is now shared as `src/lib/integration/retry-after.ts` with the Mailketing v2 adapter. The upload is a SigV4-presigned PUT via `fetch` because `Bun.S3Client.write` hides the HTTP status and headers. `evaluateObjectRetry` gained an optional third argument; `DispatchObjectSyncQueueResult` gained `deferred`. `sync-storage` README (EN/ID) updated.

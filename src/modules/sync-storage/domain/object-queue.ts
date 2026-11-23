@@ -168,6 +168,19 @@ export function verifyObjectChecksum(
 export const OBJECT_SYNC_MAX_RETRIES = 5;
 export const OBJECT_SYNC_MAX_RETRY_DELAY_MINUTES = 60;
 
+/**
+ * How long a row is parked when the provider breaker refused the attempt
+ * (Issue #1432): nothing was sent, no retry is spent, and the row is looked at
+ * again soon. Short on purpose — the breaker's own open window is what really
+ * gates the provider.
+ */
+export const OBJECT_SYNC_BREAKER_HOLD_MS = 30_000;
+
+/** `Retry-After` clamp for 429/503 answers (same ceiling as the email adapter). */
+export const OBJECT_SYNC_MIN_RETRY_AFTER_MS = 1_000;
+export const OBJECT_SYNC_MAX_RETRY_AFTER_MS =
+  OBJECT_SYNC_MAX_RETRY_DELAY_MINUTES * 60_000;
+
 export type ObjectRetryEvaluation = {
   eligible: boolean;
   nextRetryAt?: Date;
@@ -180,7 +193,9 @@ export type ObjectRetryEvaluation = {
  */
 export function evaluateObjectRetry(
   retryCount: number,
-  now: Date
+  now: Date,
+  /** A provider-requested minimum delay (`Retry-After`, Issue #1432). Never shortens the backoff; capped. */
+  minDelayMs = 0
 ): ObjectRetryEvaluation {
   if (retryCount >= OBJECT_SYNC_MAX_RETRIES) {
     return { eligible: false };
@@ -191,8 +206,13 @@ export function evaluateObjectRetry(
     OBJECT_SYNC_MAX_RETRY_DELAY_MINUTES
   );
 
+  const delayMs = Math.max(
+    delayMinutes * 60_000,
+    Math.min(Math.max(minDelayMs, 0), OBJECT_SYNC_MAX_RETRY_AFTER_MS)
+  );
+
   return {
     eligible: true,
-    nextRetryAt: new Date(now.getTime() + delayMinutes * 60_000)
+    nextRetryAt: new Date(now.getTime() + delayMs)
   };
 }

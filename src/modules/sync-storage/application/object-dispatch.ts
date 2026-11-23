@@ -72,6 +72,8 @@ export type DispatchObjectSyncQueueResult = {
   sent: number;
   retried: number;
   failed: number;
+  /** Rows the provider breaker refused (Issue #1432): no attempt, no retry spent. */
+  deferred: number;
   uploadBreakerOpen: boolean;
 };
 
@@ -156,9 +158,10 @@ async function finalizeFailure(
   id: string,
   currentRetryCount: number,
   now: Date,
-  errorMessage: string
+  errorMessage: string,
+  retryAfterMs?: number
 ): Promise<{ eligible: boolean }> {
-  const evaluation = evaluateObjectRetry(currentRetryCount, now);
+  const evaluation = evaluateObjectRetry(currentRetryCount, now, retryAfterMs);
 
   if (evaluation.eligible) {
     await withTenantOrThrow(
@@ -192,6 +195,30 @@ async function finalizeFailure(
 }
 
 /**
+ * The breaker refused the attempt (Issue #1432): nothing reached the provider,
+ * so the claim is undone WITHOUT spending a retry and the row waits a short
+ * hold window. Mirrors the email/WhatsApp/Telegram/push `deferred` path.
+ */
+async function finalizeDeferred(
+  sql: Bun.SQL,
+  tenantId: string,
+  id: string,
+  until: Date,
+  errorMessage: string
+): Promise<void> {
+  await withTenantOrThrow(
+    sql,
+    tenantId,
+    (tx) => tx`
+      UPDATE awcms_object_sync_queue
+      SET status = 'pending', next_retry_at = ${until}, last_error = ${errorMessage}
+      WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
+    `,
+    { workClass: "background_sync" }
+  );
+}
+
+/**
  * Dispatches one batch (default `OBJECT_DISPATCH_DEFAULT_LIMIT` rows) of due
  * `awcms_object_sync_queue` entries for a single tenant. Safe to call
  * repeatedly/concurrently (claim-lease pattern); call again in a loop (the
@@ -222,6 +249,7 @@ export async function dispatchObjectSyncQueue(
     sent: 0,
     retried: 0,
     failed: 0,
+    deferred: 0,
     uploadBreakerOpen
   };
 
@@ -271,13 +299,35 @@ export async function dispatchObjectSyncQueue(
       continue;
     }
 
+    if (uploadResult.skipped) {
+      // No attempt happened. Do not break: every remaining claimed row also
+      // needs releasing, and a refused call returns immediately.
+      await finalizeDeferred(
+        sql,
+        tenantId,
+        entry.id,
+        new Date(now.getTime() + uploadResult.holdMs),
+        uploadResult.error
+      );
+      result.deferred += 1;
+      log("warning", "sync_storage.object_dispatch.deferred", {
+        correlationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        objectKey: entry.object_key,
+        error: uploadResult.error
+      });
+      continue;
+    }
+
     const finalizeOutcome = await finalizeFailure(
       sql,
       tenantId,
       entry.id,
       retryCount,
       now,
-      uploadResult.error
+      uploadResult.error,
+      uploadResult.retryAfterMs
     );
 
     if (finalizeOutcome.eligible) {
