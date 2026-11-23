@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+feat(website-engagement): manage sources from `/admin/website-engagement/sources` (Issue #1477, ADR-0155, follow-up of #1153). Behind `website_engagement.sources.manage` the screen now registers a website, edits it (name, consent copy version, challenge, accepted kinds, hosts), pauses/resumes it and rotates its token, on the existing endpoints. The token is shown exactly once, in a panel the client fills from the create/rotate response and clears on dismissal, `pagehide` and bfcache restore; it is never rendered by the server and never held in storage, URL, log, attribute, audit row or idempotency record. The create/rotate response that carries a token is now sent `Cache-Control: no-store` (and so is the page). Turning the challenge off asks for confirmation and sends an `Idempotency-Key`. The host picker lists only this tenant's live domains (hostnames only) and only to a caller who may manage sources. Rotation has NO grace window (the old token dies at once): recorded as an open decision in the module README. The reveal screen (#1437) and the pre-session challenge seam (#1444) are not part of this change. 26 new msgids (en/id).

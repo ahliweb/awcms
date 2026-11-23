@@ -20,12 +20,15 @@
  * (`SourceView` has no such field), and the token itself is shown exactly once
  * by the create and rotate endpoints.
  *
- * ## Actions
+ * ## Actions (Issue #1477, behind `sources.manage`)
  *
- * Revoke only: one-way, no body, audited by the endpoint, behind
- * `sources.manage` and an explicit confirmation. Creating a source, editing its
- * hosts, pausing it and rotating its token need a one-time token display and
- * are API-only for now (recorded in the module README).
+ * Register a website, edit it (name, consent copy version, challenge, accepted
+ * kinds, hosts), pause or resume it, rotate its token and revoke it. Create and
+ * rotate answer with the token ONCE: it is rendered into one panel by the
+ * client script from the response, never by the server, never persisted (no
+ * storage, no URL, no log), cleared when the panel is dismissed, on `pagehide`
+ * and on bfcache restore. A rotation has NO grace window: the old token stops
+ * working immediately (open decision, module README).
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
@@ -58,6 +61,10 @@ const MANAGE_GUARD = {
 
 const PATH = "/admin/website-engagement";
 
+// The token a create or rotate returns is rendered into this page's DOM by the
+// script, so neither the page nor its `bfcache` copy may be kept.
+Astro.response.headers.set("Cache-Control", "private, no-store");
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -82,6 +89,9 @@ const canRead = screen.state !== "denied";
 const loadError = screen.state === "error";
 const data = screen.state === "allowed" ? screen.data : null;
 const sources = data?.sources ?? [];
+const domains = data?.domains ?? [];
+const kinds = ["contact", "lead", "interaction"] as const;
+const modes = ["turnstile", "none"] as const;
 ---
 
 <AdminLayout
@@ -138,6 +148,208 @@ const sources = data?.sources ?? [];
         hidden
       ></p>
 
+      {data.canManage && (
+        <section
+          id="website-engagement-token-panel"
+          class="admin-section"
+          aria-labelledby="website-engagement-token-title"
+          tabindex="-1"
+          hidden
+          data-copied={t("Copied.")}
+          data-copy-failed={t(
+            "Could not copy. Select the token and copy it by hand."
+          )}
+        >
+          <h3 class="admin-section-title" id="website-engagement-token-title">
+            {t("Copy this access token now")}
+          </h3>
+          <p class="page-description" id="website-engagement-token-note">
+            {t(
+              "This is the only time the token is shown. It cannot be read back later: if it is lost, rotate the source to get a new one."
+            )}
+          </p>
+          <p>
+            <code
+              id="website-engagement-token-value"
+              class="cell-code"
+              aria-describedby="website-engagement-token-note"
+            ></code>
+          </p>
+          <p
+            id="website-engagement-token-status"
+            class="cell-muted"
+            role="status"
+          ></p>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            id="website-engagement-token-copy"
+          >
+            {t("Copy token")}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="website-engagement-token-close"
+          >
+            {t("I have saved it")}
+          </button>
+        </section>
+      )}
+
+      {data.canManage && (
+        <section
+          class="admin-section"
+          aria-labelledby="website-engagement-form-title"
+        >
+          <h3 class="admin-section-title" id="website-engagement-form-title">
+            <span id="website-engagement-form-title-create">
+              {t("Register a website")}
+            </span>
+            <span id="website-engagement-form-title-edit" hidden>
+              {t("Edit website")}
+            </span>
+          </h3>
+          <form
+            id="website-engagement-source-form"
+            class="admin-form"
+            data-busy={t("Please wait…")}
+            data-confirm-challenge-off={t(
+              "Turn the anti-abuse challenge off for this source? Submissions will then rely on the access token, the host check, the honeypot, the fill time and the rate limits alone."
+            )}
+            data-failed={t("Could not save the source. Please try again.")}
+            data-invalid={t(
+              "Check the form: a code of 2 to 40 lower-case letters, digits, dashes or underscores starting with a letter, a name, a consent copy version, and at least one accepted kind."
+            )}
+            data-code-taken={t("That source code is already in use.")}
+            data-domain-missing={t(
+              "One of the chosen hosts is no longer a domain of this tenant. Reload the page."
+            )}
+            data-revoked={t("A revoked source cannot be changed.")}
+            data-forbidden={t("You do not have permission to do that.")}
+            data-not-found={t(
+              "That source no longer exists, or you cannot act on it."
+            )}
+            data-person-only={t(
+              "Saving needs a signed-in person; a machine credential cannot do it."
+            )}
+            data-key-ring={t(
+              "The key configuration for website engagement is not valid on this deployment, so a token cannot be issued."
+            )}
+            data-replayed={t(
+              "This request was already completed and its token was shown before. Rotate the source to get a new token."
+            )}
+            data-nothing={t("Nothing to change.")}
+          >
+            <input type="hidden" name="id" id="website-engagement-source-id" />
+            <div class="admin-field">
+              <label for="website-engagement-source-code">{t("Code")}</label>
+              <input
+                id="website-engagement-source-code"
+                name="code"
+                type="text"
+                maxlength="40"
+                pattern="[a-z][a-z0-9_\-]{1,39}"
+                required
+                autocomplete="off"
+              />
+              <p class="admin-field-hint">
+                {t(
+                  "Lower-case letters, digits, dashes and underscores. It cannot be changed afterwards."
+                )}
+              </p>
+            </div>
+            <div class="admin-field">
+              <label for="website-engagement-source-name">{t("Name")}</label>
+              <input
+                id="website-engagement-source-name"
+                name="name"
+                type="text"
+                maxlength="120"
+                required
+              />
+            </div>
+            <div class="admin-field">
+              <label for="website-engagement-source-consent">
+                {t("Consent copy version")}
+              </label>
+              <input
+                id="website-engagement-source-consent"
+                name="consentCopyVersion"
+                type="text"
+                maxlength="32"
+                required
+                autocomplete="off"
+              />
+              <p class="admin-field-hint">
+                {t(
+                  "The version label of the consent text this website shows next to its form. It is stored with every submission."
+                )}
+              </p>
+            </div>
+            <div class="admin-field">
+              <label for="website-engagement-source-challenge">
+                {t("Anti-abuse challenge")}
+              </label>
+              <select
+                id="website-engagement-source-challenge"
+                name="challengeMode"
+              >
+                {modes.map((mode) => (
+                  <option value={mode} selected={mode === "turnstile"}>
+                    {challengeModeLabel(t, mode)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <fieldset>
+              <legend>{t("Accepts")}</legend>
+              {kinds.map((kind) => (
+                <label class="admin-checkbox">
+                  <input
+                    type="checkbox"
+                    name="acceptedKinds"
+                    value={kind}
+                    checked
+                  />
+                  {submissionKindLabel(t, kind)}
+                </label>
+              ))}
+            </fieldset>
+            <fieldset>
+              <legend>{t("Accepted hosts")}</legend>
+              {domains.length === 0 ? (
+                <p class="admin-field-hint">
+                  {t(
+                    "This tenant has no domains yet. A source without hosts refuses every request until you add some."
+                  )}
+                </p>
+              ) : (
+                domains.map((domain) => (
+                  <label class="admin-checkbox">
+                    <input type="checkbox" name="domainIds" value={domain.id} />
+                    {domain.hostname}
+                  </label>
+                ))
+              )}
+            </fieldset>
+            <div>
+              <button type="submit" class="btn btn-primary">
+                {t("Save source")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="website-engagement-source-cancel"
+                hidden
+              >
+                {t("Cancel editing")}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       <div
         class="data-table-scroll"
         role="region"
@@ -151,7 +363,18 @@ const sources = data?.sources ?? [];
           data-confirm={t(
             "Revoke the source {name}? Its website stops being able to post submissions, and this cannot be undone."
           )}
+          data-confirm-rotate={t(
+            "Rotate the token of {name}? The current token stops working immediately, with no grace period, and the website must be given the new one."
+          )}
           data-failed={t("Could not revoke the source. Please try again.")}
+          data-action-failed={t("The action failed. Please try again.")}
+          data-key-ring={t(
+            "The key configuration for website engagement is not valid on this deployment, so a token cannot be issued."
+          )}
+          data-replayed={t(
+            "This request was already completed and its token was shown before. Rotate the source to get a new token."
+          )}
+          data-revoked={t("A revoked source cannot be changed.")}
           data-forbidden={t("You do not have permission to do that.")}
           data-not-found={t(
             "That source no longer exists, or you cannot act on it."
@@ -181,9 +404,7 @@ const sources = data?.sources ?? [];
             {sources.length === 0 ? (
               <tr>
                 <td colspan={data.canManage ? 8 : 7}>
-                  {t(
-                    "No website is registered yet. Sources are created through the API."
-                  )}
+                  {t("No website is registered yet.")}
                 </td>
               </tr>
             ) : (
@@ -245,14 +466,54 @@ const sources = data?.sources ?? [];
                       {source.status === "revoked" ? (
                         <span class="cell-muted">{t("Revoked")}</span>
                       ) : (
-                        <button
-                          type="button"
-                          class="btn btn-danger source-revoke-btn"
-                          data-source-id={source.id}
-                          data-source-name={source.code}
-                        >
-                          {t("Revoke")}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            class="btn btn-secondary source-edit-btn"
+                            data-source={JSON.stringify({
+                              id: source.id,
+                              code: source.code,
+                              name: source.name,
+                              status: source.status,
+                              consentCopyVersion: source.consentCopyVersion,
+                              challengeMode: source.challengeMode,
+                              acceptedKinds: source.acceptedKinds,
+                              domainIds: source.domains.map(
+                                (domain) => domain.id
+                              )
+                            })}
+                          >
+                            {t("Edit")}
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-secondary source-pause-btn"
+                            data-source-id={source.id}
+                            data-next-status={
+                              source.status === "active" ? "paused" : "active"
+                            }
+                          >
+                            {source.status === "active"
+                              ? t("Pause")
+                              : t("Resume")}
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-secondary source-rotate-btn"
+                            data-source-id={source.id}
+                            data-source-name={source.code}
+                          >
+                            {t("Rotate token")}
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-danger source-revoke-btn"
+                            data-source-id={source.id}
+                            data-source-name={source.code}
+                          >
+                            {t("Revoke")}
+                          </button>
+                        </>
                       )}
                     </td>
                   )}
@@ -272,20 +533,349 @@ const sources = data?.sources ?? [];
   // `default-src 'self'` CSP allows it: an import-free script would inline and
   // be blocked.
   import {
+    holdForNavigation,
     messageBox,
-    mutateAndReload,
     onAction,
-    sendJson
+    onSubmit,
+    sendJsonForData
   } from "../../../lib/ui/admin-form-client";
   import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    createIdempotencyKeySource,
+    newKey
+  } from "../../../lib/ui/admin-idempotency-key";
+  import {
+    buildCreateBody,
+    buildUpdateBody,
+    createTokenHolder,
+    disablesChallenge,
+    readTokenOutcome,
+    type SourceEditSnapshot
+  } from "../../../lib/ui/website-engagement-sources-model";
 
+  const BASE = "/api/v1/website-engagement/sources";
   const error = messageBox("website-engagement-action-error");
+  const form = document.getElementById("website-engagement-source-form");
+  const table = document.getElementById("website-engagement-sources-table");
+  const panel = document.getElementById("website-engagement-token-panel");
+  const tokenValue = document.getElementById("website-engagement-token-value");
+  const tokenStatus = document.getElementById(
+    "website-engagement-token-status"
+  );
+
+  /** One Idempotency-Key per distinct create/disable-challenge request, so a retry replays. */
+  const createKey = createIdempotencyKeySource();
+  const patchKey = createIdempotencyKeySource();
+
+  const sayTable = (name: string): string => table?.dataset[name] ?? "";
+  /** Pause and rotate: "failed" is the generic action sentence, not the revoke one. */
+  const sayAction = (name: string): string =>
+    name === "failed" ? sayTable("actionFailed") : sayTable(name);
+  const sayForm = (name: string): string =>
+    form instanceof HTMLElement ? (form.dataset[name] ?? "") : "";
+
+  // The token lives ONLY as this element's text. It is removed on dismissal,
+  // on `pagehide` and when the page is restored from the bfcache.
+  const holder = createTokenHolder({
+    show(text) {
+      if (tokenValue) tokenValue.textContent = text;
+      if (tokenStatus) tokenStatus.textContent = "";
+      if (panel) {
+        panel.hidden = false;
+        panel.focus();
+      }
+    },
+    clear() {
+      if (tokenValue) tokenValue.textContent = "";
+      if (tokenStatus) tokenStatus.textContent = "";
+      if (panel) panel.hidden = true;
+    }
+  });
+
+  window.addEventListener("pagehide", () => holder.clear());
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) holder.clear();
+  });
+
+  /** The error sentence for a failed source call, from the code only. */
+  function sentence(code: string | null, say: (n: string) => string): string {
+    switch (code) {
+      case "ACCESS_DENIED":
+        return say("forbidden");
+      case "RESOURCE_NOT_FOUND":
+        return say("notFound");
+      case "INTERACTIVE_SESSION_REQUIRED":
+        return say("personOnly");
+      case "KEY_RING_UNAVAILABLE":
+        return say("keyRing");
+      case "SOURCE_REVOKED":
+        return say("revoked");
+      case "SOURCE_CODE_TAKEN":
+        return say("codeTaken");
+      case "DOMAIN_NOT_FOUND":
+        return say("domainMissing");
+      case "VALIDATION_ERROR":
+        return say("invalid");
+      default:
+        return say("failed");
+    }
+  }
+
+  /** A response that carried (or should have carried) a token. True when the page now shows it. */
+  function showOutcome(data: unknown, say: (n: string) => string): boolean {
+    const outcome = readTokenOutcome(data);
+
+    if (outcome.kind === "token") {
+      holder.show(outcome.token);
+      return true;
+    }
+
+    error.show(outcome.kind === "replayed" ? say("replayed") : say("failed"));
+    return false;
+  }
+
+  function readForm(): {
+    id: string;
+    code: string;
+    name: string;
+    consentCopyVersion: string;
+    challengeMode: "turnstile" | "none";
+    acceptedKinds: ("contact" | "lead" | "interaction")[];
+    domainIds: string[];
+  } {
+    const checked = (name: string): string[] =>
+      [
+        ...document.querySelectorAll<HTMLInputElement>(
+          `#website-engagement-source-form input[name="${name}"]:checked`
+        )
+      ].map((input) => input.value);
+    const value = (id: string): string =>
+      (
+        document.getElementById(id) as
+          HTMLInputElement | HTMLSelectElement | null
+      )?.value.trim() ?? "";
+
+    return {
+      id: value("website-engagement-source-id"),
+      code: value("website-engagement-source-code"),
+      name: value("website-engagement-source-name"),
+      consentCopyVersion: value("website-engagement-source-consent"),
+      challengeMode:
+        value("website-engagement-source-challenge") === "none"
+          ? "none"
+          : "turnstile",
+      acceptedKinds: checked("acceptedKinds") as (
+        "contact" | "lead" | "interaction"
+      )[],
+      domainIds: checked("domainIds")
+    };
+  }
+
+  let editing: SourceEditSnapshot | null = null;
+
+  function setMode(snapshot: SourceEditSnapshot | null): void {
+    editing = snapshot;
+    const set = (id: string, v: string): void => {
+      const el = document.getElementById(id) as
+        HTMLInputElement | HTMLSelectElement | null;
+      if (el) el.value = v;
+    };
+    const code = document.getElementById(
+      "website-engagement-source-code"
+    ) as HTMLInputElement | null;
+
+    set("website-engagement-source-id", snapshot?.id ?? "");
+    set("website-engagement-source-code", snapshot?.code ?? "");
+    set("website-engagement-source-name", snapshot?.name ?? "");
+    set(
+      "website-engagement-source-consent",
+      snapshot?.consentCopyVersion ?? ""
+    );
+    set(
+      "website-engagement-source-challenge",
+      snapshot?.challengeMode ?? "turnstile"
+    );
+    if (code) code.disabled = snapshot !== null;
+
+    for (const input of document.querySelectorAll<HTMLInputElement>(
+      "#website-engagement-source-form input[name='acceptedKinds']"
+    )) {
+      input.checked = snapshot
+        ? snapshot.acceptedKinds.includes(input.value as "contact")
+        : true;
+    }
+
+    for (const input of document.querySelectorAll<HTMLInputElement>(
+      "#website-engagement-source-form input[name='domainIds']"
+    )) {
+      input.checked = snapshot
+        ? snapshot.domainIds.includes(input.value)
+        : false;
+    }
+
+    const toggle = (id: string, hidden: boolean): void => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = hidden;
+    };
+
+    toggle("website-engagement-form-title-create", snapshot !== null);
+    toggle("website-engagement-form-title-edit", snapshot === null);
+    toggle("website-engagement-source-cancel", snapshot === null);
+  }
+
+  onAction(".source-edit-btn", (button) => {
+    try {
+      setMode(JSON.parse(button.dataset.source ?? "") as SourceEditSnapshot);
+      document.getElementById("website-engagement-source-name")?.focus();
+    } catch {
+      error.show(sayTable("actionFailed"));
+    }
+  });
+
+  onAction("#website-engagement-source-cancel", () => setMode(null));
+
+  onSubmit("website-engagement-source-form", async () => {
+    error.clear();
+    holder.clear();
+
+    const values = readForm();
+    const say = sayForm;
+
+    if (values.acceptedKinds.length === 0) {
+      error.show(say("invalid"));
+      return;
+    }
+
+    if (editing === null) {
+      const body = buildCreateBody(values);
+
+      if (
+        disablesChallenge(body) &&
+        !(await confirmAction(say("confirmChallengeOff")))
+      ) {
+        return;
+      }
+
+      const result = await sendJsonForData<unknown>("POST", BASE, body, {
+        "Idempotency-Key": createKey(body)
+      });
+
+      if (!result.ok) {
+        error.show(sentence(result.errorCode, say));
+        return;
+      }
+
+      if (showOutcome(result.data, say)) setMode(null);
+
+      return;
+    }
+
+    const body = buildUpdateBody(editing, values);
+
+    if (Object.keys(body).length === 0) {
+      error.show(say("nothing"));
+      return;
+    }
+
+    if (
+      disablesChallenge(body, editing) &&
+      !(await confirmAction(say("confirmChallengeOff")))
+    ) {
+      return;
+    }
+
+    const result = await sendJsonForData<unknown>(
+      "PATCH",
+      `${BASE}/${editing.id}`,
+      body,
+      body.challengeMode === "none"
+        ? { "Idempotency-Key": patchKey({ id: editing.id, ...body }) }
+        : undefined
+    );
+
+    if (!result.ok) {
+      error.show(sentence(result.errorCode, say));
+      return;
+    }
+
+    holdForNavigation();
+    location.reload();
+  });
+
+  onAction(".source-pause-btn", async (button) => {
+    const id = button.dataset.sourceId;
+    const status = button.dataset.nextStatus;
+
+    if (!id || (status !== "paused" && status !== "active")) return;
+
+    error.clear();
+
+    const result = await sendJsonForData<unknown>("PATCH", `${BASE}/${id}`, {
+      status
+    });
+
+    if (!result.ok) {
+      error.show(sentence(result.errorCode, sayAction));
+      return;
+    }
+
+    holdForNavigation();
+    location.reload();
+  });
+
+  onAction(".source-rotate-btn", async (button) => {
+    const id = button.dataset.sourceId;
+
+    if (!id) return;
+
+    const name = button.dataset.sourceName ?? "";
+
+    if (
+      !(await confirmAction(sayTable("confirmRotate").replace("{name}", name)))
+    )
+      return;
+
+    error.clear();
+    holder.clear();
+
+    // A fresh key per rotation: the recovery for a lost token is another
+    // rotation, never a replay (a replay answers without the token).
+    const result = await sendJsonForData<unknown>(
+      "POST",
+      `${BASE}/${id}/rotate`,
+      undefined,
+      { "Idempotency-Key": newKey() }
+    );
+
+    if (!result.ok) {
+      error.show(sentence(result.errorCode, sayAction));
+      return;
+    }
+
+    showOutcome(result.data, sayAction);
+  });
+
+  onAction("#website-engagement-token-copy", async () => {
+    const text = tokenValue?.textContent ?? "";
+    const say = (name: string): string => panel?.dataset[name] ?? "";
+
+    try {
+      await navigator.clipboard.writeText(text);
+      if (tokenStatus) tokenStatus.textContent = say("copied");
+    } catch {
+      if (tokenStatus) tokenStatus.textContent = say("copyFailed");
+    }
+  });
+
+  onAction("#website-engagement-token-close", () => {
+    holder.clear();
+    holdForNavigation();
+    // The list shows the new prefix and rotation time only after a reload.
+    location.reload();
+  });
 
   onAction(".source-revoke-btn", async (button) => {
-    const table = button.closest<HTMLElement>(
-      "#website-engagement-sources-table"
-    );
-    const say = (name: string): string => table?.dataset[name] ?? "";
+    const say = sayTable;
     const id = button.dataset.sourceId;
 
     if (!id) return;
@@ -294,20 +884,20 @@ const sources = data?.sources ?? [];
 
     if (!(await confirmAction(say("confirm").replace("{name}", name)))) return;
 
-    await mutateAndReload(
-      button,
-      error,
-      // Revoke is idempotent by state and takes no body: no key is needed.
-      () => sendJson("POST", `/api/v1/website-engagement/sources/${id}/revoke`),
-      (code) =>
-        code === "ACCESS_DENIED"
-          ? say("forbidden")
-          : code === "RESOURCE_NOT_FOUND"
-            ? say("notFound")
-            : code === "INTERACTIVE_SESSION_REQUIRED"
-              ? say("personOnly")
-              : say("failed"),
-      say("busy")
+    error.clear();
+
+    // Revoke is idempotent by state and takes no body: no key is needed.
+    const result = await sendJsonForData<unknown>(
+      "POST",
+      `${BASE}/${id}/revoke`
     );
+
+    if (!result.ok) {
+      error.show(sentence(result.errorCode, say));
+      return;
+    }
+
+    holdForNavigation();
+    location.reload();
   });
 </script>

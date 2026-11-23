@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](website-engagement.md)
 
-<!-- i18n-source-hash: sha256:80f7e5c5fa858e8261d018b7ef45641b3c907fd424154da1d2fe1d25e38a9a23 -->
+<!-- i18n-source-hash: sha256:57211217cc7215cd1f34280ac4c35ae6460c548ec39f30c5d9b1cf611ece0714 -->
 
 # Website engagement — intake lead dan kontak (Issue #1153, ADR-0155)
 
@@ -95,11 +95,13 @@ Token yang tak bisa di-parse, tenant atau source tak dikenal, secret salah, sour
 
 **Telah hadir (Issue #1153, tindak lanjut): separuh baca dan penarikan/pencabutan.** `/admin/website-engagement` (kiriman), `/admin/website-engagement/{id}` dan `/admin/website-engagement/sources` hadir bersama entri navigasinya; modul berstatus `active`. Layar menampilkan nilai tersamar saja, menampilkan tantangan efektif sebagai teks (dan menyebut bila `turnstile` sebuah sumber tidak dijalankan pada deployment ini), hanya mencantumkan **awalan** token, dan menawarkan dua aksi di balik izin masing-masing: penarikan yang dikonfirmasi dan membawa `Idempotency-Key`, serta pencabutan yang dikonfirmasi. `sources.read`, `sources.manage`, `submissions.read`, dan `submissions.withdraw` keluar dari `NOT_YET_SCREENED`.
 
-**Masih ditunda:** membuat, mengubah, menjeda, dan memutar sumber (token harus ditampilkan sekali) serta reveal yang diaudit (`submissions.reveal`, tetap di `NOT_YET_SCREENED`). Kontrak yang harus dipenuhi layar itu, dalam perubahan yang sama dengan kontrolnya: tampilkan token **sekali** di area salin dengan konfirmasi eksplisit "sudah saya simpan" dan jangan render ulang; tampilkan `challengeEffective` sebagai teks yang terlihat, bukan hanya warna, dan tandai `none`; tampilkan nilai tersamar saja dan taruh reveal di balik aksi eksplisit dengan alasan; dan penuhi aturan WCAG 2.2 AA di `docs/awcms/14_ui_ux_design_system.md` (label, urutan fokus, pengumuman status, tanpa makna hanya-warna). Layar yang dikirim memakai primitif halaman-data ADR-0149 bersama, pil status berteks (tidak pernah hanya warna), kontrol berlabel, dan tabel bertumpuk 360 px.
+**Manajemen sumber telah rilis (Issue #1477):** `/admin/website-engagement/sources` kini membuat, mengubah, menjeda/melanjutkan, dan memutar sumber (dan tetap mencabut), di balik `sources.manage`, pada endpoint yang sudah ada. Token ditampilkan **sekali**, di panel yang diisi klien dari respons buat/putar (`Cache-Control: no-store` pada respons itu dan pada halaman; tidak pernah dirender server, tidak pernah ada di penyimpanan, URL, log, atribut, atau baris audit), dengan tombol salin dan "Sudah saya simpan" eksplisit yang menghapusnya; juga dihapus saat `pagehide` dan pemulihan bfcache. Pemutaran ulang idempoten menjawab tanpa token, dan layar menyuruh memutar lagi. Mematikan tantangan meminta konfirmasi dan mengirim `Idempotency-Key`. Pemilih host hanya mendaftar domain aktif tenant ini (nama host saja), dan hanya untuk pemanggil yang boleh mengelola sumber.
+
+**Masih ditunda:** reveal yang diaudit (`submissions.reveal`, tetap di `NOT_YET_SCREENED`). Kontrak yang harus dipenuhi layar itu, dalam perubahan yang sama dengan kontrolnya: tampilkan token **sekali** di area salin dengan konfirmasi eksplisit "sudah saya simpan" dan jangan render ulang; tampilkan `challengeEffective` sebagai teks yang terlihat, bukan hanya warna, dan tandai `none`; tampilkan nilai tersamar saja dan taruh reveal di balik aksi eksplisit dengan alasan; dan penuhi aturan WCAG 2.2 AA di `docs/awcms/14_ui_ux_design_system.md` (label, urutan fokus, pengumuman status, tanpa makna hanya-warna). Layar yang dikirim memakai primitif halaman-data ADR-0149 bersama, pil status berteks (tidak pernah hanya warna), kontrol berlabel, dan tabel bertumpuk 360 px.
 
 ## Keterbatasan (tercatat)
 
-Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tangan; tidak ada widget; tidak ada live chat; tidak ada deduplikasi atau pencocokan orang; tidak ada layar untuk membuat/mengubah/memutar sumber atau reveal (hanya API); tidak ada filter rentang tanggal pada daftar; tidak ada masa tenggang token saat rotasi (token lama berhenti seketika); limiter per-IP berjalan di dalam proses kecuali Redis dikonfigurasi; pencocokan host berdasarkan hostname (port diabaikan).
+Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tangan; tidak ada widget; tidak ada live chat; tidak ada deduplikasi atau pencocokan orang; tidak ada layar untuk reveal (hanya API); tidak ada filter rentang tanggal pada daftar; tidak ada masa tenggang token saat rotasi (token lama berhenti seketika); limiter per-IP berjalan di dalam proses kecuali Redis dikonfigurasi; pencocokan host berdasarkan hostname (port diabaikan).
 
 ## Pengoperasian
 

@@ -162,6 +162,29 @@ export async function fetchSource(
   return toView(row, domains.get(row.id) ?? []);
 }
 
+export type SelectableDomain = { id: string; hostname: string };
+
+/**
+ * The tenant's live domains a source may list, for the admin form's host
+ * picker. The same predicate `domainsAreLive` enforces on write (this tenant,
+ * not deleted), so a host offered here is one the API accepts. Hostnames only:
+ * no verification token or record, which `awcms_tenant_domains` also holds.
+ * Bounded: a source lists at most {@link MAX_SOURCE_DOMAINS}, and the form
+ * never needs more candidates than a tenant's registered domains.
+ */
+export async function listSelectableDomains(
+  tx: Sql,
+  tenantId: string
+): Promise<SelectableDomain[]> {
+  return (await tx`
+    SELECT id, hostname
+    FROM awcms_tenant_domains
+    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+    ORDER BY normalized_hostname, id
+    LIMIT 200
+  `) as SelectableDomain[];
+}
+
 /** True when every id is a live (non-deleted) domain of THIS tenant. Another tenant's id is invisible under RLS and so counts as missing. */
 async function domainsAreLive(
   tx: Sql,

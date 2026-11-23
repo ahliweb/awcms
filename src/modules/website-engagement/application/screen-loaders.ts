@@ -24,7 +24,12 @@ import {
   listSubmissions,
   type SubmissionView
 } from "./submission-directory";
-import { listSources, type SourceView } from "./source-directory";
+import {
+  listSelectableDomains,
+  listSources,
+  type SelectableDomain,
+  type SourceView
+} from "./source-directory";
 import { withEffectiveChallenge } from "./route-support";
 import { resolveWebsiteEngagementRings } from "../domain/engagement-config";
 import {
@@ -188,6 +193,8 @@ export type SourceListData = {
   intakeAvailable: boolean;
   sources: SourceRow[];
   canManage: boolean;
+  /** The host picker's candidates; empty unless the caller may manage sources (nothing to pick for). */
+  domains: SelectableDomain[];
 };
 
 export async function loadSourceList(input: {
@@ -199,9 +206,12 @@ export async function loadSourceList(input: {
   const { tx, tenantId, can } = input;
   const sources = (await listSources(tx, tenantId)).map(withEffectiveChallenge);
 
+  const canManage = await can(input.manageGuard);
+
   return {
     intakeAvailable: resolveWebsiteEngagementRings().ok,
     sources,
-    canManage: await can(input.manageGuard)
+    canManage,
+    domains: canManage ? await listSelectableDomains(tx, tenantId) : []
   };
 }

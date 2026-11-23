@@ -220,14 +220,93 @@ describe("the actions", () => {
     expect(script).not.toContain("sessionStorage");
   });
 
-  test("revoke posts to the revoke endpoint after a confirmation and is the only source action", () => {
+  test("revoke posts to the revoke endpoint after a confirmation", () => {
     const script = sources.slice(sources.indexOf("<script>"));
 
-    expect(script).toContain("/sources/${id}/revoke");
+    expect(script).toContain("${BASE}/${id}/revoke");
     expect(script).toContain("confirmAction(");
-    // Create, edit, pause and rotate need a one-time token display: API-only.
-    expect(script).not.toMatch(/\/rotate|"PATCH"|"DELETE"|"PUT"/);
-    expect(sources).not.toMatch(/<form/);
+  });
+
+  test("create, edit, pause and rotate drive the existing endpoints, behind sources.manage (#1477)", () => {
+    const script = sources.slice(sources.indexOf("<script>"));
+    const base = "src/pages/api/v1/website-engagement/sources";
+
+    expect(script).toContain('"POST", BASE,');
+    expect(script).toContain('"PATCH",');
+    expect(script).toContain("${BASE}/${id}/rotate");
+    expect(script).toContain('"Idempotency-Key"');
+    // Pause and resume are a PATCH of `status` only (revoke stays its own endpoint).
+    expect(script).toContain("{\n      status\n    }");
+    expect(script).not.toContain('"DELETE"');
+
+    for (const route of [
+      `${base}/index.ts`,
+      `${base}/[id]/index.ts`,
+      `${base}/[id]/rotate.ts`
+    ]) {
+      expect(read(route)).toContain("manageSources");
+    }
+
+    // Every control is rendered only for a caller `can(manage)` allowed.
+    expect(sources).toContain("data.canManage &&");
+    expect(sources.indexOf("source-edit-btn")).toBeGreaterThan(
+      sources.indexOf("data.canManage")
+    );
+  });
+
+  test("the rotation takes a fresh key per click, and a rotate confirms that the old token dies at once", () => {
+    const script = sources.slice(sources.indexOf("<script>"));
+
+    expect(script).toMatch(
+      /\/rotate`,\s*undefined,\s*\{ "Idempotency-Key": newKey\(\) \}/
+    );
+    expect(sources).toContain(
+      "stops working immediately, with no grace period"
+    );
+  });
+
+  test("the token is rendered only by the client from the response, and never persisted", () => {
+    const script = sources.slice(sources.indexOf("<script>"));
+    const markup = sources.slice(0, sources.indexOf("<script>"));
+
+    // The server never has a token to render: the panel starts empty and hidden.
+    expect(markup).toMatch(
+      /id="website-engagement-token-value"[\s\S]{0,120}><\/code>/
+    );
+    expect(markup).toMatch(
+      /id="website-engagement-token-panel"[\s\S]{0,160}hidden/
+    );
+    expect(markup).not.toMatch(
+      /token\b.*\{(data|screen|source)\.\w*[tT]oken\b/
+    );
+    // The page and every response that carries a token are never cached.
+    expect(markup).toContain('"Cache-Control", "private, no-store"');
+
+    // Held only through the holder, cleared on dismissal, pagehide and bfcache restore.
+    expect(script).toContain("createTokenHolder(");
+    expect(script).toContain(
+      'addEventListener("pagehide", () => holder.clear())'
+    );
+    expect(script).toMatch(
+      /pageshow[\s\S]{0,120}persisted[\s\S]{0,60}holder\.clear\(\)/
+    );
+    expect(script).toMatch(
+      /website-engagement-token-close"[\s\S]{0,160}holder\.clear\(\)/
+    );
+    expect(script).toContain("holder.clear();\n    holdForNavigation();");
+
+    // No other place may keep it: not storage, a cookie, the URL, a log or an attribute.
+    expect(script).not.toMatch(
+      /localStorage|sessionStorage|indexedDB|document\.cookie|history\.(push|replace)State|location\.(hash|search|href)\s*=|console\.|setAttribute\(|dataset\.token|\.value\s*=\s*outcome/
+    );
+    // The token text goes to exactly one element's textContent.
+    expect(script.match(/\.textContent\s*=\s*text/g)?.length).toBe(1);
+  });
+
+  test("the form reads its inputs from the DOM only, and sends no tenant id", () => {
+    const script = sources.slice(sources.indexOf("<script>"));
+
+    expect(script).not.toMatch(/tenantId|tenant_id/);
   });
 
   test("scripts import a module, so Astro bundles them under the CSP", () => {

@@ -15814,7 +15814,7 @@ Requires `website_engagement.sources.read`. Never returns a token or its hash: o
 - **operationId**: `createWebsiteEngagementSource`
 - **Security**: bearerAuth + tenantHeader
 
-Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The response carries the token ONCE (`token`, `revealed: true`); a replay of the same `Idempotency-Key` answers the stored body WITHOUT it (`revealed: false`). `409 SOURCE_CODE_TAKEN` for a duplicate code; `422 DOMAIN_NOT_FOUND` when a listed domain is not a live domain of this tenant (another tenant's domain answers the same).
+Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The response carries the token ONCE (`token`, `revealed: true`), sent `Cache-Control: no-store`; a replay of the same `Idempotency-Key` answers the stored body WITHOUT it (`revealed: false`). `409 SOURCE_CODE_TAKEN` for a duplicate code; `422 DOMAIN_NOT_FOUND` when a listed domain is not a live domain of this tenant (another tenant's domain answers the same).
 
 **Parameters**
 
@@ -15942,7 +15942,7 @@ Requires `website_engagement.sources.manage` and a signed-in person. Permanently
 - **operationId**: `rotateWebsiteEngagementSource`
 - **Security**: bearerAuth + tenantHeader
 
-Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The previous token stops working IMMEDIATELY (no grace window). The new token is in this response ONCE (`revealed: true`); a replay of the same `Idempotency-Key` answers the stored body without it, so a lost token is recovered by rotating again with a new key, never by reading it back. A revoked source cannot be rotated (`409 SOURCE_REVOKED`).
+Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The previous token stops working IMMEDIATELY (no grace window). The new token is in this response ONCE (`revealed: true`), which is sent `Cache-Control: no-store`; a replay of the same `Idempotency-Key` answers the stored body without it, so a lost token is recovered by rotating again with a new key, never by reading it back. A revoked source cannot be rotated (`409 SOURCE_REVOKED`).
 
 **Parameters**
 
