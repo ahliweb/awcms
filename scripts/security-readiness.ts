@@ -115,6 +115,8 @@ import {
   loadCdnPurgeConfig
 } from "../src/lib/edge-cache/cdn-purge-config";
 import { validateEnv } from "./validate-env";
+import { checkPayrollAddendumArtifact } from "./lib/payroll-addendum-artifact";
+import { PAYROLL_ADDENDUM_GATED_MODULE_KEYS } from "../src/modules/_shared/payroll-dpia-addendum-gate";
 
 export type CheckSeverity = "critical" | "warning" | "info";
 export type CheckStatus = "pass" | "fail";
@@ -5917,6 +5919,106 @@ export function checkEnvConfigValid(
 }
 
 // ---------------------------------------------------------------------------
+// Payroll DPIA addendum on record (Issue #1449, DPIA residuals R-11 / R-13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Two halves. The artifact half: when the deployment names an addendum, the file
+ * exists, hashes to the recorded digest and carries an approved gate record
+ * (`scripts/lib/payroll-addendum-artifact.ts`). The state half: no tenant may
+ * hold an ENABLED `hr_payroll` row unless the artifact half is approved. The
+ * runtime refuses such a tenant anyway (chokepoint); this reports it, because a
+ * row written by hand, a restore from another deployment or a dropped variable
+ * is exactly how a payroll tenant ends up "enabled" without an addendum.
+ *
+ * `listEnabledRows` is injectable so a test can drive both outcomes without a
+ * database.
+ */
+export async function checkPayrollAddendumOnRecord(
+  env: NodeJS.ProcessEnv = process.env,
+  options: {
+    root?: string;
+    listEnabledRows?: () => Promise<number>;
+  } = {}
+): Promise<SecurityCheckResult> {
+  const name = "Payroll DPIA addendum is on record before payroll is enabled";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    const deploy = await checkPayrollAddendumArtifact(env, {
+      root: options.root
+    });
+
+    if (deploy.state === "invalid") {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `The deployment names a payroll DPIA addendum that is not acceptable: ${deploy.problems.join("; ")}.`
+      };
+    }
+
+    if (deploy.state === "approved") {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `Addendum "${deploy.ref}" exists, matches its recorded digest, and its gate record is approved and signed off.`
+      };
+    }
+
+    const enabled = options.listEnabledRows
+      ? await options.listEnabledRows()
+      : await countEnabledGatedModuleRows();
+
+    return enabled > 0
+      ? {
+          name,
+          severity,
+          status: "fail",
+          evidence: `${enabled} tenant row(s) have a payroll-gated module enabled but no approved DPIA addendum is recorded (the runtime refuses them; the rows should not exist).`
+        }
+      : {
+          name,
+          severity,
+          status: "pass",
+          evidence:
+            "No addendum is recorded and no tenant has a payroll-gated module enabled: payroll is off and fails closed."
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the payroll DPIA addendum gate: ${errorMessage(error)}.`
+    };
+  }
+}
+
+async function countEnabledGatedModuleRows(): Promise<number> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set.");
+  }
+
+  // One query per key, not `= ANY(${array})`: a Bun.SQL array parameter arrives
+  // as comma-joined text, not as an array.
+  const sql = getDatabaseClient();
+  let total = 0;
+
+  for (const moduleKey of PAYROLL_ADDENDUM_GATED_MODULE_KEYS) {
+    const rows = (await sql`
+      SELECT count(*)::int AS n
+      FROM awcms_tenant_modules
+      WHERE enabled AND module_key = ${moduleKey}
+    `) as { n: number }[];
+
+    total += rows[0]?.n ?? 0;
+  }
+
+  return total;
+}
+
+// ---------------------------------------------------------------------------
 // 11. Sync HMAC secret is not left at its documented default (warning/info)
 // ---------------------------------------------------------------------------
 
@@ -8563,6 +8665,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkAuditLogTableReachable(),
     await checkPlatformTenantIdentifiable(),
     checkEnvConfigValid(),
+    await checkPayrollAddendumOnRecord(),
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),
     checkSsoCredentialEncryptionKeyConfigured(),

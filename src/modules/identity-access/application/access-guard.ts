@@ -47,6 +47,7 @@ import {
   resolveTenantPrincipalForTenantUser
 } from "./auth-context";
 import { isDelegatedPartnerRefused } from "../domain/partner-suspension";
+import { evaluatePayrollAddendumRequirement } from "../../_shared/payroll-dpia-addendum-gate";
 import {
   cachedRead,
   type AuthorizationReadCache
@@ -493,6 +494,41 @@ export async function authorizeInTransaction(
     return {
       allowed: false,
       denied: fail(403, "MODULE_DISABLED", decision.reason)
+    };
+  }
+
+  // Issue #1449 — the payroll DPIA-addendum go-live gate. Environment-only (no
+  // round trip), decided before any permission is looked up for the same reason
+  // as every structural gate here, and independent of `awcms_tenant_modules`
+  // because "no row" means ENABLED: a gate on the enable endpoint alone would
+  // never be reached by a module that arrives enabled-by-default. Fail-closed:
+  // no approved addendum recorded means every `hr_payroll` guard is refused,
+  // platform tenant included (the addendum is the deployment's, not a tenant's).
+  const addendumDenial = evaluatePayrollAddendumRequirement(
+    guard.moduleKey,
+    process.env
+  );
+
+  if (addendumDenial) {
+    const decision = {
+      allowed: false,
+      reason: addendumDenial.reason,
+      matchedPolicy: addendumDenial.matchedPolicy
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id,
+      context.delegatedGrantId
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "PAYROLL_DPIA_ADDENDUM_REQUIRED", decision.reason)
     };
   }
 

@@ -6,6 +6,7 @@
 import packageJson from "../../../../package.json";
 import { listModules } from "../..";
 import type { ModuleDescriptor } from "../../_shared/module-contract";
+import { evaluatePayrollAddendumRequirement } from "../../_shared/payroll-dpia-addendum-gate";
 import { syncModuleDescriptors } from "./descriptor-sync";
 import {
   evaluateModuleDisable,
@@ -171,6 +172,27 @@ export async function enableTenantModule(
 
   if (!validation.valid) {
     return { outcome: "rejected", validation };
+  }
+
+  // Issue #1449 — payroll needs the deployment's approved DPIA addendum on
+  // record. Checked AFTER the generic validation (an unknown module is still
+  // MODULE_NOT_FOUND) and BEFORE the write, so a refused enable leaves no row.
+  // The chokepoint refuses the module's endpoints on the same condition, so this
+  // is the courtesy answer, not the only control.
+  const addendumDenial = evaluatePayrollAddendumRequirement(
+    moduleKey,
+    process.env
+  );
+
+  if (addendumDenial) {
+    return {
+      outcome: "rejected",
+      validation: {
+        valid: false,
+        code: "PAYROLL_DPIA_ADDENDUM_REQUIRED",
+        message: addendumDenial.reason
+      }
+    };
   }
 
   await tx`

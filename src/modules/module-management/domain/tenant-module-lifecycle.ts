@@ -22,6 +22,7 @@ export type ModuleLifecycleErrorCode =
   | "MODULE_REVERSE_DEPENDENCY_ACTIVE"
   | "MODULE_DEPENDENCY_CYCLE"
   | "MODULE_VERSION_INCOMPATIBLE"
+  | "PAYROLL_DPIA_ADDENDUM_REQUIRED"
   | "CORE_MODULE_CANNOT_BE_DISABLED";
 
 export type LifecycleValidationResult =
