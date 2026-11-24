@@ -37,11 +37,9 @@ import {
   matchesAnyHash
 } from "../../../lib/security/field-encryption";
 import {
-  isTurnstileRequired,
-  resolveTurnstileConfig,
-  resolveTurnstileMaxTokenAgeSec,
-  verifyTurnstileToken
-} from "../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  resolveActivePublicFormChallengeProvider
+} from "../../../lib/security/public-form-challenge";
 import { appendDomainEvent } from "../../domain-event-runtime/application/append-domain-event";
 import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
@@ -72,7 +70,8 @@ import {
   WEBSITE_ENGAGEMENT_SUBMISSION_AGGREGATE_TYPE,
   WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE,
   WEBSITE_ENGAGEMENT_EVENT_VERSION,
-  WEBSITE_ENGAGEMENT_TURNSTILE_ACTION,
+  WEBSITE_ENGAGEMENT_CHALLENGE_FORM,
+  WEBSITE_ENGAGEMENT_TURNSTILE_PROVIDER_KEY,
   type ChallengeMode,
   type ChallengeOutcome,
   type SubmissionKind
@@ -244,41 +243,70 @@ export function checkSourceRules(
 }
 
 /**
- * The challenge, outside any transaction. `null` means refused (one generic
- * outcome: a missing token, a rejected one, an outage and a misconfiguration are
- * indistinguishable to the caller, and the provider failing CLOSED means an
- * outage blocks forms rather than opening them).
+ * The challenge, outside any transaction, through the pre-session challenge
+ * SEAM (`enforcePublicFormCaptcha`, Issue #1353; adopted here by Issue #1477, so
+ * this intake no longer has a Turnstile path of its own). `null` means refused
+ * (one generic outcome: a missing token, a rejected one, a replay, an outage, an
+ * ambiguous or unreadable provider configuration and a misconfiguration are
+ * indistinguishable to the caller, and the seam failing CLOSED means an outage
+ * blocks forms rather than opening them).
  *
- * The expected hostname is the VERIFIED Origin host of THIS request, not one
- * global value, so a tenant with several domains is verified against the domain
- * the visitor was actually on.
+ * What stays PER SOURCE (ADR-0155): `challengeMode: none` is the source's own
+ * visible opt-out and never calls the seam; and the expected hostname is the
+ * VERIFIED Origin host of THIS request, handed to the seam as
+ * `expectedHostname`, not one deployment-wide value, so a tenant with several
+ * domains is verified against the domain the visitor was actually on. The
+ * tenant is the one the source token opened.
+ *
+ * What the seam adds: the single-use burn, the verifier deadline, the
+ * one-provider rule and the uniform refusal. Only the Turnstile provider can be
+ * recorded as a stored outcome (the vocabulary is closed and CHECK-constrained);
+ * any other provider that is switched on refuses rather than being recorded as
+ * something it is not.
  */
 export async function runChallenge(
-  source: Pick<VerifiedSource, "challengeMode" | "origin">,
+  request: Request,
+  source: Pick<VerifiedSource, "challengeMode" | "origin"> & {
+    tenantId?: string;
+  },
   challengeToken: string | null,
   remoteIp: string | undefined,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ChallengeOutcome | null> {
   if (source.challengeMode === "none") return "source_none";
 
-  if (!isTurnstileRequired(env)) return "not_required";
+  let active: ReturnType<typeof resolveActivePublicFormChallengeProvider>;
 
-  const config = resolveTurnstileConfig(env);
+  try {
+    active = resolveActivePublicFormChallengeProvider(env);
+  } catch {
+    // No extension-point source installed: which provider applies is
+    // unknowable, so this fails closed (the seam does the same).
+    return null;
+  }
 
-  if (!challengeToken || !config) return null;
+  if (active.kind === "none") return "not_required";
 
-  const result = await verifyTurnstileToken(
-    challengeToken,
-    config,
+  if (
+    active.kind === "ambiguous" ||
+    active.provider.key !== WEBSITE_ENGAGEMENT_TURNSTILE_PROVIDER_KEY
+  ) {
+    return null;
+  }
+
+  const refusal = await enforcePublicFormCaptcha(
+    request,
+    WEBSITE_ENGAGEMENT_CHALLENGE_FORM,
+    { challengeToken: challengeToken ?? undefined },
     {
-      action: WEBSITE_ENGAGEMENT_TURNSTILE_ACTION,
-      hostname: source.origin.hostname,
-      maxTokenAgeSec: resolveTurnstileMaxTokenAgeSec(env)
-    },
-    remoteIp
+      tenantId: source.tenantId ?? null,
+      clientIp: remoteIp,
+      expectedHostname: source.origin.hostname,
+      env
+    }
   );
 
-  return result.ok ? "turnstile_verified" : null;
+  return refusal === null ? "turnstile_verified" : null;
 }
 
 export type RecordResult =

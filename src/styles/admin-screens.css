@@ -628,6 +628,11 @@
   overflow-wrap: anywhere;
 }
 
+.admin-reveal-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .admin-code-block {
   margin: 0 0 var(--sp-4, 1rem);
   padding: var(--sp-3, 0.75rem);

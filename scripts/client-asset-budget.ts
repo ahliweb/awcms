@@ -1410,8 +1410,19 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1477 part 2** (the submission reveal control): +1,990 B
+ * (393,025 -> 395,015), measured 394,897 B on a clean build of `main` plus this
+ * change, margin 118 B. All of it is in the `/admin/website-engagement/[id]`
+ * page script (the confirmed reveal POST, the text-only panel, its Hide, timeout
+ * and `pagehide` clearing, and the pure error/field model
+ * `website-engagement-reveal-model.ts`) plus one CSS rule for the message. The
+ * lifecycle is the shared `admin-form-client.ts` and the confirmation the shared
+ * `confirm-dialog-client.ts`, so there is no per-screen duplication to recover.
+ * Issue #1477 part 1 (PR #1489) raises the same constant for the sources screen:
+ * whichever merges second re-measures and stacks the two raises.
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 395_015;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

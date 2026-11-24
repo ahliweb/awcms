@@ -863,6 +863,34 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
     ]);
   });
 
+  test("a refused reveal is uniform and writes no audit row: an unknown id is the same not-found whoever asks (#1477)", async () => {
+    if (!handlerReady) return;
+
+    const unknown = "00000000-0000-4000-8000-0000000000aa";
+    const first = await call(revealSubmission, {
+      method: "POST",
+      path: `${BASE}/submissions/${unknown}/reveal`,
+      params: { id: unknown }
+    });
+    const second = await call(revealSubmission, {
+      method: "POST",
+      path: `${BASE}/submissions/${"00000000-0000-4000-8000-0000000000bb"}/reveal`,
+      params: { id: "00000000-0000-4000-8000-0000000000bb" }
+    });
+
+    expect(first.status).toBe(404);
+    expect(second.status).toBe(404);
+    expect(first.body.error?.code).toBe(second.body.error?.code);
+    expect(first.body.error?.message).toBe(second.body.error?.message);
+
+    const audit = (await admin()`
+      SELECT count(*)::int AS n FROM awcms_audit_events
+      WHERE action = 'website_engagement.submission.reveal'
+    `) as { n: number }[];
+
+    expect(audit[0]!.n).toBe(0);
+  });
+
   test("L6: switching the challenge OFF needs an Idempotency-Key and writes a warning audit row naming old and new mode", async () => {
     if (!handlerReady) return;
 

@@ -6,8 +6,20 @@
  * contact details, the CONSENT record (the purposes ticked, the exact consent
  * copy version the website showed, the page and the moment), the source
  * attribution and the provenance of the request (which host it came from and
- * how the anti-abuse challenge went). It never decrypts: the reveal is a
- * separate, audited permission (`submissions.reveal`) and has no control here.
+ * how the anti-abuse challenge went). The PAGE never decrypts and its markup
+ * carries only masked values.
+ *
+ * The REVEAL (Issue #1477) is a separate, explicit step: a button that shows
+ * only to a caller holding `submissions.reveal`, for a `received` contact or
+ * lead, and that asks for a confirmation and then POSTs to the audited reveal
+ * endpoint (the one place the contact blob is decrypted; the audit row is
+ * written there, naming the submission and never the values). The response goes
+ * into the page as TEXT, into one panel that is emptied on Hide, after a
+ * minute and when the page is left, and is never stored or read back: every
+ * reveal is a fresh, audited request. The endpoint changes no business state
+ * (its only write is the audit row, which EACH reveal must add), so it takes no
+ * `Idempotency-Key`: a replayed answer would either skip the audit row or keep
+ * the personal data in the idempotency table.
  *
  * The one action is the controller's WITHDRAWAL: one-way, it erases the contact
  * details and tells downstream consumers to stop using the submission. It shows
@@ -51,6 +63,12 @@ const WITHDRAW_GUARD = {
   action: "withdraw"
 } as const;
 
+const REVEAL_GUARD = {
+  moduleKey: "website_engagement",
+  activityCode: "submissions",
+  action: "reveal"
+} as const;
+
 const PATH = "/admin/website-engagement";
 const rawId = Astro.params.id ?? null;
 
@@ -64,6 +82,7 @@ const screen = await loadAdminScreen({
       tenantId: ssr.tenantId,
       submissionId: rawId,
       withdrawGuard: WITHDRAW_GUARD,
+      revealGuard: REVEAL_GUARD,
       can
     }),
   onError: (error) => {
@@ -167,10 +186,94 @@ const text = (value: string | null) => (value === null ? dash : value);
         </dl>
         <p class="page-description" id="website-engagement-reveal-note">
           {t(
-            "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
+            "Contact details are masked here. Reading them in full is a separate permission, and every reveal is recorded in the audit log."
           )}
         </p>
       </section>
+
+      {found.canReveal && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="website-engagement-reveal-title"
+        >
+          <h2 class="admin-section-title" id="website-engagement-reveal-title">
+            {t("Contact details")}
+          </h2>
+          <p
+            id="website-engagement-reveal-error"
+            class="admin-create-error"
+            role="alert"
+            tabindex="-1"
+            hidden
+          />
+          {/* Persistent live region: its text changes, it is never inserted. */}
+          <p
+            id="website-engagement-reveal-status"
+            class="cell-muted"
+            role="status"
+            aria-live="polite"
+          />
+          <p>
+            <button
+              type="button"
+              id="website-engagement-reveal-button"
+              class="btn"
+              data-submission-id={submission.id}
+              data-confirm={t(
+                "Reveal the full contact details and message of this submission? Every reveal is recorded in the audit log."
+              )}
+              data-busy={t("Please wait…")}
+              data-revealed={t("Contact details are now shown.")}
+              data-hidden={t("Contact details are hidden.")}
+              data-unavailable={t(
+                "These contact details are not available to you, or no longer exist."
+              )}
+              data-withdrawn={t(
+                "This submission was withdrawn and its details are no longer available."
+              )}
+              data-nothing={t("This submission carries no contact details.")}
+              data-rate-limited={t(
+                "Too many requests. Wait a moment and try again."
+              )}
+              data-failed={t(
+                "Could not read the contact details. Please try again."
+              )}
+            >
+              {t("Reveal contact details")}
+            </button>
+          </p>
+          <div
+            id="website-engagement-reveal-panel"
+            class="admin-code-block"
+            tabindex="-1"
+            hidden
+          >
+            <p class="form-legend">{t("Revealed contact details")}</p>
+            <p class="page-description">
+              {t(
+                "Shown once. This page does not keep them, and they disappear when you hide them, after a minute, or when you leave the page."
+              )}
+            </p>
+            <dl
+              class="admin-detail-list"
+              id="website-engagement-reveal-fields"
+              data-label-name={t("Name")}
+              data-label-email={t("Email")}
+              data-label-phone={t("Phone")}
+              data-label-company={t("Company")}
+              data-label-subject={t("Subject")}
+              data-label-message={t("Message")}
+            ></dl>
+            <button
+              type="button"
+              id="website-engagement-reveal-hide"
+              class="btn-inline"
+            >
+              {t("Hide")}
+            </button>
+          </div>
+        </section>
+      )}
 
       <section
         class="admin-section fade-in-up"
@@ -314,13 +417,100 @@ const text = (value: string | null) => (value === null ? dash : value);
   // `default-src 'self'` CSP allows it: an import-free script would inline and
   // be blocked.
   import {
+    lockElement,
     messageBox,
     mutateAndReload,
+    onAction,
     onSubmit,
-    sendJson
+    sendJson,
+    sendJsonForData
   } from "../../../lib/ui/admin-form-client";
   import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
   import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    REVEAL_VISIBLE_MS,
+    revealMessageKey,
+    revealRows
+  } from "../../../lib/ui/website-engagement-reveal-model";
+
+  // The REVEAL. The one place a clear contact value reaches the page: written
+  // as text (never markup, an attribute, storage or a URL), dropped on Hide,
+  // after a minute and when the page is left, and never read back.
+  const revealError = messageBox("website-engagement-reveal-error");
+  const revealPanel = document.getElementById(
+    "website-engagement-reveal-panel"
+  );
+  const revealFields = document.getElementById(
+    "website-engagement-reveal-fields"
+  );
+  const revealStatus = document.getElementById(
+    "website-engagement-reveal-status"
+  );
+  const revealButton = document.getElementById(
+    "website-engagement-reveal-button"
+  ) as HTMLButtonElement | null;
+  let revealTimer: number | undefined;
+
+  function hideRevealed(returnFocus = false): void {
+    window.clearTimeout(revealTimer);
+    revealFields?.replaceChildren();
+
+    if (revealPanel) revealPanel.hidden = true;
+
+    if (returnFocus && revealStatus) {
+      revealStatus.textContent = revealButton?.dataset.hidden ?? "";
+      if (revealButton?.isConnected) revealButton.focus();
+    }
+  }
+
+  document
+    .getElementById("website-engagement-reveal-hide")
+    ?.addEventListener("click", () => hideRevealed(true));
+  window.addEventListener("pagehide", () => hideRevealed());
+
+  onAction("#website-engagement-reveal-button", async (button) => {
+    const say = (name: string): string => button.dataset[name] ?? "";
+    const id = button.dataset.submissionId;
+
+    if (!id || !(await confirmAction(say("confirm")))) return;
+
+    hideRevealed();
+    revealError.clear();
+    if (revealStatus) revealStatus.textContent = "";
+
+    const unlock = lockElement(button, say("busy"));
+    const outcome = await sendJsonForData<unknown>(
+      "POST",
+      `/api/v1/website-engagement/submissions/${encodeURIComponent(id)}/reveal`
+    );
+
+    unlock();
+
+    const rows = outcome.ok ? revealRows(outcome.data) : null;
+
+    if (rows === null || !revealFields || !revealPanel) {
+      revealError.show(say(revealMessageKey(outcome.errorCode)));
+      return;
+    }
+
+    for (const { field, value } of rows) {
+      const term = document.createElement("dt");
+      const detail = document.createElement("dd");
+
+      term.textContent =
+        revealFields.dataset[
+          `label${field[0]?.toUpperCase()}${field.slice(1)}`
+        ] ?? field;
+      detail.textContent = value;
+      if (field === "message") detail.className = "admin-reveal-message";
+      revealFields.append(term, detail);
+    }
+
+    revealPanel.hidden = false;
+    revealPanel.focus();
+    if (revealStatus) revealStatus.textContent = say("revealed");
+    revealTimer = window.setTimeout(hideRevealed, REVEAL_VISIBLE_MS);
+  });
 
   const error = messageBox("website-engagement-withdraw-error");
   /** One key per distinct request: a retry of the same withdrawal replays, a different reason is a new request. */

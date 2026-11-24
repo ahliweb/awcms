@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { resetPublicFormChallengeForTests } from "../src/lib/security/public-form-challenge";
 import { resetRateLimitForTests } from "../src/lib/security/rate-limit";
 import { listModules } from "../src/modules";
 import { handlePublicSubmission } from "../src/modules/website-engagement/application/public-intake-handler";
@@ -32,7 +33,8 @@ import {
   WEBSITE_ENGAGEMENT_EVENT_VERSION,
   WEBSITE_ENGAGEMENT_MODULE_KEY,
   WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE,
-  WEBSITE_ENGAGEMENT_SUBMISSION_WITHDRAWN_EVENT_TYPE
+  WEBSITE_ENGAGEMENT_SUBMISSION_WITHDRAWN_EVENT_TYPE,
+  WEBSITE_ENGAGEMENT_TURNSTILE_PROVIDER_KEY
 } from "../src/modules/website-engagement/domain/website-engagement-constants";
 import { websiteEngagementModule } from "../src/modules/website-engagement/module";
 
@@ -667,49 +669,163 @@ describe("website_engagement source rules and challenge (after proof)", () => {
     ).toEqual({ ok: true });
   });
 
-  test("the challenge: none is visible, the offline profile is not_required, and a required one fails closed", async () => {
+  describe("the challenge goes through the pre-session seam (Issue #1477)", () => {
     const origin = {
       origin: "https://shop.example.id",
       hostname: "shop.example.id",
       via: "origin" as const
     };
-
-    expect(
-      await runChallenge({ challengeMode: "none", origin }, null, undefined, {})
-    ).toBe("source_none");
-    expect(
-      await runChallenge(
-        { challengeMode: "turnstile", origin },
-        null,
-        undefined,
-        {}
-      )
-    ).toBe("not_required");
-
+    const req = () =>
+      new Request(
+        "https://api.example.id/api/v1/website-engagement/submissions",
+        {
+          method: "POST"
+        }
+      );
     const online = {
       AUTH_ONLINE_SECURITY_ENABLED: "true",
       AUTH_ONLINE_SECURITY_PROFILE: "full_online",
-      TURNSTILE_ENABLED: "true"
+      TURNSTILE_ENABLED: "true",
+      TURNSTILE_SECRET_KEY: "test-secret"
     } as NodeJS.ProcessEnv;
+    const realFetch = globalThis.fetch;
+    let fetchCalls = 0;
 
-    // Required, no token: refused.
-    expect(
-      await runChallenge(
-        { challengeMode: "turnstile", origin },
-        null,
-        "1.2.3.4",
-        online
-      )
-    ).toBeNull();
-    // Required, a token, but the deployment has no secret configured: refused,
-    // never skipped, and no network call is made.
-    expect(
-      await runChallenge(
-        { challengeMode: "turnstile", origin },
-        "tok",
-        "1.2.3.4",
-        online
-      )
-    ).toBeNull();
+    const siteverify = (answer: Record<string, unknown>) => {
+      globalThis.fetch = (async () => {
+        fetchCalls += 1;
+
+        return new Response(JSON.stringify(answer), {
+          headers: { "content-type": "application/json" }
+        });
+      }) as unknown as typeof fetch;
+    };
+
+    beforeEach(() => {
+      fetchCalls = 0;
+      resetPublicFormChallengeForTests();
+    });
+    afterEach(() => {
+      globalThis.fetch = realFetch;
+    });
+
+    test("none is visible, the offline profile is not_required, and a required one fails closed", async () => {
+      expect(
+        await runChallenge(
+          req(),
+          { challengeMode: "none", origin },
+          null,
+          undefined,
+          online
+        )
+      ).toBe("source_none");
+      expect(
+        await runChallenge(
+          req(),
+          { challengeMode: "turnstile", origin },
+          null,
+          undefined,
+          {}
+        )
+      ).toBe("not_required");
+      // Required, no token: refused, no network call.
+      expect(
+        await runChallenge(
+          req(),
+          { challengeMode: "turnstile", origin },
+          null,
+          "1.2.3.4",
+          online
+        )
+      ).toBeNull();
+      // Required, a token, but the deployment has no secret configured:
+      // refused, never skipped, and no network call is made.
+      expect(
+        await runChallenge(
+          req(),
+          { challengeMode: "turnstile", origin },
+          "tok",
+          "1.2.3.4",
+          { ...online, TURNSTILE_SECRET_KEY: "" }
+        )
+      ).toBeNull();
+      expect(fetchCalls).toBe(0);
+    });
+
+    test("the hostname is the source's VERIFIED Origin host, not a deployment-wide value", async () => {
+      siteverify({
+        success: true,
+        action: "website_engagement",
+        hostname: "shop.example.id",
+        challenge_ts: new Date().toISOString()
+      });
+
+      // No TURNSTILE_EXPECTED_HOSTNAME at all: the per-source host is enough.
+      expect(
+        await runChallenge(
+          req(),
+          { challengeMode: "turnstile", origin, tenantId: "t-1" },
+          "token-a",
+          "1.2.3.4",
+          online
+        )
+      ).toBe("turnstile_verified");
+      expect(fetchCalls).toBe(1);
+
+      // The same solved token on ANOTHER of the tenant's hosts is refused.
+      expect(
+        await runChallenge(
+          req(),
+          {
+            challengeMode: "turnstile",
+            origin: { ...origin, hostname: "other.example.id" },
+            tenantId: "t-1"
+          },
+          "token-b",
+          "1.2.3.4",
+          online
+        )
+      ).toBeNull();
+      expect(fetchCalls).toBe(2);
+    });
+
+    test("a token is single-use through the seam, and a wrong action is refused", async () => {
+      siteverify({
+        success: true,
+        action: "website_engagement",
+        hostname: "shop.example.id",
+        challenge_ts: new Date().toISOString()
+      });
+
+      const source = { challengeMode: "turnstile" as const, origin };
+
+      expect(await runChallenge(req(), source, "once", "1.2.3.4", online)).toBe(
+        "turnstile_verified"
+      );
+      // The replay is refused BEFORE the verifier is asked.
+      expect(
+        await runChallenge(req(), source, "once", "1.2.3.4", online)
+      ).toBeNull();
+      expect(fetchCalls).toBe(1);
+
+      siteverify({
+        success: true,
+        action: "login",
+        hostname: "shop.example.id",
+        challenge_ts: new Date().toISOString()
+      });
+      expect(
+        await runChallenge(req(), source, "other", "1.2.3.4", online)
+      ).toBeNull();
+    });
+
+    test("the stored provider key is the real Turnstile provider's", async () => {
+      const { TURNSTILE_CHALLENGE_PROVIDER_KEY } =
+        await import("../src/modules/identity-access/infrastructure/turnstile-challenge-provider");
+
+      expect(WEBSITE_ENGAGEMENT_TURNSTILE_PROVIDER_KEY).toBe(
+        TURNSTILE_CHALLENGE_PROVIDER_KEY
+      );
+    });
   });
 });

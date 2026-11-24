@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:0a8162b529d08b6d4e906eaf0af9f0d90751cac292b66843679a2d1548c1292b -->
+<!-- i18n-source-hash: sha256:3f1208aba534cb19c1a2019291b84772e8a1b8f7557bcfe12e21534d02d862df -->
 
 # AWCMS — Project State & Continuation
 
@@ -139,7 +139,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **292** (`sql/001`–`420`)                                                                                                          | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0171** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **95** berkas `.astro` di `src/pages/admin/`; **2 dari 40** modul tanpa `navigation:` (`social-publishing`, `telegram-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **117** (69.160 baris) — soal typecheck lihat §6                                                                                   | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **117** (69.350 baris) — soal typecheck lihat §6                                                                                   | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **74** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.8.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

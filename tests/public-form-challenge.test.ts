@@ -656,7 +656,7 @@ describe("no second path around the seam", () => {
     ).toEqual([]);
   });
 
-  test("the allow-listed files are exempt, with a reason each; website-engagement is the recorded exception", () => {
+  test("the allow-listed files are exempt, with a reason each; website-engagement is NOT among them (Issue #1477)", () => {
     for (const path of Object.keys(TURNSTILE_ENTRY_IMPORT_ALLOW_LIST)) {
       expect(TURNSTILE_ENTRY_IMPORT_ALLOW_LIST[path]!.length).toBeGreaterThan(
         20
@@ -672,10 +672,9 @@ describe("no second path around the seam", () => {
     }
 
     expect(
-      TURNSTILE_ENTRY_IMPORT_ALLOW_LIST[
-        "src/modules/website-engagement/application/submission-intake.ts"
-      ]
-    ).toContain("per SOURCE");
+      "src/modules/website-engagement/application/submission-intake.ts" in
+        TURNSTILE_ENTRY_IMPORT_ALLOW_LIST
+    ).toBe(false);
   });
 
   test("the real source tree has no other importer", () => {

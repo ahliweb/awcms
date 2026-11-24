@@ -589,6 +589,8 @@ export type TurnstileEnforcementResult =
 export type EnforceTurnstileOptions = {
   /** The per-endpoint action the token must match (see `LOGIN_TURNSTILE_ACTION`/`SETUP_TURNSTILE_ACTION`). */
   action: string;
+  /** The hostname this token must be solved on, when the caller (not the deployment) knows it (a per-source public intake, Issue #1477). Absent or blank: `TURNSTILE_EXPECTED_HOSTNAME`. */
+  hostname?: string;
   env?: NodeJS.ProcessEnv;
   now?: Date;
 };
@@ -623,7 +625,8 @@ export async function enforceTurnstileIfRequired(
   }
 
   const config = resolveTurnstileConfig(env);
-  const expectedHostname = env.TURNSTILE_EXPECTED_HOSTNAME?.trim();
+  const expectedHostname =
+    options.hostname?.trim() || env.TURNSTILE_EXPECTED_HOSTNAME?.trim();
 
   // Misconfigured (enabled but no secret / no expected hostname): fail closed
   // rather than silently skipping verification or skipping the hostname check.

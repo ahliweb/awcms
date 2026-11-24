@@ -149,7 +149,13 @@ export async function loadSubmissionList(input: {
 
 export type SubmissionDetailData =
   | { found: false }
-  | { found: true; submission: SubmissionView; canWithdraw: boolean };
+  | {
+      found: true;
+      submission: SubmissionView;
+      canWithdraw: boolean;
+      /** The reveal control is offered: a `received` submission that can hold contact details, to a caller the chokepoint allows to reveal. */
+      canReveal: boolean;
+    };
 
 export async function loadSubmissionDetail(input: {
   tx: Sql;
@@ -157,6 +163,7 @@ export async function loadSubmissionDetail(input: {
   /** Raw path parameter; normalised here so no caller can forget to. */
   submissionId: string | null;
   withdrawGuard: EngagementGuard;
+  revealGuard: EngagementGuard;
   can: EngagementCan;
 }): Promise<SubmissionDetailData> {
   const { tx, tenantId, submissionId, can } = input;
@@ -178,7 +185,13 @@ export async function loadSubmissionDetail(input: {
     found: true,
     submission,
     canWithdraw:
-      submission.status === "received" && (await can(input.withdrawGuard))
+      submission.status === "received" && (await can(input.withdrawGuard)),
+    // An interaction carries no contact details and a withdrawn submission's
+    // are erased: neither is offered a control that could only refuse.
+    canReveal:
+      submission.status === "received" &&
+      submission.kind !== "interaction" &&
+      (await can(input.revealGuard))
   };
 }
 

@@ -283,13 +283,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // which claims BOTH keys (`sender_policy.configure` for the action,
   // `senders.read` for the "is this the default" readout and queue impact) and
   // so they leave this ledger. `/admin/whatsapp` stays gated on `messages.read`.
-  // website_engagement (1) — ADR-0155 / Issue #1153. `/admin/website-engagement`
-  // (and its `/{id}` and `/sources`) claim `sources.read`, `sources.manage`
-  // (revoke), `submissions.read` and `submissions.withdraw`, so those four left
-  // this ledger. What remains is the audited REVEAL of a submission's decrypted
-  // contact details: it needs its own screen contract (a deliberate, per-row,
-  // audited POST that renders personal data once), and is API-only until then.
-  "website_engagement.submissions.reveal",
   // social_publishing (9) — ADR-0157 / Issue #1145. API-first and
   // `experimental`: the operator screen (the publication list with its derived
   // status, the per-account job table where a partial failure is read, the

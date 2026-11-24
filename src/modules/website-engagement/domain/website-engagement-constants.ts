@@ -104,8 +104,19 @@ export const WITHDRAWAL_REASONS = [
 ] as const;
 export type WithdrawalReason = (typeof WITHDRAWAL_REASONS)[number];
 
-/** Turnstile `action` the widget must have been rendered with for this endpoint. */
-export const WEBSITE_ENGAGEMENT_TURNSTILE_ACTION = "website_engagement";
+/**
+ * The form name this intake presents to the public-form challenge seam. The seam
+ * hands it to Turnstile as the `action` the widget must have been rendered with
+ * for this endpoint.
+ */
+export const WEBSITE_ENGAGEMENT_CHALLENGE_FORM = "website_engagement";
+
+/**
+ * The seam provider key whose verification is stored as `turnstile_verified`.
+ * Restated (not imported from `identity-access`, a module boundary);
+ * `tests/website-engagement-contract.test.ts` pins it to the real key.
+ */
+export const WEBSITE_ENGAGEMENT_TURNSTILE_PROVIDER_KEY = "cloudflare_turnstile";
 
 /** A source's token: `wes1.<tenantId>.<sourceId>.<secret>`. The prefix versions the format. */
 export const SOURCE_TOKEN_VERSION = "wes1";

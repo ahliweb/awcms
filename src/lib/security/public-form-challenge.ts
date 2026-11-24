@@ -83,6 +83,8 @@ export type PublicFormCaptchaOptions = {
   tenantId?: string | null;
   /** Default: `resolveClientIp(request)`. */
   clientIp?: string;
+  /** The hostname the token must be solved on, for a form whose host is per request (Issue #1477). Default: the provider's deployment-wide value. */
+  expectedHostname?: string;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   /** Test seam: the verifier deadline. Production uses `PUBLIC_FORM_CHALLENGE_TIMEOUT_MS`. */
@@ -350,6 +352,7 @@ export async function enforcePublicFormCaptcha(
         formName,
         tenantId,
         remoteIp: options.clientIp ?? resolveClientIp(request, undefined),
+        expectedHostname: options.expectedHostname,
         env
       }),
       options.timeoutMs ?? PUBLIC_FORM_CHALLENGE_TIMEOUT_MS

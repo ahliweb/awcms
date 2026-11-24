@@ -63,6 +63,7 @@ describe("the screens gate on keys that really exist", () => {
     expect(literalGuard(detail, "WITHDRAW_GUARD")).toEqual(
       G.withdrawSubmissions
     );
+    expect(literalGuard(detail, "REVEAL_GUARD")).toEqual(G.revealSubmissions);
     expect(literalGuard(sources, "READ_GUARD")).toEqual(G.readSources);
     expect(literalGuard(sources, "MANAGE_GUARD")).toEqual(G.manageSources);
   });
@@ -102,6 +103,10 @@ describe("the screens gate on keys that really exist", () => {
         `${base}/submissions/[id]/withdraw.ts`,
         "WEBSITE_ENGAGEMENT_GUARDS.withdrawSubmissions"
       ],
+      [
+        `${base}/submissions/[id]/reveal.ts`,
+        "WEBSITE_ENGAGEMENT_GUARDS.revealSubmissions"
+      ],
       [`${base}/sources/index.ts`, "WEBSITE_ENGAGEMENT_GUARDS.readSources"],
       [
         `${base}/sources/[id]/revoke.ts`,
@@ -135,6 +140,11 @@ describe("the screens gate on keys that really exist", () => {
 
   test("a control is shown only when the chokepoint allows its permission", () => {
     expect(detail).toContain("withdrawGuard: WITHDRAW_GUARD");
+    expect(detail).toContain("revealGuard: REVEAL_GUARD");
+    expect(loaders).toContain("await can(input.revealGuard)");
+    // The reveal affordance also requires a received contact/lead.
+    expect(loaders).toContain('submission.kind !== "interaction"');
+    expect(detail).toContain("found.canReveal &&");
     expect(sources).toContain("manageGuard: MANAGE_GUARD");
     expect(list).toContain("readSourcesGuard: SOURCES_READ_GUARD");
     expect(loaders).toContain("await can(input.withdrawGuard)");
@@ -178,13 +188,23 @@ describe("the screens read through the routes' own functions and show no secret"
     );
   });
 
-  test("nothing decrypts, reveals or selects a token, a hash or a key", () => {
+  test("nothing decrypts or selects a token, a hash or a key; only the detail script may POST the reveal endpoint", () => {
     for (const source of [list, detail, sources, loaders]) {
       expect(source).not.toMatch(
-        /revealSubmission|decryptField|contact_encrypted|token_hash|tokenHash\b.*source|email_hash|phone_hash|KeyRing|\/reveal\b/
+        /revealSubmission|decryptField|contact_encrypted|token_hash|tokenHash\b.*source|email_hash|phone_hash|KeyRing/
       );
       expect(source).not.toMatch(/resolveWebsiteEngagementRings\(\)\.rings/);
     }
+
+    for (const source of [list, sources, loaders]) {
+      expect(source).not.toMatch(/\/reveal\b/);
+    }
+
+    // On the detail page the endpoint is named only INSIDE the script, never in
+    // the server-rendered markup.
+    expect(detail.slice(0, detail.indexOf("<script>"))).not.toMatch(
+      /\/reveal\b/
+    );
   });
 
   test("only masked projections reach the markup", () => {
@@ -236,6 +256,70 @@ describe("the actions", () => {
 
       expect(script).toContain('from "../../../lib/ui/admin-form-client"');
     }
+  });
+});
+
+describe("the reveal (Issue #1477)", () => {
+  const script = detail.slice(detail.indexOf("<script>"));
+  const markup = detail.slice(0, detail.indexOf("<script>"));
+
+  test("it is an explicit, confirmed POST to the audited endpoint, one request per click", () => {
+    expect(script).toContain("/submissions/${encodeURIComponent(id)}/reveal");
+    expect(script).toContain('"POST"');
+    expect(script).toContain("confirmAction(");
+    expect(script).toContain('onAction("#website-engagement-reveal-button"');
+    // No Idempotency-Key: a replay would skip the audit row or keep PII.
+    const revealPart = script.slice(script.indexOf("The REVEAL."));
+    expect(revealPart.slice(0, revealPart.indexOf("onSubmit("))).not.toContain(
+      "Idempotency-Key"
+    );
+  });
+
+  test("the value reaches the page as TEXT only and is never stored", () => {
+    expect(script).toContain("detail.textContent = value");
+    expect(script).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
+    expect(script).not.toContain("localStorage");
+    expect(script).not.toContain("sessionStorage");
+    expect(script).not.toContain("setAttribute(");
+  });
+
+  test("the panel is emptied on Hide, after a timeout and on pagehide", () => {
+    expect(script).toContain("revealFields?.replaceChildren()");
+    expect(script).toContain(
+      "window.setTimeout(hideRevealed, REVEAL_VISIBLE_MS)"
+    );
+    expect(script).toContain('window.addEventListener("pagehide"');
+    expect(script).toContain('"website-engagement-reveal-hide"');
+  });
+
+  test("the markup is masked by default: no panel content and no value is rendered on the server", () => {
+    expect(markup).toContain('id="website-engagement-reveal-panel"');
+    expect(markup).toMatch(
+      /id="website-engagement-reveal-panel"[^>]*\bhidden\b/
+    );
+    expect(markup).not.toMatch(
+      /\bsubmission\.(email|phone|message|name|contact)\b/
+    );
+  });
+
+  test("a11y: a persistent live region, a focusable panel, labelled controls", () => {
+    expect(markup).toMatch(
+      /id="website-engagement-reveal-status"[\s\S]{0,80}role="status"/
+    );
+    expect(markup).toContain(
+      'aria-labelledby="website-engagement-reveal-title"'
+    );
+    expect(markup).toMatch(
+      /id="website-engagement-reveal-panel"[\s\S]{0,60}tabindex="-1"/
+    );
+    expect(script).toContain("revealButton.focus()");
+    expect(script).toContain("revealPanel.focus()");
+  });
+
+  test("it left the NOT_YET_SCREENED ledger", () => {
+    expect(read("scripts/admin-screen-coverage-ledger.ts")).not.toContain(
+      "website_engagement.submissions.reveal"
+    );
   });
 });
 
