@@ -428,12 +428,15 @@ bagian 2). Akun, token, dan identitas pengirim adalah catatan
 `CHANNEL_SECRETS_ENCRYPTION_KEYS`), tidak pernah variabel lingkungan; pengirim
 tenant selalu memakai Mailketing v2.
 
-| Variabel                              | Bawaan | Fungsi                                                                                                                                              |
-| ------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EMAIL_SENDER_ROUTING_ENABLED`        | kosong | Tepat `true` menyalakan pengirim tenant. Mati: pengirim yang disebut ditolak, kebijakan tidak dipakai, baris pengirim tenant tidak pernah diklaim   |
-| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`  | Verifikasi pengirim atau kredit akun yang lebih tua dari ini dianggap basi dan MENAHAN email; jalankan `email:senders:verify` lebih sering dari ini |
-| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`  | Di bawah saldo yang dilaporkan ini, semua pengirim akun itu ditahan (`0` hanya menahan saat saldo tidak diketahui)                                  |
-| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`  | Batas lokal per pengirim tenant per jam berjalan (ADR-0151 M9)                                                                                      |
+| Variabel                              | Bawaan | Fungsi                                                                                                                                                 |
+| ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EMAIL_SENDER_ROUTING_ENABLED`        | kosong | Tepat `true` menyalakan pengirim tenant. Mati: pengirim yang disebut ditolak, kebijakan tidak dipakai, baris pengirim tenant tidak pernah diklaim      |
+| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`  | Verifikasi pengirim atau kredit akun yang lebih tua dari ini dianggap basi dan MENAHAN email; jalankan `email:senders:verify` lebih sering dari ini    |
+| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`  | Di bawah saldo yang dilaporkan ini, semua pengirim akun itu ditahan (`0` hanya menahan saat saldo tidak diketahui)                                     |
+| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`  | Batas lokal per pengirim tenant per jam berjalan (ADR-0151 M9)                                                                                         |
+| `EMAIL_SENDERS_VERIFY_DATABASE_URL`   | kosong | Login RAHASIA `email:senders:verify` sebagai role `awcms_email_senders_verify` (`sql/460`); TANPA fallback ke `DATABASE_URL`; khusus job (Issue #1479) |
+| `EMAIL_SENDER_DNS_EVIDENCE_ENABLED`   | `true` | Pencarian SPF/DKIM/DMARC bersifat saran dari container jobs; `false` mematikannya. Tidak pernah mengubah status sender (Issue #1479)                   |
+| `EMAIL_SENDER_DKIM_SELECTORS`         | kosong | Daftar selector DKIM dipisah koma (maks 5); kosong berarti DKIM `not_checked`                                                                          |
 
 Callback pengiriman Mailketing (Issue #1161, ADR-0151 bagian 5, mode `strict`).
 Mailketing tidak mendokumentasikan cara mengautentikasi callback, jadi setiap

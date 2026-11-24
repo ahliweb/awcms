@@ -526,6 +526,15 @@ const RULES: readonly Rule[] = [
     required: false,
     type: "url-postgres"
   },
+  // The sender-verify job's own login (Issue #1479). Read by the job only.
+  {
+    name: "EMAIL_SENDERS_VERIFY_DATABASE_URL",
+    required: false,
+    type: "url-postgres"
+  },
+  // Advisory SPF/DKIM/DMARC evidence of tenant senders (Issue #1479).
+  { name: "EMAIL_SENDER_DNS_EVIDENCE_ENABLED", required: false, type: "bool" },
+  { name: "EMAIL_SENDER_DKIM_SELECTORS", required: false, type: "string" },
   // The scheduled payroll catalog check (Issue #1095). Read by the job only.
   {
     name: "PAYROLL_CATALOG_AUDIT_DATABASE_URL",
@@ -1184,6 +1193,22 @@ export function telegramDispatchLoginProblems(env: EnvBag): string[] {
 }
 
 /**
+ * Issue #1479 (ADR-0162 O1): the sender-verify job's login must be its OWN role
+ * (`awcms_email_senders_verify`, sql/460). Checked only when a value is set: a
+ * deployment that has not activated the role yet is warned about
+ * ({@link collectEnvWarnings}), not blocked.
+ */
+export function emailSendersVerifyLoginProblems(env: EnvBag): string[] {
+  return dedicatedLoginProblems(
+    env,
+    "EMAIL_SENDERS_VERIFY_DATABASE_URL",
+    "EMAIL_SENDERS_VERIFY_DATABASE_URL harus berupa URL postgres dengan user (role awcms_email_senders_verify, sql/460).",
+    (name) =>
+      `EMAIL_SENDERS_VERIFY_DATABASE_URL memakai user yang sama dengan ${name}; job verifikasi sender wajib login sebagai role-nya sendiri (awcms_email_senders_verify).`
+  );
+}
+
+/**
  * Issue #1146 (ADR-0157 section 6): the social dispatcher's login must be its
  * OWN role, for the same reason as the Telegram one above.
  */
@@ -1236,6 +1261,15 @@ export function collectEnvWarnings(env: EnvBag): string[] {
     !isMailketingV2Verified(env as NodeJS.ProcessEnv)
   ) {
     warnings.push(MAILKETING_V2_UNVERIFIED_WARNING);
+  }
+
+  if (
+    env.EMAIL_SENDER_ROUTING_ENABLED?.trim() === "true" &&
+    (env.EMAIL_SENDERS_VERIFY_DATABASE_URL ?? "").trim() === ""
+  ) {
+    warnings.push(
+      "EMAIL_SENDER_ROUTING_ENABLED=true tanpa EMAIL_SENDERS_VERIFY_DATABASE_URL: job email:senders:verify menolak berjalan tanpa role awcms_email_senders_verify (sql/460), sehingga verifikasi sender kedaluwarsa dan surel sender tenant ditahan."
+    );
   }
 
   return warnings;
@@ -1554,6 +1588,12 @@ export function validateEnv(env: EnvBag): string[] {
   // login would put the channel key ring next to a broader credential.
   if (env.SOCIAL_PUBLISHING_ENABLED === "true") {
     problems.push(...socialDispatchLoginProblems(env));
+  }
+
+  // Issue #1479: when the sender-verify role's login is set, it must not be the
+  // app, worker or setup user (the key ring would then sit next to a broader login).
+  if ((env.EMAIL_SENDERS_VERIFY_DATABASE_URL ?? "").trim() !== "") {
+    problems.push(...emailSendersVerifyLoginProblems(env));
   }
 
   if (

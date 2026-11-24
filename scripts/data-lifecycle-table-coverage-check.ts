@@ -264,6 +264,11 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0151 section 2 / Issue #1160. The email twin of `awcms_whatsapp_sender_policies`: at most ONE row per business scope per tenant (plus one tenant-wide row), by two partial unique indexes; a change UPDATES the row and bumps its version, and a DELETE is refused by trigger (`sql/346`). Written only by an administrator holding `email.sender_policy.configure`, never by traffic or a job. An age-based purge would silently reset a brand's default sender to the deployment sender, so none is declared."
   },
   {
+    table: "awcms_email_sender_dns_evidence",
+    reason:
+      "ADR-0151 Q9 / Issue #1479. One row per sender identity by primary key (tenant, account), overwritten by the latest advisory SPF/DKIM/DMARC check of `email:senders:verify`: the ceiling IS the tenant's sender identities (at most 2000 per tenant by the verify job's own read), and a check overwrites rather than appends. Closed codes and a date, no person and no address. An age-based purge would silently erase the last recorded evidence of a healthy sender that simply has not changed."
+  },
+  {
     table: "awcms_whatsapp_meta_templates",
     reason:
       "Issue #1143. A unique key per (WABA, template name, language): the ceiling is the templates a business registers at Meta on its own WABAs, upserted (never appended) by an operator or by a signed status webhook for an existing template. An age-based purge would silently un-approve a template still in use, refusing every message that uses it."

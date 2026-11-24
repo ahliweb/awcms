@@ -20,7 +20,9 @@
  * - This job NEVER creates or verifies a domain or a sender at the provider.
  *   Mailketing's documented API offers no such call (ADR-0151 section 8); SPF,
  *   DKIM and DMARC are configured at the tenant's DNS and the provider, by
- *   people, and only the provider's own verdict is read here.
+ *   people. Only the provider's own verdict decides a sender's status; the
+ *   DNS records are read separately as ADVISORY evidence with a check date
+ *   (`email-sender-dns-evidence.ts`, Issue #1479) that never changes a status.
  *
  * ## Provider I/O outside every transaction (ADR-0006)
  *
@@ -37,6 +39,12 @@ import type {
 } from "../../_shared/ports/channel-account-port";
 import { resolveEmailSenderProbeTimeoutMs } from "../domain/email-sender-config";
 import { isMailketingTokenHeaderSafe } from "../domain/mailketing-v2-contract";
+import {
+  emptyEmailSenderDnsSummary,
+  recordEmailSenderDnsEvidenceForTenant,
+  type EmailSenderDnsDeps,
+  type EmailSenderDnsSummary
+} from "./email-sender-dns-evidence";
 import {
   createMailketingV2AccountProbe,
   type MailketingV2AccountProbe
@@ -63,11 +71,17 @@ export type EmailSenderVerifyDeps = {
   /** `channel_accounts`' own health writer (it owns the status transitions). */
   recordHealth: RecordEmailAccountHealth;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Advisory SPF/DKIM/DMARC evidence (Issue #1479). Absent: no DNS query is
+   * made. Present: it runs AFTER the provider verification, can never change a
+   * sender's status, and never fails the run.
+   */
+  dns?: EmailSenderDnsDeps;
   /** Test seam (no network). */
   buildProbe?: (apiToken: string) => MailketingV2AccountProbe;
 };
 
-export type EmailSenderVerifySummary = {
+export type EmailSenderVerifySummary = EmailSenderDnsSummary & {
   accounts: number;
   accountsProbed: number;
   accountsSkipped: number;
@@ -115,7 +129,8 @@ export async function verifyEmailSendersForTenant(
     secretStoreFailures: 0,
     sendersVerified: 0,
     sendersUnverified: 0,
-    sendersUnknown: 0
+    sendersUnknown: 0,
+    ...emptyEmailSenderDnsSummary()
   };
   const accounts = await withTenantOrThrow(
     sql,
@@ -291,6 +306,19 @@ export async function verifyEmailSendersForTenant(
       credits: credits.ok ? "ok" : credits.failure,
       senders: senders.ok ? "ok" : senders.failure
     });
+  }
+
+  if (deps.dns) {
+    // Advisory only: after every status decision above, and it never throws.
+    Object.assign(
+      summary,
+      await recordEmailSenderDnsEvidenceForTenant(
+        sql,
+        tenantId,
+        accounts,
+        deps.dns
+      )
+    );
   }
 
   return summary;

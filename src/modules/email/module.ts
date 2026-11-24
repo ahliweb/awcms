@@ -411,6 +411,20 @@ export const emailModule = defineModule({
       redactedColumns: ["recipient_hash", "link_hash", "dedupe_key"]
     },
     {
+      // Issue #1479 (`sql/461`). Closed codes about a DOMAIN's DNS records and
+      // the date of the check; it names no person and no address (only the
+      // sender's domain), and is overwritten by each check.
+      key: "email.email_sender_dns_evidence",
+      tableName: "awcms_email_sender_dns_evidence",
+      ownerModuleKey: "email",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Advisory SPF, DKIM and DMARC evidence of a tenant sender's domain: closed codes and the check date, one row per sender identity, overwritten by each check. No column names a person or stores an address or a record text; it hangs off the sender account, which answers for itself."
+    },
+    {
       key: "email.email_delivery_attempts",
       tableName: "awcms_email_delivery_attempts",
       ownerModuleKey: "email",

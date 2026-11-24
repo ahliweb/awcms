@@ -313,7 +313,7 @@ fi
 # Source: appConnectionTargets() in scripts/jobs-env-allowlist.ts, derived from each
 # target's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  blog:legacy:article-paths | blog:legacy:cutover:verify | blog:legacy:import | blog:legacy:redirects:import | changesets:policy:check | channel-accounts:secrets:rekey | check:astro-frontmatter:check | check:astro-scripts:check | check:docs | check:docs:translation | ci:local | data-lifecycle:registry:check | db:migrate | deps:audit:check | deps:freshness | deps:issues:sync | deps:license:check | deps:provider-changelog:check | docs:i18n:stamp | docs:i18n:stamp:check | email:senders:verify | email:templates:seed-defaults | entitlements:backfill | family:conformance:check | graph:artifacts:check | hr-commission:intents:post | identity-access:permissions:backfill | identity:mfa-collisions:preflight | identity:principals:preflight | modules:table-writes:check | omnichannel-inbox:sla | ops:restore-drill | payroll:catalog-boundary:check | payroll:sql-boundary:check | release:verify | telegram:chat:rekey | version:check)
+  blog:legacy:article-paths | blog:legacy:cutover:verify | blog:legacy:import | blog:legacy:redirects:import | changesets:policy:check | channel-accounts:secrets:rekey | check:astro-frontmatter:check | check:astro-scripts:check | check:docs | check:docs:translation | ci:local | data-lifecycle:registry:check | db:migrate | deps:audit:check | deps:freshness | deps:issues:sync | deps:license:check | deps:provider-changelog:check | docs:i18n:stamp | docs:i18n:stamp:check | email:templates:seed-defaults | entitlements:backfill | family:conformance:check | graph:artifacts:check | hr-commission:intents:post | identity-access:permissions:backfill | identity:mfa-collisions:preflight | identity:principals:preflight | modules:table-writes:check | omnichannel-inbox:sla | ops:restore-drill | payroll:catalog-boundary:check | payroll:sql-boundary:check | release:verify | telegram:chat:rekey | version:check)
     WITHHOLD_DATABASE_URL=0
     ;;
   *)
@@ -330,7 +330,7 @@ esac
 # Source: dedicatedRoleTargets() in scripts/jobs-env-allowlist.ts, derived from each
 # target's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  payroll:catalog-boundary:job | social-publishing:dispatch | telegram-engagement:dispatch)
+  email:senders:verify | payroll:catalog-boundary:job | social-publishing:dispatch | telegram-engagement:dispatch)
     WITHHOLD_ALL_DATABASE_URLS=1
     ;;
   *)
@@ -346,7 +346,7 @@ esac
 # Source: appRoleTargetsWithoutWorkerClient() in scripts/jobs-env-allowlist.ts, derived
 # from each app-role exception's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  email:senders:verify | omnichannel-inbox:sla)
+  omnichannel-inbox:sla)
     WITHHOLD_WORKER_DATABASE_URL=1
     ;;
   *)

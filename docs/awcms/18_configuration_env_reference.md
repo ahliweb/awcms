@@ -436,12 +436,15 @@ section 2). Accounts, tokens and sender identities are `channel_accounts`
 records (`CHANNEL_ACCOUNTS_ENABLED`, `CHANNEL_SECRETS_ENCRYPTION_KEYS`), never
 environment variables; tenant senders always use Mailketing v2.
 
-| Variable                              | Default | Purpose                                                                                                                                      |
-| ------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EMAIL_SENDER_ROUTING_ENABLED`        | unset   | Exactly `true` switches tenant senders on. Off: a named sender is refused, the policy is unused, tenant-sender rows are never claimed        |
-| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`   | A sender's verification or its account's credit older than this is stale and HOLDS the mail; run `email:senders:verify` more often than this |
-| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`   | Below this reported balance every sender of the account is held (`0` holds only on an unknown balance)                                       |
-| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`   | Local cap per tenant sender per trailing hour (ADR-0151 M9)                                                                                  |
+| Variable                              | Default | Purpose                                                                                                                                          |
+| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EMAIL_SENDER_ROUTING_ENABLED`        | unset   | Exactly `true` switches tenant senders on. Off: a named sender is refused, the policy is unused, tenant-sender rows are never claimed            |
+| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`   | A sender's verification or its account's credit older than this is stale and HOLDS the mail; run `email:senders:verify` more often than this     |
+| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`   | Below this reported balance every sender of the account is held (`0` holds only on an unknown balance)                                           |
+| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`   | Local cap per tenant sender per trailing hour (ADR-0151 M9)                                                                                      |
+| `EMAIL_SENDERS_VERIFY_DATABASE_URL`   | unset   | SECRET login of `email:senders:verify` as role `awcms_email_senders_verify` (`sql/460`); NO fallback to `DATABASE_URL`; job-scoped (Issue #1479) |
+| `EMAIL_SENDER_DNS_EVIDENCE_ENABLED`   | `true`  | Advisory SPF/DKIM/DMARC lookups from the jobs container; `false` switches them off. Never changes a sender status (Issue #1479)                  |
+| `EMAIL_SENDER_DKIM_SELECTORS`         | empty   | Comma list (max 5) of DKIM selectors to look up; empty means DKIM is `not_checked`                                                               |
 
 Mailketing delivery callbacks (Issue #1161, ADR-0151 section 5, `strict` mode).
 Mailketing documents no way to authenticate a callback, so every event is

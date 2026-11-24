@@ -361,13 +361,6 @@ export const APP_ROLE_SCHEDULED_EXCEPTIONS: readonly {
     entrypoint: "scripts/omnichannel-inbox-sla.ts",
     reason:
       "re-checks an assignee's role grants and enqueues the SLA e-mail; awcms_worker can read neither the role-grant tables nor insert an e-mail (Issue #1164)"
-  },
-  {
-    target: "email:senders:verify",
-    adr: "ADR-0162",
-    entrypoint: "scripts/email-senders-verify.ts",
-    reason:
-      "records channel-account health and status, which only awcms_app may write (a worker that could would mark an unverified sender verified); the provider calls are read-only GETs (Issue #1160, owner decision of 11 November 2026)"
   }
 ];
 
@@ -503,7 +496,9 @@ export const DEDICATED_ROLE_CLIENT_FILES: Readonly<Record<string, string>> = {
   "src/lib/database/social-publishing-dispatch-client.ts":
     "SOCIAL_PUBLISHING_DATABASE_URL",
   "src/lib/database/payroll-catalog-audit-client.ts":
-    "PAYROLL_CATALOG_AUDIT_DATABASE_URL"
+    "PAYROLL_CATALOG_AUDIT_DATABASE_URL",
+  "src/lib/database/email-senders-verify-client.ts":
+    "EMAIL_SENDERS_VERIFY_DATABASE_URL"
 };
 
 /** The shared-role client calls a dedicated-role job must not reach. */
@@ -791,7 +786,7 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
       {
         target: "email:senders:verify",
         reason:
-          "decrypts each tenant Mailketing account's token once per pass for the read-only GET /credits and GET /senders probes (#1160)"
+          "decrypts each tenant Mailketing account's token once per pass for the read-only GET /credits and GET /senders probes (#1160). It connects ONLY as its own role awcms_email_senders_verify (sql/460, #1479, ADR-0162 O1), whose RESTRICTIVE policy shows it only the api_token of a live Mailketing ESP account; the runner withholds DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL from it unconditionally (dedicatedRoleTargets), and the job refuses to start if one is present or if it is not connected as that role, so the ring meets no login that could read a WhatsApp, Telegram or social secret"
       },
       {
         target: "telegram-engagement:dispatch",
@@ -838,6 +833,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "social-publishing:dispatch",
         reason:
           "its only database connection, with no fallback to another one (#1146, ADR-0157 section 6)"
+      }
+    ]
+  },
+  {
+    name: "EMAIL_SENDERS_VERIFY_DATABASE_URL",
+    reason:
+      "the login of the awcms_email_senders_verify role (sql/460); whoever holds it can read the Mailketing ESP API tokens of every tenant, move their live accounts between connected and degraded (never a revoked or disabled one) and record sender health, and nothing else of the channel secrets (Issue #1479)",
+    jobs: [
+      {
+        target: "email:senders:verify",
+        reason:
+          "its only database connection, with no fallback to DATABASE_URL or WORKER_DATABASE_URL (#1479, ADR-0162 O1)"
       }
     ]
   },
