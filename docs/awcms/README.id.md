@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b76bc3a5ccbd714ae81e40dc9ab6703b3dd48ceadbdea266da38cc745324dea3 -->
+<!-- i18n-source-hash: sha256:692f7d26936f35079579e8acf40174c3b069e7d067c0ef27fbd3d66df87933cb -->
 
 # Paket Dokumen Teknis AWCMS
 
