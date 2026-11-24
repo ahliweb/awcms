@@ -205,7 +205,7 @@ export function createAjv(
 }
 
 /** Resolve a `$ref` into `components.responses|requestBodies`; returns the pointer and node. */
-function resolveComponentRef(
+export function resolveComponentRef(
   doc: AnyRecord,
   ref: string
 ): { pointer: string; node: unknown } | undefined {
