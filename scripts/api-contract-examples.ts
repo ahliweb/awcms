@@ -76,7 +76,7 @@ function isValidDateTime(value: string): boolean {
   return DATE_TIME.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-const EXAMPLE_FORMATS: Record<string, (value: string) => boolean> = {
+export const EXAMPLE_FORMATS: Record<string, (value: string) => boolean> = {
   uuid: (value) => UUID.test(value),
   date: isValidDate,
   "date-time": isValidDateTime,

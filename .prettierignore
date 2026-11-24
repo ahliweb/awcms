@@ -23,3 +23,6 @@ src/modules/omes-control/contracts/v1/
 # Producer compatibility artifacts, vendored byte-for-byte with their own PIN.json
 # (preflight hashes them), so prettier must not rewrite them either.
 src/modules/omes-control/contracts/compatibility/v1/
+# contract-derived fixtures pack (bun run api:fixtures:generate, Issue #1392) -- the
+# `:check` gate compares bytes, so the generator must be its only author
+fixtures/api-contract/
