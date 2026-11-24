@@ -10520,8 +10520,8 @@ msgstr "Email (tersamar)"
 msgid "Phone (masked)"
 msgstr "Telepon (tersamar)"
 
-msgid "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
-msgstr "Detail kontak lengkap dan pesan tidak ditampilkan di layar ini. Membacanya adalah izin terpisah yang diaudit dan tersedia melalui API."
+msgid "Contact details are masked here. Reading them in full is a separate permission, and every reveal is recorded in the audit log."
+msgstr "Detail kontak disamarkan di sini. Membacanya secara lengkap memerlukan izin tersendiri, dan setiap pengungkapan dicatat dalam log audit."
 
 msgid "Purposes"
 msgstr "Tujuan"
@@ -10591,6 +10591,45 @@ msgstr "Penarikan memerlukan orang yang sedang masuk; kredensial mesin tidak dap
 
 msgid "Withdraw submission"
 msgstr "Tarik kiriman"
+
+msgid "Contact details"
+msgstr "Detail kontak"
+
+msgid "Reveal the full contact details and message of this submission? Every reveal is recorded in the audit log."
+msgstr "Ungkap detail kontak dan pesan lengkap kiriman ini? Setiap pengungkapan dicatat dalam log audit."
+
+msgid "Contact details are now shown."
+msgstr "Detail kontak sekarang ditampilkan."
+
+msgid "Contact details are hidden."
+msgstr "Detail kontak disembunyikan."
+
+msgid "These contact details are not available to you, or no longer exist."
+msgstr "Detail kontak ini tidak tersedia untuk Anda, atau sudah tidak ada."
+
+msgid "This submission was withdrawn and its details are no longer available."
+msgstr "Kiriman ini telah ditarik dan detailnya tidak lagi tersedia."
+
+msgid "This submission carries no contact details."
+msgstr "Kiriman ini tidak memuat detail kontak."
+
+msgid "Could not read the contact details. Please try again."
+msgstr "Detail kontak tidak dapat dibaca. Silakan coba lagi."
+
+msgid "Reveal contact details"
+msgstr "Ungkap detail kontak"
+
+msgid "Revealed contact details"
+msgstr "Detail kontak yang diungkap"
+
+msgid "Shown once. This page does not keep them, and they disappear when you hide them, after a minute, or when you leave the page."
+msgstr "Ditampilkan sekali. Halaman ini tidak menyimpannya, dan detail hilang saat disembunyikan, setelah semenit, atau saat Anda meninggalkan halaman."
+
+msgid "Phone"
+msgstr "Telepon"
+
+msgid "Company"
+msgstr "Perusahaan"
 
 msgid "{count} source"
 msgid_plural "{count} sources"

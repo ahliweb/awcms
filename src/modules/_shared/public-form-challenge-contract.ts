@@ -37,6 +37,14 @@ export type PublicFormChallengeVerifyInput = PublicFormChallengeFields & {
   /** The tenant the token must have been issued for, or `null` for a form with no tenant (platform setup, tenant-less login). A provider MUST refuse a token issued for another tenant. */
   tenantId: string | null;
   remoteIp?: string;
+  /**
+   * The hostname the token must have been solved on, when the FORM (not the
+   * deployment) decides it: a per-source public intake verifies against the
+   * verified Origin host of THAT request (Issue #1477). Absent: the provider's
+   * own deployment-wide value applies. A provider that ignores it must still
+   * fail closed.
+   */
+  expectedHostname?: string;
   env: NodeJS.ProcessEnv;
 };
 

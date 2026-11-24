@@ -73,6 +73,7 @@ const HASH_RING = `h1:${Buffer.from(
 const READ_SUBMISSIONS = "website_engagement.submissions.read";
 const READ_SOURCES = "website_engagement.sources.read";
 const WITHDRAW = "website_engagement.submissions.withdraw";
+const REVEAL = "website_engagement.submissions.reveal";
 const MANAGE_SOURCES = "website_engagement.sources.manage";
 /** A recognisable token hash and ciphertext: neither may reach a loader's output. */
 const TOKEN_HASH = `h1:${"ab".repeat(32)}`;
@@ -300,6 +301,7 @@ const detailAs = (token: string, id: string | null) =>
       tenantId,
       submissionId: id,
       withdrawGuard: G.withdrawSubmissions,
+      revealGuard: G.revealSubmissions,
       can
     })
   );
@@ -493,6 +495,59 @@ suite("website engagement screens (#1153, ADR-0155)", () => {
       canWithdraw: false
     });
     expect(mine).not.toBe("");
+  });
+
+  test("the reveal control follows ITS OWN permission, never read or withdraw, and is not offered where it could only refuse (#1477)", async () => {
+    const { mine, mySubmission } = await twoTenants();
+    await seedInteractions(tenantId, mine, 1);
+    const everythingButReveal = await seedUser(tenantId, "nor", [
+      READ_SUBMISSIONS,
+      READ_SOURCES,
+      WITHDRAW,
+      MANAGE_SOURCES
+    ]);
+    const revealer = await seedUser(tenantId, "rev", [
+      READ_SUBMISSIONS,
+      REVEAL
+    ]);
+    const revealOnly = await seedUser(tenantId, "revonly", [REVEAL]);
+
+    expect(
+      await detailAs(everythingButReveal.token, mySubmission)
+    ).toMatchObject({ found: true, canReveal: false, canWithdraw: true });
+    expect(await detailAs(revealer.token, mySubmission)).toMatchObject({
+      found: true,
+      canReveal: true,
+      canWithdraw: false
+    });
+    // The screen itself still needs read: reveal alone opens nothing.
+    expect(await detailAs(revealOnly.token, mySubmission)).toBe("denied");
+
+    // An interaction holds no contact details: no control.
+    const rows = (await admin()`
+      SELECT id FROM awcms_engagement_submissions
+      WHERE tenant_id = ${tenantId} AND kind = 'interaction'
+    `) as { id: string }[];
+
+    expect(rows).toHaveLength(1);
+    expect(await detailAs(revealer.token, rows[0]!.id)).toMatchObject({
+      found: true,
+      canReveal: false
+    });
+
+    // A withdrawn submission's details are erased: no control either.
+    await admin()`
+      UPDATE awcms_engagement_submissions
+      SET status = 'withdrawn', withdrawn_at = now(),
+          withdrawal_reason = 'controller_decision', contact_encrypted = NULL,
+          email_hash = NULL, email_masked = NULL
+      WHERE id = ${mySubmission}
+    `;
+
+    expect(await detailAs(revealer.token, mySubmission)).toMatchObject({
+      found: true,
+      canReveal: false
+    });
   });
 
   test("filters narrow in SQL, and a hand-edited filter value is ignored", async () => {

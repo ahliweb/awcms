@@ -30,7 +30,11 @@ bindPublicFormChallengeVerifier(TURNSTILE_CHALLENGE_PROVIDER_KEY, {
     const result = await enforceTurnstileIfRequired(
       input.token,
       input.remoteIp,
-      { action: input.formName, env: input.env }
+      {
+        action: input.formName,
+        env: input.env,
+        hostname: input.expectedHostname
+      }
     );
 
     return result.ok ? { ok: true } : { ok: false, reason: "rejected" };

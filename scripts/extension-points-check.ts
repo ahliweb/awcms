@@ -92,9 +92,7 @@ export const TURNSTILE_ENTRY_IMPORT_ALLOW_LIST: Readonly<
   "src/lib/security/turnstile.ts":
     "the module itself: it defines these entry points and their own tests",
   "src/lib/security/public-form-challenge-bindings.ts":
-    "binds Turnstile as the first provider behind the seam",
-  "src/modules/website-engagement/application/submission-intake.ts":
-    "the sources registry verifies Turnstile per SOURCE (its own action and the source's allowed hostnames), a different shape from a pre-session form; its tokens are not a pre-session form's, so the seam's one-provider/burn model does not apply. Recorded exception (Issue #1353)."
+    "binds Turnstile as the first provider behind the seam"
 };
 
 const TURNSTILE_ENTRY_POINTS = [

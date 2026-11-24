@@ -280,6 +280,7 @@ export async function handlePublicSubmission(
       ? "source_none"
       : "not_required"
     : await runChallenge(
+        request,
         source,
         submission.challengeToken,
         clientIp === "unknown" ? undefined : clientIp

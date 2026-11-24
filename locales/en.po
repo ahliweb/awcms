@@ -10562,7 +10562,7 @@ msgstr ""
 msgid "Phone (masked)"
 msgstr ""
 
-msgid "The full contact details and message are not shown on this screen. Reading them is a separate, audited permission available through the API."
+msgid "Contact details are masked here. Reading them in full is a separate permission, and every reveal is recorded in the audit log."
 msgstr ""
 
 msgid "Purposes"
@@ -10632,6 +10632,45 @@ msgid "Withdrawing needs a signed-in person; a machine credential cannot do it."
 msgstr ""
 
 msgid "Withdraw submission"
+msgstr ""
+
+msgid "Contact details"
+msgstr ""
+
+msgid "Reveal the full contact details and message of this submission? Every reveal is recorded in the audit log."
+msgstr ""
+
+msgid "Contact details are now shown."
+msgstr ""
+
+msgid "Contact details are hidden."
+msgstr ""
+
+msgid "These contact details are not available to you, or no longer exist."
+msgstr ""
+
+msgid "This submission was withdrawn and its details are no longer available."
+msgstr ""
+
+msgid "This submission carries no contact details."
+msgstr ""
+
+msgid "Could not read the contact details. Please try again."
+msgstr ""
+
+msgid "Reveal contact details"
+msgstr ""
+
+msgid "Revealed contact details"
+msgstr ""
+
+msgid "Shown once. This page does not keep them, and they disappear when you hide them, after a minute, or when you leave the page."
+msgstr ""
+
+msgid "Phone"
+msgstr ""
+
+msgid "Company"
 msgstr ""
 
 msgid "{count} source"

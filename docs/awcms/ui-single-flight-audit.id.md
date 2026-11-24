@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:d18183b05d047da19facf464d1fb9fbe3e93cfb127fae97bf9462654ebf79d8c -->
+<!-- i18n-source-hash: sha256:d85d6266e976891192b5947095c05d5f19420bb28428b576aed12246c8bc7a53 -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-243 titik masuk di 83 berkas; 239 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-239 itu dijaga `lockElement`/`mutateAndReload` pada 224, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 239 dari 243 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+244 titik masuk di 83 berkas; 240 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-240 itu dijaga `lockElement`/`mutateAndReload` pada 225, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 240 dari 244 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                             | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -311,6 +311,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/users.astro`                      | `.js-user-status`                              | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/users.astro`                      | `.js-assign-role`                              | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/users.astro`                      | `.js-unassign-role`                            | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
+| `src/pages/admin/website-engagement/[id].astro`    | `#website-engagement-reveal-button`            | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/website-engagement/[id].astro`    | `website-engagement-withdraw-form`             | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/website-engagement/sources.astro` | `.source-revoke-btn`                           | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/whatsapp.astro`                   | `.js-whatsapp-cancel`                          | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
