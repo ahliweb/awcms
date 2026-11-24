@@ -645,7 +645,7 @@
 | ------------- | ---------- |
 | `(root)`      | 668        |
 | `e2e`         | 33         |
-| `integration` | 205        |
+| `integration` | 206        |
 | `unit`        | 2          |
 
 ### Routes
