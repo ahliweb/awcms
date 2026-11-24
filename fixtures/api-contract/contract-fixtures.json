@@ -1,6 +1,6 @@
 {
   "packVersion": 1,
-  "contractSha256": "d98f65deedb3d552ac7d6cb1c9d04df3149ad1752bcbad3479dcfa1c5e4424b0",
+  "contractSha256": "c837817b50ab36c859de7917522aceab9865757654442aa93d500a0ccdd36c1e",
   "summary": {
     "operations": 743,
     "fixtures": 1786,
@@ -4540,7 +4540,12 @@
                         {}
                       ],
                       "provider": "example",
-                      "videoId": "example"
+                      "videoId": "example",
+                      "title": "example",
+                      "caption": "example",
+                      "thumbnailMediaObjectId": "example",
+                      "durationSeconds": 1,
+                      "sourceLabel": "example"
                     }
                   ],
                   "status": "draft",
@@ -4632,7 +4637,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -4743,7 +4753,12 @@
                 {}
               ],
               "provider": "example",
-              "videoId": "example"
+              "videoId": "example",
+              "title": "example",
+              "caption": "example",
+              "thumbnailMediaObjectId": "example",
+              "durationSeconds": 1,
+              "sourceLabel": "example"
             }
           ],
           "locale": "example",
@@ -4887,7 +4902,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -4980,7 +5000,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -5079,7 +5104,12 @@
                 {}
               ],
               "provider": "example",
-              "videoId": "example"
+              "videoId": "example",
+              "title": "example",
+              "caption": "example",
+              "thumbnailMediaObjectId": "example",
+              "durationSeconds": 1,
+              "sourceLabel": "example"
             }
           ],
           "locale": "example",
@@ -5145,7 +5175,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -5542,7 +5577,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -5662,7 +5702,12 @@
                 {}
               ],
               "provider": "example",
-              "videoId": "example"
+              "videoId": "example",
+              "title": "example",
+              "caption": "example",
+              "thumbnailMediaObjectId": "example",
+              "durationSeconds": 1,
+              "sourceLabel": "example"
             }
           ],
           "locale": "example",
@@ -5734,7 +5779,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -5836,7 +5886,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -5944,7 +5999,12 @@
                 {}
               ],
               "provider": "example",
-              "videoId": "example"
+              "videoId": "example",
+              "title": "example",
+              "caption": "example",
+              "thumbnailMediaObjectId": "example",
+              "durationSeconds": 1,
+              "sourceLabel": "example"
             }
           ],
           "locale": "example",
@@ -6016,7 +6076,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -6118,7 +6183,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -6410,7 +6480,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -6529,7 +6604,12 @@
                         {}
                       ],
                       "provider": "example",
-                      "videoId": "example"
+                      "videoId": "example",
+                      "title": "example",
+                      "caption": "example",
+                      "thumbnailMediaObjectId": "example",
+                      "durationSeconds": 1,
+                      "sourceLabel": "example"
                     }
                   ],
                   "excerpt": "example",
@@ -6611,7 +6691,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "excerpt": "example",
@@ -6691,7 +6776,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",
@@ -6886,7 +6976,12 @@
                     {}
                   ],
                   "provider": "example",
-                  "videoId": "example"
+                  "videoId": "example",
+                  "title": "example",
+                  "caption": "example",
+                  "thumbnailMediaObjectId": "example",
+                  "durationSeconds": 1,
+                  "sourceLabel": "example"
                 }
               ],
               "status": "draft",

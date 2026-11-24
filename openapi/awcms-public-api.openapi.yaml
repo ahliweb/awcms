@@ -47771,6 +47771,21 @@ components:
         videoId:
           type: string
           description: Present when _type is videoNews.
+        title:
+          type: string
+          description: Optional. Present only when _type is videoNews.
+        caption:
+          type: string
+          description: Optional. Present only when _type is videoNews.
+        thumbnailMediaObjectId:
+          type: string
+          description: Optional. Present only when _type is videoNews; the id of the media object the renderer resolves to the thumbnail.
+        durationSeconds:
+          type: number
+          description: Optional. Present only when _type is videoNews; whole seconds when written through the legacy block validator.
+        sourceLabel:
+          type: string
+          description: Optional. Present only when _type is videoNews.
     PortableTextSpan:
       type: object
       required:
