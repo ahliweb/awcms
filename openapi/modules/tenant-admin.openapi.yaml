@@ -434,6 +434,24 @@ paths:
                     only on a full-online deployment where Turnstile is enabled;
                     absent and ignored on every LAN/offline deployment. Verified
                     server-side before the tenant/owner bootstrap.
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: >-
+                    Public-form challenge field (Issue #1353). Sent only when a challenge
+                    provider is switched on (off by default); absent and ignored otherwise.
+                    Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider
+                    reads is that provider's own contract.
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: >-
+                    Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare
+                    Turnstile reads this field, and still accepts the older `turnstileToken`.
       responses:
         "200":
           description: Tenant bootstrapped.

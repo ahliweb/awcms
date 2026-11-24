@@ -114,6 +114,11 @@ import {
 import { resetDatabaseCircuitBreakerForTests } from "../../src/lib/database/circuit-breaker";
 import { resetWorkClassGatesForTests } from "../../src/lib/database/work-class";
 import { resetRateLimitForTests } from "../../src/lib/security/rate-limit";
+import {
+  PUBLIC_FORM_NAMES,
+  PUBLIC_FORM_ROUTE_FORMS,
+  solvePublicFormChallengeForTests
+} from "../../src/lib/security/public-form-challenge";
 import { installExtensionPointSource } from "../../src/modules/_shared/extension-point-source";
 import { listModules } from "../../src/modules";
 
@@ -835,6 +840,14 @@ export type InvokeOptions = {
   params?: Record<string, string>;
   locals?: Record<string, unknown>;
   cookies?: CookieJar;
+  /**
+   * Public-form challenge (Issue #1353). By default `invoke` adds a SOLVED
+   * challenge to the JSON body of a platform pre-session form when a challenge
+   * provider is on and offers `solveForTests`, so a suite needs no per-route
+   * edit. `false` opts out (to test the refusal); fields already in `body` are
+   * never overwritten. A no-op when no provider is on (the default).
+   */
+  challenge?: false;
 };
 
 export type InvokeResult<T = unknown> = {
@@ -842,6 +855,41 @@ export type InvokeResult<T = unknown> = {
   body: T;
   response: Response;
 };
+
+const INVITATION_ACCEPT_PATH = /^\/api\/v1\/auth\/invitations\/[^/]+\/accept$/;
+
+async function withSolvedChallenge(
+  options: InvokeOptions,
+  method: string,
+  path: string
+): Promise<unknown> {
+  const body = options.body;
+  const pathname = path.split("?")[0] ?? path;
+  const formName = INVITATION_ACCEPT_PATH.test(pathname)
+    ? PUBLIC_FORM_NAMES.invitationAccept
+    : PUBLIC_FORM_ROUTE_FORMS[pathname];
+
+  if (
+    options.challenge === false ||
+    method === "GET" ||
+    formName === undefined ||
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body)
+  ) {
+    return body;
+  }
+
+  const tenantHeader = Object.entries(options.headers ?? {}).find(
+    ([name]) => name.toLowerCase() === "x-awcms-tenant-id"
+  )?.[1];
+  const solved = await solvePublicFormChallengeForTests(
+    formName,
+    tenantHeader ?? null
+  );
+
+  return solved === null ? body : { ...solved, ...body };
+}
 
 /**
  * Calls an Astro `APIRoute` with a synthetic context. Only the fields real
@@ -856,12 +904,13 @@ export async function invoke<T = unknown>(
   const method = options.method ?? "GET";
   const path = options.path ?? "/";
   const url = new URL(`http://integration.test${path}`);
-  const hasBody = options.body !== undefined && method !== "GET";
+  const requestBody = await withSolvedChallenge(options, method, path);
+  const hasBody = requestBody !== undefined && method !== "GET";
 
   const request = new Request(url.toString(), {
     method,
     headers: options.headers,
-    body: hasBody ? JSON.stringify(options.body) : undefined
+    body: hasBody ? JSON.stringify(requestBody) : undefined
   });
 
   const context = {

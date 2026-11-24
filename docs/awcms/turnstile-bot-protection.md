@@ -102,6 +102,8 @@ The secret is **never** stored in the DB/source/log/audit — only in env/the se
 
 On the full-online profile, a Cloudflare failure is **fail-closed**: login/setup are rejected with `TURNSTILE_INVALID` for the duration of the outage (the `turnstile` circuit breaker opens after consecutive transport failures and rejects fast). This is deliberate — not a bug.
 
+**What opens the shared breaker.** Only a failure on Cloudflare's side: a 5xx, a 408/429, a 2xx that cannot be parsed or exceeds the size cap, and the `internal-error` code. A garbage, expired or duplicate token (`invalid-input-response`, `timeout-or-duplicate`, `missing-input-response`, `bad-request`), `success:false`, and any other 4xx are the caller's doing and never count, so nobody can lock login out for every tenant with junk tokens. `invalid-input-secret` is our own misconfiguration: it is logged at `error` and never counted (every request still fails closed). `tests/turnstile-verifier.test.ts` proves both directions.
+
 Mitigation options, safest first:
 
 1. **Wait for recovery.** The breaker retries automatically after `openDurationMs`. The `turnstile.circuit_breaker_open` log (warning) marks an ongoing outage.

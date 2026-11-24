@@ -211,6 +211,14 @@ Adapted from awcms-micro Issue #496. Two public endpoints + two pages:
 - **Rate limit + Turnstile** — per `clientIp:tenantId` on BOTH endpoints,
   checked before touching the DB; Turnstile uses its own `password_reset` action
   (a token from the login form cannot be replayed here).
+- **Challenge seam (Issue #1353)** — Turnstile is the first provider behind the
+  public-form challenge seam. The module declares it in its descriptor
+  (`publicFormChallengeProviders`, `infrastructure/turnstile-challenge-provider.ts`),
+  and every pre-session route (login x2, register, forgot, reset, invitation
+  accept, setup) calls `enforcePublicFormCaptcha` instead of Turnstile
+  directly. Published contract unchanged (`turnstileToken`,
+  `TURNSTILE_REQUIRED` / `TURNSTILE_INVALID`); the neutral `challenge*` fields
+  are read as well. See `docs/awcms/public-form-challenge.md`.
 
 ## Self-registration with admin approval (Wave 2 auth delta)
 

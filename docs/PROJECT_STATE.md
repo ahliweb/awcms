@@ -137,9 +137,9 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **291** (`sql/001`–`418`)                                                                                                           | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0170** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **95** `.astro` files in `src/pages/admin/`; **2 of 40** modules without `navigation:` (`social-publishing`, `telegram-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **117** (69.117 lines) — on typechecking see §6                                                                                     | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **117** (69.160 lines) — on typechecking see §6                                                                                     | `find src -name '*.astro'`                                                              |
 | Gates                             | **74** in the `bun run check` chain                                                                                                 | `scripts.check` in `package.json`, split on `&&`                                        |
-| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.7.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.8.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 

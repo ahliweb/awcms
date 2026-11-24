@@ -427,6 +427,6 @@ describe("the contract version records the addition", () => {
     // one-hop path to the subject through a parent row. Optional, so MINOR.
     // 4.7.0 (ADR-0164) adds `emailTemplateCategories` and `whatsappTemplates`;
     // likewise nothing here.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.7.0");
+    expect(MODULE_CONTRACT_VERSION).toBe("4.8.0");
   });
 });

@@ -313,6 +313,7 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
       "src/lib/security/security-headers.ts",
       "src/lib/security/turnstile.ts",
       "src/pages/forgot-password.astro",
+      "src/pages/reset-password.astro",
       "src/pages/login.astro",
       "src/pages/register.astro"
     ],

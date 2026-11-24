@@ -35,6 +35,13 @@ import { POST as loginPOST } from "../src/pages/api/v1/auth/login";
 import { POST as setupPOST } from "../src/pages/api/v1/setup/initialize";
 import { hashPassword } from "../src/lib/auth/password";
 import { resetProviderCircuitBreakersForTests } from "../src/lib/database/circuit-breaker";
+import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { listModules } from "../src/modules";
+
+// The routes reach Turnstile through the public-form challenge seam, which
+// resolves its provider from the module list a composition root installed
+// (`src/middleware.ts` in the web process; Issue #1353).
+installExtensionPointSource(listModules);
 
 const DATABASE_URL =
   process.env.TURNSTILE_TEST_DATABASE_URL ?? process.env.DATABASE_URL;

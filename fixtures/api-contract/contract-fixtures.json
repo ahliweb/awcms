@@ -1,6 +1,6 @@
 {
   "packVersion": 1,
-  "contractSha256": "a4397f279ae6d7fb54494982214f52b5b78fbcc9a08c64a64b6d97995f94460e",
+  "contractSha256": "6f86f9afde381d22b8f13bcaf2ef19a2dcf984c5f565e118005abb87b48b187f",
   "summary": {
     "operations": 743,
     "fixtures": 1786,
@@ -1831,7 +1831,10 @@
         "value": {
           "password": "examplex",
           "displayName": "example",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },
@@ -1877,7 +1880,10 @@
         "value": {
           "loginIdentifier": "example",
           "password": "example",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },
@@ -2524,7 +2530,10 @@
         "source": "generated",
         "value": {
           "loginIdentifier": "example",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },
@@ -2566,7 +2575,10 @@
         "value": {
           "token": "example",
           "newPassword": "examplex",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },
@@ -2790,7 +2802,10 @@
         "value": {
           "displayName": "example",
           "loginIdentifier": "example",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },
@@ -34555,7 +34570,10 @@
           "ownerLoginIdentifier": "example",
           "ownerPassword": "examplex",
           "ownerDisplayName": "example",
-          "turnstileToken": "example"
+          "turnstileToken": "example",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example"
         }
       }
     },

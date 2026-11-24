@@ -1766,6 +1766,18 @@ paths:
                   description: Lets the invitee correct the name the inviter typed for them. Omitted, the inviter's version stands.
                 turnstileToken:
                   type: string
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: The membership exists. Sign in at /login.
@@ -1835,6 +1847,18 @@ paths:
                 turnstileToken:
                   type: string
                   description: "Cloudflare Turnstile response token (Issue #186). Required only on a full-online deployment where Turnstile is enabled; absent and ignored on every LAN/offline deployment. Verified server-side before password verification."
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: Session issued.
@@ -2544,6 +2568,18 @@ paths:
                 turnstileToken:
                   type: string
                   description: "Cloudflare Turnstile response token (Issue #186), solved for the `password_reset` action. Required only on a full-online deployment where Turnstile is enabled; absent and ignored on every LAN/offline deployment."
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: Request accepted. Says nothing about whether an account exists.
@@ -2608,6 +2644,18 @@ paths:
                 turnstileToken:
                   type: string
                   description: "Cloudflare Turnstile response token (Issue #186), solved for the `password_reset` action. Required only on a full-online deployment where Turnstile is enabled."
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: Password changed and all sessions revoked.
@@ -3001,6 +3049,18 @@ paths:
                 turnstileToken:
                   type: string
                   description: "Cloudflare Turnstile response token (Issue #186), solved for the `register` action. Required only on a full-online deployment where Turnstile is enabled."
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: Request accepted. Says nothing about whether the address is already registered or already pending.
@@ -29964,6 +30024,18 @@ paths:
                 turnstileToken:
                   type: string
                   description: "Cloudflare Turnstile response token (Issue #186). Required only on a full-online deployment where Turnstile is enabled; absent and ignored on every LAN/offline deployment. Verified server-side before the tenant/owner bootstrap."
+                challengeId:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+                challengeAnswer:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`."
+                challengeToken:
+                  type: string
+                  maxLength: 4096
+                  description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
       responses:
         "200":
           description: Tenant bootstrapped.

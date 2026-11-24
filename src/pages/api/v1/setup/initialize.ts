@@ -12,9 +12,9 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import {
-  enforceTurnstileIfRequired,
-  SETUP_TURNSTILE_ACTION
-} from "../../../../lib/security/turnstile";
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../lib/security/public-form-challenge";
 import { validateSetupInitializeInput } from "../../../../modules/tenant-admin/domain/setup-validation";
 import { bootstrapPlatformTenant } from "../../../../modules/tenant-admin/application/platform-bootstrap";
 
@@ -98,20 +98,15 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   // operator completes it is exactly what Turnstile exists for. Bound to a
   // distinct `setup` action so a token minted for the login form cannot be
   // replayed here.
-  const turnstileResult = await enforceTurnstileIfRequired(
-    (bodyRead.value as Record<string, unknown> | null)?.turnstileToken,
-    clientIp,
-    { action: SETUP_TURNSTILE_ACTION }
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.setup,
+    bodyRead.value,
+    { clientIp, tenantId: null }
   );
 
-  if (!turnstileResult.ok) {
-    return fail(
-      400,
-      turnstileResult.code,
-      turnstileResult.code === "TURNSTILE_REQUIRED"
-        ? "Turnstile verification token is required."
-        : "Turnstile verification failed."
-    );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const input = validation.value;

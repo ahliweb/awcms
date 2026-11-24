@@ -1399,8 +1399,19 @@ export const READER_BUDGET_BYTES = 39_000;
  * sign-in downloads the login script alone (7,036 B), not the encoder. The
  * total rises a little more than the code it adds because a split chunk costs
  * its own import glue.
+ *
+ * **Raised for Issue #1353** (public-form challenge seam): +670 B
+ * (385,460 -> 386,130), measured 385,987 B on a clean build. The cost is the
+ * ONE shared client helper `src/lib/ui/public-form-challenge-client.ts` (660 B
+ * minified, a single chunk both the forgot- and reset-password scripts import,
+ * so there is no per-page duplication to recover) plus the call sites in those
+ * two scripts. Margin 143 B, as above.
+ *
+ * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
+ * (+670 B, written against 385,460 B) is stacked on it, giving
+ * 393,025 B; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 392_355;
+export const APP_BUDGET_BYTES = 393_025;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

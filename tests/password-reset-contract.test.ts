@@ -126,8 +126,10 @@ describe("the reset routes", () => {
       // Its own action, never LOGIN_TURNSTILE_ACTION: a token solved on the login
       // form must not be replayable against an unauthenticated endpoint that
       // writes a row and queues an email.
-      expect(source).toContain("PASSWORD_RESET_TURNSTILE_ACTION");
-      expect(source).not.toContain("LOGIN_TURNSTILE_ACTION");
+      // (Issue #1353: through the challenge seam, whose form name for both
+      // routes is the `password_reset` Turnstile action.)
+      expect(source).toContain("PUBLIC_FORM_NAMES.passwordReset");
+      expect(source).not.toContain("PUBLIC_FORM_NAMES.login");
     }
   );
 
