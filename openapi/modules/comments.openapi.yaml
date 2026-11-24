@@ -105,6 +105,12 @@ paths:
         immediately publicly visible returns its id and status. A caller
         therefore cannot use this endpoint to enumerate blocked terms, probe the
         timing floor, or discover unpublished resources.
+
+        CHALLENGE (Issue #1353): off by default. While a human-presence
+        challenge provider is switched on, a request without a valid challenge
+        field is refused with `400` `TURNSTILE_REQUIRED` (nothing sent) or
+        `TURNSTILE_INVALID` (failed verification), after the per-IP limiter and
+        before any database work.
       security: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -113,7 +119,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SubmitCommentRequest"
+              $ref: "#/components/schemas/SubmitTopLevelCommentRequest"
       responses:
         "200":
           description: >-
@@ -837,6 +843,39 @@ components:
         id:
           type: string
           format: uuid
+    SubmitTopLevelCommentRequest:
+      description: >-
+        `SubmitCommentRequest` plus the optional public-form challenge fields
+        (Issue #1353). Only `POST /api/v1/comments` enforces the challenge; a
+        reply and an edit do not take these fields.
+      allOf:
+        - $ref: "#/components/schemas/SubmitCommentRequest"
+        - type: object
+          properties:
+            challengeId:
+              type: string
+              maxLength: 4096
+              description: >-
+                Sent only when a challenge provider is switched on (off by
+                default); absent and ignored otherwise. Which of `challengeId`,
+                `challengeAnswer` and `challengeToken` a provider reads is that
+                provider's own contract.
+            challengeAnswer:
+              type: string
+              maxLength: 4096
+              description: "See `challengeId`."
+            challengeToken:
+              type: string
+              maxLength: 4096
+              description: >-
+                See `challengeId`. Cloudflare Turnstile reads this field, and
+                still accepts the older `turnstileToken`.
+            turnstileToken:
+              type: string
+              maxLength: 4096
+              description: >-
+                Legacy spelling of `challengeToken` for the Cloudflare Turnstile
+                provider (Issue #186).
     SubmitCommentRequest:
       type: object
       required:

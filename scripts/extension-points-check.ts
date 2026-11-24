@@ -235,7 +235,7 @@ export function findChallengeRouteProblems(
   for (const [route, file] of routeFiles) {
     const code = stripComments(file.text);
 
-    if (!/\benforcePublicFormCaptcha\s*\(/.test(code)) {
+    if (!/\benforcePublicFormCaptcha\b/.test(code)) {
       continue;
     }
 

@@ -9431,6 +9431,7 @@ PUBLIC and anonymous. The tenant is resolved from the request host. Only `approv
 
 PUBLIC and anonymous, host-resolved, `Idempotency-Key` required. Anti-abuse gated (honeypot field, submit-timing floor, blocked terms, duplicate fingerprint, per-IP rate limit).
 RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, an anti-abuse block, and an accepted-but-held-for-moderation comment ALL return `{"status":"received"}`. Only a comment that is immediately publicly visible returns its id and status. A caller therefore cannot use this endpoint to enumerate blocked terms, probe the timing floor, or discover unpublished resources.
+CHALLENGE (Issue #1353): off by default. While a human-presence challenge provider is switched on, a request without a valid challenge field is refused with `400` `TURNSTILE_REQUIRED` (nothing sent) or `TURNSTILE_INVALID` (failed verification), after the per-IP limiter and before any database work.
 
 **Parameters**
 
@@ -9438,7 +9439,7 @@ RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, a
 | ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
-**Request body** (required): [`SubmitCommentRequest`](#schema-submitcommentrequest)
+**Request body** (required): [`SubmitTopLevelCommentRequest`](#schema-submittoplevelcommentrequest)
 
 **Responses**
 
@@ -21212,17 +21213,25 @@ At least one field. `null` clears; an omitted field is left alone.
 
 There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, and having no field at all is stronger than defaulting one to false — consent is recorded when the confirmation link is followed, so it cannot be defaulted, pre-ticked, or inferred from a submission.
 
-| Field    | Type   | Required | Nullable | Description                                                                                                                                                                                                                                                                     |
-| -------- | ------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `email`  | string | yes      | no       | Shape-checked only — something, an `@`, something with a dot, no spaces. A stricter regex would reject valid addresses and buy nothing, because the actual proof that an address exists and belongs to the person who typed it is the confirmation link nobody else can follow. |
-| `locale` | string | no       | yes      | Language for the confirmation mail. Falls back to `en`.                                                                                                                                                                                                                         |
+| Field             | Type   | Required | Nullable | Description                                                                                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `email`           | string | yes      | no       | Shape-checked only — something, an `@`, something with a dot, no spaces. A stricter regex would reject valid addresses and buy nothing, because the actual proof that an address exists and belongs to the person who typed it is the confirmation link nobody else can follow. |
+| `locale`          | string | no       | yes      | Language for the confirmation mail. Falls back to `en`.                                                                                                                                                                                                                         |
+| `challengeId`     | string | no       | no       | Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract.                  |
+| `challengeAnswer` | string | no       | no       | Public-form challenge field (Issue #1353); see `challengeId`.                                                                                                                                                                                                                   |
+| `challengeToken`  | string | no       | no       | Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`.                                                                                                                              |
+| `turnstileToken`  | string | no       | no       | Legacy spelling of `challengeToken` for the Cloudflare Turnstile provider (Issue #186). Ignored when no provider is switched on.                                                                                                                                                |
 
 **Example**
 
 ```json
 {
   "email": "user@example.com",
-  "locale": "string"
+  "locale": "string",
+  "challengeId": "string",
+  "challengeAnswer": "string",
+  "challengeToken": "string",
+  "turnstileToken": "string"
 }
 ```
 
@@ -22442,6 +22451,33 @@ Enum values: `post_published`, `scheduled_published`, `manual_editor_action`.
   "website": "string",
   "timingToken": "string",
   "subscribeToReplies": false
+}
+```
+
+### Schema: SubmitTopLevelCommentRequest
+
+`SubmitCommentRequest` plus the optional public-form challenge fields (Issue #1353). Only `POST /api/v1/comments` enforces the challenge; a reply and an edit do not take these fields.
+
+`SubmitCommentRequest` plus the optional public-form challenge fields (Issue #1353). Only `POST /api/v1/comments` enforces the challenge; a reply and an edit do not take these fields.
+
+**Example**
+
+```json
+{
+  "body": "string",
+  "resourceType": "string",
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "locale": "string",
+  "parentId": "00000000-0000-0000-0000-000000000000",
+  "authorDisplayName": "string",
+  "authorEmail": "user@example.com",
+  "website": "string",
+  "timingToken": "string",
+  "subscribeToReplies": false,
+  "challengeId": "string",
+  "challengeAnswer": "string",
+  "challengeToken": "string",
+  "turnstileToken": "string"
 }
 ```
 

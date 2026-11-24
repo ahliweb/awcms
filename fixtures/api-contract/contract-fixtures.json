@@ -1,6 +1,6 @@
 {
   "packVersion": 1,
-  "contractSha256": "d98f65deedb3d552ac7d6cb1c9d04df3149ad1752bcbad3479dcfa1c5e4424b0",
+  "contractSha256": "3b5556a866a1de07b5d2acf13f93b42fa41e3f216bda6d9387546f00172cddbf",
   "summary": {
     "operations": 743,
     "fixtures": 1786,
@@ -13306,7 +13306,11 @@
           "authorEmail": "example",
           "website": "example",
           "timingToken": "example",
-          "subscribeToReplies": true
+          "subscribeToReplies": true,
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example",
+          "turnstileToken": "example"
         }
       }
     },
@@ -27234,14 +27238,8 @@
           "value": {
             "success": false,
             "error": {
-              "code": "VALIDATION_ERROR",
-              "message": "A valid email address is required.",
-              "details": [
-                {
-                  "field": "email",
-                  "message": "email is not an address."
-                }
-              ]
+              "code": "TURNSTILE_REQUIRED",
+              "message": "A challenge response is required."
             },
             "meta": {
               "correlationId": "example-correlation-err"
@@ -27267,7 +27265,11 @@
         "source": "generated",
         "value": {
           "email": "example",
-          "locale": "en"
+          "locale": "en",
+          "challengeId": "example",
+          "challengeAnswer": "example",
+          "challengeToken": "example",
+          "turnstileToken": "example"
         }
       }
     },

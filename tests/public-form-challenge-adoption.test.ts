@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import type { APIRoute } from "astro";
+import { parse as parseYaml } from "yaml";
 
 import {
   PUBLIC_FORM_NAMES,
@@ -507,6 +508,21 @@ describe("route gate", () => {
     ).toEqual([]);
   });
 
+  test("an aliased or re-exported seam import cannot hide an undeclared route", () => {
+    for (const text of [
+      `import { enforcePublicFormCaptcha as guard } from "x";\nawait guard(request, "demo", body);`,
+      `import * as seam from "x";\nconst g = seam.enforcePublicFormCaptcha;\nawait g(request, "demo", body);`
+    ]) {
+      expect(
+        findChallengeRouteProblems(
+          mod([]),
+          [{ path: "src/pages/api/v1/demo.ts", text }],
+          { demoKey: "demo" }
+        ).join("|")
+      ).toContain("no module declares /api/v1/demo");
+    }
+  });
+
   test("the real tree is clean", () => {
     const files: { path: string; text: string }[] = [];
     const walk = (dir: string) => {
@@ -690,4 +706,58 @@ describe("newsletter and comments adopt the seam with one call each", () => {
       expect(at).toBeLessThan(text.lastIndexOf(db));
     }
   });
+});
+
+describe("OpenAPI documents every declared challenge route (#1353)", () => {
+  // Resolve a request-body schema through $ref and allOf to its property names.
+  const propertyNames = (
+    schema: Record<string, unknown> | undefined,
+    spec: Record<string, any>,
+    seen = new Set<unknown>()
+  ): Set<string> => {
+    const out = new Set<string>();
+    if (!schema || seen.has(schema)) return out;
+    seen.add(schema);
+    const ref = schema.$ref as string | undefined;
+    if (ref) {
+      const target = ref
+        .replace(/^#\//, "")
+        .split("/")
+        .reduce<any>((node, key) => node?.[key], spec);
+      return propertyNames(target, spec, seen);
+    }
+    for (const key of Object.keys((schema.properties as object) ?? {}))
+      out.add(key);
+    for (const part of (schema.allOf as Record<string, unknown>[]) ?? [])
+      for (const key of propertyNames(part, spec, seen)) out.add(key);
+    return out;
+  };
+
+  const spec = parseYaml(
+    readFileSync("openapi/awcms-public-api.openapi.yaml", "utf8")
+  ) as Record<string, any>;
+
+  const routes = listModules().flatMap((module) =>
+    (module.publicFormChallengeForms ?? []).flatMap((form) =>
+      form.routes.map((route) => ({ route, formName: form.formName }))
+    )
+  );
+
+  test("there are declared routes to check", () => {
+    expect(routes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  for (const { route, formName } of routes) {
+    test(`${formName} on ${route} declares the neutral challenge field and the legacy token`, () => {
+      const path = route.replace(/\[([^\]]+)\]/g, "{$1}");
+      const operation = spec.paths?.[path]?.post;
+      expect(operation).toBeDefined();
+      const names = propertyNames(
+        operation.requestBody?.content?.["application/json"]?.schema,
+        spec
+      );
+      expect(names.has("challengeToken")).toBe(true);
+      expect(names.has("turnstileToken")).toBe(true);
+    });
+  }
 });

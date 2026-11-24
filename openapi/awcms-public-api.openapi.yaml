@@ -11352,6 +11352,7 @@ paths:
       description: |-
         PUBLIC and anonymous, host-resolved, `Idempotency-Key` required. Anti-abuse gated (honeypot field, submit-timing floor, blocked terms, duplicate fingerprint, per-IP rate limit).
         RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, an anti-abuse block, and an accepted-but-held-for-moderation comment ALL return `{"status":"received"}`. Only a comment that is immediately publicly visible returns its id and status. A caller therefore cannot use this endpoint to enumerate blocked terms, probe the timing floor, or discover unpublished resources.
+        CHALLENGE (Issue #1353): off by default. While a human-presence challenge provider is switched on, a request without a valid challenge field is refused with `400` `TURNSTILE_REQUIRED` (nothing sent) or `TURNSTILE_INVALID` (failed verification), after the per-IP limiter and before any database work.
       security: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -11360,7 +11361,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SubmitCommentRequest"
+              $ref: "#/components/schemas/SubmitTopLevelCommentRequest"
       responses:
         "200":
           description: Accepted. Either the neutral `{"status":"received"}` acknowledgement or, when the comment is immediately public, its id and status.
@@ -23039,6 +23040,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
               examples:
+                challenge_required:
+                  summary: "`TURNSTILE_REQUIRED` or `TURNSTILE_INVALID`, answered only while a challenge provider is enabled (off by default)"
+                  value:
+                    success: false
+                    error:
+                      code: TURNSTILE_REQUIRED
+                      message: A challenge response is required.
+                    meta:
+                      correlationId: example-correlation-err
                 validation_error:
                   summary: "`VALIDATION_ERROR`"
                   value:
@@ -46824,6 +46834,22 @@ components:
           nullable: true
           pattern: ^[a-z]{2}(-[A-Z]{2})?$
           description: Language for the confirmation mail. Falls back to `en`.
+        challengeId:
+          type: string
+          maxLength: 4096
+          description: "Public-form challenge field (Issue #1353). Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract."
+        challengeAnswer:
+          type: string
+          maxLength: 4096
+          description: "Public-form challenge field (Issue #1353); see `challengeId`."
+        challengeToken:
+          type: string
+          maxLength: 4096
+          description: "Public-form challenge field (Issue #1353); see `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`."
+        turnstileToken:
+          type: string
+          maxLength: 4096
+          description: "Legacy spelling of `challengeToken` for the Cloudflare Turnstile provider (Issue #186). Ignored when no provider is switched on."
       description: There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, and having no field at all is stronger than defaulting one to false — consent is recorded when the confirmation link is followed, so it cannot be defaulted, pre-ticked, or inferred from a submission.
     NewsletterTokenRequest:
       type: object
@@ -50311,6 +50337,28 @@ components:
         commentId:
           type: string
           format: uuid
+    SubmitTopLevelCommentRequest:
+      description: "`SubmitCommentRequest` plus the optional public-form challenge fields (Issue #1353). Only `POST /api/v1/comments` enforces the challenge; a reply and an edit do not take these fields."
+      allOf:
+        - $ref: "#/components/schemas/SubmitCommentRequest"
+        - type: object
+          properties:
+            challengeId:
+              type: string
+              maxLength: 4096
+              description: Sent only when a challenge provider is switched on (off by default); absent and ignored otherwise. Which of `challengeId`, `challengeAnswer` and `challengeToken` a provider reads is that provider's own contract.
+            challengeAnswer:
+              type: string
+              maxLength: 4096
+              description: See `challengeId`.
+            challengeToken:
+              type: string
+              maxLength: 4096
+              description: See `challengeId`. Cloudflare Turnstile reads this field, and still accepts the older `turnstileToken`.
+            turnstileToken:
+              type: string
+              maxLength: 4096
+              description: "Legacy spelling of `challengeToken` for the Cloudflare Turnstile provider (Issue #186)."
     TaxComponentResult:
       type: object
       properties:

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](public-form-challenge.md)
 
-<!-- i18n-source-hash: sha256:60019e3529bb3361a72904548436409156ca720b67a983a1a7723a07f85eada6 -->
+<!-- i18n-source-hash: sha256:a8decfa49c7209be17b3341ba97acc9c77d512c640d902d5cd92bb7ab6585b8d -->
 
 # Seam challenge (captcha) form publik
 
@@ -58,7 +58,7 @@ Modul mendeklarasikan form publik yang dimilikinya beserta rute API-nya di descr
 ## 6. Titik terbuka
 
 - Pembakaran sekali-pakai bersifat per proses. Provider tanpa jaminan sekali-pakai sendiri bisa di-replay lintas proses; kontrak mewajibkan jaminan itu di provider.
-- `newsletter` (`POST /api/v1/newsletter/subscribe`) dan `comments` (`POST /api/v1/comments`) kini masing-masing memanggil seam sekali, sesudah limiter per-IP dan sebelum pekerjaan basis data apa pun. **Trade-off yang harus diputuskan sebelum menyalakan Turnstile pada deployment yang melayani situs tenant:** Turnstile mengunci SATU hostname (`TURNSTILE_EXPECTED_HOSTNAME`), sedangkan kedua rute ini dipanggil dari situs publik tenant di hostname lain (dan oleh `awcms-astro`), sehingga dengan Turnstile menyala request dari host lain ditolak sampai form membawa widget dan ada pengikatan per-tenant atau multi-host. Dengan seam mati (default) tak ada yang berubah. Keduanya terikat hanya pada nama form (`tenantId: null`) karena tenant di-resolve dari host di dalam transaksi.
+- `newsletter` (`POST /api/v1/newsletter/subscribe`) dan `comments` (`POST /api/v1/comments`) kini masing-masing memanggil seam sekali, sesudah limiter per-IP dan sebelum pekerjaan basis data apa pun. **Trade-off yang harus diputuskan sebelum menyalakan Turnstile pada deployment yang melayani situs tenant:** Turnstile mengunci SATU hostname (`TURNSTILE_EXPECTED_HOSTNAME`), sedangkan kedua rute ini dipanggil dari situs publik tenant di hostname lain (dan oleh `awcms-astro`), sehingga dengan Turnstile menyala request dari host lain ditolak sampai form membawa widget dan ada pengikatan per-tenant atau multi-host. Dengan seam mati (default) tak ada yang berubah. Operasi OpenAPI keduanya mendokumentasikan field `challenge*` dan 400 `TURNSTILE_REQUIRED`/`TURNSTILE_INVALID`. Pengikatan per-tenant atau multi-host dan pemasangan widget di `awcms-astro` belum dibangun; kerjakan sebelum menyalakan Turnstile pada deployment multi-host. Keduanya terikat hanya pada nama form (`tenantId: null`) karena tenant di-resolve dari host di dalam transaksi.
 - Intake source website-engagement mempertahankan verifikasi per-SOURCE miliknya (Issue #1477 pemiliknya).
 - Ledger pembakaran sekali-pakai bersama berbasis basis data ditunda (issue tindak lanjut #1524). `siteverify` Turnstile sendiri sekali-pakai di Cloudflare, itulah jaminan lintas proses saat ini; pembakaran per proses hanya menutup jendela replay dalam satu proses. Dengan beberapa replika web, token yang di-replay dapat mencapai `siteverify` sekali per replika, dan Cloudflare tetap menolak yang kedua; provider TANPA jaminan sekali-pakai sendiri dapat di-replay lintas replika sampai ledger ada.
 - `forgot` dan `reset` masih berbagi nama form `password_reset` (jadi satu action token Turnstile melayani kedua halaman); memisahkannya mengubah `action` Turnstile yang sudah terbit dan tidak dilakukan di sini.
