@@ -483,6 +483,30 @@ pioneered directly here after the ADR-0047 freeze.)
   decision PR, #1095 masking plus the daily job, and #1171
   fan-out; G2 and G3 follow the order above.
 
+- **DECISION OF 22 NOVEMBER 2026 (K16): ADR-0168 (passkey, WebAuthn) ACCEPTED
+  WITH AMENDMENTS (#1405, #1406, #1407).** Carries out K8: the owner delegated the
+  decision to the orchestrator, taken after an `awcms-security-auditor` review of
+  `origin/main` at `16c8ebcd` (no Critical finding; five High findings that
+  change the data model or the authorization boundary, so they are normative in
+  the ADR now). Docs only; no migration. A1 recovery codes become
+  principal-owned and independent of factor type (today `sql/114` ties them to a
+  TOTP factor). A2 `awcms_sessions` records `stepped_up_method` and
+  `stepped_up_passkey_id`, and the recovery cool-down is evaluated at the gate.
+  A3 passkey reset is platform-scoped when the target has an identity in another
+  tenant, with mandatory maker/checker. A4 passkey as a first factor obeys
+  `password_login_disabled`/SSO enforcement in `evaluateTenantEntry`. A5
+  `/login`, `/admin/*` and the ceremony endpoints are served only on the
+  `APP_URL` host (today `src/middleware.ts` has no host gate). A6 ten normative
+  verifier checks, `attStmt` never trusted. A7 atomic counter compare-and-set, no
+  "admin clear". A8 a passkey is an active factor everywhere one is read. A9
+  challenge TTL 300 s, no passwordless in the first release (Q3). A10 S1
+  go/no-go gates G1 to G7; **S3 and later are blocked until S1 passes them**, a
+  NO-GO means option B through its own dependency ADR. A11 threat model, privacy
+  analysis and permission matrix before Definition of Ready. Everything ships
+  behind `AUTH_PASSKEY_ENABLED=false`. Q1 to Q9 are answered in the ADR. #1406
+  must not rely on passkeys for device binding. Next: S1 (the pure verifier
+  spike) with its gates.
+
 - **`email:senders:verify` SCHEDULED — 14 November 2026 (#1160, ADR-0162).**
   Carries out the owner decision of 11 November 2026 (ADR-0159 entry below).
   The job is now on the generated crontab hourly (`0 * * * *`), as the third
