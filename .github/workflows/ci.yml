@@ -12,7 +12,9 @@
 # (pola yang sama dengan job Validate release.yml): `bun test` di dalam
 # `check` men-skip bersih suite DB-gated (lihat gerbang `integrationEnabled`
 # di `tests/integration/harness.ts`); suite itu benar-benar jalan di job
-# `integration-tests` di bawah yang menyalakan Postgres-nya sendiri.
+# `integration-shards` di bawah (lima shard paralel, masing-masing menyalakan
+# Postgres-nya sendiri); `integration-tests` adalah check wajib yang
+# mengagregasinya.
 # Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun):
 # 404 + login render tidak butuh DB, tapi alur admin ter-autentikasi butuh,
 # jadi job-nya menyalakan service `postgres:18.6`, `db:migrate`, lalu men-seed
@@ -75,11 +77,11 @@ jobs:
         # `check` memuat `bun test` polos. Suite DB-gated lama (masing-masing
         # membuka koneksi ad-hoc ke `DATABASE_URL`) tidak dirancang jalan
         # bersamaan atas satu database ter-migrasi dalam satu proses `bun
-        # test` — komentar job `integration-tests` di bawah mendokumentasikan
+        # test` — komentar job `integration-shards` di bawah mendokumentasikan
         # tabrakan 26-kegagalan yang direproduksi empiris dari pemicu persis
         # itu. `DATABASE_URL` dikosongkan untuk step ini sehingga suite
         # DB-gated skip bersih; cakupan DB/RLS nyata jalan di job
-        # `integration-tests`. Pola identik dengan job Validate release.yml.
+        # `integration-shards`. Pola identik dengan job Validate release.yml.
         run: bun run check
         env:
           DATABASE_URL: ""
@@ -112,7 +114,7 @@ jobs:
     # Ephemeral per-job Postgres, created + torn down by the runner for THIS
     # job only. Migrations run as this superuser and the app connects as it
     # too — E2E smoke proves the UI flow (login → session → SSR render), not
-    # RLS enforcement (that is what the `integration-tests` job below proves,
+    # RLS enforcement (that is what the `integration-shards` jobs below prove,
     # run under a non-superuser role there).
     services:
       postgres:
@@ -230,9 +232,32 @@ jobs:
 
           bun run test:e2e
 
-  integration-tests:
-    name: Integration tests (RLS + DB role separation)
+  # Issue #1510. The DB-gated step used to be ONE `bun test tests/integration/`
+  # run of ~37.5 minutes (203 files) inside a ~39-minute job — the slowest
+  # required check by a factor of six, and, because the `main` ruleset requires
+  # branches to be up to date (`strict: true`), the thing that set the merge
+  # queue's throughput (about one PR per 40 minutes). It is now split across
+  # FIVE parallel jobs with Bun's built-in `bun test --shard=<i>/<N>`, which
+  # partitions the sorted file list into disjoint, exhaustive slices.
+  #
+  # Each shard runs on its OWN runner with its OWN ephemeral Postgres service —
+  # the same isolation the single job had, so no two shards ever share a cluster
+  # (roles are cluster-global; that is why `--parallel` inside one job is NOT
+  # used: the files would share one Postgres). `fail-fast: false` so one red
+  # shard does not cancel the others and hide a second failure.
+  #
+  # N appears twice, in `matrix.shard` and in the `--shard=<i>/5` command below;
+  # `tests/ci-integration-shards.test.ts` fails if they disagree.
+  #
+  # The required status check is NOT any shard: see the `integration-tests`
+  # aggregator at the end of this job group.
+  integration-shards:
+    name: Integration shard ${{ matrix.shard }}/5
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
     permissions:
       contents: read
     env:
@@ -240,7 +265,7 @@ jobs:
       POSTGRES_PASSWORD: awcms_ci_password
       POSTGRES_DB: awcms
     # Own ephemeral per-job Postgres — a fresh throwaway instance, never
-    # shared with `e2e-smoke`'s. `tests/integration/harness.ts` treats this
+    # shared with `e2e-smoke`'s or with another shard's. `tests/integration/harness.ts` treats this
     # superuser DATABASE_URL purely as an admin channel: it builds its OWN
     # ephemeral database/roles on top of it and runs real migrations via
     # `bun scripts/db-migrate.ts` as a subprocess — nothing else needs to be
@@ -289,6 +314,9 @@ jobs:
         run: bun run db:migrate
 
       - name: Payroll catalog boundary (the migrated database)
+        # Runs ONCE (shard 1 only), not once per shard: it analyses the
+        # migrated schema, which is identical on every shard's fresh database.
+        if: matrix.shard == 1
         # Issue #1077: the catalog half of the payroll boundary needs a database
         # where every migration has run, so it cannot sit in `bun run check`
         # (which has none). The same analysis runs, with its probes, in
@@ -318,9 +346,17 @@ jobs:
         # runner, so 60s is ~30x headroom and still far under the job timeout.
         # Set here rather than per-hook in 13 files: one place to forget, not
         # thirteen.
-        run: bun test tests/integration/ --timeout 60000
+        #
+        # `--shard=<i>/5` (Issue #1510) runs the i-th of five disjoint slices
+        # of the sorted file list; every file under `tests/integration/` runs in
+        # exactly one shard. The 60s timeout applies to each shard unchanged.
+        run: bun test tests/integration/ --shard=${{ matrix.shard }}/5 --timeout 60000
 
       - name: Run DB-gated integration tests (legacy ad-hoc suite)
+        # Runs ONCE (shard 1 only, after its harness slice): the suite is not
+        # shardable by `--shard` because it is an explicit file list, and
+        # running it on every shard would repeat it five times.
+        if: matrix.shard == 1
         # These 15 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
         # connection to the SAME database this job's harness step just used,
         # and were designed to run together (that is release.yml's original,
@@ -365,6 +401,34 @@ jobs:
           tests/tenant-selection-e2e.test.ts
           tests/turnstile-login-e2e.test.ts
           tests/workflow-approval-concurrency.test.ts
+
+  # The REQUIRED status check. The `name:` below is the exact string the `main`
+  # ruleset requires; it is reported by THIS job, which only passes when every
+  # shard passed. The shards' own display names ("Integration shard i/5") are
+  # deliberately different, so a green shard can never satisfy the requirement
+  # on its own. `if: always()` makes it run (and fail) when a shard failed or
+  # was cancelled instead of being skipped — a skipped required check reads as
+  # "not run", which some merge setups treat as passing. A `skipped` or
+  # `cancelled` shard result fails it as well: only `success` passes.
+  #
+  # Results arrive through `env`, not interpolated into the script body.
+  integration-tests:
+    name: Integration tests (RLS + DB role separation)
+    needs: [integration-shards]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require every integration shard to have succeeded
+        env:
+          SHARDS_RESULT: ${{ needs.integration-shards.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::integration shards concluded '$SHARDS_RESULT', not 'success'"
+            exit 1
+          fi
+          echo "all integration shards succeeded"
 
   minimum-supported:
     # Issue #183 AC "CI menguji minimal versi current DAN minimum-supported":

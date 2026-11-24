@@ -100,6 +100,20 @@ for how), not something this document settles.
 
 ### `Integration tests (RLS + DB role separation)` — exists and runs, informational only
 
+> **Update (Issue #1510): the job is now sharded.** The DB-gated step used to
+> be one ~37.5-minute `bun test tests/integration/` run. It is now five
+> parallel jobs, `Integration shard <i>/5` (job `integration-shards`), each
+> with its own Postgres service and running `bun test tests/integration/
+--shard=<i>/5 --timeout 60000`; shard 1 also runs the payroll catalog
+> boundary and the legacy ad-hoc suite once. The check named
+> `Integration tests (RLS + DB role separation)` is now the **aggregator** job
+> `integration-tests`: `needs` every shard, `if: always()`, and it fails unless
+> every shard concluded `success` (a failed, cancelled or skipped shard fails
+> it). Its name is unchanged, so the ruleset is unchanged. The shards' own
+> names are deliberately different and must never be added as required checks.
+> `tests/ci-integration-shards.test.ts` pins this. The paragraph below
+> describes the earlier single-job shape.
+
 `ci.yml` also has an `integration-tests` job (check name:
 `Integration tests (RLS + DB role separation)`) that brings up its own
 ephemeral Postgres (separate from the one `e2e-smoke` uses), migrates against

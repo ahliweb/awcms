@@ -87,7 +87,7 @@ import path from "node:path";
 export const WORKFLOW_CI = ".github/workflows/ci.yml";
 export const WORKFLOW_CHANGESETS = ".github/workflows/changesets.yml";
 
-/** `bun-version:` of the `quality`, `e2e-smoke`, `integration-tests` jobs. */
+/** `bun-version:` of the `quality`, `e2e-smoke`, `integration-shards` jobs. */
 export const CI_BUN_CURRENT = "1.4.4";
 /** `bun-version:` of the `minimum-supported` job (`engines.bun >=1.3.0`). */
 export const CI_BUN_MINIMUM = "1.3.0";
@@ -230,6 +230,13 @@ export type JobDef = {
   aliases: readonly string[];
   workflow: typeof WORKFLOW_CI | typeof WORKFLOW_CHANGESETS;
   workflowJob: string;
+  /**
+   * A workflow job that only AGGREGATES this one (Issue #1510: the required
+   * `integration-tests` check gates the `integration-shards` matrix). It has no
+   * steps worth mirroring locally; the parity test still demands it exists, and
+   * `title` is ITS name — the required-check name in the ruleset.
+   */
+  aggregatedBy?: string;
   title: string;
   /** Whether the job needs the admin PostgreSQL connection. */
   needsDatabase: boolean;
@@ -1483,9 +1490,14 @@ echo "OK: tidak ada berkas .env yang ter-track."`
   },
   {
     id: "integration",
-    aliases: ["integration-tests"],
+    aliases: ["integration-tests", "integration-shards"],
     workflow: WORKFLOW_CI,
-    workflowJob: "integration-tests",
+    // CI splits this job into a 5-way matrix (`integration-shards`) plus the
+    // aggregator that carries the required-check name (`integration-tests`).
+    // Locally ONE throwaway database runs the whole suite: the shards exist to
+    // spread wall-clock across runners, not to change what runs.
+    workflowJob: "integration-shards",
+    aggregatedBy: "integration-tests",
     title: "Integration tests (RLS + DB role separation)",
     needsDatabase: true,
     preflight: databasePreflight,
@@ -1503,9 +1515,25 @@ echo "OK: tidak ada berkas .env yang ter-track."`
         run: "bun run payroll:catalog-boundary:check"
       },
       {
-        kind: "shell",
+        kind: "native",
         step: "Run DB-gated integration tests",
-        run: "bun test tests/integration/ --timeout 60000"
+        adapted:
+          "CI runs `bun test tests/integration/ --shard=<i>/5 --timeout 60000` once per matrix shard, each on its own runner and Postgres (Issue #1510); locally the five slices run as one process over the whole directory against the one throwaway database — the union of the shards, with the same timeout",
+        async run(run) {
+          const argv = [
+            "bun",
+            "test",
+            "tests/integration/",
+            "--timeout",
+            "60000"
+          ];
+          echoCommand(run, argv.join(" "));
+          const code = await exec(run, argv, resolveEnv(run, undefined));
+
+          return code === 0
+            ? { ok: true }
+            : { ok: false, detail: `exited with code ${code}` };
+        }
       },
       {
         kind: "shell",
