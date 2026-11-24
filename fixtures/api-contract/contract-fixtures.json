@@ -1,11 +1,11 @@
 {
   "packVersion": 1,
-  "contractSha256": "d98f65deedb3d552ac7d6cb1c9d04df3149ad1752bcbad3479dcfa1c5e4424b0",
+  "contractSha256": "453ea9264e7287625b37f9b782379329a6a214674523b802c2fbebe65bd67409",
   "summary": {
-    "operations": 743,
-    "fixtures": 1786,
+    "operations": 744,
+    "fixtures": 1787,
     "declared": 13,
-    "generated": 1773,
+    "generated": 1774,
     "skipped": 4
   },
   "sharedResponses": {
@@ -29416,6 +29416,40 @@
           "expectedVersion": 1
         }
       }
+    },
+    "GET /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees": {
+      "responses": {
+        "200": {
+          "contentType": "application/json",
+          "source": "generated",
+          "value": {
+            "success": true,
+            "data": {
+              "items": [
+                {
+                  "tenantUserId": "00000000-0000-4000-8000-000000000000",
+                  "displayName": "example"
+                }
+              ],
+              "nextCursor": "example"
+            },
+            "meta": {}
+          }
+        },
+        "400": {
+          "$ref": "#/sharedResponses/BadRequest"
+        },
+        "401": {
+          "$ref": "#/sharedResponses/Unauthorized"
+        },
+        "403": {
+          "$ref": "#/sharedResponses/Forbidden"
+        },
+        "404": {
+          "$ref": "#/sharedResponses/NotFound"
+        }
+      },
+      "operationId": "listOmnichannelInboxEligibleAssignees"
     },
     "POST /api/v1/omnichannel-inbox/conversations/{id}/responses": {
       "responses": {
