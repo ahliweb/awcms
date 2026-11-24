@@ -13,12 +13,12 @@
  * prevent. A new operation that cannot meet a rule gets an entry in
  * CONTRACT_POLICY_EXCEPTIONS below, with the reason. The gate fails when a line
  * names an operation that no longer exists (delete it), and
- * `tests/api-contract-policy.test.ts` pins a ceiling on the length and that
- * the list stays sorted and unique.
+ * `tests/api-contract-policy.test.ts` pins the exact length, a hash of each
+ * line with its `METHOD route`, and that the list stays sorted and unique.
  *
  * Operations are retrofitted gradually (ADR-0167 section 6): when an existing
  * operation is brought up to the policy, its line MAY be deleted here so the
- * gate keeps it there; lowering the ceiling in the test is part of that edit.
+ * gate keeps it there; updating the length and hash pins in the test is part of that edit.
  */
 export const CONTRACT_POLICY_BASELINE: readonly string[] = [
   "accessCreateAbacPolicy",

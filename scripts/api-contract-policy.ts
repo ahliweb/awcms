@@ -46,8 +46,11 @@
  * - an entry whose operation no longer exists FAILS the gate, so removing an
  *   operation forces the line out and a later operation cannot re-use the id to
  *   inherit its exemption;
- * - `tests/api-contract-policy.test.ts` pins a ceiling on its length, so adding
- *   a line (declaring a new operation "old") is a second, visible edit;
+ * - `tests/api-contract-policy.test.ts` pins its exact length and a hash of
+ *   `operationId METHOD route` for every line, so a retrofit, an add, or an id
+ *   swapped onto another route each force a visible edit of the pin. The gate
+ *   itself keys on operationId only; the route pin is what stops a new
+ *   operation at a different route from inheriting a removed one's id;
  * - the same test pins that it stays sorted and free of duplicates.
  *
  * An operation with no `operationId`, or one whose `operationId` is declared
@@ -148,11 +151,21 @@ export interface PolicyInputs {
   isRateLimited: RateLimitProbe;
 }
 
-const SCHEMA_CHILD_MAPS = ["properties", "patternProperties"] as const;
+const SCHEMA_CHILD_MAPS = [
+  "properties",
+  "patternProperties",
+  "$defs",
+  "definitions",
+  "dependentSchemas"
+] as const;
 const SCHEMA_CHILD_LISTS = ["allOf", "anyOf", "oneOf", "prefixItems"] as const;
 const SCHEMA_CHILD_NODES = [
   "items",
   "additionalProperties",
+  "unevaluatedProperties",
+  "unevaluatedItems",
+  "contains",
+  "propertyNames",
   "not",
   "if",
   "then",
@@ -451,6 +464,16 @@ export function checkContractPolicy(
         })
       );
     }
+    // parameters declared once on the path item apply to every method under it
+    const pathItem = isRecord(doc.paths) ? doc.paths[op.route] : undefined;
+    if (isRecord(pathItem) && Array.isArray(pathItem.parameters)) {
+      pathItem.parameters.forEach((p, i) =>
+        nullableRoots.push({
+          pointer: `/paths/${seg(op.route)}/parameters/${i}`,
+          node: p
+        })
+      );
+    }
     for (const response of successResponses(doc, op)) {
       if (shared.has(response.pointer)) continue;
       nullableRoots.push({ pointer: response.pointer, node: response.node });
@@ -548,7 +571,39 @@ export function checkContractPolicy(
   };
 }
 
-/** Report each `nullable` key found in the graph reachable from `root`. */
+/**
+ * Keys whose value is a map of NAMES to nodes (property names, media types,
+ * header names, ...). A key inside such a map is an author's name, never a
+ * keyword, so it is not subject to the example/default skip below: a property
+ * called `default` must still be scanned.
+ */
+const NAME_MAPS: ReadonlySet<string> = new Set([
+  "properties",
+  "patternProperties",
+  "$defs",
+  "definitions",
+  "dependentSchemas",
+  "content",
+  "headers",
+  "responses",
+  "encoding",
+  "links"
+]);
+
+/** Keyword keys whose value is DATA (an instance), not a schema. */
+const DATA_KEYWORDS: ReadonlySet<string> = new Set([
+  "example",
+  "examples",
+  "default",
+  "enum",
+  "const"
+]);
+
+/**
+ * Report each `nullable` key found in the graph reachable from `root`. A
+ * `$ref` node is followed AND its sibling keys are scanned (3.1 allows
+ * siblings of `$ref`).
+ */
 function scanNullable(
   doc: AnyRecord,
   rootPointer: string,
@@ -557,35 +612,29 @@ function scanNullable(
   onFound: (pointer: string) => void
 ): void {
   const seen = new Set<string>();
-  const go = (pointer: string, node: unknown): void => {
+  const go = (pointer: string, node: unknown, nameMap: boolean): void => {
     if (Array.isArray(node)) {
-      node.forEach((child, index) => go(`${pointer}/${index}`, child));
+      node.forEach((child, index) => go(`${pointer}/${index}`, child, false));
       return;
     }
     if (!isRecord(node)) return;
-    if (typeof node.$ref === "string") {
+    if (!nameMap && typeof node.$ref === "string") {
       const target = resolveRef(doc, node.$ref);
-      if (!target || seen.has(target.pointer) || shared.has(target.pointer))
-        return;
-      seen.add(target.pointer);
-      go(target.pointer, target.node);
-      return;
+      if (target && !seen.has(target.pointer) && !shared.has(target.pointer)) {
+        seen.add(target.pointer);
+        go(target.pointer, target.node, false);
+      }
     }
-    if ("nullable" in node) onFound(`${pointer}/nullable`);
+    if (!nameMap && "nullable" in node) onFound(`${pointer}/nullable`);
     for (const [key, child] of Object.entries(node)) {
-      // example values may legitimately contain a property called `nullable`
-      if (
-        key === "example" ||
-        key === "examples" ||
-        key === "default" ||
-        key === "enum" ||
-        key === "const"
-      )
-        continue;
-      go(`${pointer}/${seg(key)}`, child);
+      if (!nameMap && key === "$ref") continue;
+      // instance data may legitimately contain a property called `nullable`;
+      // but a NAME in a names map that happens to equal a keyword is scanned
+      if (!nameMap && DATA_KEYWORDS.has(key)) continue;
+      go(`${pointer}/${seg(key)}`, child, !nameMap && NAME_MAPS.has(key));
     }
   };
-  go(rootPointer, root);
+  go(rootPointer, root, false);
 }
 
 /** Probe over the real route files: the call graph of each handler. */

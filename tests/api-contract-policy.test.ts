@@ -329,6 +329,94 @@ describe("rule 3: no nullable", () => {
   });
 });
 
+describe("rule 3 blind spots: keyword-named properties, $ref siblings, path-item parameters", () => {
+  const rulesOf = (doc: Doc): string[] =>
+    checkContractPolicy(doc, inputs()).violations.map((v) => v.rule);
+  const withProperty = (name: string): Doc =>
+    contract({
+      "/a": {
+        get: operation("a", {
+          "200": okResponse({
+            schema: {
+              type: "object",
+              required: [name],
+              properties: { [name]: { type: "string", nullable: true } }
+            }
+          })
+        })
+      }
+    });
+
+  for (const name of ["default", "example", "examples", "enum", "const"]) {
+    test(`a property NAMED ${name} still carries nullable into a violation`, () => {
+      expect(rulesOf(withProperty(name))).toEqual(["no-nullable"]);
+    });
+  }
+
+  test("a keyword-named key inside an example VALUE is still skipped", () => {
+    const doc = contract({
+      "/a": {
+        get: operation("a", {
+          "200": okResponse({ example: { default: { nullable: true } } })
+        })
+      }
+    });
+    expect(rulesOf(doc)).toEqual([]);
+  });
+
+  test("nullable beside a $ref fails", () => {
+    const doc = contract(
+      {
+        "/a": {
+          get: operation("a", {
+            "200": okResponse({
+              schema: {
+                type: "object",
+                required: ["x"],
+                properties: {
+                  x: { $ref: "#/components/schemas/X", nullable: true }
+                }
+              }
+            })
+          })
+        }
+      },
+      { schemas: { X: { type: "string" } } }
+    );
+    expect(rulesOf(doc)).toEqual(["no-nullable"]);
+  });
+
+  test("nullable in a path-item parameter fails", () => {
+    const doc = contract({
+      "/a": {
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            schema: { type: "string", nullable: true }
+          }
+        ],
+        get: operation("a")
+      }
+    });
+    expect(rulesOf(doc)).toEqual(["no-nullable"]);
+  });
+
+  test("a missing required list under $defs / contains is seen", () => {
+    for (const where of ["$defs", "contains"]) {
+      const inner = { type: "object", properties: { n: { type: "string" } } };
+      const schema =
+        where === "$defs"
+          ? { ...GOOD_BODY, $defs: { inner } }
+          : { ...GOOD_BODY, contains: inner };
+      const doc = contract({
+        "/a": { get: operation("a", { "200": okResponse({ schema }) }) }
+      });
+      expect(rulesOf(doc)).toEqual(["required-list"]);
+    }
+  });
+});
+
 describe("rule 4: 429 where the handler is rate-limited", () => {
   const doc = contract({ "/a": { get: operation("a") } });
 
@@ -616,10 +704,28 @@ describe("the real contract, baseline and routes", () => {
     expect(r.violations).toEqual([]);
   });
 
-  test("the baseline never grows: ceiling, sorted, unique", () => {
-    // Lower this number when an operation leaves the baseline. Raising it is
-    // declaring a new operation "old" and is refused in review.
-    expect(CONTRACT_POLICY_BASELINE.length).toBeLessThanOrEqual(742);
+  test("the baseline is pinned exactly, and to the routes it exempts", () => {
+    // Exact, not a ceiling: retrofitting an operation (deleting its line) must
+    // edit these two numbers in the same diff, and so must any add or swap.
+    // The hash covers `operationId METHOD route`, so an id that moves to a
+    // different route (or is reused by a new operation at another route) cannot
+    // keep its exemption silently.
+    const routeOf = new Map<string, string>();
+    for (const [route, item] of Object.entries(bundle.paths as Doc)) {
+      for (const method of ["get", "put", "post", "delete", "patch"]) {
+        const id = (item as Doc)[method]?.operationId;
+        if (typeof id === "string") {
+          routeOf.set(id, `${method.toUpperCase()} ${route}`);
+        }
+      }
+    }
+    const lines = CONTRACT_POLICY_BASELINE.map(
+      (id) => `${id} ${routeOf.get(id)}`
+    );
+    expect(CONTRACT_POLICY_BASELINE.length).toBe(742);
+    expect(
+      new Bun.CryptoHasher("sha256").update(lines.join("\n")).digest("hex")
+    ).toBe("8defe6fda199f44e08d338a0c9abb29b96d3338b17ee8bcb95bb419621d675e2");
     expect(CONTRACT_POLICY_BASELINE.length).toBeGreaterThan(0);
     expect([...CONTRACT_POLICY_BASELINE]).toEqual(
       [...CONTRACT_POLICY_BASELINE].sort()
