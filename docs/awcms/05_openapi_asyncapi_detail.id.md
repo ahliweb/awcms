@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:5c81095d7aded7ebe37710d98463cc162c1f3e84bd6c5cc1853699232d9831a7 -->
+<!-- i18n-source-hash: sha256:21e368d90e1b812ebbbb11c3eb90bc37457f842c7a1ed883b59384fe58c961c2 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -407,6 +407,7 @@ Tes: `tests/api-contract-examples.test.ts` (bundle asli lolos; merusak satu fiel
 - **Deterministik.** Kunci berurutan tetap dan tidak ada nilai yang bergantung pada jam, keacakan, atau mesin, sehingga dua kali jalan identik byte demi byte. Paket membawa `contractSha256` (SHA-256 bundle), sehingga PERUBAHAN APA PUN pada bundle membuat paket ter-commit basi: regenerasi dengan `bun run api:fixtures:generate` dan commit bersama perubahan kontrak. Berkas ini dikecualikan dari prettier (`.prettierignore`) karena gerbang membandingkan byte.
 - **Hanya sintetis.** String hasil generate adalah placeholder tetap (`example`, `user@example.test`, `00000000-0000-4000-8000-000000000000`, `2026-01-01T00:00:00Z`); tanpa rahasia dan tanpa data pribadi.
 - **Batas yang diketahui (TV-2).** Sebuah instans hanya membuktikan body cocok dengan skema: properti yang diganti nama pada skema tanpa `required` tetap lolos. Tes menerapkan vektor laporan #1379 bagian 7 (TV-0 baseline, TV-1 aditif lolos, TV-2 ganti nama TIDAK tertangkap, TV-3 ubah tipe, TV-4 required baru, TV-5 `additionalProperties: false` tertangkap) dan menegaskan TV-2 sebagai batasnya; kebijakan kontrak (`required` pada operasi baru, ADR-0167 bagian 5) yang mempersempitnya.
-- **Di luar cakupan di sini.** Penerbitan paket sebagai artefak terpatok untuk konsumen (#1394) dan kesesuaian respons handler sungguhan (#1393).
+- **Manifes dan pinning (Issue #1394).** Paket dibuka dengan `packVersion` (format, `2`), `contractVersion` (`info.version`), `contractSha256`, dan `contentSha256`; `api:fixtures:check` juga memverifikasi manifes terhadap isi dan bundle, serta memindai paket untuk rahasia, data pribadi, dan nama repositori di luar keluarga (`scripts/lib/contract-fixture-pack-hygiene.ts`). Konsumen mem-pin berkas pada SHA commit dan memverifikasi kedua hash: [`contract-fixtures-pack-consumer-guide.id.md`](contract-fixtures-pack-consumer-guide.id.md) (keputusan kanal, penilaian opsi, aturan kesegaran).
+- **Di luar cakupan di sini.** Kesesuaian respons handler sungguhan (#1393).
 
 Tes: `tests/api-contract-fixtures.test.ts` (regenerasi identik byte, determinisme, contoh terdeklarasi dipakai, TV-0..TV-5, aturan generator `oneOf`/`allOf`/siklus/pola, kontrak yang dimutasi mengubah paket).

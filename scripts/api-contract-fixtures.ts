@@ -63,7 +63,12 @@ import { BUNDLED_PATH } from "./openapi-bundle";
 type AnyRecord = Record<string, unknown>;
 
 export const PACK_PATH = "fixtures/api-contract/contract-fixtures.json";
-export const PACK_VERSION = 1;
+/**
+ * Pack FORMAT version. 2 (Issue #1394) added `contractVersion` and
+ * `contentSha256` to the manifest; a consumer that pins a pack checks this
+ * number first, so a format change never reads as a content change.
+ */
+export const PACK_VERSION = 2;
 
 const HTTP_METHODS = ["get", "put", "post", "patch", "delete"] as const;
 const MAX_DEPTH = 14;
@@ -82,8 +87,18 @@ export interface SkippedFixture {
 }
 
 export interface FixturePack {
+  /** Pack format version (`PACK_VERSION`). */
   packVersion: number;
+  /** `info.version` of the bundled contract the pack was derived from. */
+  contractVersion: string;
+  /** SHA-256 (hex) of the bundle file the pack was derived from. */
   contractSha256: string;
+  /**
+   * SHA-256 (hex) of the pack itself: of `JSON.stringify(rest, null, 2) + "\n"`
+   * where `rest` is the parsed pack WITHOUT this field (key order kept). See
+   * `computeContentSha256`; the consumer guide shows the verification snippet.
+   */
+  contentSha256: string;
   summary: {
     operations: number;
     fixtures: number;
@@ -669,8 +684,14 @@ export function buildFixturePack(
     }
   }
 
-  return {
+  const info = doc.info;
+  const contractVersion =
+    isRecord(info) && typeof info.version === "string"
+      ? info.version
+      : "unknown";
+  const body: Omit<FixturePack, "contentSha256"> = {
     packVersion: PACK_VERSION,
+    contractVersion,
     contractSha256,
     summary: {
       operations: Object.keys(operations).length,
@@ -687,6 +708,35 @@ export function buildFixturePack(
       (a, b) =>
         a.operation.localeCompare(b.operation) || a.slot.localeCompare(b.slot)
     )
+  };
+  return withContentSha256(body);
+}
+
+/**
+ * The content hash of a pack: SHA-256 of its canonical serialisation WITHOUT
+ * the `contentSha256` field. Canonical means `JSON.stringify(rest, null, 2)`
+ * plus one trailing newline, with the key order the file already has -- the
+ * very bytes `serializePack` writes, minus that one field.
+ */
+export function computeContentSha256(
+  pack: Omit<FixturePack, "contentSha256"> | FixturePack
+): string {
+  const { contentSha256: _ignored, ...rest } = pack as FixturePack;
+  return sha256(`${JSON.stringify(rest, null, 2)}\n`);
+}
+
+function withContentSha256(
+  body: Omit<FixturePack, "contentSha256">
+): FixturePack {
+  // Rebuilt in manifest order (`contentSha256` right after `contractSha256`) so
+  // the key order in the file is part of the documented format.
+  const { packVersion, contractVersion, contractSha256, ...tail } = body;
+  return {
+    packVersion,
+    contractVersion,
+    contractSha256,
+    contentSha256: computeContentSha256(body),
+    ...tail
   };
 }
 
@@ -728,7 +778,41 @@ if (import.meta.main) {
       );
       process.exitCode = 1;
     } else {
-      console.log(`api:fixtures:check OK -- ${line}.`);
+      // Issue #1394: the pack is pinned by consumers, so besides freshness it
+      // must carry a verifiable manifest and hold no secret, personal datum or
+      // foreign repository name. Imported lazily: the hygiene module imports
+      // this one.
+      const { scanPackHygiene, verifyManifest } =
+        await import("./lib/contract-fixture-pack-hygiene");
+      const bundleText = await readFile(
+        path.resolve(process.cwd(), BUNDLED_PATH),
+        "utf8"
+      );
+      const info = (parseYaml(bundleText) as AnyRecord).info;
+      const parsed = JSON.parse(committed) as unknown;
+      const problems = verifyManifest(parsed, {
+        sha256: sha256(bundleText),
+        version:
+          isRecord(info) && typeof info.version === "string"
+            ? info.version
+            : undefined
+      });
+      const findings = scanPackHygiene(parsed);
+      if (problems.length > 0 || findings.length > 0) {
+        for (const problem of problems) {
+          console.error(`api:fixtures:check FAILED -- manifest: ${problem}.`);
+        }
+        for (const f of findings.slice(0, 20)) {
+          console.error(
+            `api:fixtures:check FAILED -- hygiene ${f.rule} at ${f.path}.`
+          );
+        }
+        process.exitCode = 1;
+      } else {
+        console.log(
+          `api:fixtures:check OK -- ${line}; manifest verified, hygiene clean.`
+        );
+      }
     }
   }
 }
