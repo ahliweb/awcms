@@ -519,6 +519,12 @@ const RULES: readonly Rule[] = [
     required: false,
     type: "url-postgres"
   },
+  // The scheduled payroll catalog check (Issue #1095). Read by the job only.
+  {
+    name: "PAYROLL_CATALOG_AUDIT_DATABASE_URL",
+    required: false,
+    type: "url-postgres"
+  },
 
   // crm_leads (ADR-0153, Issue #1166). Deployment switch, OFF by default: every
   // route answers 503 after authorization. TWO secret rings (ADR-0137 section

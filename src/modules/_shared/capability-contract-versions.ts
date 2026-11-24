@@ -106,7 +106,10 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // `accrue` alone and was not listed here; Issue #1109 adds `void` (a new
     // method on the port: MINOR) and declares the key for the first time, so
     // `1.1.0` is the first assigned number: `1.0.0` is the accrue-only shape.
-    commission_accrual: "1.1.0",
+    // 2.0.0 (Issue #1095, MAJOR): the record the port returns is MASKED. The
+    // `amount` and `employmentId` fields were REMOVED, because the port performs
+    // no sensitive-read audit and earnings are financial data about a person.
+    commission_accrual: "2.0.0",
     // commission_intake is provided by `hr_commission` (Issue #1189, ADR-0147): the
     // port an EVENT-DRIVEN consumer (one running as `awcms_worker`) submits a
     // commission request through, because the worker may not touch the accrual

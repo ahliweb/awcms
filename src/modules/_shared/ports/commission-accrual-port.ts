@@ -64,6 +64,16 @@
  * after a refusal still COMMITS its transaction, so a consumer that already wrote
  * its own rows must throw to undo them.
  *
+ * ## Masked results (Issue #1095, contract 2.0.0)
+ *
+ * Money goes IN as a decimal string; what comes BACK is a masked receipt
+ * ({@link CommissionAccrualRecord}: id, rule key and version, status, currency).
+ * No amount and no beneficiary leave the port, so a composition root that
+ * authorized only the business action never receives a person's earnings
+ * without a sensitive-read audit. This is the 1.x to 2.0 break: a consumer that
+ * read `accrual.amount` or `accrual.employmentId` must read the amount through
+ * the audited ledger endpoints (and already holds the employment id it posted).
+ *
  * Money is a decimal STRING in and out (never a JS number): a number has already
  * been through a float.
  *
@@ -131,14 +141,20 @@ export type CommissionAccrualRequest = {
   correlationId?: string;
 };
 
+/**
+ * What the port hands BACK about an accrual: a MASKED receipt (contract 2.0.0,
+ * Issue #1095). It names the accrual and says which rule version and status it
+ * is in, and carries no amount and no beneficiary: earnings are financial data
+ * about a person, the port performs no sensitive-read audit, and a consumer
+ * already holds the employment id it posted (and its own sale's amount). The
+ * amount is readable only through the ledger's audited read endpoints
+ * (`GET /api/v1/hr-commission/accruals/{id}`, `hr_commission.accruals.read`).
+ */
 export type CommissionAccrualRecord = {
   id: string;
-  employmentId: string;
   ruleKey: string;
   ruleVersion: number;
   status: "pending" | "approved" | "payable" | "paid" | "voided";
-  /** Fixed-scale decimal string. */
-  amount: string;
   currencyCode: string;
 };
 

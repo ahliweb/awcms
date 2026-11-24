@@ -109,6 +109,7 @@
     "sensitive-reads:check": "bun scripts/sensitive-reads-check.ts",
     "payroll:sql-boundary:check": "bun scripts/payroll-sql-boundary-check.ts",
     "payroll:catalog-boundary:check": "bun scripts/payroll-catalog-boundary-check.ts",
+    "payroll:catalog-boundary:job": "bun scripts/payroll-catalog-boundary-job.ts",
     "skills:check": "bun scripts/skills-check.ts",
     "graph:artifacts:check": "bun scripts/graph-artifacts-check.ts",
     "knowledge:graph:update": "graphify update .",

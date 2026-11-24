@@ -8442,6 +8442,251 @@ export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult
 // 7f. No schema/database CREATE for a restricted role (critical) — #1279 (X3)
 // ---------------------------------------------------------------------------
 
+/** sql/420: the minimal role of the scheduled payroll catalog check. */
+export const PAYROLL_CATALOG_AUDIT_ROLE = "awcms_catalog_boundary_audit";
+
+/**
+ * The role of `payroll:catalog-boundary:job` (sql/420, Issue #1095) holds
+ * CONNECT and the catalog views and NOTHING ELSE: it exists, is not SUPERUSER,
+ * BYPASSRLS, CREATEDB or CREATEROLE, holds no TABLE- or COLUMN-level privilege
+ * (SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER, TRUNCATE; through
+ * PUBLIC or a membership included, which `has_*_privilege` accounts for) on any
+ * relation outside the system schemas, is a member of no role, owns no
+ * relation, function or schema, and no role is a member of it that could
+ * widen it. A role that can read a single payroll row defeats the point of a
+ * check whose login sits in a cron container.
+ */
+export async function checkPayrollCatalogAuditRole(): Promise<SecurityCheckResult> {
+  const name =
+    "Payroll catalog audit role holds no privilege on any application table";
+  const severity: CheckSeverity = "critical";
+  const role = PAYROLL_CATALOG_AUDIT_ROLE;
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings: string[] = [];
+    const roleRows = (await sql`
+      SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolinherit
+      FROM pg_roles WHERE rolname = ${role}
+    `) as {
+      rolsuper: boolean;
+      rolbypassrls: boolean;
+      rolcreatedb: boolean;
+      rolcreaterole: boolean;
+      rolinherit: boolean;
+    }[];
+
+    if (roleRows.length === 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${role} does not exist: sql/420 has not been applied, and payroll:catalog-boundary:job has no least-privilege role to connect as.`
+      };
+    }
+
+    const attributes = roleRows[0]!;
+
+    if (
+      attributes.rolsuper ||
+      attributes.rolbypassrls ||
+      attributes.rolcreatedb ||
+      attributes.rolcreaterole
+    ) {
+      findings.push(
+        `${role} is SUPERUSER, BYPASSRLS, CREATEDB or CREATEROLE (it must hold CONNECT and nothing else)`
+      );
+    }
+
+    // sql/420 creates it NOINHERIT: a later GRANT of another role would then not
+    // flow to it silently. INHERIT removes that second line of defence.
+    if (attributes.rolinherit) {
+      findings.push(
+        `${role} is INHERIT (sql/420 ships it NOINHERIT; a role it joins would pass its privileges on)`
+      );
+    }
+
+    // The closure of what the role can reach through a definer: a SECURITY
+    // DEFINER function runs with its owner's rights, so a role that may EXECUTE
+    // one (directly, through PUBLIC or a membership) reads whatever it reads.
+    // There is NO reviewed pin for this role: the set must be empty (the same
+    // rule as the #1274 audit L3 for awcms_social_dispatch, with no exceptions).
+    const reachableDefiners = (await sql`
+      SELECT p.oid::regprocedure::text AS signature,
+             pg_get_userbyid(p.proowner) AS owner
+      FROM pg_proc p
+      WHERE p.prosecdef
+        AND has_function_privilege(${role}, p.oid, 'EXECUTE')
+      ORDER BY 1
+    `) as { signature: string; owner: string }[];
+
+    for (const row of reachableDefiners) {
+      findings.push(
+        `SECURITY DEFINER function ${row.signature} (owner ${row.owner}) is executable by ${role}; it has no reviewed pin`
+      );
+    }
+
+    const tableGrants = (await sql`
+      SELECT n.nspname || '.' || c.relname AS relation
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+        AND n.nspname NOT LIKE 'pg\_toast%'
+        AND (
+          has_table_privilege(${role}, c.oid, 'SELECT')
+          OR has_table_privilege(${role}, c.oid, 'INSERT')
+          OR has_table_privilege(${role}, c.oid, 'UPDATE')
+          OR has_table_privilege(${role}, c.oid, 'DELETE')
+          OR has_table_privilege(${role}, c.oid, 'TRUNCATE')
+          OR has_table_privilege(${role}, c.oid, 'REFERENCES')
+          OR has_table_privilege(${role}, c.oid, 'TRIGGER')
+        )
+      ORDER BY 1
+    `) as { relation: string }[];
+
+    for (const row of tableGrants) {
+      findings.push(`${role} holds a TABLE-level privilege on ${row.relation}`);
+    }
+
+    const columnGrants = (await sql`
+      SELECT DISTINCT n.nspname || '.' || c.relname AS relation
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+        AND n.nspname NOT LIKE 'pg\_toast%'
+        AND a.attnum > 0 AND NOT a.attisdropped
+        AND (
+          has_column_privilege(${role}, c.oid, a.attnum, 'SELECT')
+          OR has_column_privilege(${role}, c.oid, a.attnum, 'INSERT')
+          OR has_column_privilege(${role}, c.oid, a.attnum, 'UPDATE')
+          OR has_column_privilege(${role}, c.oid, a.attnum, 'REFERENCES')
+        )
+      ORDER BY 1
+    `) as { relation: string }[];
+
+    for (const row of columnGrants) {
+      findings.push(
+        `${role} holds a COLUMN-level privilege on ${row.relation}`
+      );
+    }
+
+    const memberships = (await sql`
+      SELECT g.rolname AS other, 'member of' AS direction
+      FROM pg_auth_members m
+      JOIN pg_roles g ON g.oid = m.roleid
+      WHERE m.member = to_regrole(${role})::oid
+      UNION ALL
+      SELECT mm.rolname AS other, 'has member' AS direction
+      FROM pg_auth_members m
+      JOIN pg_roles mm ON mm.oid = m.member
+      WHERE m.roleid = to_regrole(${role})::oid
+    `) as { other: string; direction: string }[];
+
+    for (const row of memberships) {
+      findings.push(`${role} ${row.direction} ${row.other}`);
+    }
+
+    const owned = (await sql`
+      SELECT 'relation ' || relname AS what FROM pg_class
+        WHERE relowner = to_regrole(${role})::oid
+      UNION ALL
+      SELECT 'function ' || proname FROM pg_proc
+        WHERE proowner = to_regrole(${role})::oid
+      UNION ALL
+      SELECT 'schema ' || nspname FROM pg_namespace
+        WHERE nspowner = to_regrole(${role})::oid
+    `) as { what: string }[];
+
+    for (const row of owned) {
+      findings.push(`${role} owns ${row.what}`);
+    }
+
+    return findings.length === 0
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${role} exists, is not SUPERUSER, BYPASSRLS, CREATEDB or CREATEROLE, holds no table- or column-level privilege on any relation, is in no role membership and owns nothing (the scheduled payroll catalog check reads the catalog and no data).`
+        }
+      : {
+          name,
+          severity,
+          status: "fail",
+          evidence: findings.join("; ")
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `The payroll catalog audit role check could not run: ${errorMessage(error)}`
+    };
+  }
+}
+
+/**
+ * The scheduled payroll catalog check is only an alarm once the operator has
+ * given its role a login (Issue #1095, M3). Until then the job prints
+ * `SKIPPED (not activated)` and exits 0, so a deployment that never activates it
+ * has NO drift alarm and says nothing about it. This WARNING (never blocking)
+ * is the place that says so: it fails while `awcms_catalog_boundary_audit`
+ * cannot LOG IN. A fresh or local database therefore shows it; that is the
+ * intended nudge, not a failure of the database.
+ */
+export async function checkPayrollCatalogAuditActivated(): Promise<SecurityCheckResult> {
+  const name = "Scheduled payroll catalog check is activated";
+  const severity: CheckSeverity = "warning";
+  const role = PAYROLL_CATALOG_AUDIT_ROLE;
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT rolcanlogin FROM pg_roles WHERE rolname = ${role}
+    `) as { rolcanlogin: boolean }[];
+
+    if (rows.length === 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${role} does not exist (sql/420 has not been applied): the daily payroll catalog check cannot run.`
+      };
+    }
+
+    return rows[0]!.rolcanlogin
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence: `${role} can log in, so the daily payroll:catalog-boundary:job can connect (that PAYROLL_CATALOG_AUDIT_DATABASE_URL is set in the jobs container is not visible from the database).`
+        }
+      : {
+          name,
+          severity,
+          status: "fail",
+          evidence: `${role} has no LOGIN: payroll:catalog-boundary:job prints "SKIPPED (not activated)" and exits 0, so this deployment has NO daily payroll drift alarm. Activate it (docs/awcms/payroll-catalog-boundary-job.md).`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `The payroll catalog activation check could not run: ${errorMessage(error)}`
+    };
+  }
+}
+
 /**
  * Roles allowed to hold CREATE besides the schema/database owner: a deployment
  * whose migrator is a LOGIN member of a NOLOGIN owner role lists it in
@@ -8602,6 +8847,8 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkWorkerJobsReachableWithoutWorkerUrl(),
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
+    await checkPayrollCatalogAuditRole(),
+    await checkPayrollCatalogAuditActivated(),
     await checkChannelAccountsAccessGuards(),
     await checkChannelAccountsClaimGuards(),
     await checkDedicatedRoleProbesRan(),

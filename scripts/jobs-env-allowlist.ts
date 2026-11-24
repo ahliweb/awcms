@@ -501,7 +501,9 @@ export const DEDICATED_ROLE_CLIENT_FILES: Readonly<Record<string, string>> = {
   "src/lib/database/telegram-engagement-dispatch-client.ts":
     "TELEGRAM_ENGAGEMENT_DATABASE_URL",
   "src/lib/database/social-publishing-dispatch-client.ts":
-    "SOCIAL_PUBLISHING_DATABASE_URL"
+    "SOCIAL_PUBLISHING_DATABASE_URL",
+  "src/lib/database/payroll-catalog-audit-client.ts":
+    "PAYROLL_CATALOG_AUDIT_DATABASE_URL"
 };
 
 /** The shared-role client calls a dedicated-role job must not reach. */
@@ -836,6 +838,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "social-publishing:dispatch",
         reason:
           "its only database connection, with no fallback to another one (#1146, ADR-0157 section 6)"
+      }
+    ]
+  },
+  {
+    name: "PAYROLL_CATALOG_AUDIT_DATABASE_URL",
+    reason:
+      "the login of the awcms_catalog_boundary_audit role (sql/420); the role holds CONNECT and the catalog views and NO privilege on any application table, so this login reads structure and no data row (Issue #1095)",
+    jobs: [
+      {
+        target: "payroll:catalog-boundary:job",
+        reason:
+          "its only database connection, with no fallback to DATABASE_URL or WORKER_DATABASE_URL (the scheduled payroll catalog check, Issue #1095)"
       }
     ]
   },

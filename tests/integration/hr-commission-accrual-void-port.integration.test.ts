@@ -265,10 +265,11 @@ suite("CommissionAccrualPort.void (Issue #1109)", () => {
     expect(outcome.outcome === "voided" && outcome.accrual.status).toBe(
       "voided"
     );
-    // The monetary fact is untouched: 2.5% of 1000.10 = 25.0025 -> 25.00.
-    expect(outcome.outcome === "voided" && outcome.accrual.amount).toBe(
-      "25.000000"
-    );
+    // The port result is MASKED (contract 2.0.0, Issue #1095): no amount, no
+    // beneficiary. The monetary fact is untouched in the ledger row below.
+    expect(
+      Object.keys((outcome as { accrual: object }).accrual).sort()
+    ).toEqual(["currencyCode", "id", "ruleKey", "ruleVersion", "status"]);
 
     const admin = getAdminSql();
     const row = (await admin`

@@ -660,6 +660,31 @@ export function findForbiddenReadImports(
           problem: `imports ${reads.join(", ")} from ${entry.source} but is not in PAYROLL_READ_FUNCTION_IMPORTS allowedImporters. Those functions return payroll-boundary rows; a new caller is a new read path and must be added there together with its audit`
         });
       } else if (
+        Object.hasOwn(entry.maskedResultImporters ?? {}, name) &&
+        reads.every((fn) => entry.writePathFunctions?.includes(fn))
+      ) {
+        // Issue #1095: no read audit, so the result must be MASKED. The file
+        // must call every mask it names (a call outside comments and literals);
+        // one that stops calling it is a write path returning a full accrual
+        // with no audit, and is refused.
+        const clean = maskLiterals(stripComments(source));
+        const missing = entry.maskedResultImporters![name]!.mustCall.filter(
+          (mask) => !new RegExp(`\\b${mask}\\s*\\(`).test(clean)
+        );
+
+        if (
+          missing.length > 0 &&
+          !collectAuditedPermissions(source, constantsFor(source)).has(
+            entry.permission
+          )
+        ) {
+          forbidden.push({
+            source: name,
+            functions: reads,
+            problem: `imports ${reads.join(", ")} from ${entry.source} with no read audit and never calls ${missing.join(", ")}: a write path may return the accrual only in its masked shape (Issue #1095) or after recordSensitiveRead({ permission: "${entry.permission}", ... })`
+          });
+        }
+      } else if (
         !(
           Object.hasOwn(entry.auditExemptImporters ?? {}, name) &&
           reads.every((fn) => entry.writePathFunctions?.includes(fn))

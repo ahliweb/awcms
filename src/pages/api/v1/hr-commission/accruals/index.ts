@@ -2,6 +2,10 @@ import { fail, ok } from "../../../../../modules/_shared/api-response";
 import type { CommissionAccrualRequest } from "../../../../../modules/_shared/ports/commission-accrual-port";
 import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
+import {
+  projectStoredAccrueBody,
+  toMutationReceipt
+} from "../../../../../modules/hr-commission/application/hr-commission-accrual-receipt";
 import { accrueRefusal } from "../../../../../modules/hr-commission/application/hr-commission-accrual-route-support";
 import {
   accrueCommission,
@@ -176,59 +180,20 @@ export const POST = defineTenantRoute<CreatePrepared>({
 
         const stored = await getAccrual(tx, tenantId, result.accrual.id);
 
-        // PS-18: a REPLAY hands back an existing accrual (amount, status),
-        // which is a read of someone's earnings. A first-time accrual is
-        // audited by auditAccrued above.
-        if (result.outcome === "replayed") {
-          await auditAccrualReplayRead(
-            tx,
-            tenantId,
-            auth.context.tenantUserId,
-            result.accrual.id,
-            locals.correlationId
-          );
-        }
-
+        // Issue #1095 (K3): the body is the MASKED receipt, on a first accrual
+        // and on a replay alike, and the body STORED for the Idempotency-Key is
+        // the same receipt. No amount, beneficiary or source reference leaves
+        // this route, so a replay is not a read of anyone's earnings and needs
+        // no read audit; the full values come only from the audited GET.
         return {
           status: result.outcome === "accrued" ? 201 : 200,
           body: {
             replayed: result.outcome === "replayed",
-            accrual: stored!.accrual
+            accrual: toMutationReceipt(stored!.accrual)
           }
         };
       },
-      async (storedBody) => {
-        const id = (
-          storedBody as { data?: { accrual?: { id?: unknown } } } | null
-        )?.data?.accrual?.id;
-
-        if (typeof id === "string") {
-          await auditAccrualReplayRead(
-            tx,
-            tenantId,
-            auth.context.tenantUserId,
-            id,
-            locals.correlationId
-          );
-        }
-      }
+      undefined,
+      projectStoredAccrueBody
     )
 });
-
-/** The read audit for a replayed POST, which returns a stored accrual. */
-function auditAccrualReplayRead(
-  tx: Bun.SQL,
-  tenantId: string,
-  actorTenantUserId: string,
-  accrualId: string,
-  correlationId: string | undefined
-) {
-  return recordSensitiveRead(tx, {
-    tenantId,
-    actorTenantUserId,
-    permission: "hr_commission.accruals.read",
-    itemCount: 1,
-    resourceIds: [accrualId],
-    correlationId
-  });
-}

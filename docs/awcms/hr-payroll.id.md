@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:d6c8d1161a1a7a60b1dfa22a8a6fd18f85bd9b305398174bd22af85bfef33970 -->
+<!-- i18n-source-hash: sha256:339d0a3cf6850b6dcbada7616b1223e4053990268930d08c27a8e85c74de620e -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1428,14 +1428,14 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   dipercaya secara definisi. Selain itu: katalog tidak membaca objek
   ekstensi, superuser, atau role `BYPASSRLS` (mereka melewati setiap grant
   secara definisi); `NO FORCE` / `DISABLE ROW LEVEL SECURITY` pada tabel payroll
-  adalah urusan gerbang RLS lain; pemeriksaan belum dijadwalkan terhadap
-  database yang DIDEPLOI (butuh kredensial dan cron operator, keputusan
-  operasional); route mutasi yang ada (`approve`, `release`, `pay`, `void`, dan
-  adapter port) diizinkan TANPA audit baca (`auditExemptImporters`): mereka
-  mengembalikan accrual yang ditransisikan kepada pemanggil yang hanya memegang
-  hak transisi, sehingga apakah mereka harus mencatat pembacaan atau
-  mengembalikan bentuk tersamar adalah keputusan produk, tidak diambil di sini;
-  fungsi yang tak pernah dipanggil namun berisi `recordSensitiveRead` tetap
+  adalah urusan gerbang RLS lain; pemeriksaan berjalan harian terhadap database yang DIDEPLOI sebagai job
+  `payroll:catalog-boundary:job` (Issue #1095, lihat "Pemeriksaan katalog
+  terjadwal" di bawah), sehingga drift di antara dua rilis ketahuan dalam
+  sehari, bukan pada run manual berikutnya; route mutasi (`approve`, `release`,
+  `pay`, `void`) dan adapter port mengembalikan bentuk TERSAMAR sebagai ganti
+  audit baca (Issue #1095, lihat "Hasil mutasi tersamar" di bawah), dan gerbang
+  menolak jalur tulis yang mengimpor fungsi tulis ledger tetapi berhenti
+  memanggil penyamarnya; fungsi yang tak pernah dipanggil namun berisi `recordSensitiveRead` tetap
   memenuhi gerbang baca-sensitif (batas dead-branch); `import(ident)` dinamis
   yang specifier-nya tak menampakkan bagian nama berkas ledger; penyamaran
   literal memperlakukan `${ ... }` di dalam template literal sebagai teks dan
@@ -1443,6 +1443,63 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   berkas, bukan di setiap jalur handler.
   Pengecualian ada di `PAYROLL_CATALOG_EXEMPTIONS` (kosong; jalan keluarnya
   adalah nama keluarga payroll).
+- _Hasil mutasi tersamar (Issue #1095, keputusan pemilik K3 22 Nov 2026)._
+  `POST /api/v1/hr-commission/accruals/{id}/approve|release|pay|void` dan
+  `CommissionAccrualPort` in-process (kontrak `commission_accrual` **2.0.0**,
+  perubahan MAJOR) tidak lagi mengembalikan accrual. Mereka mengembalikan
+  **tanda terima tersamar** yang dibangun field demi field: tepi status (`id`,
+  `status`, kunci dan versi aturan, mata uang, `sourceType`, `calculation`,
+  `occurredOn` dan cap waktu transisi, ditambah `masked: true`) dan **tidak
+  pernah** nominal, basis, unit, tarif, nominal tetap, `employmentId`,
+  `sourceRef`, `sourceLine`, `paymentReference`, atau `ruleId`. Nilai penuh
+  hanya terbaca lewat `GET /api/v1/hr-commission/accruals[/{id}]`, yang mencatat
+  pembacaan sensitif (`hr_commission.accruals.read`). Artinya sebuah mutasi
+  **tidak butuh audit baca** dan tidak ada tulis audit tambahan per mutasi.
+  Pengecualian `auditExemptImporters` untuk keempat route dan adapter **sudah
+  hilang**: mereka kini terdaftar di `maskedResultImporters`, dan
+  `sensitive-reads:check` gagal bila berkas semacam itu mengimpor
+  `accrueCommission`, `transitionAccrual`, atau `voidCommissionBySource` dan
+  tidak memanggil penyamarnya (`toMutationReceipt`, atau `maskAccrueOutcome` dan
+  `maskVoidOutcome`) di luar komentar dan literal, kecuali ia sendiri mencatat
+  audit baca. **Hal yang sama berlaku untuk `POST /accruals`** (kini ia
+  mengembalikan tanda terima, pada accrual pertama maupun replay, dan menyimpan
+  tanda terima itu untuk Idempotency-Key-nya, jadi replay pun tidak butuh audit
+  baca), dan replay body yang tersimpan sebelum penyamaran diproyeksikan ke
+  kunci tanda terima (`pickReceipt`), bukan dikembalikan apa adanya. Batas
+  gerbangnya sendiri: ia membuktikan penyamar _dipanggil_ di berkas, bukan bahwa
+  hasilnya yang dikembalikan; handler yang memanggil penyamar lalu mengembalikan
+  accrual penuh (penyamar "dipanggil lalu dibuang") lolos pemindaian teks, dan
+  hanya tes kontrak respons yang menangkapnya (skema
+  `HrCommissionAccrualMutationReceipt` adalah `additionalProperties: false`,
+  divalidasi dengan `ajv` terhadap body respons sungguhan). Sisa entri `auditExemptImporters` hanya pembaca own-only
+  (penghasilan karyawan sendiri) dan poster intake, yang membuang accrual yang
+  ia posting. **Residual:** gerbang membuktikan penyamar dipanggil di berkas,
+  bukan di setiap jalur handler (batas dead-branch), dan replay idempoten yang
+  tersimpan SEBELUM perubahan ini masih mengembalikan isi penuh lama sampai
+  catatan idempotensinya kedaluwarsa.
+- _Pemeriksaan katalog terjadwal (Issue #1095, keputusan pemilik K3)._
+  `bun run payroll:catalog-boundary:job` berjalan harian (03:17, entri job
+  registry `hr_commission`, jadi `ops/awcms-jobs.crontab` memuatnya) terhadap
+  database yang dideploy sebagai role-nya sendiri `awcms_catalog_boundary_audit`
+  (`sql/420`, dikirim `NOLOGIN`): CONNECT dan view katalog dan **tanpa privilege
+  pada tabel aplikasi mana pun**, sehingga login yang bocor tidak membaca satu
+  baris data pun. Ia adalah job role-khusus seperti `social-publishing:dispatch`:
+  satu-satunya login adalah `PAYROLL_CATALOG_AUDIT_DATABASE_URL` (ber-scope job,
+  tanpa fallback), runner menahan `DATABASE_URL`, `WORKER_DATABASE_URL`, dan
+  `SETUP_DATABASE_URL`, dan job menolak mulai kecuali server menyatakan ia role
+  itu. `security:readiness` mengunci role (tanpa privilege tabel atau kolom,
+  tanpa keanggotaan, tidak memiliki objek). Ia gagal dengan lantang (exit 1,
+  tiap temuan ke stderr): pada temuan, pada koneksi yang ditolak, dan, pada
+  deployment split-role, bila `PAYROLL_EXPECTED_OWNERS` kosong (pesan menyebut
+  variabelnya). Setiap hasil adalah baris log terstruktur level `error` dari
+  logger repo, bukan `console.error` polos. **Belum diaktifkan**
+  (`PAYROLL_CATALOG_AUDIT_DATABASE_URL` tidak di-set) mencatat
+  `SKIPPED (not activated)` dan keluar 0, dan WARNING `security:readiness`
+  menyatakan tidak ada alarm drift sampai role punya LOGIN; URL yang di-set tetapi
+  salah adalah penolakan (exit 1). Bentuk operator `payroll:catalog-boundary:check`
+  (`DATABASE_URL`) tetap ada untuk database hasil pemulihan. Pemasangan dan
+  alarmnya ada di
+  [`payroll-catalog-boundary-job.id.md`](payroll-catalog-boundary-job.id.md).
 - _Komisi ada di dalam batas (keputusan pemilik)._ `awcms_hr_commission_accruals`
   (beserta log transisinya) dan modul `hr_commission` dilarang sebagai sumber
   proyeksi, pencarian, komentar, cache, dan ekspor, dan `hr_commission` adalah

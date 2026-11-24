@@ -586,6 +586,7 @@ describe("the dedicated-role job (ADR-0157 section 6)", () => {
     // customer dispatcher too, Issue #1156), this one among them.
     expect(runner).toContain(
       renderRunnerDedicatedRoles([
+        "payroll:catalog-boundary:job",
         "social-publishing:dispatch",
         "telegram-engagement:dispatch"
       ])

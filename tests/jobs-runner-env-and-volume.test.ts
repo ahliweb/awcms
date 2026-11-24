@@ -44,6 +44,7 @@ import {
 
 /** Jobs that run as their own database role and receive no shared login (Issues #1146, #1156). */
 const DEDICATED_ROLE_JOBS = new Set([
+  "payroll:catalog-boundary:job",
   "social-publishing:dispatch",
   "telegram-engagement:dispatch"
 ]);

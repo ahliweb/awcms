@@ -97,7 +97,14 @@ export async function runIdempotent(
    * included) without running `produce`, so a read audit placed inside
    * `produce` never sees it (#978 re-audit L-A).
    */
-  onStoredReplay?: (storedBody: unknown) => Promise<void>
+  onStoredReplay?: (storedBody: unknown) => Promise<void>,
+  /**
+   * Projects the STORED body before it is returned on a replay (Issue #1095,
+   * L1). A body stored before a response was masked still holds the full
+   * values; the projection makes a replay return the current shape without a
+   * data migration.
+   */
+  projectStoredBody?: (storedBody: unknown) => unknown
 ): Promise<Response> {
   // Binding the actor into the hash means a second user presenting the same key
   // does not get the first user's response replayed (it can carry a tenant's commercial terms).
@@ -124,9 +131,12 @@ export async function runIdempotent(
 
     await onStoredReplay?.(existing.responseBody);
 
-    return jsonResponse(existing.responseBody, {
-      status: existing.responseStatus
-    });
+    return jsonResponse(
+      projectStoredBody
+        ? projectStoredBody(existing.responseBody)
+        : existing.responseBody,
+      { status: existing.responseStatus }
+    );
   }
 
   const produced = await produce();

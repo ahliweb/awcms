@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ARCHITECTURE.md)
 
-<!-- i18n-source-hash: sha256:93c89b954280b33670dc998ae1f9d431e03f97bda4ed172d5a58213a11b7f6f5 -->
+<!-- i18n-source-hash: sha256:e9e723a175c69cf822e85e0ec6045e9d9862cb53102a60d217a00928e9fda2b2 -->
 
 # Arsitektur AWCMS
 
@@ -21,7 +21,7 @@ Sebagai template yang di-ship, base menyediakan **modul fondasi reusable + kontr
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **40 modul terdaftar**, migration `sql/001-sql/418`, RLS
+bawah). Repo ini punya **40 modul terdaftar**, migration `sql/001-sql/420`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.

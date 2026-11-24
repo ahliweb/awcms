@@ -396,6 +396,17 @@ export type PayrollReadFunctionImport = {
    */
   auditExemptImporters?: Readonly<Record<string, string>>;
   /**
+   * Allow-listed importers of a write-path function that return its result to a
+   * caller WITHOUT a read audit, and so must return a MASKED shape (Issue #1095).
+   * Each names the functions it must CALL (`mustCall`, outside comments and
+   * string literals; a file that imports the write-path function but never
+   * calls the mask is refused) and why. Unlike `auditExemptImporters`, the
+   * exemption is conditional on the mask.
+   */
+  maskedResultImporters?: Readonly<
+    Record<string, { mustCall: readonly string[]; reason: string }>
+  >;
+  /**
    * The functions of `functions` that an audit-exempt importer may import (and
    * only these: one import of anything else puts the audit back). For the
    * ledger's entry they are the mutations' functions; for the own-only entry
@@ -420,7 +431,8 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
         "getAccrual",
         "reconcileAccruals",
         "accrueCommission",
-        "transitionAccrual"
+        "transitionAccrual",
+        "voidCommissionBySource"
       ],
       permission: "hr_commission.accruals.read",
       allowedImporters: [
@@ -433,24 +445,46 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
         "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts",
         "src/modules/hr-commission/application/hr-commission-intake-poster.ts"
       ],
-      // The existing mutation callers are audited as mutations by their own
-      // high-risk events. Whether they should ALSO record a read, or return a
-      // masked shape to a caller who holds only the transition power, is a
-      // product decision recorded as a remaining limit in hr-payroll.md section
-      // 13.3. The exemption covers an importer only while it imports nothing but
-      // these functions.
-      writePathFunctions: ["accrueCommission", "transitionAccrual"],
-      auditExemptImporters: {
-        "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts":
-          "a mutation audited at warning severity by its own event (never with an amount); returns the transitioned accrual to the actor who holds the approve power",
-        "src/pages/api/v1/hr-commission/accruals/[id]/release.ts":
-          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the release power",
-        "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts":
-          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the pay power",
-        "src/pages/api/v1/hr-commission/accruals/[id]/void.ts":
-          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the void power",
+      // The mutation callers are audited as mutations by their own high-risk
+      // events and record no read, so they return a MASKED shape (Issue #1095,
+      // decision K3, docs/awcms/hr-payroll.md section 13.3): the amount and the
+      // person are readable only through the audited GET endpoints. The
+      // exemption holds only while an importer imports nothing but the
+      // write-path functions AND calls its mask.
+      writePathFunctions: [
+        "accrueCommission",
+        "transitionAccrual",
+        "voidCommissionBySource"
+      ],
+      maskedResultImporters: {
+        "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts": {
+          mustCall: ["toMutationReceipt"],
+          reason:
+            "a mutation audited at warning severity by its own event (never with an amount); returns the masked receipt, not the amount or the beneficiary"
+        },
+        "src/pages/api/v1/hr-commission/accruals/[id]/release.ts": {
+          mustCall: ["toMutationReceipt"],
+          reason:
+            "a mutation audited by its own event; returns the masked receipt, not the amount or the beneficiary"
+        },
+        "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts": {
+          mustCall: ["toMutationReceipt"],
+          reason:
+            "a mutation audited by its own event; returns the masked receipt, not the amount, the beneficiary or the payment reference"
+        },
+        "src/pages/api/v1/hr-commission/accruals/[id]/void.ts": {
+          mustCall: ["toMutationReceipt"],
+          reason:
+            "a mutation audited by its own event; returns the masked receipt, not the amount or the beneficiary"
+        },
         "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts":
-          "the in-process CommissionAccrualPort for other modules; it maps the ledger result to the port shape and exposes no HTTP surface",
+          {
+            mustCall: ["maskAccrueOutcome", "maskVoidOutcome"],
+            reason:
+              "the in-process CommissionAccrualPort for other modules (contract 2.0.0); it exposes no HTTP surface and returns the masked receipt, never the amount or the beneficiary"
+          }
+      },
+      auditExemptImporters: {
         "src/modules/hr-commission/application/hr-commission-intake-poster.ts":
           "the awcms_app job hr-commission:intents:post (ADR-0147, Issue #1189): it posts a queued request through the one posting core and DISCARDS the returned accrual, keeping only the outcome code on the intake row. It exposes no HTTP surface and reads no accrual for anyone; the NEW accrual is audited by auditAccrued and a void by the ledger's own transition audit, exactly as on the synchronous path"
       }
