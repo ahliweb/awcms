@@ -1,6 +1,6 @@
 {
   "packVersion": 1,
-  "contractSha256": "453ea9264e7287625b37f9b782379329a6a214674523b802c2fbebe65bd67409",
+  "contractSha256": "fc6c27083ed662acba57cd98c74e6a6c4af6eedbdfc12d3ae74c13a67e3db014",
   "summary": {
     "operations": 744,
     "fixtures": 1787,
@@ -12397,7 +12397,8 @@
                 "version": 1,
                 "accessMode": "assigned"
               },
-              "credentialErased": true
+              "credentialErased": true,
+              "connectionRevoked": true
             },
             "meta": {}
           }

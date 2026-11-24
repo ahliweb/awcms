@@ -250,6 +250,7 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
   ...[
     "awcms_social_publications",
     "awcms_social_publish_jobs",
+    "awcms_social_publish_attempts",
     "awcms_channel_account_health",
     "awcms_audit_events",
     "awcms_domain_events",
@@ -259,7 +260,8 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
     excusedOwner: TOOLING,
     reason:
       "`scripts/security-readiness.ts` `probeSocialDispatchWriteBoundary` " +
-      "(Issue #1146, sql/373) seeds a throwaway tenant, a publication and jobs, " +
+      "(Issue #1146, sql/373; the #1145 credential-path review, sql/426 and " +
+      "sql/427) seeds a throwaway tenant, a publication and jobs, " +
       "then, as `awcms_social_dispatch`, attempts the legitimate and the " +
       "forbidden writes (each in a savepoint) inside ONE transaction that it " +
       "ALWAYS rolls back (it throws a sentinel). Nothing it writes is ever " +

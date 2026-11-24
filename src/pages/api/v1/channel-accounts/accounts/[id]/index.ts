@@ -213,7 +213,10 @@ export const DELETE = defineTenantRoute<DeletePrepared>({
           resourceType: "channel_account",
           resourceId: prepared.id,
           severity: "warning",
-          message: "Channel account deleted; stored credential erased."
+          message: result.connectionRevoked
+            ? "Channel account deleted; its own credential and its connection's grant were erased."
+            : "Channel account deleted; its own stored credential erased.",
+          attributes: { connectionRevoked: result.connectionRevoked }
         });
 
         return { status: 200, body: { id: prepared.id, deleted: true } };

@@ -226,7 +226,7 @@ export const socialPublishingModule = defineModule({
         "Drain the due social publish queue (claim lease, per-account fair share and daily cap, account re-check, provider call outside any transaction, retry/backoff, per-account circuit breaker) for every active tenant.",
       recommendedSchedule: "Every 2 minutes via cron/systemd timer.",
       environmentNotes:
-        'No-op when SOCIAL_PUBLISHING_ENABLED is not "true" and publishes nothing until a provider adapter is registered. Holds NO key ring and is composed with a credential port that refuses every request until the first connector brings the credential path under a separate DB role (ADR-0157 section 6). Requires outbound HTTPS to the providers; on an offline/LAN deployment it stays a no-op.',
+        'No-op when SOCIAL_PUBLISHING_ENABLED is not "true". Connects ONLY as the dedicated role awcms_social_dispatch through SOCIAL_PUBLISHING_DATABASE_URL (no fallback; the role ships NOLOGIN, must be a member of no other role, and is checked at start) and holds CHANNEL_SECRETS_ENCRYPTION_KEYS, but composes the credential path only when SOCIAL_PUBLISHING_FACEBOOK_ENABLED="true" (default off: every credential request is refused and nothing is decrypted). ADR-0157 section 6. Requires outbound HTTPS to the providers; on an offline/LAN deployment it stays a no-op.',
       safeInOfflineLan: true
     },
     {
