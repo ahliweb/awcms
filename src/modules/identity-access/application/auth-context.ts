@@ -18,6 +18,15 @@ export type ResolvedTenantPrincipal = {
   context: TenantContext;
   /** `awcms_tenants.status` — `active` | `inactive` | `suspended` (sql/002). */
   tenantStatus: string;
+  /**
+   * The tenant's ABAC policy version (`awcms_abac_policy_versions`, sql/432,
+   * Issue #1482), `"0"` when it has no row. Read by the SAME statement that
+   * resolves the tenant user — a LEFT JOIN on a primary key, not a round trip —
+   * and handed to `loadActivePolicies`, which serves a cached policy snapshot
+   * only when its tag equals this value. That is what makes a policy change in
+   * one process visible to the next authorization in every other one.
+   */
+  abacPolicyVersion: string;
 };
 
 /**
@@ -185,11 +194,13 @@ export async function resolveTenantPrincipalForTenantUser(
   tenantUserId: string
 ): Promise<ResolvedTenantPrincipal | null> {
   const rows = (await tx`
-    SELECT tu.id, tu.identity_id, tu.principal_kind, t.status AS tenant_status
+    SELECT tu.id, tu.identity_id, tu.principal_kind, t.status AS tenant_status,
+           COALESCE(pv.policy_version, 0)::text AS abac_policy_version
     FROM awcms_tenant_users tu
     JOIN awcms_identities i
       ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
     JOIN awcms_tenants t ON t.id = tu.tenant_id
+    LEFT JOIN awcms_abac_policy_versions pv ON pv.tenant_id = tu.tenant_id
     WHERE tu.tenant_id = ${tenantId} AND tu.id = ${tenantUserId}
       AND tu.status = 'active' AND i.status = 'active'
   `) as {
@@ -197,6 +208,7 @@ export async function resolveTenantPrincipalForTenantUser(
     identity_id: string;
     principal_kind: PrincipalKind;
     tenant_status: string;
+    abac_policy_version: string;
   }[];
 
   const tenantUser = rows[0];
@@ -223,7 +235,8 @@ export async function resolveTenantPrincipalForTenantUser(
         tenantUser.principal_kind
       )
     },
-    tenantStatus: tenantUser.tenant_status
+    tenantStatus: tenantUser.tenant_status,
+    abacPolicyVersion: tenantUser.abac_policy_version
   };
 }
 
@@ -259,13 +272,20 @@ export async function resolveTenantPrincipal(
   if (!session) return null;
 
   const tenantUserRows = await tx`
-    SELECT tu.id, tu.principal_kind, t.status AS tenant_status
+    SELECT tu.id, tu.principal_kind, t.status AS tenant_status,
+           COALESCE(pv.policy_version, 0)::text AS abac_policy_version
     FROM awcms_tenant_users tu
     JOIN awcms_tenants t ON t.id = tu.tenant_id
+    LEFT JOIN awcms_abac_policy_versions pv ON pv.tenant_id = tu.tenant_id
     WHERE tu.tenant_id = ${tenantId} AND tu.identity_id = ${session.identity_id}
   `;
   const tenantUser = tenantUserRows[0] as
-    | { id: string; principal_kind: PrincipalKind; tenant_status: string }
+    | {
+        id: string;
+        principal_kind: PrincipalKind;
+        tenant_status: string;
+        abac_policy_version: string;
+      }
     | undefined;
   if (!tenantUser) return null;
 
@@ -291,7 +311,8 @@ export async function resolveTenantPrincipal(
         tenantUser.principal_kind
       )
     },
-    tenantStatus: tenantUser.tenant_status
+    tenantStatus: tenantUser.tenant_status,
+    abacPolicyVersion: tenantUser.abac_policy_version
   };
 }
 

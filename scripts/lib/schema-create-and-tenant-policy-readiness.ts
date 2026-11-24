@@ -231,6 +231,17 @@ export const REVIEWED_PERMISSIVE_POLICIES: readonly ReviewedPermissivePolicy[] =
       "r",
       "awcms_channel_claim_locator"
     ),
+    // sql/432 (Issue #1482): the trigger owner writes the version of whichever
+    // tenant's policies changed, with or without a tenant context (a migration
+    // has none). Only the pinned trigger body can act as this role.
+    REVIEWED_NARROW(
+      "awcms_abac_policy_versions",
+      "awcms_abac_policy_versions_bump",
+      "*",
+      "awcms_abac_policy_version_bump",
+      "true",
+      "true"
+    ),
     REVIEWED_NARROW(
       "awcms_delegated_access_grants",
       "awcms_delegated_access_grants_delegated_expiry_sweep",

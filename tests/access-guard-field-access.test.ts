@@ -9,8 +9,9 @@
  * (deny-overrides-allow not honored for the field). These tests prove the deny
  * is now honored, while RBAC is still required (default deny).
  *
- * No real database: the only query the helper runs is the policy-cache SELECT,
- * driven here by a fake tagged-template `tx`. The policy cache is reset per test.
+ * No real database: the only queries the helper runs are the policy-cache
+ * reads (the tenant's policy version, Issue #1482, then the policies), driven
+ * here by a fake tagged-template `tx`. The policy cache is reset per test.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
@@ -37,11 +38,15 @@ function context(tenantId: string): TenantContext {
 }
 
 /**
- * A fake tagged-template `tx` returning `rows` for the single policy-cache
- * SELECT `evaluateFieldAccessInTransaction` runs (via `loadActivePolicies`).
+ * A fake tagged-template `tx` returning `rows` for the policy SELECT
+ * `evaluateFieldAccessInTransaction` runs (via `loadActivePolicies`), and no
+ * version row (version `"0"`) for the policy-version read that precedes it.
  */
 function fakeTx(rows: unknown[]): Bun.SQL {
-  return (() => Promise.resolve(rows)) as unknown as Bun.SQL;
+  return ((strings: TemplateStringsArray) =>
+    Promise.resolve(
+      strings.join("").includes("awcms_abac_policy_versions") ? [] : rows
+    )) as unknown as Bun.SQL;
 }
 
 /** A DSL-managed DENY policy scoped to `raw_detail.read`, always-true condition. */

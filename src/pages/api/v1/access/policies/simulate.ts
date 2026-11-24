@@ -179,7 +179,13 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       ipTrusted: input.environment.ipTrusted
     };
 
-    const policies = await loadActivePolicies(tx, tenantId);
+    // The caller's own authorization above read the version in this
+    // transaction (Issue #1482): no further query on a cache hit.
+    const policies = await loadActivePolicies(
+      tx,
+      tenantId,
+      auth.abacPolicyVersion
+    );
 
     const decision = evaluateAccess(
       context,

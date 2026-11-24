@@ -103,6 +103,28 @@ Unchanged from before ADR-0123: a plain `--format=custom` dump plus a
    ./restore-postgres.sh /var/backups/awcms/awcms_<db>_<ts>.dump.age --target=<dbname> --yes
    ```
 
+6. **After any restore into a live target, or a point-in-time recovery: both
+   steps below, before the application serves traffic again.**
+
+   The ABAC policy cache (`policy-cache.ts`, Issue #1482) trusts a per-tenant
+   version written from `awcms_abac_policy_version_seq`. A restore rewinds that
+   sequence, so the next policy write can reissue a version that a process
+   still running from BEFORE the restore has cached against a different policy
+   set — and that process keeps serving the old decisions (a stale allow) until
+   the cache's five-minute age bound expires. Remove the collision instead of
+   waiting for the bound:
+
+   ```bash
+   # a) Move the version sequence far past anything issued before the restore.
+   psql "<owner-role-url>" -c \
+     "SELECT setval('awcms_abac_policy_version_seq', (SELECT last_value FROM awcms_abac_policy_version_seq) + 1000000)"
+   ```
+
+   b) Restart **every** application process and replica (web and jobs), so no
+   in-memory cache survives from before the restore. Either step alone closes
+   the gap; do both. The same applies if anyone ever truncates
+   `awcms_abac_policy_versions` by hand.
+
 ## What "authenticated" actually buys you
 
 - **Tampering with the ciphertext** — `age`'s AEAD construction fails to

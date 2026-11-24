@@ -119,6 +119,14 @@ export type AuthorizeResult =
       allowed: true;
       context: TenantContext;
       grantedPermissionKeys: Set<string>;
+      /**
+       * The tenant's ABAC policy version this decision was made at (Issue
+       * #1482), read in THIS transaction. A caller asking a follow-up ABAC
+       * question in the SAME transaction (`evaluateFieldAccessInTransaction`)
+       * passes it on so the cache check costs no further query. Never carry it
+       * into another transaction.
+       */
+      abacPolicyVersion?: string;
     }
   | {
       allowed: false;
@@ -809,13 +817,22 @@ export async function authorizeInTransaction(
   }
 
   // Issue #179 — load the tenant's active, compiled ABAC policies (tenant-keyed
-  // cache, deterministically invalidated on any policy mutation) and evaluate
+  // cache, invalidated by the database policy version on any mutation in any
+  // process — Issue #1482) and evaluate
   // them at this single chokepoint, AFTER session/tenant/module-enabled/RBAC
   // resolution. An empty policy set (the default for every tenant that has
   // authored none) makes ABAC a no-op — behavior is unchanged. `ipTrusted`
   // defaults to false (fail-closed) until a deployment wires a trusted-network
   // resolver; `env.now` is the request timestamp already threaded through here.
-  const policies = await loadActivePolicies(tx, tenantId);
+  //
+  // Issue #1482 — the cache is checked against the tenant's policy version as
+  // the principal query read it, in THIS transaction, so a policy change made
+  // by any other process or replica is honoured here without a round trip.
+  const policies = await loadActivePolicies(
+    tx,
+    tenantId,
+    principal?.abacPolicyVersion
+  );
   const evaluated = evaluateAccess(
     context,
     guard,
@@ -945,7 +962,8 @@ export async function authorizeInTransaction(
     // so `evaluateFieldAccessInTransaction` cannot be handed a credential's
     // context and treat it as a session by omission.
     context: machine ? { ...context, viaMachineCredential: true } : context,
-    grantedPermissionKeys
+    grantedPermissionKeys,
+    abacPolicyVersion: principal?.abacPolicyVersion
   };
 }
 
@@ -977,9 +995,20 @@ export async function evaluateFieldAccessInTransaction(
   context: TenantContext,
   grantedPermissionKeys: ReadonlySet<string>,
   fieldGuard: AccessRequest,
-  now: Date
+  now: Date,
+  /**
+   * `AuthorizeResult.abacPolicyVersion` from the authorization made in THIS
+   * transaction (Issue #1482). Supplied, the policy cache check costs no query;
+   * omitted, the version is read here (one primary-key lookup). Never pass a
+   * version read in another transaction.
+   */
+  observedPolicyVersion?: string
 ): Promise<boolean> {
-  const policies = await loadActivePolicies(tx, tenantId);
+  const policies = await loadActivePolicies(
+    tx,
+    tenantId,
+    observedPolicyVersion
+  );
   const decision = evaluateAccess(
     context,
     fieldGuard,

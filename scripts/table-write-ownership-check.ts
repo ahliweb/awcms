@@ -290,7 +290,32 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "throws a sentinel when the write is wrongly accepted), so nothing is ever " +
       "committed: a behavioural probe of the row policy and the append-only " +
       "grant, not a second writer of these tables. Confined to that one function."
-  }))
+  })),
+  {
+    // The probe's `UPDATE awcms_abac_policy_versions`, run as `awcms_app` in a
+    // savepoint. NOT a seed: the database is expected to refuse it (42501),
+    // and the probe reports a finding if it does not.
+    table: "awcms_abac_policy_versions",
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/abac-policy-version-readiness.ts` " +
+      "`probeAbacPolicyVersionBump` (Issue #1482, sql/432) attempts ONE direct " +
+      "UPDATE of the version row as `awcms_app`, inside a savepoint of a " +
+      "transaction it ALWAYS rolls back, and requires it to be refused. The " +
+      "only real writer of the table is the SECURITY DEFINER trigger."
+  },
+  {
+    table: "awcms_abac_policies",
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/abac-policy-version-readiness.ts` " +
+      "`probeAbacPolicyVersionBump` (used by `security:readiness`, Issue #1482, " +
+      "sql/432) inserts, updates and deletes ONE throwaway policy row of a " +
+      "throwaway tenant INSIDE a transaction it ALWAYS rolls back, to prove the " +
+      "version trigger moves the tenant's version on every write kind. Nothing " +
+      "is ever committed: a behavioural probe of a trigger, not a second " +
+      "writer of ABAC policies."
+  }
 ];
 
 function accountableOwners(table: string, owners: readonly string[]): string[] {

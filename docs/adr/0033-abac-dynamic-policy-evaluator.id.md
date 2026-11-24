@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0033-abac-dynamic-policy-evaluator.md)
 
-<!-- i18n-source-hash: sha256:c2a9730ca446aa2bbddab8b2609c19948b1d6b6787272cc5d2bf7481db85e5d7 -->
+<!-- i18n-source-hash: sha256:bbc04c312e8d0f37f5e25bd7250e39a0f0c7acc514e0037fbdcb726e547af430 -->
 
 # ADR-0033 — Dynamic ABAC policy evaluator (DSL, precedence, cache)
 
@@ -62,7 +62,7 @@ Keduanya menulis tabel yang sama; permukaan flat **tetap** memanggil `invalidate
 
 ### 4. Cache per-tenant dengan invalidasi deterministik
 
-Kebijakan aktif dikompilasi sekali per tenant dan disimpan di cache in-process yang **tenant-keyed** (`application/policy-cache.ts`). Setiap mutasi kebijakan (create/update/enable/disable, dari **kedua** permukaan) memanggil `invalidatePolicyCache(tenantId)` yang menaikkan versi per-tenant dan menghapus entry; endpoint memanggilnya **setelah** transaksi commit sehingga request berikutnya tak pernah men-cache snapshot pra-commit (jebakan TOCTOU). Load selalu di dalam `withTenant` (RLS + peran `awcms_app` non-superuser, FORCE RLS), sehingga tak pernah membaca lintas tenant. Tanpa restart. **Batasan:** invalidasi bersifat per-PROSES; deployment yang di-scale horizontal butuh sinyal lintas-instance tambahan (LISTEN/NOTIFY atau TTL pendek) — dicatat sebagai batasan, bukan diasumsikan hilang.
+Kebijakan aktif dikompilasi sekali per tenant dan disimpan di cache in-process yang **tenant-keyed** (`application/policy-cache.ts`). Setiap mutasi kebijakan (create/update/enable/disable, dari **kedua** permukaan) memanggil `invalidatePolicyCache(tenantId)` yang menaikkan versi per-tenant dan menghapus entry; endpoint memanggilnya **setelah** transaksi commit sehingga request berikutnya tak pernah men-cache snapshot pra-commit (jebakan TOCTOU). Load selalu di dalam `withTenant` (RLS + peran `awcms_app` non-superuser, FORCE RLS), sehingga tak pernah membaca lintas tenant. Tanpa restart. **Batasan:** invalidasi bersifat per-PROSES; deployment yang di-scale horizontal butuh sinyal lintas-instance tambahan (LISTEN/NOTIFY atau TTL pendek) — dicatat sebagai batasan, bukan diasumsikan hilang. **Ditutup oleh Issue #1482 (`sql/432`):** trigger pada `awcms_abac_policies` menulis nilai sequence baru ke `awcms_abac_policy_versions` dalam transaksi yang sama dengan setiap penulisan (permukaan mana pun, migrasi, atau operator); chokepoint membaca versi itu di dalam transaksinya sendiri (menumpang query principal, tanpa round trip tambahan) dan hanya menyajikan snapshot cache bila versinya sama, sehingga setiap proses menghormati perubahan pada otorisasi berikutnya. `invalidatePolicyCache` tinggal sebagai optimasi lokal.
 
 ### 5. Decision log & simulasi
 

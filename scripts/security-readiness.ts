@@ -60,6 +60,10 @@ import {
   probeChannelAccountsClaimGuards
 } from "./lib/channel-accounts-claim-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
+import {
+  pinAbacPolicyVersionBump,
+  probeAbacPolicyVersionBump
+} from "./lib/abac-policy-version-readiness";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
@@ -738,6 +742,11 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // `awcms_worker` (`WORKER_ROLE_GRANTS`); `awcms_domain_events` is an outbox
   // whose processing state lives in `awcms_domain_event_deliveries`, not here.
   awcms_abac_decision_logs: ["SELECT", "INSERT"],
+  // Issue #1482 / `sql/432`. NOT retired -- the per-tenant ABAC policy version,
+  // written ONLY by the SECURITY DEFINER trigger on `awcms_abac_policies`. The
+  // runtime reads it and nothing more: a runtime that could write it could set
+  // a version back to the one its stale policy cache holds.
+  awcms_abac_policy_versions: ["SELECT"],
   awcms_access_policy_events: ["SELECT", "INSERT"],
   awcms_business_scope_assignment_events: ["SELECT", "INSERT"],
   awcms_domain_events: ["SELECT", "INSERT"],
@@ -5604,6 +5613,10 @@ export async function checkWorkerCredentialColumnsUnreadable(
  * have no members, or the narrow EXECUTE is bypassed by simply connecting as it.
  */
 export const DEFINER_OWNER_ROLES: readonly string[] = [
+  // sql/432 (Issue #1482): owns the trigger that bumps the per-tenant ABAC
+  // policy version; SELECT (id) on tenants, SELECT/INSERT and column UPDATE on
+  // the version table, USAGE on its sequence, nothing else.
+  "awcms_abac_policy_version_bump",
   "awcms_booking_expiry",
   "awcms_booking_lifecycle_counter",
   "awcms_booking_reminders",
@@ -5712,6 +5725,55 @@ export async function checkDefinerOwnerRolesNoLogin(
       severity,
       status: "fail",
       evidence: `Could not verify SECURITY DEFINER owner roles: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7f. The ABAC policy version is bumped by every policy write (critical) — #1482
+// ---------------------------------------------------------------------------
+
+/**
+ * The cross-process ABAC policy cache (sql/432) trusts the version row to move
+ * on every change to `awcms_abac_policies`. Exact catalog pin of the trigger
+ * function, both triggers and the grants, plus a rolled-back behavioural probe.
+ */
+export async function checkAbacPolicyVersionBump(): Promise<SecurityCheckResult> {
+  const name = "ABAC policy version is bumped by every policy write";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings = await pinAbacPolicyVersionBump(sql);
+    const probe = await probeAbacPolicyVersionBump(sql);
+
+    if (probe.finding) findings.push(probe.finding);
+
+    if (findings.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `A stale ABAC policy cache in another process could keep allowing what a new deny refuses: ${findings.join("; ")}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Trigger function, both triggers and grants match sql/432 exactly; a rolled-back probe saw INSERT, UPDATE and DELETE each move the version${probe.ranAsApp ? ", and awcms_app refused a direct version write" : " (run as the connection role; the awcms_app refusal half was not exercised)"}.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the ABAC policy version trigger: ${errorMessage(error)}.`
     };
   }
 }
@@ -8853,6 +8915,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkChannelAccountsClaimGuards(),
     await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
+    await checkAbacPolicyVersionBump(),
     await checkNoRestrictedSchemaCreate(),
     await checkTenantIsolationPoliciesCanonical(),
     await checkNoViewBypassesRls(),
