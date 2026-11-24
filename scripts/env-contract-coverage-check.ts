@@ -194,6 +194,16 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
       "Superuser connection string `ci:local` uses to create and drop the throwaway databases of its integration and e2e jobs (falls back to DATABASE_URL). A developer-machine setting for running the CI jobs locally, never read by a running deployment."
   },
   {
+    name: "DRILL_SOURCE_URL",
+    reason:
+      "Superuser connection string of the SOURCE loopback cluster for `ops:restore-drill` (Issue #968), which creates and drops only `awcms_drill_*` databases there. A developer or operator rehearsal setting, never read by a running deployment."
+  },
+  {
+    name: "DRILL_TARGET_URL",
+    reason:
+      "Superuser connection string of the second loopback cluster `ops:restore-drill` restores into (Issue #968). Same scope as DRILL_SOURCE_URL: tooling only, loopback only."
+  },
+  {
     name: "PLAYWRIGHT_BROWSERS_PATH",
     reason:
       "Playwright's own variable for where its browsers live. `ci:local` reads it only to check that the Chromium the e2e job needs is installed before starting; the application never reads it."

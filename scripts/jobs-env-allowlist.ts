@@ -1268,11 +1268,13 @@ export const UNTRACEABLE_EXECUTION_SITES: readonly {
     "scripts/astro-script-typecheck.ts",
     "scripts/astro-frontmatter-typecheck.ts",
     "scripts/changeset-policy-check.ts",
-    "scripts/ci-local.ts"
+    "scripts/ci-local.ts",
+    "scripts/restore-drill.ts",
+    "scripts/lib/restore-drill.ts"
   ].map((file) => ({
     file,
     reason:
-      "developer or CI gate that shells out to a tool in the repository checkout; it is not a job and nothing a job imports reaches it"
+      "developer or CI gate that shells out to a tool in the repository checkout (`restore-drill` runs `pg_dump`/`pg_restore` and `db:migrate` against throwaway loopback clusters, Issue #968); it is not a job and nothing a job imports reaches it"
   })),
   {
     file: "tests/integration/harness.ts",
