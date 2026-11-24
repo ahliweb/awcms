@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 292   |
-| `awcms_*` tables                    | 278   |
-| Tables with `FORCE` RLS             | 259   |
+| Migrations                          | 293   |
+| `awcms_*` tables                    | 279   |
+| Tables with `FORCE` RLS             | 260   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 927   |
+| Test files                          | 929   |
 | Route files                         | 699   |
 | ADR                                 | 346   |
 
@@ -357,6 +357,7 @@
 | 290 | `sql/416_awcms_channel_accounts_claim_on_verify.sql`                   |
 | 291 | `sql/418_awcms_realtime_wake_hint_notify.sql`                          |
 | 292 | `sql/420_awcms_catalog_boundary_audit_role.sql`                        |
+| 293 | `sql/432_awcms_abac_policy_version_counter.sql`                        |
 
 ### Tables & Row-Level Security
 
@@ -364,6 +365,7 @@
 | ---------------------------------------------- | ---------------------------------------------------------- | --- | ----- |
 | `awcms_abac_decision_logs`                     | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
 | `awcms_abac_policies`                          | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_abac_policy_versions`                   | `sql/432_awcms_abac_policy_version_counter.sql`            | yes | yes   |
 | `awcms_access_assignments`                     | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
 | `awcms_access_policies`                        | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
 | `awcms_access_policy_events`                   | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
@@ -645,9 +647,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 684        |
+| `(root)`      | 685        |
 | `e2e`         | 33         |
-| `integration` | 208        |
+| `integration` | 209        |
 | `unit`        | 2          |
 
 ### Routes
