@@ -46,11 +46,17 @@ if (results.length === 0) {
   process.exit(2);
 }
 
+const cpuBasis = arg("cpu-basis") ?? "host";
+if (cpuBasis !== "host" && cpuBasis !== "process") {
+  console.error('--cpu-basis must be "host" (default) or "process"');
+  process.exit(64);
+}
 const expected = Number(arg("generators") ?? results[0]?.totalGenerators ?? 0);
 const report = mergeResults(results, saturations, expected, {
   maxCpuPct: Number(arg("max-cpu") ?? DEFAULT_LIMITS.maxCpuPct),
   maxNetPct: Number(arg("max-net") ?? DEFAULT_LIMITS.maxNetPct),
-  maxDroppedRatio: DEFAULT_LIMITS.maxDroppedRatio
+  maxDroppedRatio: DEFAULT_LIMITS.maxDroppedRatio,
+  cpuBasis
 });
 writeFileSync(join(dir, "merged.json"), JSON.stringify(report, null, 2));
 console.log(renderReport(report));

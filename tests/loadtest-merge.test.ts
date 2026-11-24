@@ -3,10 +3,16 @@ import { describe, expect, test } from "bun:test";
 import {
   evaluateSaturation,
   mergeResults,
+  renderReport,
   DEFAULT_LIMITS,
   type GeneratorResult,
   type Saturation
 } from "../loadtest/lib/merge";
+import {
+  isGeneratorProcess,
+  parseProcStatTicks
+} from "../loadtest/lib/saturation";
+import { assessTarget } from "../loadtest/lib/target-guard";
 import { assertLoopback, tenantCodeFor } from "../loadtest/ephemeral/seed";
 
 function gen(
@@ -156,5 +162,111 @@ describe("ephemeral seed guard", () => {
 
   test("the seeded tenant code carries the run id", () => {
     expect(tenantCodeFor("abc123")).toBe("lt-abc123");
+  });
+});
+
+describe("process CPU basis (shared development host)", () => {
+  const withProc = (id: string, host: number, proc: number | null) => ({
+    ...sat(id, host),
+    procCpuAvgPct: proc === null ? null : proc / 2,
+    procCpuPeakPct: proc,
+    loadAvg1End: 40
+  });
+  const three = [gen("g1"), gen("g2"), gen("g3")];
+  const proc = { ...DEFAULT_LIMITS, cpuBasis: "process" as const };
+  const busyHost = [
+    withProc("g1", 95, 3),
+    withProc("g2", 95, 3),
+    withProc("g3", 95, 3)
+  ];
+
+  test("host basis still rejects a busy host even when k6 is idle", () => {
+    expect(mergeResults(three, busyHost, 3).accepted).toBe(false);
+  });
+
+  test("process basis judges the generators, not the neighbours", () => {
+    const r = mergeResults(three, busyHost, 3, proc);
+    expect(r.accepted).toBe(true);
+    expect(r.saturation.cpuBasis).toBe("process");
+    expect(r.saturation.hostContention[0]?.hostCpuPeakPct).toBe(95);
+    expect(renderReport(r)).toContain("Local, not an NFR measurement");
+  });
+
+  test("process basis rejects a generator that really is saturated", () => {
+    expect(evaluateSaturation(withProc("g1", 10, 80), 0, proc).ok).toBe(false);
+  });
+
+  test("process basis never treats unattributed CPU as safe", () => {
+    expect(evaluateSaturation(withProc("g1", 10, null), 0, proc).ok).toBe(
+      false
+    );
+    // a record written before the field existed
+    expect(evaluateSaturation(sat("g1", 10), 0, proc).ok).toBe(false);
+  });
+});
+
+describe("generator process attribution", () => {
+  test("utime+stime parse survives spaces and parentheses in the name", () => {
+    const stat = "123 (k6 (x) y) S 1 2 3 4 5 6 7 8 9 10 250 150 0 0 20";
+    expect(parseProcStatTicks(stat)).toBe(400);
+    expect(parseProcStatTicks("garbage")).toBeNull();
+  });
+
+  test("only a k6 process carrying this run id counts", () => {
+    const args = "k6\0run\0-e\0RUN_ID=run-1234\0script.js";
+    expect(isGeneratorProcess("k6\n", args, "", "run-1234")).toBe(true);
+    expect(
+      isGeneratorProcess("k6\n", "k6\0run", "A=1\0RUN_ID=run-1234", "run-1234")
+    ).toBe(true);
+    expect(isGeneratorProcess("k6\n", args, "", "run-9999")).toBe(false);
+    expect(isGeneratorProcess("bun\n", args, "", "run-1234")).toBe(false);
+    // a longer id must not match by prefix
+    expect(isGeneratorProcess("k6\n", "RUN_ID=run-12345", "", "run-1234")).toBe(
+      false
+    );
+  });
+});
+
+describe("target guard", () => {
+  test("loopback and private addresses are allowed without confirmation", () => {
+    for (const u of [
+      "http://127.0.0.1:4321",
+      "http://localhost:4321",
+      "http://[::1]:4321",
+      "http://10.1.2.3",
+      "http://172.20.0.5",
+      "http://192.168.1.10:8080",
+      "http://x.localhost"
+    ]) {
+      expect(assessTarget(u, undefined).ok).toBe(true);
+    }
+  });
+
+  test("a routable host is refused until the operator repeats it", () => {
+    const v = assessTarget("https://www.example.com/blog", undefined);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("--confirm-remote-target www.example.com");
+    expect(
+      assessTarget("https://www.example.com", "other.example.com").ok
+    ).toBe(false);
+    expect(assessTarget("https://www.example.com", "WWW.example.com").ok).toBe(
+      true
+    );
+  });
+
+  test("lookalikes of private ranges are not private", () => {
+    for (const u of [
+      "http://172.32.0.1",
+      "http://10.0.0.1.example.com",
+      "http://localhost.example.com",
+      "http://300.1.1.1"
+    ]) {
+      expect(assessTarget(u, undefined).ok).toBe(false);
+    }
+  });
+
+  test("garbage and non-http targets are refused", () => {
+    expect(assessTarget("not a url", undefined).ok).toBe(false);
+    expect(assessTarget("ftp://127.0.0.1", undefined).ok).toBe(false);
   });
 });

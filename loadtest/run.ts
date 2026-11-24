@@ -18,6 +18,7 @@ import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 
 import { startSampler } from "./lib/saturation";
+import { assessTarget } from "./lib/target-guard";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -46,6 +47,11 @@ if (process.env.LOADTEST_TARGET_APPROVED !== runId) {
 }
 
 const baseUrl = need("base-url");
+const targetVerdict = assessTarget(baseUrl, arg("confirm-remote-target"));
+if (!targetVerdict.ok) {
+  console.error(targetVerdict.reason);
+  process.exit(64);
+}
 const scenario = arg("scenario") ?? "public-page";
 const profile = arg("profile") ?? "smoke";
 const targetRps = arg("target-rps") ?? "50";
@@ -118,7 +124,7 @@ function k6Command(id: string): string[] {
   ];
 }
 
-const sampler = startSampler(ids.join("+"), hostname(), linkMbps);
+const sampler = startSampler(ids.join("+"), hostname(), linkMbps, runId);
 const procs = ids.map((id) => ({
   id,
   p: Bun.spawn(k6Command(id), { stdout: "inherit", stderr: "inherit" })

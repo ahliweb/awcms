@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](load-testing.md)
 
-<!-- i18n-source-hash: sha256:4e1993dd26dab87ad471b74e39e2395e993d7cff67f78ebf0029bd56df06ff94 -->
+<!-- i18n-source-hash: sha256:6748b085a9debb62ec2930074a1ee9d842c043804c5f4d800bc38cd0b8032aeb -->
 
 # Uji beban terdistribusi (Issue #1283, ADR-0161)
 
@@ -65,6 +65,11 @@ flowchart LR
 - `loadtest:run` menolak mulai kecuali `LOADTEST_TARGET_APPROVED` sama dengan run
   id, dan `setup()` k6 dibatalkan kecuali tenant yang di-seed **untuk run ini**
   menjawab di target. URL yang salah ketik gagal di situ, sebelum ada beban.
+- `loadtest:run` menolak `--base-url` yang hostnya bukan loopback atau alamat
+  privat (RFC 1918, `localhost`, `*.localhost`, `::1`) kecuali host itu
+  diulang dengan `--confirm-remote-target <host>`. Perkakas tidak dapat tahu
+  host mana produksi, jadi apa pun yang dapat dirutekan memerlukan langkah
+  kedua yang eksplisit itu. Jangan pernah mengarahkannya ke produksi.
 - App berjalan sebagai `APP_ENV=production` dengan role least-privilege
   `awcms_app` dan `awcms_setup` diaktifkan, sehingga RLS benar-benar teruji
   seperti di produksi, bukan dilewati oleh superuser.
@@ -142,6 +147,18 @@ kernel tidak dapat melaporkannya, misalnya di VM). **Run yang tidak diterima
 bukan baseline**: tambah generator atau turunkan target sampai batasnya jelas
 berada di sisi aplikasi.
 
+**Host pengembangan bersama.** Pemeriksaan CPU membaca CPU seluruh host,
+sehingga di mesin yang berbagi dengan tetangga ia menolak setiap run karena
+alasan yang tak terkait generator. `loadtest:merge --cpu-basis process` menilai
+CPU proses k6 milik run itu (dicocokkan dari nama biner `k6` dan run id, dibaca
+dari `/proc`; persentase dari kapasitas seluruh host) dan mencetak puncak CPU
+host serta load average di sampingnya. Ia sepenuhnya opt-in, angka yang tak
+dapat diatribusikan dihitung tidak diterima, dan laporannya diberi label "Local,
+not an NFR measurement": tetangga masih dapat membuat app kekurangan CPU. Pakai
+basis `host` bawaan untuk run yang dimaksudkan untuk dihitung. Laporan juga
+menampilkan iterasi di samping permintaan: redirect locale membuat satu
+tampilan halaman publik menjadi dua permintaan.
+
 CPU aplikasi dan koneksi database **tidak** dikumpulkan harness. Bacalah dari
 host dan dari PostgreSQL selama run (misalnya `docker stats` dan
 `pg_stat_activity`) dan tulis di samping laporan. Metrik latensi HTTP di dalam
@@ -172,7 +189,11 @@ itu keputusan tersendiri di bawah ADR-0083.
 ## Baseline terukur
 
 **Belum ada baseline yang diterima.** Baseline di environment yang disetujui
-(isu #1283 langkah 3 dan 4) belum dijalankan.
+(isu #1283 langkah 3 dan 4) belum dijalankan. Run lokal kedua, 22 November
+2026, memakai basis CPU proses dan mengukur batas pertama origin tanpa cache
+(pool database interactive); lihat
+[`capacity-baseline-2026-11-22.id.md`](capacity-baseline-2026-11-22.id.md).
+Ia berlabel lokal dan bukan bukti NFR.
 
 ### Uji coba lokal, 15 November 2026 (BUKAN pengukuran NFR)
 

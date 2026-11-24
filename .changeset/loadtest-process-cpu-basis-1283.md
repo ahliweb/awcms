@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+test(loadtest): the load harness (#1283) gains a target guard and a shared-host CPU basis, and a first LOCAL capacity baseline is recorded. `loadtest:run` now refuses any `--base-url` that is not loopback or a private address unless the host is repeated with `--confirm-remote-target`. `loadtest:merge --cpu-basis process` (opt-in; default stays whole-host) judges the CPU of the run's own k6 processes, read from `/proc`, and prints host CPU and load beside it, so a shared workstation no longer rejects every run for reasons unrelated to the generators; an unattributable figure still counts as not accepted. The report also shows iterations next to requests (a locale redirect makes one page view two requests). `loadtest/results/` is now git-ignored. `docs/awcms/capacity-baseline-2026-11-22.md` (+ `.id.md`) records the local numbers (uncached origin limit set by the interactive database pool at roughly 300 to 400 page views/s on a 2-CPU app, admin read and write well within p95, spike 30 to 300/s clean), labelled as not NFR evidence. Tooling and docs only; no runtime change.

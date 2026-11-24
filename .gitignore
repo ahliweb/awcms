@@ -177,3 +177,6 @@ graphify-out/GRAPH_TREE.html
 graphify-out/obsidian/
 graphify-out/.graphify_*
 # END:pengetahuan-ringkas
+
+# Local load-test results (loadtest/run.ts); per-run output, never committed
+/loadtest/results/
