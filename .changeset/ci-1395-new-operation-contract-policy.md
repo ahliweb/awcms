@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+ci(api): enforce the ADR-0167 contract policy on NEW operations (Issue #1395). `bun run api:contract:policy:check`, in `bun run check` right after `api:fixtures:check`, holds an operation that is not in the committed baseline to four rules: a declared response example on every 2xx body, a `required` list on object response schemas, no `nullable` (use `type: [X, "null"]`), and `429` when the handler is rate-limited. The 742 existing operations are listed in `scripts/api-contract-policy-baseline.ts`, which may only shrink (a stale line fails the gate, a test pins a ceiling, sorted and unique), so the answer to "is it new?" is the same on a shallow CI checkout as locally. "Rate-limited" is derived from the handler call graph (the walker of the #1385 test, now shared as `scripts/lib/route-handler-graph.ts`), not a text search; its detection limits are recorded, and an undetectable handler fails closed. Waivers need a reason of at least 30 characters and fail when stale. No new dependency, no migration, no runtime change.

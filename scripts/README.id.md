@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f359a71b15c5804127b7ef9b5211d70d227d662204ba09e9fa563026a2095d69 -->
+<!-- i18n-source-hash: sha256:27c4b7230d2f822a3ec5b13f36423492390d014f3acb233df4eeea95f4723ddc -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-169 target menjalankan berkas di `scripts/`; 70 di antaranya
+170 target menjalankan berkas di `scripts/`; 71 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -45,6 +45,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `api:consumer-contract:check`             | `api-consumer-contract.ts`                     | ✅   |
 | `api:consumer-contract:generate`          | `api-consumer-contract.ts`                     | —    |
 | `api:contract:lint`                       | `api-contract-lint.ts`                         | ✅   |
+| `api:contract:policy:check`               | `api-contract-policy.ts`                       | ✅   |
 | `api:docs:check`                          | `api-docs-check.ts`                            | ✅   |
 | `api:docs:generate`                       | `api-docs-generate.ts`                         | —    |
 | `api:fixtures:check`                      | `api-contract-fixtures.ts`                     | ✅   |
