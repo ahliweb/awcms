@@ -658,6 +658,12 @@ suite("realtime wake-up hint across instances (#1171)", () => {
     const own = await conversation(tenantId);
 
     await stream.waitFor((e) => changeIds([e]).has(own), 3_000);
+    // The frame and the test's own subscriber are two different consumers of
+    // one hint: the hub hands each a random delay inside a spreading window
+    // (up to 20 ms for two subscribers), and the route's tick is a database
+    // round trip of about the same size, so the frame can win the race. Wait
+    // for the condition that is asserted, not for the other signal.
+    await until(() => woke.a > 0, 3_000);
     expect(woke.a).toBeGreaterThan(0);
     stream.close();
     await stream.ended;
@@ -775,6 +781,7 @@ suite("realtime wake-up hint across instances (#1171)", () => {
     await until(() => instance.wakeAllCalls() >= 2);
     await until(() => instance.listener.state() === "listening");
     // The catch-up wake: hints sent while it was down are gone.
+    await until(() => woken >= 1, 3_000);
     expect(woken).toBeGreaterThanOrEqual(1);
     await Bun.sleep(200);
     expect(await backendsOf(ROLES.reconnect)).toBe(1);
@@ -823,6 +830,7 @@ suite("realtime wake-up hint across instances (#1171)", () => {
         `ALTER DATABASE "${databaseName}" SET awcms.realtime_wake = 'on'`
       );
       await writeAs(bare());
+      await until(() => payloads.length >= 1, 3_000);
       expect(payloads.length).toBe(1);
 
       // 4. RESET: silent again.
@@ -890,8 +898,24 @@ suite("realtime wake-up hint across instances (#1171)", () => {
       streams.push(stream);
     }
 
+    // A tick the small work class refuses degrades to the 30 s timer, so on a
+    // slow machine one hint is not guaranteed to reach all 100 streams in time;
+    // a LATER wake catches a stream up from its cursor (that is the contract).
+    // Re-wake, spread by the hub, until every stream has the change (bounded).
+    const everyoneSees = async (changeId: string): Promise<void> => {
+      const deadline = Date.now() + 15_000;
+
+      while (
+        Date.now() < deadline &&
+        !streams.every((stream) => changeIds(stream.events).has(changeId))
+      ) {
+        await Bun.sleep(1_500);
+        instance.hub.wakeAll();
+      }
+    };
     const id = await conversation(tenantId);
 
+    await everyoneSees(id);
     await Promise.all(
       streams.map((stream) =>
         stream.waitFor((e) => changeIds([e]).has(id), 20_000)
@@ -902,6 +926,7 @@ suite("realtime wake-up hint across instances (#1171)", () => {
     const id2 = await conversation(tenantId);
 
     instance.hub.wakeAll();
+    await everyoneSees(id2);
     await Promise.all(
       streams.map((stream) =>
         stream.waitFor((e) => changeIds([e]).has(id2), 20_000)
@@ -960,12 +985,30 @@ suite("realtime wake-up hint across instances (#1171)", () => {
 
     // Released in small groups the same streams are all alive and catch up
     // from their cursors: the refused ticks lost nothing.
+    // A wake whose tick the (deliberately small) work class refuses degrades to
+    // the 30 s timer, so ONE pass of waves is not guaranteed to reach every
+    // stream when the machine is slow. What the contract promises is that a
+    // later wake catches the stream up from its cursor, so wake again, in
+    // waves, whoever has not seen the change yet, until all have (bounded).
     const everyone = [...wakes];
+    const seen = (index: number) => changeIds(streams[index]!.events).has(id);
+    const deadline = Date.now() + 15_000;
 
-    for (let i = 0; i < everyone.length; i += 5) {
-      for (const wake of everyone.slice(i, i + 5)) wake();
-      await Bun.sleep(60);
-    }
+    do {
+      const pending = everyone
+        .map((wake, index) => ({ wake, index }))
+        .filter(({ index }) => !seen(index));
+
+      for (let i = 0; i < pending.length; i += 5) {
+        for (const { wake } of pending.slice(i, i + 5)) wake();
+        await Bun.sleep(60);
+      }
+
+      await Bun.sleep(100);
+    } while (
+      Date.now() < deadline &&
+      !streams.every((_, index) => seen(index))
+    );
 
     await Promise.all(
       streams.map((stream) =>
@@ -1022,6 +1065,7 @@ suite("realtime wake-up hint across instances (#1171)", () => {
     // The rebuilt connection hears its own pings: it stays up.
     await Bun.sleep(600);
     expect(listener.state()).toBe("listening");
+    await until(() => usages.length > 0, 3_000);
     expect(usages.length).toBeGreaterThan(0);
     expect(usages.every((u) => u >= 0 && u <= 1)).toBe(true);
     expect(await listeningBackendsOf(ROLES.live)).toBe(1);
