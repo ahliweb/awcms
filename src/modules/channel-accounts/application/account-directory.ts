@@ -20,7 +20,12 @@ import type {
   ChannelHealthState,
   ChannelSecretPurpose
 } from "../domain/channel-accounts-constants";
-import { checkAccountShape } from "../domain/provider-matrix";
+import {
+  checkAccountShape,
+  claimBasisFor,
+  externalIdShapeOk,
+  normalizeExternalId
+} from "../domain/provider-matrix";
 import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import type {
   AccessModeInput,
@@ -250,6 +255,7 @@ export type CreateAccountOutcome =
         | "CONNECTION_REQUIRED"
         | "PARENT_REQUIRED"
         | "PARENT_INVALID"
+        | "EXTERNAL_ID_INVALID"
         | "ACCOUNT_ALREADY_REGISTERED";
     };
 
@@ -265,7 +271,7 @@ export type CreateAccountOutcome =
 export function checkRegistrationShape(
   input: Pick<
     CreateAccountInput,
-    "provider" | "accountKind" | "authMode" | "connectionId"
+    "provider" | "accountKind" | "authMode" | "connectionId" | "externalId"
   >
 ):
   | { ok: true; parentKind: string | null }
@@ -277,6 +283,13 @@ export function checkRegistrationShape(
   );
 
   if (!shape.ok) return { ok: false, code: shape.code };
+
+  // ADR-0170 (audit H1): the id must have the shape of its kind, so the id
+  // namespaces of two kinds cannot be made to overlap. Input-only, so the same
+  // answer for every caller and no oracle on other tenants' data.
+  if (!externalIdShapeOk(input.provider, input.accountKind, input.externalId)) {
+    return { ok: false, code: "EXTERNAL_ID_INVALID" };
+  }
 
   // OAuth accounts hang off a connection (the token holder); the other modes
   // carry their own credential and may not claim one.
@@ -303,6 +316,13 @@ export async function createAccount(
   const shape = checkRegistrationShape(input);
 
   if (!shape.ok) return { outcome: "refused", code: shape.code };
+
+  // One spelling before the claim index sees the id (audit L-d).
+  const externalId = normalizeExternalId(
+    input.provider,
+    input.accountKind,
+    input.externalId
+  );
 
   if (input.authMode === "oauth2") {
     // `FOR SHARE`: a revocation (which locks the row `FOR UPDATE`) cannot
@@ -376,17 +396,24 @@ export async function createAccount(
     return { outcome: "refused", code: "PARENT_INVALID" };
   }
 
+  // ADR-0170: how this row holds the global claim. A `verification` row is
+  // `pending` and holds nothing against other tenants until a connector proves
+  // control of the id; a `registration` row holds the claim from here on. No
+  // target on the conflict clause: the arbiter is whichever unique index the row
+  // collides with (the per-tenant one for a verification row, that one or the
+  // global one for a registration row), and every collision answers the same.
   const rows = (await tx`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
        account_kind, external_id, display_name, auth_mode, connection_id,
-       parent_account_id, created_by, updated_by)
+       parent_account_id, claim_basis, created_by, updated_by)
     VALUES (${tenantId}, ${input.businessScope?.type ?? null},
             ${input.businessScope?.id ?? null}, ${input.provider},
-            ${input.accountKind}, ${input.externalId}, ${input.displayName},
+            ${input.accountKind}, ${externalId}, ${input.displayName},
             ${input.authMode}, ${input.connectionId}, ${input.parentAccountId},
+            ${claimBasisFor(input.provider, input.accountKind)},
             ${actorTenantUserId}, ${actorTenantUserId})
-    ON CONFLICT (provider, external_id) WHERE deleted_at IS NULL DO NOTHING
+    ON CONFLICT DO NOTHING
     RETURNING id, business_scope_type, business_scope_id, provider,
               account_kind, external_id, display_name, auth_mode,
               connection_id, parent_account_id, secret_id, status,
@@ -921,6 +948,143 @@ export async function deleteAccount(
   return { outcome: "deleted" };
 }
 
+export const CLAIM_RELEASED_REASON_CODE = "CLAIM_RELEASED_BY_PLATFORM";
+
+export type ReleasedChild = {
+  accountId: string;
+  accountKind: string;
+  credentialErased: boolean;
+};
+
+export type ReleaseHeldAccountOutcome =
+  | {
+      outcome: "released";
+      accountKind: string;
+      credentialErased: boolean;
+      /** Live children that held NO claim and were ended with the container (audit M1). */
+      children: ReleasedChild[];
+    }
+  | { outcome: "not_found" }
+  | { outcome: "refused"; code: "HAS_CHILD_ACCOUNTS" };
+
+/**
+ * The tenant-side half of the platform release action (ADR-0170 option C),
+ * run in the HOLDER tenant's own RLS context by the platform route: the account
+ * that holds a contested `(provider, external id)` claim is ended with the same
+ * steps a tenant's own delete takes (credential ciphertext erased, webhook
+ * subscriptions revoked and their secrets erased, soft delete), minus the
+ * "not while connected" refusal, which is exactly what a release overrides. The
+ * terminal row carries the fixed reason {@link CLAIM_RELEASED_REASON_CODE}, so
+ * the tenant sees WHY its account ended. `deleted_by` stays NULL: the operator
+ * is not a member of this tenant (ADR-0091).
+ *
+ * Returns `not_found` when the account is gone or no longer holds the claim (it
+ * became `pending` and `verification`-basis, was deleted, ...): there is nothing
+ * to release, and the platform route answers the same as for an unknown id.
+ * A container whose live child HOLDS a claim is refused (release that child by
+ * its own id); children that hold none are ended with it.
+ */
+export async function releaseHeldAccount(
+  tx: Bun.SQL,
+  store: SecretStorePort,
+  tenantId: string,
+  accountId: string
+): Promise<ReleaseHeldAccountOutcome> {
+  const rows = (await tx`
+    SELECT account_kind, secret_id, status, claim_basis
+    FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId} AND deleted_at IS NULL
+    FOR UPDATE
+  `) as {
+    account_kind: string;
+    secret_id: string | null;
+    status: string;
+    claim_basis: string;
+  }[];
+  const account = rows[0];
+
+  if (
+    !account ||
+    !(
+      account.claim_basis === "registration" ||
+      account.status === "connected" ||
+      account.status === "degraded"
+    )
+  ) {
+    return { outcome: "not_found" };
+  }
+
+  // The children, locked. A child that HOLDS a claim of its own blocks the
+  // release (its holder is a different dispute and the operator releases it by
+  // its own id). A child that holds none (a `pending` verification-basis row) is
+  // invisible to the locator, so it could never be released by itself: it is
+  // ended with its container (audit M1), with its own credential erased.
+  const children = (await tx`
+    SELECT id, account_kind, secret_id, status, claim_basis
+    FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND parent_account_id = ${accountId}
+      AND deleted_at IS NULL
+    ORDER BY id
+    FOR UPDATE
+  `) as {
+    id: string;
+    account_kind: string;
+    secret_id: string | null;
+    status: string;
+    claim_basis: string;
+  }[];
+
+  if (
+    children.some(
+      (child) =>
+        child.claim_basis === "registration" ||
+        child.status === "connected" ||
+        child.status === "degraded"
+    )
+  ) {
+    return { outcome: "refused", code: "HAS_CHILD_ACCOUNTS" };
+  }
+
+  const releasedChildren: ReleasedChild[] = [];
+
+  for (const child of children) {
+    await endHeldAccount(tx, store, tenantId, child.id, child.secret_id);
+    releasedChildren.push({
+      accountId: child.id,
+      accountKind: child.account_kind,
+      credentialErased: child.secret_id !== null
+    });
+  }
+
+  await endHeldAccount(tx, store, tenantId, accountId, account.secret_id);
+
+  return {
+    outcome: "released",
+    accountKind: account.account_kind,
+    credentialErased: account.secret_id !== null,
+    children: releasedChildren
+  };
+}
+
+/** Credential erased, webhook subscriptions revoked, soft delete with the fixed release reason. */
+async function endHeldAccount(
+  tx: Bun.SQL,
+  store: SecretStorePort,
+  tenantId: string,
+  accountId: string,
+  secretId: string | null
+): Promise<void> {
+  await eraseAccountCredential(tx, store, tenantId, accountId, secretId);
+  await revokeAccountWebhookSubscriptions(tx, store, tenantId, accountId);
+  await tx`
+    UPDATE awcms_channel_accounts
+    SET status = 'deleted', status_reason = ${CLAIM_RELEASED_REASON_CODE},
+        deleted_at = now(), connected_at = NULL, updated_at = now(),
+        version = version + 1
+    WHERE tenant_id = ${tenantId} AND id = ${accountId}
+  `;
+}
+
 // ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
@@ -980,6 +1144,37 @@ export type RecordHealthInput = {
   quotaLimit?: number | null;
 };
 
+export const CLAIM_LOST_REASON_CODE = "ACCOUNT_ALREADY_REGISTERED";
+
+export type RecordHealthResult = {
+  recorded: boolean;
+  /**
+   * `lost` (ADR-0170): the report was `ok` for a `verification`-basis account
+   * that another tenant had ALREADY verified for the same external id. The
+   * account stays `pending`, the health row says `failing` with
+   * {@link CLAIM_LOST_REASON_CODE}, and the connector must treat the account as
+   * not connected. Whoever reports health maps it to the one answer a refused
+   * registration gives (`409 ACCOUNT_ALREADY_REGISTERED`); it never names the
+   * other tenant.
+   */
+  claim?: "lost";
+};
+
+/**
+ * The unique violation of the global claim index
+ * (`awcms_channel_accounts_live_external_key`). Bun.SQL carries the SQLSTATE in
+ * `errno`, not `code`. Anything else is not a lost claim and is rethrown.
+ */
+function isClaimConflict(error: unknown): boolean {
+  const failure = error as { errno?: unknown; constraint?: unknown } | null;
+
+  return (
+    String(failure?.errno) === "23505" &&
+    (failure?.constraint === undefined ||
+      failure.constraint === "awcms_channel_accounts_live_external_key")
+  );
+}
+
 /**
  * Called by health jobs and dispatch failures of provider connectors, and by ONE
  * route: `attest-device` (Issue #1142), for a device of an UNOFFICIAL provider
@@ -997,24 +1192,60 @@ export type RecordHealthInput = {
  *
  * `revoked`, `disabled` and `deleted` are NEVER changed by health: a stale
  * success report cannot resurrect an account somebody turned off.
+ *
+ * ADR-0170: `ok` is also the moment a `verification`-basis account claims its
+ * external id globally. If another tenant verified the same id first, the
+ * account stays `pending` and the result says `claim: "lost"`.
  */
 export async function recordAccountHealth(
   tx: Bun.SQL,
   tenantId: string,
   accountId: string,
   input: RecordHealthInput
-): Promise<{ recorded: boolean }> {
+): Promise<RecordHealthResult> {
   const account = await fetchAccountRecord(tx, tenantId, accountId);
 
   if (!account) return { recorded: false };
+
+  let claimLost = false;
+
+  if (input.state === "ok") {
+    // First, and inside a savepoint: for a `verification`-basis account the move
+    // to `connected` is the moment it claims the external id globally, and the
+    // partial unique index (sql/416) is what makes the first of two racing
+    // tenants the winner. The loser's statement fails with 23505; the savepoint
+    // keeps that from aborting the caller's transaction.
+    const trx = tx as Bun.TransactionSQL;
+
+    try {
+      await trx.savepoint(async (sp) => {
+        await sp`
+          UPDATE awcms_channel_accounts
+          SET status = 'connected', status_reason = NULL,
+              connected_at = COALESCE(connected_at, now()), updated_at = now(),
+              version = version + 1
+          WHERE tenant_id = ${tenantId} AND id = ${accountId}
+            AND status IN ('pending', 'degraded')
+        `;
+      });
+    } catch (error) {
+      if (!isClaimConflict(error)) throw error;
+
+      claimLost = true;
+    }
+  }
+
+  const state = claimLost ? "failing" : input.state;
+  const reasonCode = claimLost ? CLAIM_LOST_REASON_CODE : input.reasonCode;
 
   await tx`
     INSERT INTO awcms_channel_account_health
       (tenant_id, account_id, state, reason_code, checked_at,
        token_expires_at, quota_remaining, quota_limit)
-    VALUES (${tenantId}, ${accountId}, ${input.state}, ${input.reasonCode},
-            now(), ${input.tokenExpiresAt ?? null},
-            ${input.quotaRemaining ?? null}, ${input.quotaLimit ?? null})
+    VALUES (${tenantId}, ${accountId}, ${state}, ${reasonCode},
+            now(), ${claimLost ? null : (input.tokenExpiresAt ?? null)},
+            ${claimLost ? null : (input.quotaRemaining ?? null)},
+            ${claimLost ? null : (input.quotaLimit ?? null)})
     ON CONFLICT (tenant_id, account_id) DO UPDATE
     SET state = EXCLUDED.state, reason_code = EXCLUDED.reason_code,
         checked_at = EXCLUDED.checked_at,
@@ -1023,16 +1254,13 @@ export async function recordAccountHealth(
         quota_limit = EXCLUDED.quota_limit, updated_at = now()
   `;
 
-  if (input.state === "ok") {
-    await tx`
-      UPDATE awcms_channel_accounts
-      SET status = 'connected', status_reason = NULL,
-          connected_at = COALESCE(connected_at, now()), updated_at = now(),
-          version = version + 1
-      WHERE tenant_id = ${tenantId} AND id = ${accountId}
-        AND status IN ('pending', 'degraded')
-    `;
-  } else if (input.state === "degraded" || input.state === "failing") {
+  // The account row itself is NOT touched on a lost claim: it stays `pending`
+  // exactly as it was. The health row carries the reason (the connector roles
+  // that report health may write a pending account's health but, by their
+  // RESTRICTIVE policies, never another status or reason onto the account).
+  if (claimLost) return { recorded: true, claim: "lost" };
+
+  if (input.state === "degraded" || input.state === "failing") {
     await tx`
       UPDATE awcms_channel_accounts
       SET status = 'degraded', status_reason = ${input.reasonCode},

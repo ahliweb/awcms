@@ -13,6 +13,8 @@ export const CREDENTIALS_ACTIVITY_CODE = "credentials";
 export const ASSIGNMENTS_ACTIVITY_CODE = "assignments";
 export const RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE = "risk_acknowledgements";
 export const WEBHOOKS_ACTIVITY_CODE = "webhooks";
+/** PLATFORM-scoped (ADR-0053, ADR-0170): releasing a contested external-account claim held by ANOTHER tenant. */
+export const ACCOUNT_CLAIMS_ACTIVITY_CODE = "account_claims";
 
 /**
  * The guards, one per seeded permission. `AccessAction` is a CLOSED vocabulary
@@ -79,6 +81,14 @@ export const CHANNEL_ACCOUNTS_GUARDS = {
     moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
     activityCode: WEBHOOKS_ACTIVITY_CODE,
     action: "configure" as const
+  },
+  // ADR-0170 option C: PLATFORM-scoped (the permission is declared
+  // `scope: "platform"` in the descriptor and seeded so by sql/416). It is the
+  // only guard here that is not in the catalogue seeded to tenant roles.
+  releaseClaim: {
+    moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+    activityCode: ACCOUNT_CLAIMS_ACTIVITY_CODE,
+    action: "revoke" as const
   }
 } as const;
 

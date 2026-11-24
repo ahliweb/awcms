@@ -632,6 +632,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/channel-accounts/claims/release.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/channel-accounts/connections/[id]/revoke.ts",
       "workClass": "interactive",
       "source": "factory"

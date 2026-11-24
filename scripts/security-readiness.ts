@@ -55,6 +55,10 @@ import {
   pinChannelAccountsAccessGuards,
   probeChannelAccountsAccessGuards
 } from "./lib/channel-accounts-access-guards";
+import {
+  pinChannelAccountsClaimGuards,
+  probeChannelAccountsClaimGuards
+} from "./lib/channel-accounts-claim-guards";
 import { probeTelegramEngagementDispatchRole } from "./lib/telegram-engagement-dispatch-probe";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
@@ -5607,6 +5611,10 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   // reservation; column-scoped UPDATE on the reservation, allocation and staff
   // assignment release columns, INSERT on the history table, nothing else.
   "awcms_booking_transition",
+  // sql/416 (Issue #1215, ADR-0170): owns the cross-tenant READ that finds which
+  // row holds a contested external-account claim; column SELECT on eight
+  // columns of `awcms_channel_accounts`, nothing else, never a write.
+  "awcms_channel_claim_locator",
   "awcms_delegated_expiry",
   "awcms_domain_bootstrap",
   // sql/306 (Issue #970): owns the operator-run erasure of one employment's
@@ -8320,6 +8328,49 @@ export async function checkChannelAccountsAccessGuards(): Promise<SecurityCheckR
 }
 
 /**
+ * The external-account claim (Issue #1215, ADR-0170, `sql/416`): the global
+ * claim index is held by verification for a provider whose id a connector
+ * proves and by registration for every other, one tenant cannot hold an id
+ * twice, the basis is immutable, and the platform release action's locator is
+ * one narrow read-only SECURITY DEFINER lookup. Exact pins plus a rolled-back
+ * behavioural probe (a pin alone passes an index that kept its shape but
+ * changed what it covers).
+ */
+export async function checkChannelAccountsClaimGuards(): Promise<SecurityCheckResult> {
+  const name =
+    "External-account claims are held by verification, one tenant per id";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings = await pinChannelAccountsClaimGuards(sql);
+    const probe = await probeChannelAccountsClaimGuards(sql);
+
+    if (probe !== null) findings.push(...probe);
+
+    return findings.length === 0
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence: `the claim_basis column, its CHECK, the two unique claim indexes and the locator (role, columns, owner, search_path, body, EXECUTE) equal their reviewed definitions${probe === null ? "; the rolled-back behavioural probe was NOT run (this connection cannot seed a throwaway tenant), so only the exact pins stood" : ", and a rolled-back probe confirmed pending verification-basis rows hold nothing, the first to connect wins, registration-basis rows hold from the start, one tenant cannot hold an id twice, and the locator answers only a held claim"}.`
+        }
+      : { name, severity, status: "fail", evidence: findings.join("; ") };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the channel account claim guards: ${errorMessage(error)}`
+    };
+  }
+}
+
+/**
  * The #1271 audit, L3: the behavioural probes of the dedicated roles
  * (`awcms_worker`'s secret view, `awcms_social_dispatch`'s secret view and
  * write boundary, `awcms_telegram_engagement_dispatch`) run only when the
@@ -8552,6 +8603,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
     await checkChannelAccountsAccessGuards(),
+    await checkChannelAccountsClaimGuards(),
     await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
     await checkNoRestrictedSchemaCreate(),

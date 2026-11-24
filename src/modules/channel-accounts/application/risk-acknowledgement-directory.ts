@@ -263,6 +263,13 @@ export type AttestDeviceOutcome =
   | { outcome: "attested"; status: "connected" }
   | { outcome: "already_connected" }
   | { outcome: "not_found" }
+  /**
+   * ADR-0170: another tenant already holds the claim. A StarSender device is a
+   * `registration`-basis account (its pairing is attested, not proven), so its
+   * claim is held from registration and this cannot happen today; the outcome
+   * exists so a future change of basis cannot connect a device that lost.
+   */
+  | { outcome: "claim_lost" }
   | {
       outcome: "refused";
       code:
@@ -359,10 +366,13 @@ export async function attestDevice(
 
   if (!second.ok) return second.result;
 
-  await recordAccountHealth(tx, tenantId, accountId, {
+  const health = await recordAccountHealth(tx, tenantId, accountId, {
     state: "ok",
     reasonCode: OPERATOR_ATTESTED_REASON
   });
+
+  if (health.claim === "lost") return { outcome: "claim_lost" };
+
   await tx`
     UPDATE awcms_channel_accounts
     SET attested_acknowledgement_id = ${own[0].id}

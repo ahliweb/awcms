@@ -271,9 +271,10 @@ async function seedBotAccount(
     const rows = (await tx`
       INSERT INTO awcms_channel_accounts
         (tenant_id, provider, account_kind, external_id, display_name,
-         auth_mode, secret_id, status, created_by)
+         auth_mode, secret_id, status, claim_basis, created_by)
       VALUES (${tenantId}, 'telegram', 'bot', ${botId}, ${`Bot ${botId}`},
-              'bot_token', ${secret.secretId}, 'pending', ${actor})
+              'bot_token', ${secret.secretId}, 'pending', 'verification',
+              ${actor})
       RETURNING id
     `) as { id: string }[];
     const accountId = rows[0]!.id;
@@ -564,11 +565,116 @@ suite("telegram_engagement against PostgreSQL (Issue #1156)", () => {
       expect(again).toEqual({ outcome: "refused", code: "ALREADY_REGISTERED" });
     });
 
-    test("a second tenant cannot hold the same bot (the channel account registry refuses it)", async () => {
-      await assertRejected(
-        seedBotAccount(T2, U2, BOT_IDS.a),
-        "the same bot in two tenants"
+    test("a second tenant can REGISTER the same bot but cannot hold it: the bot is claimed when its token is verified, and the first tenant already did (ADR-0170)", async () => {
+      // `pending` holds nothing against other tenants (a verification-basis
+      // account), so the registration itself is accepted without an oracle...
+      const second = await seedBotAccount(T2, U2, BOT_IDS.a);
+      const registered = await inTenant(T2, (tx) =>
+        registerBot(
+          tx,
+          T2,
+          U2,
+          { accountId: second, dailySendCeiling: null },
+          ENV
+        )
       );
+
+      expect(registered.outcome).toBe("registered");
+
+      // ...and the connector's getMe proves the id, but the claim is already
+      // T1's: the endpoint FAILS with the registration-refusal code, the account
+      // stays pending, and nothing is served for it.
+      const webhookCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "setWebhook" && c.token.startsWith(`${BOT_IDS.a}:`)
+        ).length;
+      const before = webhookCalls();
+
+      await dispatch(T2);
+
+      // Audit L1: the claim comes BEFORE setWebhook, and the loser never calls
+      // it, so it cannot overwrite the winner's webhook with its own.
+      expect(webhookCalls()).toBe(before);
+
+      const endpoint = (await getAdminSql()`
+        SELECT state, last_error_code FROM awcms_telegram_engagement_endpoints
+        WHERE account_id = ${second}
+      `) as { state: string; last_error_code: string }[];
+      const account = (await getAdminSql()`
+        SELECT status, status_reason FROM awcms_channel_accounts
+        WHERE id = ${second}
+      `) as { status: string; status_reason: string | null }[];
+
+      expect(endpoint[0]).toEqual({
+        state: "failed",
+        last_error_code: "ACCOUNT_ALREADY_REGISTERED"
+      });
+      expect(account[0]).toEqual({ status: "pending", status_reason: null });
+
+      const health = (await getAdminSql()`
+        SELECT state, reason_code FROM awcms_channel_account_health
+        WHERE account_id = ${second}
+      `) as { state: string; reason_code: string }[];
+
+      expect(health).toEqual([
+        { state: "failing", reason_code: "ACCOUNT_ALREADY_REGISTERED" }
+      ]);
+
+      // Audit L-b: the loser's endpoint never set a webhook, so revoking it
+      // must not schedule a deleteWebhook that would switch off the WINNER's
+      // webhook (Telegram has one webhook per bot).
+      const deleteCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "deleteWebhook" && c.token.startsWith(`${BOT_IDS.a}:`)
+        ).length;
+      const deletesBefore = deleteCalls();
+
+      await inTenant(T2, (tx) => revokeBot(tx, T2, U2, second));
+      await dispatch(T2);
+
+      expect(deleteCalls()).toBe(deletesBefore);
+
+      const loserEndpoint = (await getAdminSql()`
+        SELECT state, provider_action FROM awcms_telegram_engagement_endpoints
+        WHERE account_id = ${second}
+      `) as { state: string; provider_action: string | null }[];
+
+      expect(loserEndpoint[0]).toEqual({
+        state: "revoked",
+        provider_action: null
+      });
+
+      // The winner is untouched.
+      const winner = (await getAdminSql()`
+        SELECT status FROM awcms_channel_accounts WHERE id = ${fx.accounts.a}
+      `) as { status: string }[];
+
+      expect(winner[0]!.status).toBe("connected");
+    });
+
+    test("ADR-0170 L-b: revoking an endpoint that never set a webhook schedules no deleteWebhook, even for an account that holds the claim", async () => {
+      const deleteCalls = () =>
+        telegram.calls.filter(
+          (c) =>
+            c.method === "deleteWebhook" && c.token.startsWith(`${BOT_IDS.c}:`)
+        ).length;
+
+      // Rotation inserts a NEW pending endpoint (never activated) for a bot
+      // whose account is connected and so holds the claim.
+      const rotated = await inTenant(T1, (tx) =>
+        rotateBot(tx, T1, U1, fx.accounts.c, ENV)
+      );
+
+      expect(rotated.outcome).toBe("rotated");
+
+      const before = deleteCalls();
+
+      await inTenant(T1, (tx) => revokeBot(tx, T1, U1, fx.accounts.c));
+      await dispatch(T1);
+
+      expect(deleteCalls()).toBe(before);
     });
 
     test("another tenant's account is not found, never registered", async () => {

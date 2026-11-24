@@ -58,6 +58,10 @@ import {
   writeAccountCredential
 } from "../../src/modules/channel-accounts/application/account-directory";
 import {
+  findClaimHolder,
+  releaseContestedClaim
+} from "../../src/modules/channel-accounts/application/claim-release";
+import {
   listAccountCapabilities,
   resolveCapability,
   setAccountCapability
@@ -509,28 +513,31 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         authMode: "api_token" as const
       };
 
-      expect(await page(T1, U1, "pn-1", phoneShape)).toEqual({
+      expect(await page(T1, U1, "2000000001", phoneShape)).toEqual({
         outcome: "refused",
         code: "PARENT_REQUIRED"
       });
 
-      const waba = await created(T1, U1, "waba-1", {
+      const waba = await created(T1, U1, "3000000001", {
         provider: "whatsapp_cloud",
         accountKind: "waba",
         authMode: "api_token"
       });
-      const phone = await created(T1, U1, "pn-1", {
+      const phone = await created(T1, U1, "2000000001", {
         ...phoneShape,
         parentAccountId: waba
       });
 
       expect(
-        await page(T1, U1, "pn-2", { ...phoneShape, parentAccountId: phone })
+        await page(T1, U1, "2000000002", {
+          ...phoneShape,
+          parentAccountId: phone
+        })
       ).toEqual({ outcome: "refused", code: "PARENT_INVALID" });
 
       // Five phone numbers under one WABA are five accounts.
       for (const n of [2, 3, 4, 5]) {
-        await created(T1, U1, `pn-${n}`, {
+        await created(T1, U1, `200000000${n}`, {
           ...phoneShape,
           parentAccountId: waba
         });
@@ -551,25 +558,27 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         authMode: "oauth2" as const
       };
 
-      expect(await page(T1, U1, "pg-1", facebookPage)).toEqual({
+      expect(await page(T1, U1, "10000001", facebookPage)).toEqual({
         outcome: "refused",
         code: "CONNECTION_REQUIRED"
       });
       expect(
-        await page(T1, U1, "pg-1", {
+        await page(T1, U1, "10000001", {
           ...facebookPage,
           provider: "threads",
           accountKind: "profile",
           connectionId: connection
         })
       ).toEqual({ outcome: "refused", code: "CONNECTION_MISMATCH" });
-      expect(await page(T1, U1, "pg-1", { connectionId: connection })).toEqual({
+      expect(
+        await page(T1, U1, "10000001", { connectionId: connection })
+      ).toEqual({
         outcome: "refused",
         code: "CONNECTION_MISMATCH"
       });
 
       // One connection exposes several pages: the token holder is not the account.
-      for (const external of ["pg-1", "pg-2", "pg-3"]) {
+      for (const external of ["10000001", "10000002", "10000003"]) {
         await created(T1, U1, external, {
           ...facebookPage,
           connectionId: connection
@@ -578,7 +587,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
 
       // Another tenant cannot attach to it.
       expect(
-        await page(T2, U2, "pg-9", {
+        await page(T2, U2, "10000009", {
           ...facebookPage,
           connectionId: connection
         })
@@ -769,7 +778,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       registerFakeAdapter();
 
       const connection = await activeConnection(T1, U1);
-      const oauth = await created(T1, U1, "pg-oauth", {
+      const oauth = await created(T1, U1, "10000010", {
         provider: "facebook",
         accountKind: "page",
         authMode: "oauth2",
@@ -870,7 +879,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       registerFakeAdapter();
 
       const connection = await activeConnection(T1, U1);
-      const id = await created(T1, U1, "cap-page", {
+      const id = await created(T1, U1, "10000031", {
         provider: "facebook",
         accountKind: "page",
         authMode: "oauth2",
@@ -929,12 +938,12 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
     });
 
     test("an unsupported action is refused when recorded and when used, never degraded", async () => {
-      const waba = await created(T1, U1, "waba-cap", {
+      const waba = await created(T1, U1, "3000000002", {
         provider: "whatsapp_cloud",
         accountKind: "waba",
         authMode: "api_token"
       });
-      const phone = await created(T1, U1, "pn-cap", {
+      const phone = await created(T1, U1, "2000000003", {
         provider: "whatsapp_cloud",
         accountKind: "waba_phone_number",
         authMode: "api_token",
@@ -1489,7 +1498,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       registerFakeAdapter();
 
       const connection = await activeConnection(T1, U1);
-      const id = await created(T1, U1, "refresh-page", {
+      const id = await created(T1, U1, "10000032", {
         provider: "facebook",
         accountKind: "page",
         authMode: "oauth2",
@@ -1780,7 +1789,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       if (handed.outcome !== "handed_off") throw new Error("fixture");
 
       expect(
-        await page(T1, U1, "pg-pending", {
+        await page(T1, U1, "10000011", {
           ...facebookPage,
           connectionId: handed.connectionId
         })
@@ -1791,20 +1800,20 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         failConnectionGrant(tx, store, T1, handed.connectionId)
       );
       expect(
-        await page(T1, U1, "pg-failed", {
+        await page(T1, U1, "10000012", {
           ...facebookPage,
           connectionId: handed.connectionId
         })
       ).toEqual({ outcome: "refused", code: "CONNECTION_NOT_ACTIVE" });
 
       // active works; once revoked it no longer does, and nothing was claimed.
-      await created(T1, U1, "pg-live", {
+      await created(T1, U1, "10000013", {
         ...facebookPage,
         connectionId: active
       });
       await inTenant(T1, (tx) => revokeConnection(tx, store, T1, active));
       expect(
-        await page(T1, U1, "pg-revoked", {
+        await page(T1, U1, "10000014", {
           ...facebookPage,
           connectionId: active
         })
@@ -1812,7 +1821,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
 
       const claimed = (await getAdminSql()`
         SELECT external_id FROM awcms_channel_accounts
-        WHERE external_id IN ('pg-pending', 'pg-failed', 'pg-revoked')
+        WHERE external_id IN ('10000011', '10000012', '10000014')
       `) as unknown[];
 
       expect(claimed).toHaveLength(0);
@@ -2150,6 +2159,551 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       const view = await inTenant(T1, (tx) => fetchAccountRecord(tx, T1, id));
 
       expect(view?.businessScope?.type).toBe("brand");
+    });
+  });
+  describe("an external id is claimed by verification, and a platform release settles disputes (Issue #1215, ADR-0170)", () => {
+    const T3 = "c1140000-0000-4000-8000-000000000003";
+    const U3 = "c1140000-0000-4000-8000-000000000301";
+
+    const botOf = (tenantId: string, actor: string, externalId: string) =>
+      inTenant(tenantId, (tx) =>
+        createAccount(tx, tenantId, actor, {
+          provider: "telegram",
+          accountKind: "bot",
+          authMode: "bot_token",
+          externalId,
+          displayName: `Bot ${externalId}`,
+          businessScope: null,
+          connectionId: null,
+          parentAccountId: null
+        })
+      );
+
+    const verify = (tenantId: string, accountId: string) =>
+      inTenant(tenantId, (tx) =>
+        recordAccountHealth(tx, tenantId, accountId, {
+          state: "ok",
+          reasonCode: null
+        })
+      );
+
+    test("two tenants register a verifiable id, the first to verify wins, and a racing pair of verifications has exactly one winner (as the least-privilege runtime role)", async () => {
+      const first = await botOf(T1, U1, "7400000001");
+      const second = await botOf(T2, U2, "7400000001");
+
+      expect(first.outcome).toBe("created");
+      expect(second.outcome).toBe("created");
+
+      if (first.outcome !== "created" || second.outcome !== "created") return;
+
+      const results = await Promise.all([
+        verify(T1, first.account.id),
+        verify(T2, second.account.id)
+      ]);
+
+      expect(results.filter((r) => r.claim === "lost")).toHaveLength(1);
+      expect(results.filter((r) => r.claim === undefined)).toHaveLength(1);
+
+      const rows = (await getAdminSql()`
+        SELECT status FROM awcms_channel_accounts
+        WHERE external_id = '7400000001' ORDER BY status
+      `) as { status: string }[];
+
+      expect(rows.map((row) => row.status)).toEqual(["connected", "pending"]);
+    });
+
+    test("the locator reads across tenants for the runtime role, while a direct SELECT still sees only the caller's own rows", async () => {
+      await created(T1, U1, "locator-dev");
+
+      const viaLocator = await inTenant(T2, (tx) =>
+        findClaimHolder(tx, "starsender", "device", "locator-dev")
+      );
+      const direct = (await inTenant(
+        T2,
+        (tx) =>
+          tx`SELECT id FROM awcms_channel_accounts WHERE external_id = 'locator-dev'`
+      )) as unknown[];
+
+      expect(viaLocator?.tenantId).toBe(T1);
+      expect(direct).toHaveLength(0);
+
+      // A pending verification-basis id holds nothing: there is no claim to find.
+      await botOf(T1, U1, "7400000002");
+
+      expect(
+        await inTenant(T2, (tx) =>
+          findClaimHolder(tx, "telegram", "bot", "7400000002")
+        )
+      ).toBeNull();
+    });
+
+    test("the platform release, run as the runtime role, ends the holder's account, erases its credential, writes both trails, and the real owner can then register", async () => {
+      await seedTenant(T3, "ca-platform", [[U3, "u3"]]);
+
+      const squat = await created(T1, U1, "disputed-dev");
+
+      await inTenant(T1, (tx) =>
+        writeAccountCredential(tx, store, T1, U1, squat, CANARY)
+      );
+      expect(await secretCount(T1)).toBe(1);
+      expect((await page(T2, U2, "disputed-dev")).outcome).toBe("refused");
+
+      const released = await inTenant(T3, (tx) =>
+        releaseContestedClaim(
+          tx,
+          store,
+          { platformTenantId: T3, tenantUserId: U3 },
+          {
+            provider: "starsender",
+            accountKind: "device",
+            externalId: "disputed-dev",
+            reasonCode: "ownership_dispute_resolved",
+            ticketRef: "TKT-1215",
+            reason: "verified out of band (ticket 1215)"
+          }
+        )
+      );
+
+      expect(released).toMatchObject({
+        outcome: "released",
+        holderTenantId: T1,
+        accountId: squat,
+        credentialErased: true
+      });
+      expect(await secretCount(T1)).toBe(0);
+
+      const row = (await getAdminSql()`
+        SELECT status, status_reason, deleted_at, secret_id
+        FROM awcms_channel_accounts WHERE id = ${squat}
+      `) as {
+        status: string;
+        status_reason: string;
+        deleted_at: Date | null;
+        secret_id: string | null;
+      }[];
+
+      expect(row[0]!.status).toBe("deleted");
+      expect(row[0]!.status_reason).toBe("CLAIM_RELEASED_BY_PLATFORM");
+      expect(row[0]!.deleted_at).not.toBeNull();
+      expect(row[0]!.secret_id).toBeNull();
+
+      const trails = (await getAdminSql()`
+        SELECT tenant_id, action, severity FROM awcms_audit_events
+        WHERE action IN ('channel_accounts.claim.release',
+                         'channel_accounts.account.claim_released')
+        ORDER BY action
+      `) as { tenant_id: string; action: string; severity: string }[];
+
+      // The platform row is only writable when the platform tenant is bound
+      // again after the holder's context (FORCE RLS WITH CHECK).
+      expect(trails).toEqual([
+        {
+          tenant_id: T1,
+          action: "channel_accounts.account.claim_released",
+          severity: "warning"
+        },
+        {
+          tenant_id: T3,
+          action: "channel_accounts.claim.release",
+          severity: "critical"
+        }
+      ]);
+      expect((await page(T2, U2, "disputed-dev")).outcome).toBe("created");
+
+      // Nothing is left to release.
+      expect(
+        await inTenant(T3, (tx) =>
+          releaseContestedClaim(
+            tx,
+            store,
+            { platformTenantId: T3, tenantUserId: U3 },
+            {
+              provider: "starsender",
+              accountKind: "device",
+              externalId: "no-such-claim",
+              reasonCode: "ownership_dispute_resolved",
+              ticketRef: null,
+              reason: "verified out of band (ticket 1215)"
+            }
+          )
+        )
+      ).toEqual({ outcome: "not_found" });
+    });
+
+    describe("audit H1/M1/M2: kind-scoped claims, id shapes, child cascade, holder trail", () => {
+      const T3b = "c1140000-0000-4000-8000-000000000003";
+      const U3b = "c1140000-0000-4000-8000-000000000301";
+      const create = (
+        tenantId: string,
+        actor: string,
+        provider: string,
+        kind: string,
+        authMode: "bot_token" | "api_token" | "device_key",
+        externalId: string,
+        parentAccountId: string | null = null
+      ) =>
+        inTenant(tenantId, (tx) =>
+          createAccount(tx, tenantId, actor, {
+            provider,
+            accountKind: kind,
+            authMode,
+            externalId,
+            displayName: "x",
+            businessScope: null,
+            connectionId: null,
+            parentAccountId
+          })
+        );
+      const verify = (tenantId: string, accountId: string) =>
+        inTenant(tenantId, (tx) =>
+          recordAccountHealth(tx, tenantId, accountId, {
+            state: "ok",
+            reasonCode: null
+          })
+        );
+
+      test("P1: a channel cannot be named with a bot's id, and even a registration-basis channel row of the same id does not block the bot (the kind is part of the key)", async () => {
+        // The shape refuses a bare integer for a channel, for a held id and a
+        // free id alike: no oracle.
+        const held = await create(
+          T1,
+          U1,
+          "telegram",
+          "bot",
+          "bot_token",
+          "7777000002"
+        );
+
+        expect(held.outcome).toBe("created");
+        if (held.outcome !== "created") return;
+        await verify(T1, held.account.id);
+
+        const probeHeld = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "7777000002"
+        );
+        const probeFree = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "7777000003"
+        );
+
+        expect(probeHeld).toEqual({
+          outcome: "refused",
+          code: "EXTERNAL_ID_INVALID"
+        });
+        expect(probeFree).toEqual(probeHeld);
+
+        // Defence in depth beneath the shape: a channel row of the bot's id
+        // inserted around the application does not take the bot's claim.
+        const squatted = await create(
+          T1,
+          U1,
+          "telegram",
+          "bot",
+          "bot_token",
+          "7777000001"
+        );
+
+        expect(squatted.outcome).toBe("created");
+        await getAdminSql()`
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name, auth_mode)
+          VALUES (${T2}, 'telegram', 'channel', '7777000001', 'squat', 'bot_token')
+        `;
+        if (squatted.outcome !== "created") return;
+        expect((await verify(T1, squatted.account.id)).claim).toBeUndefined();
+      });
+
+      test("P2: an ESP login cannot be named like an address, a sender is its lowercase address, and a sender verifies whatever other tenants registered", async () => {
+        expect(
+          await create(
+            T2,
+            U2,
+            "mailketing",
+            "esp_account",
+            "api_token",
+            "ops@victim.test"
+          )
+        ).toEqual({ outcome: "refused", code: "EXTERNAL_ID_INVALID" });
+
+        const esp = await create(
+          T1,
+          U1,
+          "mailketing",
+          "esp_account",
+          "api_token",
+          "victim-esp-1"
+        );
+
+        expect(esp.outcome).toBe("created");
+        if (esp.outcome !== "created") return;
+
+        expect(
+          await create(
+            T1,
+            U1,
+            "mailketing",
+            "sender_identity",
+            "api_token",
+            "Ops@Victim.test",
+            esp.account.id
+          )
+        ).toEqual({ outcome: "refused", code: "EXTERNAL_ID_INVALID" });
+
+        const sender = await create(
+          T1,
+          U1,
+          "mailketing",
+          "sender_identity",
+          "api_token",
+          "ops@victim.test",
+          esp.account.id
+        );
+
+        expect(sender.outcome).toBe("created");
+        if (sender.outcome !== "created") return;
+        expect((await verify(T1, sender.account.id)).claim).toBeUndefined();
+      });
+
+      test("L-d: a Telegram username is one claim whatever its case, and an id has one spelling (no leading zero); the refusal is the ordinary one", async () => {
+        const first = await create(
+          T1,
+          U1,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@VictimChannel"
+        );
+
+        expect(first.outcome).toBe("created");
+        if (first.outcome !== "created") return;
+        // stored under ONE spelling
+        expect(first.account.externalId).toBe("@victimchannel");
+
+        const second = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@victimchannel"
+        );
+        const third = await create(
+          T2,
+          U2,
+          "telegram",
+          "channel",
+          "bot_token",
+          "@VICTIMCHANNEL"
+        );
+
+        expect(second).toEqual({
+          outcome: "refused",
+          code: "ACCOUNT_ALREADY_REGISTERED"
+        });
+        expect(third).toEqual(second);
+
+        for (const id of ["0123456", "00001"]) {
+          expect(
+            await create(T1, U1, "whatsapp_cloud", "waba", "api_token", id)
+          ).toEqual({ outcome: "refused", code: "EXTERNAL_ID_INVALID" });
+        }
+      });
+
+      test("shapes: the documented formats are enforced and the unverified providers are left open", async () => {
+        const cases: [
+          string,
+          string,
+          "bot_token" | "api_token" | "device_key",
+          string,
+          boolean
+        ][] = [
+          ["telegram", "bot", "bot_token", "0123", false],
+          ["telegram", "bot", "bot_token", "-1001234567890", false],
+          ["telegram", "bot", "bot_token", "7000000123", true],
+          ["telegram", "channel", "bot_token", "-1001234567890", true],
+          ["telegram", "channel", "bot_token", "@mychannel", true],
+          ["telegram", "channel", "bot_token", "1234567890", false],
+          ["starsender", "device", "device_key", "has space", false],
+          ["starsender", "device", "device_key", "dev-1", true]
+        ];
+
+        for (const [provider, kind, authMode, id, ok] of cases) {
+          const result = await create(T1, U1, provider, kind, authMode, id);
+
+          expect([provider, kind, id, result.outcome]).toEqual([
+            provider,
+            kind,
+            id,
+            ok ? "created" : "refused"
+          ]);
+          if (!ok) {
+            expect(result).toEqual({
+              outcome: "refused",
+              code: "EXTERNAL_ID_INVALID"
+            });
+          }
+        }
+      });
+
+      const platformRelease = (
+        externalId: string,
+        provider: string,
+        accountKind: string
+      ) =>
+        inTenant(T3b, (tx) =>
+          releaseContestedClaim(
+            tx,
+            store,
+            { platformTenantId: T3b, tenantUserId: U3b },
+            {
+              provider,
+              accountKind,
+              externalId,
+              reasonCode: "ownership_dispute_resolved",
+              ticketRef: "TKT-1215",
+              reason: "SECRET-FREE-TEXT-ABOUT-THE-CLAIMANT operator basis"
+            }
+          )
+        );
+
+      test("P4/M1: a squatted container is released together with its pending (claim-less) child, credentials erased and a trail per child; a child that holds a claim blocks it", async () => {
+        await seedTenant(T3b, "ca-platform-b", [[U3b, "u3b"]]);
+
+        const esp = await create(
+          T2,
+          U2,
+          "mailketing",
+          "esp_account",
+          "api_token",
+          "victim-esp-id"
+        );
+        const child = await create(
+          T2,
+          U2,
+          "mailketing",
+          "sender_identity",
+          "api_token",
+          "anything@squat.test",
+          (esp as { account: { id: string } }).account.id
+        );
+
+        expect(child.outcome).toBe("created");
+        if (esp.outcome !== "created" || child.outcome !== "created") return;
+        await inTenant(T2, (tx) =>
+          writeAccountCredential(tx, store, T2, U2, esp.account.id, CANARY)
+        );
+        expect(await secretCount(T2)).toBe(1);
+
+        // The child alone holds nothing: it is not releasable by itself.
+        expect(
+          await platformRelease(
+            "anything@squat.test",
+            "mailketing",
+            "sender_identity"
+          )
+        ).toEqual({ outcome: "not_found" });
+
+        const released = await platformRelease(
+          "victim-esp-id",
+          "mailketing",
+          "esp_account"
+        );
+
+        expect(released).toMatchObject({
+          outcome: "released",
+          releasedChildren: 1
+        });
+
+        const rows = (await getAdminSql()`
+          SELECT id, status, status_reason, secret_id FROM awcms_channel_accounts
+          WHERE tenant_id = ${T2} ORDER BY account_kind
+        `) as {
+          id: string;
+          status: string;
+          status_reason: string;
+          secret_id: string | null;
+        }[];
+
+        expect(rows.map((r) => r.status)).toEqual(["deleted", "deleted"]);
+        expect(rows.every((r) => r.secret_id === null)).toBe(true);
+        expect(await secretCount(T2)).toBe(0);
+
+        const trails = (await getAdminSql()`
+          SELECT resource_id, attributes::text AS attributes FROM awcms_audit_events
+          WHERE tenant_id = ${T2} AND action = 'channel_accounts.account.claim_released'
+        `) as { resource_id: string; attributes: string }[];
+
+        expect(trails.map((t) => t.resource_id).sort()).toEqual(
+          [esp.account.id, child.account.id].sort()
+        );
+
+        // The erased-ciphertext flag must stay READABLE: a key named after a
+        // credential is redacted by name, so the attribute is `ciphertextErased`.
+        const erased = trails
+          .map((t) => JSON.parse(t.attributes) as Record<string, unknown>)
+          .map((a) => a.ciphertextErased);
+
+        expect(erased.sort()).toEqual([false, true]);
+
+        // M2: the holder (opposing party) sees the closed code and the ticket
+        // reference, never the operator's text; the platform trail has it.
+        for (const trail of trails) {
+          expect(trail.attributes).not.toContain("SECRET-FREE-TEXT");
+          expect(JSON.parse(trail.attributes)).toMatchObject({
+            releaseReason: "ownership_dispute_resolved",
+            ticketRef: "TKT-1215"
+          });
+        }
+
+        const platform = (await getAdminSql()`
+          SELECT attributes::text AS attributes FROM awcms_audit_events
+          WHERE tenant_id = ${T3b} AND action = 'channel_accounts.claim.release'
+        `) as { attributes: string }[];
+
+        expect(platform[0]!.attributes).toContain("SECRET-FREE-TEXT");
+
+        // A child that HOLDS a claim (registration basis) still blocks.
+        const waba = (await getAdminSql()`
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name, auth_mode)
+          VALUES (${T1}, 'whatsapp_cloud', 'waba', '1000000001', 'w', 'api_token')
+          RETURNING id
+        `) as { id: string }[];
+
+        await getAdminSql()`
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name,
+             auth_mode, parent_account_id)
+          VALUES (${T1}, 'whatsapp_cloud', 'waba_phone_number', '1000000002', 'n', 'api_token', ${waba[0]!.id})
+        `;
+        expect(
+          await platformRelease("1000000001", "whatsapp_cloud", "waba")
+        ).toEqual({ outcome: "refused", code: "HAS_CHILD_ACCOUNTS" });
+      });
+    });
+
+    test("an unprivileged runtime tenant cannot reach another tenant's row through the release path's tables", async () => {
+      const id = await created(T1, U1, "untouchable-dev");
+
+      // The platform route is the only caller; as a plain tenant transaction
+      // the runtime role still cannot see, update or delete a foreign row.
+      const updated = (await inTenant(
+        T2,
+        (tx) =>
+          tx`UPDATE awcms_channel_accounts SET status = 'deleted', deleted_at = now()
+             WHERE id = ${id} RETURNING id`
+      )) as unknown[];
+
+      expect(updated).toHaveLength(0);
     });
   });
 });

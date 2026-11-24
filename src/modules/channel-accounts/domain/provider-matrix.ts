@@ -490,3 +490,132 @@ export function evaluateCapability(input: {
 
   return { allowed: true };
 }
+
+/**
+ * How a registered account comes to hold the GLOBAL `(provider, external id)`
+ * claim (ADR-0170, amending ADR-0148 invariant I1):
+ *
+ * - `registration` (the default, fail-closed): the row holds the claim from the
+ *   moment it is live, in every status. It is the basis of every provider and
+ *   kind for which this repository has no call that proves control of the id.
+ * - `verification`: the row holds the claim only while `connected` or
+ *   `degraded`, i.e. after a connector proved control of the id. A `pending`
+ *   row of this basis holds nothing against other tenants.
+ */
+export type ClaimBasis = "registration" | "verification";
+
+/**
+ * The ONLY `(provider, kind)` pairs whose id a connector in this repository
+ * proves, one entry per proof:
+ *
+ * - `telegram` `bot`: `telegram_engagement`'s connector calls `getMe` with the
+ *   account's own bot token and refuses the endpoint unless the returned bot id
+ *   equals the account's external id (`BOT_IDENTITY_MISMATCH`); only then does
+ *   it report the account healthy.
+ * - `mailketing` `sender_identity`: `email`'s sender verification lists the
+ *   senders the provider itself has verified for the account's token and moves
+ *   a sender to `connected` only when the address is on that list.
+ *
+ * Everything else keeps the `registration` claim: Graph API accounts (WhatsApp
+ * Cloud, Facebook, Instagram, Threads) and the other OAuth providers have no
+ * call that binds the id to the connection's token yet; `starsender` is
+ * operator-attested (`attest-device`), which is not proof; `mailketing`
+ * `esp_account` is proven only as "this token works", not as "this id is that
+ * token's account"; `telegram` `channel` is not checked by `getMe`. A provider
+ * enters this table in the SAME change as the connector call that proves it,
+ * and `tests/channel-accounts-claim-basis.test.ts` pins the table.
+ */
+export const VERIFIED_CLAIM_KINDS: Readonly<Record<string, readonly string[]>> =
+  {
+    telegram: ["bot"],
+    mailketing: ["sender_identity"]
+  };
+
+export function claimBasisFor(provider: string, kind: string): ClaimBasis {
+  return Object.hasOwn(VERIFIED_CLAIM_KINDS, provider) &&
+    VERIFIED_CLAIM_KINDS[provider]!.includes(kind)
+    ? "verification"
+    : "registration";
+}
+
+/**
+ * The SHAPE an external id must have, per `(provider, kind)` (ADR-0170, audit
+ * H1). The claim index is keyed by kind, and this keeps the id namespaces of
+ * two kinds from being made to overlap on purpose: a Telegram channel cannot be
+ * named with a bot's integer id, a Mailketing ESP login cannot be named like a
+ * sender's address, a sender is always the lowercase address.
+ *
+ * Only shapes the provider documents are enforced, and the ones the repository's
+ * own connectors already enforce at use time (`FACEBOOK_PAGE_ID`, the WhatsApp
+ * phone number id, the StarSender device id). Everything else is left open on
+ * purpose (TikTok, LinkedIn, Threads and so on have no id format this repository
+ * has verified): an over-tight guess would refuse a real account.
+ *
+ * Pure and independent of any stored data, so a refusal here is the same for
+ * every caller and reveals nothing about other tenants.
+ */
+const EXTERNAL_ID_SHAPES: Readonly<
+  Record<string, Readonly<Record<string, RegExp>>>
+> = {
+  telegram: {
+    // A bot's id is a positive integer. (Proven at connect time by getMe.)
+    bot: /^[1-9][0-9]{0,19}$/
+  },
+  mailketing: {
+    // An ESP login is a label, NEVER an address: addresses are sender ids.
+    esp_account: /^[^@\s]{1,256}$/,
+    // A sender is its normalised (lowercase) address.
+    sender_identity:
+      /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/
+  },
+  whatsapp_cloud: {
+    // No leading zero: `0123` and `123` must not be two spellings of one id.
+    waba: /^[1-9][0-9]{4,24}$/,
+    waba_phone_number: /^[1-9][0-9]{4,24}$/
+  },
+  facebook: { page: /^[1-9][0-9]{0,31}$/ },
+  instagram: { professional_account: /^[1-9][0-9]{0,31}$/ },
+  starsender: { device: /^[A-Za-z0-9._:-]{1,128}$/ }
+};
+
+/** A telegram `channel` is `-100<digits>` or `@username`; never a bare integer (that is a bot id). */
+const TELEGRAM_CHANNEL_ID = /^(-100[0-9]{5,16}|@[A-Za-z][A-Za-z0-9_]{4,31})$/;
+
+/**
+ * The ONE spelling an id is stored (and looked up) under, applied BEFORE the
+ * claim index sees it (audit L-d). A Telegram username is case-insensitive, so
+ * `@VictimChannel` and `@victimchannel` are one channel and must be one claim;
+ * numeric ids refuse a leading zero in their shape instead of being rewritten.
+ * Left as written, because the provider's semantics are not documented: the
+ * Mailketing ESP login label, the StarSender device id, and every provider with
+ * an open shape. Mailketing senders are REFUSED unless already lowercase
+ * (`sender_identity` shape), not rewritten.
+ */
+export function normalizeExternalId(
+  provider: string,
+  kind: string,
+  externalId: string
+): string {
+  return provider === "telegram" &&
+    kind === "channel" &&
+    externalId.startsWith("@")
+    ? externalId.toLowerCase()
+    : externalId;
+}
+
+export function externalIdShapeOk(
+  provider: string,
+  kind: string,
+  externalId: string
+): boolean {
+  if (provider === "telegram" && kind === "channel") {
+    return TELEGRAM_CHANNEL_ID.test(externalId);
+  }
+
+  const byKind = Object.hasOwn(EXTERNAL_ID_SHAPES, provider)
+    ? EXTERNAL_ID_SHAPES[provider]!
+    : null;
+  const shape = byKind && Object.hasOwn(byKind, kind) ? byKind[kind]! : null;
+
+  return shape === null || shape.test(externalId);
+}

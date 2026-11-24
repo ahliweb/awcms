@@ -8,13 +8,13 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 290   |
+| Migrations                          | 291   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 909   |
-| Route files                         | 697   |
-| ADR                                 | 340   |
+| Test files                          | 911   |
+| Route files                         | 698   |
+| ADR                                 | 342   |
 
 ### Modules
 
@@ -354,7 +354,8 @@
 | 287 | `sql/413_awcms_inbox_status_progress_stream.sql`                       |
 | 288 | `sql/414_awcms_omes_workflow_verdict_worker_grants.sql`                |
 | 289 | `sql/415_awcms_email_messages_worker_update_columns.sql`               |
-| 290 | `sql/418_awcms_realtime_wake_hint_notify.sql`                          |
+| 290 | `sql/416_awcms_channel_accounts_claim_on_verify.sql`                   |
+| 291 | `sql/418_awcms_realtime_wake_hint_notify.sql`                          |
 
 ### Tables & Row-Level Security
 
@@ -643,7 +644,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 669        |
+| `(root)`      | 671        |
 | `e2e`         | 33         |
 | `integration` | 205        |
 | `unit`        | 2          |
@@ -652,7 +653,7 @@
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 570   |
+| `/api/v1/**`    | 571   |
 | `/admin/**`     | 96    |
 | publik / anonim | 31    |
 

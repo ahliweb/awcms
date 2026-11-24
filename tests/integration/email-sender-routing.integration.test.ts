@@ -1047,6 +1047,70 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
     expect(emailSendersVerifyRunFailed(summary, 0)).toBe(true);
   });
 
+  test("ADR-0170: a sender address is claimed when it is first verified; a second tenant's verified sender with the same address stays pending and is not counted verified", async () => {
+    const address = "shared-brand@claim.example";
+    const sender = async (tenantId: string) => {
+      const rows = (await getAdminSql()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, status, parent_account_id, claim_basis)
+        VALUES (${tenantId}, 'mailketing', 'sender_identity', ${address},
+                'Shared brand', 'api_token', 'pending',
+                ${fx(tenantId).accounts[0]!.id}, 'verification')
+        RETURNING id
+      `) as { id: string }[];
+
+      return rows[0]!.id;
+    };
+    // Both tenants may REGISTER the address: a pending verification-basis row
+    // holds nothing against other tenants.
+    const idA = await sender(TENANT_A);
+    const idB = await sender(TENANT_B);
+    const verifyTenant = (tenantId: string) =>
+      verifyEmailSendersForTenant(getRuntimeSql(), tenantId, {
+        directory: emailAccountDirectoryAdapter,
+        credentials,
+        recordHealth: (tx, tenant, accountId, input) =>
+          recordAccountHealth(tx, tenant, accountId, input),
+        buildProbe: () => ({
+          readCredits: async () => ({ ok: true, value: 500 }),
+          listVerifiedSenders: async () => ({
+            ok: true,
+            value: {
+              verified: new Set([address]),
+              ambiguous: new Set<string>()
+            }
+          })
+        }),
+        env: { ...ENV, ...CA_ENV } as NodeJS.ProcessEnv
+      });
+    const statusOf = async (id: string) =>
+      (
+        (await getAdminSql()`
+          SELECT status FROM awcms_channel_accounts WHERE id = ${id}
+        `) as { status: string }[]
+      )[0]!.status;
+
+    const winner = await verifyTenant(TENANT_B);
+
+    expect(await statusOf(idB)).toBe("connected");
+    expect(winner.sendersVerified).toBe(1);
+
+    const loser = await verifyTenant(TENANT_A);
+    const aHealth = (await getAdminSql()`
+      SELECT state, reason_code FROM awcms_channel_account_health
+      WHERE account_id = ${idA}
+    `) as { state: string; reason_code: string }[];
+
+    expect(await statusOf(idA)).toBe("pending");
+    expect(aHealth).toEqual([
+      { state: "failing", reason_code: "ACCOUNT_ALREADY_REGISTERED" }
+    ]);
+    // The provider verified it, but the claim is the other tenant's: not
+    // counted as verified for this tenant.
+    expect(loser.sendersVerified).toBe(0);
+  });
+
   describe("audit M2: a parent lends only to a child whose scope it contains", () => {
     const SCOPE_Y = {
       type: "brand",

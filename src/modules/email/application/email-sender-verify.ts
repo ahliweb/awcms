@@ -235,12 +235,32 @@ export async function verifyEmailSendersForTenant(
           } else if (senders.ok) {
             const verified = senders.value.verified.has(sender.address);
 
-            await deps.recordHealth(tx, tenantId, sender.accountId, {
-              state: verified ? "ok" : "degraded",
-              reasonCode: verified ? null : "SENDER_UNVERIFIED"
-            });
+            const recorded = await deps.recordHealth(
+              tx,
+              tenantId,
+              sender.accountId,
+              {
+                state: verified ? "ok" : "degraded",
+                reasonCode: verified ? null : "SENDER_UNVERIFIED"
+              }
+            );
 
-            if (verified) summary.sendersVerified += 1;
+            // ADR-0170: a sender address is claimed globally when it is first
+            // verified. Provider-verified here but already verified by another
+            // tenant first: this sender stays `pending` and is NOT counted as
+            // verified (the dispute path is the platform release action).
+            if (
+              verified &&
+              (recorded as { claim?: string } | null | undefined)?.claim ===
+                "lost"
+            ) {
+              summary.sendersUnverified += 1;
+              log("warning", "email.senders_verify.claim_contested", {
+                tenantId,
+                moduleKey: MODULE_KEY,
+                accountId: sender.accountId
+              });
+            } else if (verified) summary.sendersVerified += 1;
             else summary.sendersUnverified += 1;
           } else if (senders.failure === "malformed") {
             await deps.recordHealth(tx, tenantId, sender.accountId, {

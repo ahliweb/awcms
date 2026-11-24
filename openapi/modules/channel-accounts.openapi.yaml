@@ -142,11 +142,26 @@ paths:
       summary: Register an external account.
       description: >-
         `(provider, accountKind, authMode)` must be a combination the provider
-        matrix admits. A live external account belongs to ONE tenant: a duplicate
-        is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds
-        it (one answer, so the conflict is not an oracle). The account starts
-        `pending` and becomes `connected` only when a connector verifies it. No
-        credential is accepted here. A `businessScope` is a request, not a fact:
+        matrix admits, and `externalId` must have the shape of its kind (`422
+        EXTERNAL_ID_INVALID`, the same answer whether or not any tenant holds
+        the id: a Telegram bot is a positive integer, a channel `-100...` or
+        `@name`, a Mailketing ESP login is never an address, a sender is its
+        lowercase address; ids of providers with no verified format are left
+        open). An external account is claimed, per `(provider, accountKind,
+        externalId)`, by ONE tenant (ADR-0170):
+        for a provider and kind no connector can verify, from registration; for
+        one whose id a connector proves (a Telegram bot, a Mailketing sender),
+        only once it is verified, so a `pending` registration of the latter holds
+        nothing against other tenants (it is accepted, with no oracle) and the
+        first to verify wins. A duplicate that IS refused is `409
+        ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one
+        answer, so the conflict is not an oracle); a tenant that registers the
+        same id twice is always refused. The account starts `pending` and becomes
+        `connected` only when a connector verifies it; a verification that loses
+        to another tenant leaves it `pending` with health `failing` and reason
+        `ACCOUNT_ALREADY_REGISTERED`. The dispute path is
+        `POST /api/v1/channel-accounts/claims/release` (platform). No credential
+        is accepted here. A `businessScope` is a request, not a fact:
         the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a
         caller confined to business scopes may not omit it (an account without
         one is tenant-wide). Binding to a `connectionId` lends the account that
@@ -209,7 +224,9 @@ paths:
           description: >-
             The combination is not admitted: `PROVIDER_UNKNOWN`,
             `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`,
-            `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`
+            `AUTH_MODE_INVALID`, `EXTERNAL_ID_INVALID` (the id lacks the shape of
+            its kind; the same answer for a held and a free id),
+            `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`
             (also, for an `oauth2` account, for a connection of another
             provider, one outside the caller's authority or whose scope does
             not contain the account's scope), `CONNECTION_MISMATCH` (only for a
@@ -751,7 +768,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: "`IDEMPOTENCY_CONFLICT`."
+          description: "`IDEMPOTENCY_CONFLICT`, or `ACCOUNT_ALREADY_REGISTERED` (ADR-0170: another tenant already holds the claim; unreachable for StarSender, whose claim is held from registration)."
           content:
             application/json:
               schema:
@@ -764,6 +781,145 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "503":
           description: "`CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/claims/release:
+    post:
+      operationId: releaseChannelAccountClaim
+      tags:
+        - Channel Accounts
+      summary: PLATFORM — release a contested external-account claim held by another tenant.
+      description: >-
+        The dispute path of ADR-0170 (option C) for an external-account claim
+        (`provider` + `accountKind` + `externalId`: the KIND is part of the claim
+        key), used after the operator has verified the real owner out of band. It
+        ends the account of the tenant that HOLDS the claim for that exact triple:
+        a soft delete with the fixed reason `CLAIM_RELEASED_BY_PLATFORM`, its own
+        credential ciphertext and webhook secrets erased, so the real owner can
+        register and verify the id. Children of the holder that hold NO claim of
+        their own (a `pending` sender of a Mailketing account) are ended with it,
+        each with its own audit row; a child that holds a claim blocks the release. A claim
+        is held from registration by a provider no connector can verify
+        (`registration` basis) and, for a provider whose id a connector proves
+        (a Telegram bot, a Mailketing sender), only while the account is
+        `connected` or `degraded`: a `pending` account of the latter holds nothing
+        and answers `404`. A holder with a child that holds a claim of its own is
+        refused (`409 HAS_CHILD_ACCOUNTS`): release that child by its own id first.
+
+        **Authority.** The PLATFORM-scoped permission
+        `channel_accounts.account_claims.revoke` (ADR-0053): the access chokepoint
+        refuses it unless the acting tenant IS the platform tenant, and it is in
+        no catalogue seeded to a tenant role, so a tenant owner receives the same
+        uniform `403` as anyone without the grant. A machine credential is refused
+        (`403 INTERACTIVE_SESSION_REQUIRED`). The permission REQUIRES an enrolled
+        MFA factor (`403 MFA_ENROLMENT_REQUIRED` for an operator with none, ADR-0141)
+        and the route a fresh step-up, unconditionally (`403 STEP_UP_REQUIRED`).
+        `Idempotency-Key` is required. `reasonCode` is a closed enum, `ticketRef`
+        an optional narrow-pattern reference, and `reason` (10 to 500 characters,
+        no email address or phone number) is mandatory free text.
+
+        **Audit.** In one transaction: `critical`
+        `channel_accounts.claim.release` in the PLATFORM tenant's trail (with the
+        operator and the free-text `reason`), and `warning`
+        `channel_accounts.account.claim_released` in the HOLDER's own trail, one per
+        ended account (naming the platform tenant, not the individual operator,
+        ADR-0091). The holder is the opposing party: its trail carries only
+        `reasonCode` and `ticketRef`, never the free text. No row carries the
+        external id or any credential.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - provider
+                - accountKind
+                - externalId
+                - reasonCode
+                - reason
+              properties:
+                provider:
+                  type: string
+                  pattern: "^[a-z][a-z0-9_]{1,31}$"
+                accountKind:
+                  type: string
+                  pattern: "^[a-z][a-z0-9_]{1,47}$"
+                reasonCode:
+                  type: string
+                  enum:
+                    - ownership_dispute_resolved
+                    - registered_in_error
+                    - abuse_confirmed
+                  description: The only reason that reaches the holder tenant's audit trail.
+                ticketRef:
+                  type: string
+                  pattern: "^[A-Z]{2,10}-[0-9]{1,10}$"
+                  description: Optional ticket reference; also reaches the holder tenant's audit trail.
+                externalId:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  description: The operator's out-of-band basis. Written to the PLATFORM operator's audit trail ONLY; must not contain an email address or a phone number.
+      responses:
+        "200":
+          description: Released (a replay of the same `Idempotency-Key` returns the stored answer).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      released:
+                        type: boolean
+                        enum:
+                          - true
+                      releasedChildren:
+                        type: integer
+                        description: Children of the holder that held no claim and were ended with it.
+                      holderTenantId:
+                        type: string
+                        format: uuid
+                      accountId:
+                        type: string
+                        format: uuid
+                      accountKind:
+                        type: string
+                      credentialErased:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`HAS_CHILD_ACCOUNTS` (a child holds a claim of its own) or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`."
           content:
             application/json:
               schema:

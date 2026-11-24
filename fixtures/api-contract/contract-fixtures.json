@@ -1,11 +1,11 @@
 {
   "packVersion": 1,
-  "contractSha256": "1d99edd6926c4db23a5f440a6a4bbd0c33d8f61ca84b5ebd7b482c8ca0a6fde5",
+  "contractSha256": "a4397f279ae6d7fb54494982214f52b5b78fbcc9a08c64a64b6d97995f94460e",
   "summary": {
-    "operations": 742,
-    "fixtures": 1782,
+    "operations": 743,
+    "fixtures": 1786,
     "declared": 13,
-    "generated": 1769,
+    "generated": 1773,
     "skipped": 4
   },
   "sharedResponses": {
@@ -12554,6 +12554,80 @@
         "source": "generated",
         "value": {
           "appSecret": "abcdefghijklmnop"
+        }
+      }
+    },
+    "POST /api/v1/channel-accounts/claims/release": {
+      "responses": {
+        "200": {
+          "contentType": "application/json",
+          "source": "generated",
+          "value": {
+            "success": true,
+            "data": {
+              "released": true,
+              "releasedChildren": 1,
+              "holderTenantId": "00000000-0000-4000-8000-000000000000",
+              "accountId": "00000000-0000-4000-8000-000000000000",
+              "accountKind": "example",
+              "credentialErased": true
+            },
+            "meta": {}
+          }
+        },
+        "400": {
+          "$ref": "#/sharedResponses/BadRequest"
+        },
+        "401": {
+          "$ref": "#/sharedResponses/Unauthorized"
+        },
+        "403": {
+          "$ref": "#/sharedResponses/Forbidden"
+        },
+        "404": {
+          "$ref": "#/sharedResponses/NotFound"
+        },
+        "409": {
+          "contentType": "application/json",
+          "source": "generated",
+          "value": {
+            "success": false,
+            "error": {
+              "code": "example",
+              "message": "example"
+            },
+            "meta": {
+              "correlationId": "example",
+              "requestId": "example"
+            }
+          }
+        },
+        "503": {
+          "contentType": "application/json",
+          "source": "generated",
+          "value": {
+            "success": false,
+            "error": {
+              "code": "example",
+              "message": "example"
+            },
+            "meta": {
+              "correlationId": "example",
+              "requestId": "example"
+            }
+          }
+        }
+      },
+      "operationId": "releaseChannelAccountClaim",
+      "request": {
+        "contentType": "application/json",
+        "source": "generated",
+        "value": {
+          "provider": "example",
+          "accountKind": "example",
+          "reasonCode": "ownership_dispute_resolved",
+          "externalId": "example",
+          "reason": "examplexxx"
         }
       }
     },
