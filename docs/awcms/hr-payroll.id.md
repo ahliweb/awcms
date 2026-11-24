@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:339d0a3cf6850b6dcbada7616b1223e4053990268930d08c27a8e85c74de620e -->
+<!-- i18n-source-hash: sha256:771d7ebb55b331b3ca4f76e83719a9ac7130125e19bd1e2b5a6828991d1d3351 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 

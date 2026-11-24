@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:fd1163612dabf3c7e463884624a015ef50b13e737e8d81154e107535cb0919ab -->
+<!-- i18n-source-hash: sha256:e4a644283f9ea500196e238d2775d155a736b3088662c1128cd56fa7afc62e81 -->
 
 # Architecture Decision Records (ADR)
 
