@@ -18517,7 +18517,12 @@ Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all 
       "markDefs": [],
       "items": [],
       "provider": "string",
-      "videoId": "string"
+      "videoId": "string",
+      "title": "string",
+      "caption": "string",
+      "thumbnailMediaObjectId": "string",
+      "durationSeconds": 0,
+      "sourceLabel": "string"
     }
   ],
   "locale": "string",
@@ -18582,7 +18587,12 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
       "markDefs": [],
       "items": [],
       "provider": "string",
-      "videoId": "string"
+      "videoId": "string",
+      "title": "string",
+      "caption": "string",
+      "thumbnailMediaObjectId": "string",
+      "durationSeconds": 0,
+      "sourceLabel": "string"
     }
   ],
   "locale": "string",
@@ -21781,7 +21791,12 @@ ADR-0100 — the canonical article body. contentJson.blocks is a derived, LOSSY 
     ],
     "items": ["(operation-specific payload)"],
     "provider": "string",
-    "videoId": "string"
+    "videoId": "string",
+    "title": "string",
+    "caption": "string",
+    "thumbnailMediaObjectId": "string",
+    "durationSeconds": 0,
+    "sourceLabel": "string"
   }
 ]
 ```
@@ -21808,18 +21823,23 @@ ADR-0100 — the canonical article body. contentJson.blocks is a derived, LOSSY 
 
 One node of a CLOSED Portable Text vocabulary (ADR-0100). _type is one of block, gallery, videoNews — anything else is refused at write time, which is what keeps "there is no field where arbitrary markup could live" true.
 
-| Field      | Type                                                                        | Required | Nullable | Description                                    |
-| ---------- | --------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------- |
-| `_type`    | enum(`block`, `gallery`, `videoNews`)                                       | yes      | no       |                                                |
-| `_key`     | string                                                                      | yes      | no       |                                                |
-| `style`    | enum(`normal`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `blockquote`)            | no       | no       |                                                |
-| `listItem` | enum(`bullet`, `number`)                                                    | no       | no       |                                                |
-| `level`    | integer                                                                     | no       | no       |                                                |
-| `children` | array of [`PortableTextSpan`](#schema-portabletextspan)                     | no       | no       |                                                |
-| `markDefs` | array of [`PortableTextLinkAnnotation`](#schema-portabletextlinkannotation) | no       | no       |                                                |
-| `items`    | array of object                                                             | no       | no       | Gallery items — present when _type is gallery. |
-| `provider` | string                                                                      | no       | no       | Present when _type is videoNews.               |
-| `videoId`  | string                                                                      | no       | no       | Present when _type is videoNews.               |
+| Field                    | Type                                                                        | Required | Nullable | Description                                                                                                        |
+| ------------------------ | --------------------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `_type`                  | enum(`block`, `gallery`, `videoNews`)                                       | yes      | no       |                                                                                                                    |
+| `_key`                   | string                                                                      | yes      | no       |                                                                                                                    |
+| `style`                  | enum(`normal`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `blockquote`)            | no       | no       |                                                                                                                    |
+| `listItem`               | enum(`bullet`, `number`)                                                    | no       | no       |                                                                                                                    |
+| `level`                  | integer                                                                     | no       | no       |                                                                                                                    |
+| `children`               | array of [`PortableTextSpan`](#schema-portabletextspan)                     | no       | no       |                                                                                                                    |
+| `markDefs`               | array of [`PortableTextLinkAnnotation`](#schema-portabletextlinkannotation) | no       | no       |                                                                                                                    |
+| `items`                  | array of object                                                             | no       | no       | Gallery items — present when _type is gallery.                                                                     |
+| `provider`               | string                                                                      | no       | no       | Present when _type is videoNews.                                                                                   |
+| `videoId`                | string                                                                      | no       | no       | Present when _type is videoNews.                                                                                   |
+| `title`                  | string                                                                      | no       | no       | Optional. Present only when _type is videoNews.                                                                    |
+| `caption`                | string                                                                      | no       | no       | Optional. Present only when _type is videoNews.                                                                    |
+| `thumbnailMediaObjectId` | string                                                                      | no       | no       | Optional. Present only when _type is videoNews; the id of the media object the renderer resolves to the thumbnail. |
+| `durationSeconds`        | number                                                                      | no       | no       | Optional. Present only when _type is videoNews; whole seconds when written through the legacy block validator.     |
+| `sourceLabel`            | string                                                                      | no       | no       | Optional. Present only when _type is videoNews.                                                                    |
 
 **Example**
 
@@ -21847,7 +21867,12 @@ One node of a CLOSED Portable Text vocabulary (ADR-0100). _type is one of block,
   ],
   "items": ["(operation-specific payload)"],
   "provider": "string",
-  "videoId": "string"
+  "videoId": "string",
+  "title": "string",
+  "caption": "string",
+  "thumbnailMediaObjectId": "string",
+  "durationSeconds": 0,
+  "sourceLabel": "string"
 }
 ```
 
