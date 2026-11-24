@@ -239,25 +239,52 @@ test.describe("every admin screen renders", () => {
       // the test uses a value the app itself considers real. Deriving beats
       // inventing: a fabricated key would 404 and prove nothing about whether
       // the screen can render.
-      const listingUrl = route.url.replace(/\/\[[^\]]+\]$/, "");
+      // The listing is everything before the FIRST dynamic segment, so a nested
+      // screen such as `/admin/crm-leads/[id]/edit` derives its id from
+      // `/admin/crm-leads` exactly like `/admin/crm-leads/[id]` does, and the id
+      // is then substituted into the route. Only the segment right after the
+      // listing is taken from the link: a deeper link must not leak its tail.
+      const dynamicAt = route.url.search(/\/\[[^\]]+\]/);
+      const listingUrl = route.url.slice(0, dynamicAt);
       await page.goto(listingUrl);
 
-      const href = await page
+      // A listing also links its static siblings (`/new`, `/deleted`,
+      // `/settings`); those are known routes, never an id, so they are skipped.
+      const staticChildren = new Set(
+        routes
+          .filter((r) => !r.dynamic && r.url.startsWith(`${listingUrl}/`))
+          .map((r) => r.url.slice(listingUrl.length + 1).split("/")[0]!)
+      );
+      const hrefs = await page
         .locator(`a[href^="${listingUrl}/"]`)
-        .first()
-        .getAttribute("href");
+        .evaluateAll((anchors) =>
+          anchors.map((a) => a.getAttribute("href") ?? "")
+        );
+      const linked = hrefs.find((candidate) => {
+        const segment = candidate
+          .slice(listingUrl.length + 1)
+          .split(/[/?#]/)[0]!;
+        return segment !== "" && !staticChildren.has(segment);
+      });
 
       // Failing rather than skipping is deliberate. A silent skip is how a dead
       // screen stays dead: the run goes green and nobody learns that the only
       // detail page in the section was never requested.
       expect(
-        href,
+        linked,
         `${route.url} (${route.source}): no link under ${listingUrl}/ was ` +
           "found, so no real id could be derived. Supply one here rather than " +
           "skipping — an unrequested screen is how /admin/seo stayed broken."
       ).toBeTruthy();
 
-      await checkRenders(page, href!, route.source);
+      const realId = linked!.slice(listingUrl.length + 1).split(/[/?#]/)[0]!;
+      const href = route.url.replace(/\[[^\]]+\]/, realId);
+      expect(
+        href,
+        `${route.url}: more than one dynamic segment; supply the extra ids here.`
+      ).not.toMatch(/\[[^\]]+\]/);
+
+      await checkRenders(page, href, route.source);
     });
   }
 });
