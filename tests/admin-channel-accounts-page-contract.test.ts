@@ -132,12 +132,13 @@ describe("the screens gate on keys that really exist", () => {
     const module = listModules().find((m) => m.key === "channel_accounts")!;
 
     expect(module.status).toBe("active");
-    expect(module.navigation).toEqual([
+    // The platform claim-release entry (#1215) is pinned by its own page-contract test.
+    expect(module.navigation).toContainEqual(
       expect.objectContaining({
         path: "/admin/channel-accounts",
         requiredPermission: "channel_accounts.accounts.read"
       })
-    ]);
+    );
     expect(list).toContain("authorize: READ_GUARD");
   });
 

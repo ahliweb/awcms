@@ -1410,8 +1410,20 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * **Raised for Issue #1215** (the platform claim-release screen): +2,375 B
+ * (393,025 -> 395,400), measured 395,240 B on a clean build, so the margin is
+ * 160 B, as above. `main` was already at the ceiling (the first screen with a
+ * script of its own was always going to cross it). The cost is ONE new page
+ * script, `channel-account-claims.astro_astro_type_script_index_0_lang.*.js`
+ * (2,188 B minified): the form submit, the inline step-up retry that keeps the
+ * same `Idempotency-Key`, and the error-code mapping. It imports the shared
+ * `admin-form-client`, `admin-idempotency-key` and `channel-accounts-screen`
+ * chunks that the account detail screen already ships, so there is no new
+ * shared helper and no duplication to recover; every string it shows is
+ * rendered by the server into `data-*` attributes (HTML, not bundle).
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 395_400;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

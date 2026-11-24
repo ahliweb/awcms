@@ -57,7 +57,7 @@ export function resolveChannelSecretsRing(
 export function resolveChannelOAuthRedirectUri(
   env: NodeJS.ProcessEnv = process.env
 ): string | null {
-  if (!isDeclaredAppUrl(env.APP_URL)) return null;
+  if (!isDeclaredAppUrl(env.APP_URL, env.APP_ENV)) return null;
 
   return new URL(
     "/api/v1/channel-accounts/connections/oauth/callback",
@@ -66,20 +66,31 @@ export function resolveChannelOAuthRedirectUri(
 }
 
 /**
- * `APP_URL` as the OAuth redirect needs it: present, an absolute http(s) URL, no
- * embedded credentials. Shared with `scripts/validate-env.ts` so the validator
- * cannot disagree with the runtime.
+ * `APP_URL` as the OAuth redirect needs it: present, an absolute URL, no
+ * embedded credentials, and **`https:` unless `APP_ENV` is exactly
+ * `development`** (#1215, a decision taken FAIL-CLOSED): an authorisation code
+ * and the `state` travel in the query of this redirect, so a plain-`http:`
+ * origin would hand them to the network in clear. Anything that is not
+ * `development` (production, `test`, unset, misspelt) requires `https:`: the
+ * unknown case takes the safe branch, and a local developer is the only caller
+ * who needs `http://localhost`. Shared with `scripts/validate-env.ts` so the
+ * validator cannot disagree with the runtime.
  */
-export function isDeclaredAppUrl(raw: string | undefined): boolean {
+export function isDeclaredAppUrl(
+  raw: string | undefined,
+  appEnv?: string
+): boolean {
   const value = raw?.trim();
 
   if (!value) return false;
 
   try {
     const url = new URL(value);
+    const httpAllowed = appEnv?.trim().toLowerCase() === "development";
 
     return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
+      (url.protocol === "https:" ||
+        (httpAllowed && url.protocol === "http:")) &&
       url.username === "" &&
       url.password === ""
     );

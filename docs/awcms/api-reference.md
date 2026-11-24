@@ -15363,18 +15363,25 @@ Refused while the account is `connected` or `degraded` (disconnect it first) and
 | 422    | `OWNER_REQUIRED` (switching to `assigned` needs an owner).                             | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/channel-accounts/accounts/{id}/assignments` — Who may operate this account.
+### `GET /api/v1/channel-accounts/accounts/{id}/assignments` — Who may operate this account (oldest first, keyset).
 
 - **operationId**: `listChannelAccountAssignments`
 - **Security**: bearerAuth + tenantHeader
 
-Requires `channel_accounts.accounts.read`.
+Keyset-paginated (#1215 N3): follow `nextCursor` until it is null. Requires `channel_accounts.accounts.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type    | Description |
+| -------- | ----- | -------- | ------- | ----------- |
+| `limit`  | query | no       | integer |             |
+| `cursor` | query | no       | string  |             |
 
 **Responses**
 
 | Status | Description                                                                            | Schema                                 |
 | ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The assignments.                                                                       | object                                 |
+| 200    | A page of assignments.                                                                 | object                                 |
 | 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
@@ -15639,19 +15646,21 @@ The dispute path of ADR-0170 (option C) for an external-account claim (`provider
 - **operationId**: `listChannelConnections`
 - **Security**: bearerAuth + tenantHeader
 
-State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Requires `channel_accounts.accounts.read`.
+State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Newest first, keyset-paginated (#1215 N3): the cursor follows the page as stored, so a page that lost rows to the visibility rule is short but never skips or repeats a connection; follow `nextCursor` until it is null. Requires `channel_accounts.accounts.read`.
 
 **Parameters**
 
-| Name       | In    | Required | Type   | Description |
-| ---------- | ----- | -------- | ------ | ----------- |
-| `provider` | query | no       | string |             |
+| Name       | In    | Required | Type    | Description |
+| ---------- | ----- | -------- | ------- | ----------- |
+| `provider` | query | no       | string  |             |
+| `limit`    | query | no       | integer |             |
+| `cursor`   | query | no       | string  |             |
 
 **Responses**
 
 | Status | Description                                                                            | Schema                                 |
 | ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The connections.                                                                       | object                                 |
+| 200    | A page of connections.                                                                 | object                                 |
 | 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |

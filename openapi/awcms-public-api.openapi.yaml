@@ -10069,11 +10069,25 @@ paths:
       operationId: listChannelAccountAssignments
       tags:
         - Channel Accounts
-      summary: Who may operate this account.
-      description: Requires `channel_accounts.accounts.read`.
+      summary: Who may operate this account (oldest first, keyset).
+      description: "Keyset-paginated (#1215 N3): follow `nextCursor` until it is null. Requires `channel_accounts.accounts.read`."
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         "200":
-          description: The assignments.
+          description: A page of assignments.
           content:
             application/json:
               schema:
@@ -10084,9 +10098,18 @@ paths:
                     enum:
                       - true
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ChannelAccountAssignment"
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChannelAccountAssignment"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                    required:
+                      - items
+                      - nextCursor
                   meta:
                     type: object
         "400":
@@ -10830,16 +10853,29 @@ paths:
       tags:
         - Channel Accounts
       summary: The tenant's provider connections.
-      description: State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Requires `channel_accounts.accounts.read`.
+      description: "State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Newest first, keyset-paginated (#1215 N3): the cursor follows the page as stored, so a page that lost rows to the visibility rule is short but never skips or repeats a connection; follow `nextCursor` until it is null. Requires `channel_accounts.accounts.read`."
       parameters:
         - name: provider
           in: query
           required: false
           schema:
             type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         "200":
-          description: The connections.
+          description: A page of connections.
           content:
             application/json:
               schema:
@@ -10850,9 +10886,18 @@ paths:
                     enum:
                       - true
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ChannelConnection"
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChannelConnection"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                    required:
+                      - items
+                      - nextCursor
                   meta:
                     type: object
         "400":

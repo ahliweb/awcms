@@ -1,0 +1,492 @@
+---
+/**
+ * `/admin/channel-account-claims` — the PLATFORM operator's screen for
+ * releasing a contested external-account claim (Issue #1215, ADR-0170 option
+ * C, ADR-0051).
+ *
+ * ## What it is for
+ *
+ * An external account id (a page, a WhatsApp number, a device) is claimed by ONE
+ * tenant. When the wrong tenant holds it, the platform operator, after
+ * verifying the real owner OUT OF BAND, ends the holder's account so the real
+ * owner can register and verify it. This screen is the form for that action; the
+ * endpoint (`POST /api/v1/channel-accounts/claims/release`) is the authority.
+ *
+ * ## It is platform-scoped, never a tenant role
+ *
+ * The page's entry guard is the PLATFORM permission
+ * `channel_accounts.account_claims.revoke` (ADR-0053): the chokepoint refuses
+ * it unless the acting tenant is the platform tenant, and it is in no catalogue
+ * seeded to a tenant role. A tenant owner sees the same "no permission" answer
+ * as anyone else (nothing here names the platform tenant, so the page is no
+ * oracle for who the operator is). The sidebar entry is gated on the same key.
+ *
+ * ## What the screen does NOT show
+ *
+ * It never lists claims (that would be a cross-tenant read of other tenants'
+ * accounts: the only cross-tenant read is the endpoint's own narrow locator),
+ * never shows the holder tenant, and never echoes the external id after the
+ * action. The form asks for the id TWICE: the second entry is the typed
+ * confirmation, so a paste of the wrong id is not a one-click mistake. The
+ * step-up code is asked inline when the endpoint asks for it (ADR-0125), and the
+ * retry reuses the SAME `Idempotency-Key`.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  channelAccountKindLabel,
+  channelProviderLabel
+} from "../../lib/i18n/labels/channel-accounts";
+import { isChannelAccountsEnabled } from "../../modules/channel-accounts/domain/channel-accounts-constants";
+import {
+  PROVIDER_MATRIX,
+  registrableProviders
+} from "../../modules/channel-accounts/domain/provider-matrix";
+import { CLAIM_RELEASE_REASON_CODES } from "../../modules/channel-accounts/domain/channel-accounts-validation";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+const PATH = "/admin/channel-account-claims";
+
+/**
+ * Spelled out as a literal so `admin:screen-coverage:check` (which reads source
+ * text) sees the permission this screen claims; the page-contract test holds it
+ * equal to `CHANNEL_ACCOUNTS_GUARDS.releaseClaim` and to the endpoint.
+ */
+const RELEASE_GUARD = {
+  moduleKey: "channel_accounts",
+  activityCode: "account_claims",
+  action: "revoke"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: RELEASE_GUARD,
+  load: async () => ({ enabled: isChannelAccountsEnabled() }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/channel-account-claims.astro: failed to load",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRelease = screen.state === "allowed";
+const loadError = screen.state === "error";
+// Said ONLY to a caller the chokepoint allowed: an unauthorised caller learns
+// nothing about the deployment switch.
+const deploymentEnabled =
+  screen.state === "allowed" ? screen.data.enabled : true;
+const mfaRequired =
+  screen.state === "denied" && screen.code === "MFA_ENROLMENT_REQUIRED";
+
+/** `provider|kind` options: the pair names the claim, so the operator picks both at once. */
+const claimKinds = registrableProviders().flatMap((provider) =>
+  Object.keys(PROVIDER_MATRIX[provider]!.kinds).map((kind) => ({
+    value: `${provider}|${kind}`,
+    label: `${channelProviderLabel(t, provider)} - ${channelAccountKindLabel(t, kind)}`
+  }))
+);
+
+function reasonCodeLabel(code: string): string {
+  switch (code) {
+    case "ownership_dispute_resolved":
+      return t("Ownership dispute resolved");
+    case "registered_in_error":
+      return t("Registered in error");
+    case "abuse_confirmed":
+      return t("Abuse confirmed");
+    default:
+      return code;
+  }
+}
+
+const noticeKey = Astro.url.searchParams.get("notice") ?? "";
+const notice =
+  noticeKey === "claim-released"
+    ? t(
+        "The claim was released. The holder's account is ended and its credential erased; the real owner can register and verify the account now."
+      )
+    : null;
+---
+
+<AdminLayout
+  title={t("Release a contested account claim")}
+  description={t(
+    "Platform operators only. An external account id is held by one tenant; when the wrong tenant holds it, verify the real owner out of band, then release the claim here."
+  )}
+>
+  {mfaRequired && (
+    <p class="state-notice fade-in-up" id="channel-claims-mfa">
+      {t(
+        "Releasing a claim needs two-factor authentication. Turn it on under your account first."
+      )}
+    </p>
+  )}
+
+  {!canRelease && !mfaRequired && !loadError && (
+    <p class="state-notice fade-in-up" id="channel-claims-denied">
+      {t("You do not have permission to release account claims.")}
+    </p>
+  )}
+
+  {loadError && (
+    <p class="state-notice fade-in-up" id="channel-claims-error">
+      {t("This page could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRelease && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="channel-claims-disabled">
+      {t(
+        "Channel accounts are switched off on this deployment, so no claim can be released."
+      )}
+    </p>
+  )}
+
+  {canRelease && notice !== null && (
+    <p
+      class="state-notice"
+      id="channel-claims-notice"
+      tabindex="-1"
+      role="status"
+    >
+      {notice}
+    </p>
+  )}
+
+  {canRelease && deploymentEnabled && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="channel-claims-title"
+    >
+      <h2 class="admin-section-title" id="channel-claims-title">
+        {t("Release a claim")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "This ends the holder's account (soft delete), erases its stored credential and webhook secrets, and writes a critical audit entry in your trail and a warning entry in the holder's trail. It does not decide who is right: you must have verified the claimant yourself."
+        )}
+      </p>
+
+      <form id="channel-claims-form" class="admin-create-form" data-path={PATH}>
+        <p
+          id="channel-claims-form-error"
+          class="admin-create-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+
+        <label for="channel-claims-kind">
+          {t("Provider and account kind")}
+          <select id="channel-claims-kind" name="kind" required>
+            <option value="">{t("Choose…")}</option>
+            {claimKinds.map((option) => (
+              <option value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label for="channel-claims-external-id">
+          {t("External id")}
+          <input
+            id="channel-claims-external-id"
+            name="externalId"
+            type="text"
+            maxlength="256"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+        </label>
+
+        <label for="channel-claims-external-id-confirm">
+          {t("Type the external id again to confirm")}
+          <input
+            id="channel-claims-external-id-confirm"
+            name="externalIdConfirm"
+            type="text"
+            maxlength="256"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+        </label>
+
+        <label for="channel-claims-reason-code">
+          {t("Reason code")}
+          <select id="channel-claims-reason-code" name="reasonCode" required>
+            {CLAIM_RELEASE_REASON_CODES.map((code) => (
+              <option value={code}>{reasonCodeLabel(code)}</option>
+            ))}
+          </select>
+        </label>
+
+        <label for="channel-claims-ticket">
+          {t("Ticket reference (optional)")}
+          <input
+            id="channel-claims-ticket"
+            name="ticketRef"
+            type="text"
+            maxlength="32"
+            autocomplete="off"
+            placeholder="TKT-1215"
+            aria-describedby="channel-claims-ticket-hint"
+          />
+          <span class="admin-field-hint" id="channel-claims-ticket-hint">
+            {t(
+              "Uppercase prefix, hyphen and number. It is visible in the holder's audit trail."
+            )}
+          </span>
+        </label>
+
+        <label for="channel-claims-reason">
+          {t("Reason (your audit trail only)")}
+          <textarea
+            id="channel-claims-reason"
+            name="reason"
+            rows="4"
+            minlength="10"
+            maxlength="500"
+            required
+            aria-describedby="channel-claims-reason-hint"
+          ></textarea>
+          <span class="admin-field-hint" id="channel-claims-reason-hint">
+            {t(
+              "10 to 500 characters: how you verified the real owner. No email address or phone number."
+            )}
+          </span>
+        </label>
+
+        <div class="admin-field" id="channel-claims-stepup" hidden>
+          <label for="channel-claims-stepup-code">
+            {t("Authenticator code")}
+          </label>
+          <input
+            id="channel-claims-stepup-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="12"
+            spellcheck="false"
+            aria-describedby="channel-claims-stepup-hint"
+          />
+          <p class="admin-field-hint" id="channel-claims-stepup-hint">
+            {t(
+              "Enter the current six-digit code, then release the claim again."
+            )}
+          </p>
+        </div>
+
+        <div>
+          <button
+            type="submit"
+            class="btn btn-danger"
+            id="channel-claims-submit"
+          >
+            {t("Release claim")}
+          </button>
+        </div>
+      </form>
+
+      {/* Strings the client script cannot translate itself (it cannot load the
+          catalogue): rendered here, read back from `data-*`. */}
+      <div
+        id="channel-claims-i18n"
+        hidden
+        data-busy={t("Please wait…")}
+        data-mismatch={t(
+          "The two external ids do not match. Nothing was changed."
+        )}
+        data-failed={t("Could not release the claim. Please try again.")}
+        data-validation={t(
+          "Check the fields: the reason needs 10 to 500 characters without an email address or phone number, and the ticket reference looks like TKT-1215."
+        )}
+        data-not-found={t(
+          "No live claim is held for that provider, kind and external id."
+        )}
+        data-has-children={t(
+          "A child account of the holder still holds a claim of its own; release that one by its own id first."
+        )}
+        data-forbidden={t("You do not have permission to do that.")}
+        data-mfa-required={t(
+          "Releasing a claim needs two-factor authentication. Turn it on under your account first."
+        )}
+        data-mfa-invalid={t(
+          "That code is not right. Check it and try again; the form is unchanged."
+        )}
+        data-mfa-locked={t(
+          "Too many wrong codes. The factor is locked for a while; the form is unchanged."
+        )}
+        data-step-up-prompt={t(
+          "Enter the current six-digit code from your authenticator app to confirm."
+        )}
+        data-step-up-cancelled={t("Confirmation cancelled. Nothing changed.")}
+        data-conflict={t(
+          "That was already done, or the request conflicts with an earlier one. Reload the page."
+        )}
+        data-rate-limited={t("Too many attempts. Try again later.")}
+      ></div>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { newKey } from "../../lib/ui/admin-idempotency-key";
+  import { confirmationMatches } from "../../lib/ui/channel-accounts-screen";
+
+  const host = document.getElementById("channel-claims-i18n");
+
+  /** A string the server rendered for us, never a fallback invented here. */
+  function say(key: string): string {
+    return host?.dataset[key] ?? "";
+  }
+
+  const errors = messageBox("channel-claims-form-error");
+
+  document.getElementById("channel-claims-notice")?.focus();
+
+  /**
+   * Every code below is one the endpoints this screen calls really emit
+   * (`tests/admin-channel-account-claims-page-contract.test.ts` holds each to a
+   * route's source).
+   */
+  function messageFor(errorCode: string | null): string {
+    switch (errorCode) {
+      case "MFA_ENROLMENT_REQUIRED":
+      case "MFA_NOT_ACTIVE":
+        return say("mfaRequired");
+      case "MFA_INVALID_CODE":
+        return say("mfaInvalid");
+      case "MFA_LOCKED":
+        return say("mfaLocked");
+      case "VALIDATION_ERROR":
+        return say("validation");
+      case "RESOURCE_NOT_FOUND":
+        return say("notFound");
+      case "HAS_CHILD_ACCOUNTS":
+        return say("hasChildren");
+      case "ACCESS_DENIED":
+        return say("forbidden");
+      case "IDEMPOTENCY_CONFLICT":
+        return say("conflict");
+      case "RATE_LIMITED":
+        return say("rateLimited");
+      default:
+        return say("failed");
+    }
+  }
+
+  /**
+   * The same `Idempotency-Key` is reused ONLY for a retry after a step-up
+   * prompt of the very same body; any other outcome drops it, so a corrected
+   * form is a new request.
+   */
+  let pendingKey: string | null = null;
+
+  onSubmit("channel-claims-form", async ({ form, data, submit }) => {
+    errors.clear();
+
+    const externalId = String(data.get("externalId") ?? "").trim();
+    const confirmation = String(data.get("externalIdConfirm") ?? "");
+    const [provider, accountKind] = String(data.get("kind") ?? "").split("|");
+
+    if (!confirmationMatches(confirmation, externalId)) {
+      errors.show(say("mismatch"));
+      document.getElementById("channel-claims-external-id-confirm")?.focus();
+      return;
+    }
+
+    const stepUpBox = document.getElementById("channel-claims-stepup");
+    const stepUpInput = form.querySelector<HTMLInputElement>(
+      "#channel-claims-stepup-code"
+    );
+    const asking = stepUpBox !== null && !stepUpBox.hidden;
+    const code = asking && stepUpInput ? stepUpInput.value.trim() : "";
+
+    if (asking && code === "") {
+      errors.show(say("stepUpCancelled"));
+      stepUpInput?.focus();
+      return;
+    }
+
+    const unlock = submit ? lockElement(submit, say("busy")) : () => {};
+    const key = pendingKey ?? newKey();
+    const ticketRef = String(data.get("ticketRef") ?? "").trim();
+    let result: { ok: boolean; errorCode: string | null } = {
+      ok: true,
+      errorCode: null
+    };
+
+    if (code !== "") {
+      result = await sendJson("POST", "/api/v1/auth/mfa/step-up", { code });
+      if (stepUpInput) stepUpInput.value = "";
+    }
+
+    if (result.ok) {
+      result = await sendJson(
+        "POST",
+        "/api/v1/channel-accounts/claims/release",
+        {
+          provider,
+          accountKind,
+          externalId,
+          reasonCode: String(data.get("reasonCode") ?? ""),
+          ...(ticketRef === "" ? {} : { ticketRef }),
+          reason: String(data.get("reason") ?? "").trim()
+        },
+        { "Idempotency-Key": key }
+      );
+    }
+
+    const askAgain =
+      result.errorCode === "STEP_UP_REQUIRED" ||
+      result.errorCode === "MFA_INVALID_CODE" ||
+      result.errorCode === "MFA_LOCKED";
+
+    if (!result.ok && askAgain && stepUpBox) {
+      pendingKey = key;
+      stepUpBox.hidden = false;
+      errors.show(
+        result.errorCode === "STEP_UP_REQUIRED"
+          ? say("stepUpPrompt")
+          : messageFor(result.errorCode)
+      );
+      stepUpInput?.focus();
+      unlock();
+      return;
+    }
+
+    pendingKey = null;
+    if (stepUpBox) stepUpBox.hidden = true;
+
+    if (result.ok) {
+      // A fresh read with a one-line notice; the ids leave the page with it.
+      holdForNavigation();
+      window.location.assign(
+        `${window.location.pathname}?notice=claim-released`
+      );
+      return;
+    }
+
+    errors.show(messageFor(result.errorCode));
+    unlock();
+  });
+</script>

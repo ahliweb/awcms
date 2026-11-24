@@ -712,7 +712,7 @@ export async function connectionAccountAccess(
   context: AccountRouteContext,
   guard: AccountGuard,
   minimumKind: ChannelAssignmentKind,
-  filter: { connectionId: string | null; provider: string | null }
+  filter: { connectionId: string | null; connectionIds?: readonly string[] }
 ): Promise<Map<string, { accounts: number; allowed: number }>> {
   const bindings = await listConnectionAccountBindings(
     context.tx,
@@ -788,19 +788,32 @@ export async function connectionBreakGlass(
     : false;
 }
 
+/**
+ * Whether the caller started this connection AND that still means something
+ * (#1215 L5). Having started a connection is authority over a TENANT-WIDE one
+ * only. A SCOPED connection answers to the business scope it was started for
+ * (`connectionBreakGlass`, `scopeCoveredFor`), and a creator whose scope was
+ * withdrawn since must not keep seeing, binding to or revoking it on the
+ * strength of the old act: the stamp says who clicked, not who may still hold
+ * the scope. Before this, listing, revoking an empty connection and the
+ * tenant-wide bind rule honoured the stamp while binding to a scoped
+ * connection already required the scope, so one connection had two answers.
+ */
 const isCreator = (context: AccountRouteContext, connection: ConnectionView) =>
+  connection.businessScope === null &&
   connection.connectedBy === context.auth.context.tenantUserId;
 
 /** Keeps the connections the caller may see: break-glass, the creator, or at least one visible account. */
 export async function filterVisibleConnections(
   context: AccountRouteContext,
   guard: AccountGuard,
-  connections: ConnectionView[],
-  provider: string | null
+  connections: ConnectionView[]
 ): Promise<ConnectionView[]> {
+  if (connections.length === 0) return [];
+
   const access = await connectionAccountAccess(context, guard, "viewer", {
     connectionId: null,
-    provider
+    connectionIds: connections.map((connection) => connection.id)
   });
   const visible: ConnectionView[] = [];
 
@@ -834,8 +847,7 @@ export async function mayRevokeConnection(
 
   const entry = (
     await connectionAccountAccess(context, guard, "owner", {
-      connectionId: connection.id,
-      provider: null
+      connectionId: connection.id
     })
   ).get(connection.id);
 
@@ -901,8 +913,7 @@ export async function authorizeConnectionBinding(
 
   const entry = (
     await connectionAccountAccess(context, guard, "owner", {
-      connectionId: connection.id,
-      provider: null
+      connectionId: connection.id
     })
   ).get(connection.id);
 

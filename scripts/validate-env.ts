@@ -1566,9 +1566,9 @@ export function validateEnv(env: EnvBag): string[] {
     // back to a built-in default origin when it is blank; here a blank or
     // malformed origin would make the module hand a provider a redirect URI at a
     // host the operator never declared. Same predicate as the runtime.
-    if (!isDeclaredAppUrl(env.APP_URL)) {
+    if (!isDeclaredAppUrl(env.APP_URL, env.APP_ENV)) {
       problems.push(
-        "APP_URL wajib diisi dengan URL http(s) absolut tanpa kredensial saat CHANNEL_ACCOUNTS_ENABLED=true (redirect URI OAuth akun kanal adalah origin deployment ini; tanpa itu alur otorisasi ditolak)."
+        "APP_URL wajib diisi dengan URL https absolut tanpa kredensial saat CHANNEL_ACCOUNTS_ENABLED=true (http hanya diterima bila APP_ENV=development; redirect URI OAuth akun kanal adalah origin deployment ini, dan kode otorisasi tidak boleh lewat jaringan polos; tanpa itu alur otorisasi ditolak)."
       );
     }
 

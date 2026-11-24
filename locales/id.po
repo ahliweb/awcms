@@ -9223,6 +9223,9 @@ msgstr "Seluruh tenant"
 msgid "Scope: {type}"
 msgstr "Cakupan: {type}"
 
+msgid "Account claims"
+msgstr "Klaim akun"
+
 msgid "Channel accounts"
 msgstr "Akun kanal"
 
@@ -9487,6 +9490,99 @@ msgstr "Masukkan kode enam digit saat ini, lalu ganti kredensial sekali lagi."
 
 msgid "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest."
 msgstr "Tenant ini memiliki lebih banyak akun daripada yang dimuat layar ini. Menampilkan {count} terbaru. Filter penyedia dan status mencakup semua akun; pencarian hanya mencakup yang ditampilkan. API menampilkan sisanya."
+
+msgid "This tenant has more provider connections than this screen loads. Showing the newest {count}. The API lists the rest."
+msgstr "Tenant ini memiliki lebih banyak koneksi penyedia daripada yang dimuat layar ini. Menampilkan {count} terbaru. API menampilkan sisanya."
+
+msgid "10 to 500 characters: how you verified the real owner. No email address or phone number."
+msgstr "10 sampai 500 karakter: bagaimana Anda memverifikasi pemilik sebenarnya. Tanpa alamat email atau nomor telepon."
+
+msgid "A child account of the holder still holds a claim of its own; release that one by its own id first."
+msgstr "Akun anak milik pemegang masih memegang klaimnya sendiri; lepaskan klaim itu lebih dulu dengan id-nya sendiri."
+
+msgid "Abuse confirmed"
+msgstr "Penyalahgunaan terkonfirmasi"
+
+msgid "Channel accounts are switched off on this deployment, so no claim can be released."
+msgstr "Akun kanal dimatikan pada deployment ini, sehingga tidak ada klaim yang dapat dilepaskan."
+
+msgid "Check the fields: the reason needs 10 to 500 characters without an email address or phone number, and the ticket reference looks like TKT-1215."
+msgstr "Periksa isian: alasan perlu 10 sampai 500 karakter tanpa alamat email atau nomor telepon, dan referensi tiket berbentuk TKT-1215."
+
+msgid "Choose…"
+msgstr "Pilih…"
+
+msgid "Could not release the claim. Please try again."
+msgstr "Klaim tidak dapat dilepaskan. Silakan coba lagi."
+
+msgid "Enter the current six-digit code, then release the claim again."
+msgstr "Masukkan kode enam digit saat ini, lalu lepaskan klaim sekali lagi."
+
+msgid "External id"
+msgstr "Id eksternal"
+
+msgid "No live claim is held for that provider, kind and external id."
+msgstr "Tidak ada klaim aktif untuk penyedia, jenis, dan id eksternal itu."
+
+msgid "Ownership dispute resolved"
+msgstr "Sengketa kepemilikan diselesaikan"
+
+msgid "Platform operators only. An external account id is held by one tenant; when the wrong tenant holds it, verify the real owner out of band, then release the claim here."
+msgstr "Hanya operator platform. Satu id akun eksternal dipegang oleh satu tenant; bila tenant yang salah memegangnya, verifikasi pemilik sebenarnya di luar sistem, lalu lepaskan klaim di sini."
+
+msgid "Provider and account kind"
+msgstr "Penyedia dan jenis akun"
+
+msgid "Reason (your audit trail only)"
+msgstr "Alasan (hanya di jejak audit Anda)"
+
+msgid "Reason code"
+msgstr "Kode alasan"
+
+msgid "Registered in error"
+msgstr "Terdaftar karena kekeliruan"
+
+msgid "Release a claim"
+msgstr "Lepaskan klaim"
+
+msgid "Release a contested account claim"
+msgstr "Lepaskan klaim akun yang disengketakan"
+
+msgid "Release claim"
+msgstr "Lepaskan klaim"
+
+msgid "Releasing a claim needs two-factor authentication. Turn it on under your account first."
+msgstr "Melepaskan klaim memerlukan autentikasi dua faktor. Aktifkan lebih dulu di akun Anda."
+
+msgid "That code is not right. Check it and try again; the form is unchanged."
+msgstr "Kode itu tidak tepat. Periksa lalu coba lagi; formulir tidak berubah."
+
+msgid "The claim was released. The holder's account is ended and its credential erased; the real owner can register and verify the account now."
+msgstr "Klaim dilepaskan. Akun pemegang diakhiri dan kredensialnya dihapus; pemilik sebenarnya kini dapat mendaftarkan dan memverifikasi akun itu."
+
+msgid "The two external ids do not match. Nothing was changed."
+msgstr "Kedua id eksternal tidak sama. Tidak ada yang diubah."
+
+msgid "This ends the holder's account (soft delete), erases its stored credential and webhook secrets, and writes a critical audit entry in your trail and a warning entry in the holder's trail. It does not decide who is right: you must have verified the claimant yourself."
+msgstr "Ini mengakhiri akun pemegang (soft delete), menghapus kredensial dan rahasia webhook yang tersimpan, serta menulis entri audit kritis di jejak Anda dan entri peringatan di jejak pemegang. Ini tidak memutuskan siapa yang benar: Anda sendiri harus sudah memverifikasi pihak penuntut."
+
+msgid "This page could not be loaded right now. Please try again later."
+msgstr "Halaman ini tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Ticket reference (optional)"
+msgstr "Referensi tiket (opsional)"
+
+msgid "Too many wrong codes. The factor is locked for a while; the form is unchanged."
+msgstr "Terlalu banyak kode salah. Faktor dikunci sementara; formulir tidak berubah."
+
+msgid "Type the external id again to confirm"
+msgstr "Ketik ulang id eksternal untuk konfirmasi"
+
+msgid "Uppercase prefix, hyphen and number. It is visible in the holder's audit trail."
+msgstr "Awalan huruf kapital, tanda hubung, dan angka. Terlihat di jejak audit pemegang."
+
+msgid "You do not have permission to release account claims."
+msgstr "Anda tidak memiliki izin untuk melepaskan klaim akun."
 
 msgid "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."
 msgstr "Peran Anda boleh menulis kredensial, tetapi formulirnya ditahan: menulis kredensial memerlukan autentikasi dua faktor yang terdaftar pada akun Anda, atau sebuah kebijakan menolaknya."

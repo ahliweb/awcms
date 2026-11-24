@@ -15,6 +15,7 @@ import {
 } from "../src/modules/channel-accounts/application/secret-store";
 import { accountScopeWithinConnection } from "../src/modules/channel-accounts/application/channel-accounts-route-support";
 import {
+  isDeclaredAppUrl,
   resolveChannelOAuthRedirectUri,
   resolveChannelSecretsRing
 } from "../src/modules/channel-accounts/domain/channel-accounts-config";
@@ -209,6 +210,51 @@ describe("the key ring fails closed", () => {
         } as unknown as NodeJS.ProcessEnv)
       ).toBeNull();
     }
+  });
+});
+
+describe("#1215 isDeclaredAppUrl: https outside development (fail-closed)", () => {
+  const redirect = (appUrl: string, appEnv?: string) =>
+    resolveChannelOAuthRedirectUri({
+      APP_URL: appUrl,
+      APP_ENV: appEnv
+    } as unknown as NodeJS.ProcessEnv);
+
+  test("a plain http origin is refused in every environment except development", () => {
+    for (const appEnv of [
+      "production",
+      "test",
+      "staging",
+      "devel",
+      "",
+      undefined
+    ]) {
+      expect(redirect("http://cms.example.test", appEnv)).toBeNull();
+      expect(isDeclaredAppUrl("http://cms.example.test", appEnv)).toBe(false);
+    }
+  });
+
+  test("development alone may name an http origin, and https is accepted everywhere", () => {
+    expect(isDeclaredAppUrl("http://localhost:4321", "development")).toBe(true);
+    expect(isDeclaredAppUrl("http://localhost:4321", " Development ")).toBe(
+      true
+    );
+    expect(redirect("http://localhost:4321", "development")).toBe(
+      "http://localhost:4321/api/v1/channel-accounts/connections/oauth/callback"
+    );
+
+    for (const appEnv of ["production", "test", "development", undefined]) {
+      expect(isDeclaredAppUrl("https://cms.example.test", appEnv)).toBe(true);
+    }
+  });
+
+  test("credentials and non-http schemes stay refused even in development", () => {
+    expect(
+      isDeclaredAppUrl("https://u:p@cms.example.test", "development")
+    ).toBe(false);
+    expect(isDeclaredAppUrl("ftp://cms.example.test", "development")).toBe(
+      false
+    );
   });
 });
 
@@ -459,17 +505,24 @@ describe("the module descriptor", () => {
     );
   });
 
-  test("it is active and its one navigation entry opens the connection manager (#1154)", () => {
+  test("it is active and its two navigation entries open the connection manager (#1154) and the platform claim screen (#1215)", () => {
     expect(module.status).toBe("active");
     expect(module.navigation).toEqual([
       expect.objectContaining({
         path: "/admin/channel-accounts",
         requiredPermission: "channel_accounts.accounts.read"
+      }),
+      expect.objectContaining({
+        path: "/admin/channel-account-claims",
+        requiredPermission: "channel_accounts.account_claims.revoke"
       })
     ]);
-    // The screen exists (admin-navigation-registry.test.ts proves it for every
-    // entry); this pins that no other, unscreened entry slips in beside it.
+    // The screens exist (admin-navigation-registry.test.ts proves it for every
+    // entry); this pins that no other, unscreened entry slips in beside them.
     expect(existsSync("src/pages/admin/channel-accounts.astro")).toBe(true);
+    expect(existsSync("src/pages/admin/channel-account-claims.astro")).toBe(
+      true
+    );
   });
 
   test("every table the migration creates has RLS enabled and FORCED", () => {

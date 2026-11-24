@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:d18183b05d047da19facf464d1fb9fbe3e93cfb127fae97bf9462654ebf79d8c -->
+<!-- i18n-source-hash: sha256:530db9b1100223879f4ec40957f1991dc1873c28afaef0dd55699785e006b58a -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-243 titik masuk di 83 berkas; 239 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-239 itu dijaga `lockElement`/`mutateAndReload` pada 224, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 239 dari 243 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+244 titik masuk di 84 berkas; 240 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-240 itu dijaga `lockElement`/`mutateAndReload` pada 225, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 240 dari 244 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                             | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -157,6 +157,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/business-scope.astro`             | `assign-scope-form`                            | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/business-scope.astro`             | `request-exception-form`                       | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/business-scope.astro`             | `.js-${action}-exception`                      | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/channel-account-claims.astro`     | `channel-claims-form`                          | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/channel-accounts/[id].astro`      | `channel-account-credential-form`              | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/channel-accounts/[id].astro`      | `channel-account-disconnect-form`              | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/channel-accounts/[id].astro`      | `channel-account-revoke-connection-form`       | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |

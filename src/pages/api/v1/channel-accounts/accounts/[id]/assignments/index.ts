@@ -17,12 +17,23 @@ import {
 import { CHANNEL_ACCOUNTS_GUARDS } from "../../../../../../../modules/channel-accounts/domain/channel-accounts-constants";
 import {
   validateAssignment,
+  validateListAssignmentsQuery,
   type AssignmentInput
 } from "../../../../../../../modules/channel-accounts/domain/channel-accounts-validation";
 
-/** `GET /api/v1/channel-accounts/accounts/{id}/assignments` (Issue #1140) — who may operate this account. */
-export const GET = defineTenantRoute({
+/** `GET /api/v1/channel-accounts/accounts/{id}/assignments` (Issue #1140) — who may operate this account, oldest first, keyset paged (`?limit=` 1-100, `?cursor=`, answer `{ items, nextCursor }`, #1215 N3). */
+export const GET = defineTenantRoute<{
+  limit: number;
+  cursor: string | null;
+}>({
   workClass: "interactive",
+  prepare: ({ url }) => {
+    const query = validateListAssignmentsQuery(url.searchParams);
+
+    return query.valid
+      ? query.value
+      : fail(400, "VALIDATION_ERROR", "Query is invalid.", {}, query.errors);
+  },
   authorize: CHANNEL_ACCOUNTS_GUARDS.read,
   handler: async (context) => {
     const refused = commonRefusal(context.auth);
@@ -41,7 +52,18 @@ export const GET = defineTenantRoute({
 
     if ("denied" in loaded) return loaded.denied;
 
-    return ok(await listAssignments(context.tx, context.tenantId, id));
+    const result = await listAssignments(
+      context.tx,
+      context.tenantId,
+      id,
+      context.prepared
+    );
+
+    if (!result.ok) {
+      return fail(400, "VALIDATION_ERROR", "cursor is invalid.");
+    }
+
+    return ok({ items: result.items, nextCursor: result.nextCursor });
   }
 });
 

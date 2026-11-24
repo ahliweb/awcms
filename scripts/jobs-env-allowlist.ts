@@ -363,6 +363,13 @@ export const APP_ROLE_SCHEDULED_EXCEPTIONS: readonly {
       "re-checks an assignee's role grants and enqueues the SLA e-mail; awcms_worker can read neither the role-grant tables nor insert an e-mail (Issue #1164)"
   },
   {
+    target: "channel-accounts:oauth-state:sweep",
+    adr: "ADR-0148",
+    entrypoint: "scripts/channel-accounts-oauth-state-sweep.ts",
+    reason:
+      "deletes expired OAuth state and the ciphertext hanging off it in every tenant; no worker role holds any privilege on the channel tables (Issue #1215 N2)"
+  },
+  {
     target: "email:senders:verify",
     adr: "ADR-0162",
     entrypoint: "scripts/email-senders-verify.ts",
@@ -1081,6 +1088,13 @@ export const REACHES_WITHOUT_READING: readonly {
     ],
     reason:
       "imports telegram-config.ts for the retention-day constants only; it never resolves a ring, so the distinctness check is not on its path"
+  },
+  {
+    name: "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+    target: "channel-accounts:oauth-state:sweep",
+    readerCalls: ["resolveChannelSecretsRing"],
+    reason:
+      "reaches channel-accounts-config.ts through connection-directory.ts (the OAuth redirect URI resolver) but only DELETES expired state and ciphertext through a delete-only store; it encrypts and decrypts nothing and is deliberately given no key ring (Issue #1215 N2)"
   }
 ];
 

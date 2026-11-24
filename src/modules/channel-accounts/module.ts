@@ -150,9 +150,29 @@ export const channelAccountsModule = defineModule({
       path: "/admin/channel-accounts",
       order: 83,
       requiredPermission: "channel_accounts.accounts.read"
+    },
+    // PLATFORM-scoped (ADR-0051, ADR-0170 option C, #1215): the operator's
+    // dispute screen. Gated on the platform permission, so a tenant role never
+    // sees the entry; the page is real in this same change.
+    {
+      labelKey: "admin.layout.nav_channel_account_claims",
+      path: "/admin/channel-account-claims",
+      order: 84,
+      requiredPermission: "channel_accounts.account_claims.revoke"
     }
   ],
   jobs: [
+    {
+      command: "bun run channel-accounts:oauth-state:sweep",
+      schedule: { mode: "cron", expression: "17 * * * *", backlog: "bounded" },
+      purpose:
+        "For every active tenant, delete expired OAuth authorisation states (with their PKCE verifier ciphertext) and fail `pending` provider connections whose code was never exchanged within a day (erasing the hand-off ciphertext), in bounded per-tenant passes (Issue #1215 N2). Until now this ran only when the same tenant started another flow. A failure in one tenant never stops the others.",
+      recommendedSchedule:
+        "Hourly via cron/systemd timer; a tenant with a backlog beyond the pass bound is finished by the next run.",
+      environmentNotes:
+        "Pure PostgreSQL operation, run as `awcms_app` (DATABASE_URL): no worker role holds any privilege on the channel tables. It decrypts nothing and needs no key ring. Runs even while CHANNEL_ACCOUNTS_ENABLED is off. No network egress. Safe in offline/LAN deployments.",
+      safeInOfflineLan: true
+    },
     {
       command: "bun run channel-accounts:secrets:rekey",
       schedule: {

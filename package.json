@@ -57,6 +57,7 @@
     "push:auth-secret:backfill": "bun scripts/push-auth-secret-backfill.ts",
     "push:auth-secret:rekey": "bun scripts/push-auth-secret-backfill.ts --rekey",
     "channel-accounts:secrets:rekey": "bun scripts/channel-accounts-secrets-rekey.ts",
+    "channel-accounts:oauth-state:sweep": "bun scripts/channel-accounts-oauth-state-sweep.ts",
     "telegram:chat:rekey": "bun scripts/telegram-chat-rekey.ts",
     "hr-commission:intents:post": "bun scripts/hr-commission-intents-post.ts",
     "push:dispatch": "bun scripts/push-dispatch.ts",

@@ -40,6 +40,11 @@ import {
 import { resolveChannelOAuthRedirectUri } from "../domain/channel-accounts-config";
 import { getProviderRow } from "../domain/provider-matrix";
 import type { OAuthStartInput } from "../domain/channel-accounts-validation";
+import {
+  decodeKeysetCursor,
+  encodeKeysetCursor,
+  keysetCursorCreatedAtSql
+} from "../../_shared/keyset-pagination";
 import { getChannelOAuthAdapter } from "./oauth-adapter-registry";
 import type { SecretStorePort } from "./secret-store";
 
@@ -125,21 +130,48 @@ function toConnectionView(row: ConnectionRow): ConnectionView {
   };
 }
 
+export type ListConnectionsResult =
+  | { ok: true; items: ConnectionView[]; nextCursor: string | null }
+  | { ok: false; code: "INVALID_CURSOR" };
+
+/**
+ * Newest first, keyset-paginated (#1215 N3: this was `LIMIT 200` with no way to
+ * reach the 201st connection). The cursor follows the RAW page, so a caller that
+ * later filters rows out by visibility sees a short page, never a skipped or
+ * repeated row.
+ */
 export async function listConnections(
   tx: Bun.SQL,
   tenantId: string,
-  provider: string | null
-): Promise<ConnectionView[]> {
+  query: { provider: string | null; limit: number; cursor: string | null }
+): Promise<ListConnectionsResult> {
+  const cursor = query.cursor ? decodeKeysetCursor(query.cursor) : null;
+
+  if (query.cursor && !cursor) return { ok: false, code: "INVALID_CURSOR" };
+
   const rows = (await tx`
-    SELECT ${tx.unsafe(CONNECTION_COLUMNS)}
+    SELECT ${tx.unsafe(CONNECTION_COLUMNS)},
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_channel_provider_connections
     WHERE tenant_id = ${tenantId}
-      AND (${provider}::text IS NULL OR provider = ${provider})
+      AND (${query.provider}::text IS NULL OR provider = ${query.provider})
+      AND (${cursor?.createdAt ?? null}::timestamptz IS NULL
+           OR (created_at, id) <
+              (${cursor?.createdAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
     ORDER BY created_at DESC, id DESC
-    LIMIT 200
-  `) as ConnectionRow[];
+    LIMIT ${query.limit + 1}
+  `) as (ConnectionRow & { created_at_cursor: string })[];
+  const page = rows.slice(0, query.limit);
+  const last = page[page.length - 1];
 
-  return rows.map(toConnectionView);
+  return {
+    ok: true,
+    items: page.map(toConnectionView),
+    nextCursor:
+      rows.length > query.limit && last
+        ? encodeKeysetCursor(last.created_at_cursor, last.id)
+        : null
+  };
 }
 
 /**
@@ -182,13 +214,15 @@ const STALE_PENDING_CONNECTION_SECONDS = 24 * 60 * 60;
  * ONE tenant: expired states that no connection references (with their PKCE
  * verifier ciphertext) and `pending` connections whose code was never exchanged
  * (failed, hand-off secrets erased). Called on the write path of
- * {@link startOAuthGrant}, so growth is bounded by use without a scheduled job
- * and without an orphaned ciphertext row. This is the `purgeFunctionRef` of the
- * `awcms_channel_oauth_states` lifecycle descriptor.
+ * {@link startOAuthGrant} AND, since #1215 N2, by the scheduled job
+ * `channel-accounts:oauth-state:sweep` (a tenant that never starts another flow
+ * is no longer left holding its last abandoned verifier and hand-off code until
+ * it does). Growth stays bounded without an orphaned ciphertext row. This is the
+ * `purgeFunctionRef` of the `awcms_channel_oauth_states` lifecycle descriptor.
  */
 export async function sweepExpiredOAuthStates(
   tx: Bun.SQL,
-  store: SecretStorePort,
+  store: Pick<SecretStorePort, "remove">,
   tenantId: string,
   now: Date,
   limit = 50
@@ -463,7 +497,7 @@ export type ActivateGrantOutcome =
 
 async function eraseHandoffSecrets(
   tx: Bun.SQL,
-  store: SecretStorePort,
+  store: Pick<SecretStorePort, "remove">,
   tenantId: string,
   connectionId: string
 ): Promise<void> {
@@ -550,7 +584,7 @@ export async function activateConnectionGrant(
 /** The exchange failed (invalid code, provider refusal): the hand-off is erased and the grant is `failed`. */
 export async function failConnectionGrant(
   tx: Bun.SQL,
-  store: SecretStorePort,
+  store: Pick<SecretStorePort, "remove">,
   tenantId: string,
   connectionId: string
 ): Promise<boolean> {

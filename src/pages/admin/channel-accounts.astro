@@ -152,6 +152,7 @@ const screen = await loadAdminScreen({
         accounts: [] as AccountView[],
         moreAccounts: false,
         connections: [] as ConnectionView[],
+        moreConnections: false,
         accountsPerConnection: {} as Record<string, number>
       };
     }
@@ -197,11 +198,20 @@ const screen = await loadAdminScreen({
       moreAccounts = page === LOAD_PAGE_LIMIT - 1;
     }
 
+    // One keyset page (#1215 N3): the bound of what this screen loads; the
+    // API's `nextCursor` reaches the rest.
+    const connectionPage = await listConnections(tx, ssr.tenantId, {
+      provider: null,
+      limit: LOAD_PAGE_SIZE,
+      cursor: null
+    });
+    const listedConnections = connectionPage.ok ? connectionPage.items : [];
+    const moreConnections =
+      connectionPage.ok && connectionPage.nextCursor !== null;
     const connections = await filterVisibleConnections(
       context,
       READ_GUARD,
-      await listConnections(tx, ssr.tenantId, null),
-      null
+      listedConnections
     );
 
     // How many accounts each connection holds, from ONE statement over the
@@ -214,7 +224,10 @@ const screen = await loadAdminScreen({
       ssr.tenantId,
       { tenantUserId: viewer.tenantUserId, bypass: viewer.bypass },
       "viewer",
-      { connectionId: null, provider: null }
+      {
+        connectionId: null,
+        connectionIds: listedConnections.map((connection) => connection.id)
+      }
     );
 
     for (const binding of bindings) {
@@ -235,6 +248,7 @@ const screen = await loadAdminScreen({
       accounts,
       moreAccounts,
       connections,
+      moreConnections,
       accountsPerConnection
     };
   },
@@ -550,6 +564,14 @@ function scopeText(scope: { type: string; id: string } | null): string {
             "An authorisation the tenant granted a provider. Tokens, authorisation codes and their references are never shown."
           )}
         </p>
+        {data.moreConnections && (
+          <p class="state-notice" id="channel-connections-truncated">
+            {t(
+              "This tenant has more provider connections than this screen loads. Showing the newest {count}. The API lists the rest.",
+              { count: connections.length }
+            )}
+          </p>
+        )}
         <div
           class="data-table-scroll"
           role="region"

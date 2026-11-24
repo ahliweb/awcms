@@ -78,6 +78,7 @@ import {
   startOAuthGrant,
   sweepExpiredOAuthStates
 } from "../../src/modules/channel-accounts/application/connection-directory";
+import { runOAuthStateSweepJob } from "../../src/modules/channel-accounts/application/oauth-state-sweep-job";
 import {
   clearChannelOAuthAdaptersForTests,
   registerChannelOAuthAdapter
@@ -2704,6 +2705,163 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       )) as unknown[];
 
       expect(updated).toHaveLength(0);
+    });
+  });
+
+  describe("the scheduled OAuth state sweep (#1215 N2)", () => {
+    const LONG_AFTER = new Date("2030-01-03T00:00:00Z");
+    const old = new Date("2026-01-01T00:00:00Z");
+    const stateCount = async (tenantId: string) =>
+      (
+        (await getAdminSql()`
+          SELECT count(*)::int AS n FROM awcms_channel_oauth_states
+          WHERE tenant_id = ${tenantId}
+        `) as { n: number }[]
+      )[0]!.n;
+
+    test("it sweeps every tenant without any tenant starting another flow", async () => {
+      registerFakeAdapter();
+      await startFlow(T1, U1, old);
+      await startFlow(T2, U2, old);
+
+      const abandoned = await startFlow(T1, U1B, old);
+
+      await callback(T1, U1B, abandoned, new Date("2026-01-01T00:01:00Z"));
+      expect(await secretCount(T1)).toBe(3);
+      expect(await secretCount(T2)).toBe(1);
+
+      const run = await runOAuthStateSweepJob(getRuntimeSql(), {
+        now: LONG_AFTER
+      });
+
+      expect(run).toMatchObject({
+        tenantsChecked: 2,
+        tenantsErrored: 0,
+        tenantsBacklogged: 0,
+        aborted: false,
+        statesDeleted: 2,
+        connectionsFailed: 1
+      });
+      expect(await secretCount(T1)).toBe(0);
+      expect(await secretCount(T2)).toBe(0);
+      expect(await stateCount(T2)).toBe(0);
+      // A second run has nothing left and says so.
+      expect(
+        await runOAuthStateSweepJob(getRuntimeSql(), { now: LONG_AFTER })
+      ).toMatchObject({ statesDeleted: 0, connectionsFailed: 0 });
+    });
+
+    test("it never touches a state that has not expired", async () => {
+      registerFakeAdapter();
+      await startFlow(T1, U1, new Date());
+
+      const run = await runOAuthStateSweepJob(getRuntimeSql());
+
+      expect(run.statesDeleted).toBe(0);
+      expect(await stateCount(T1)).toBe(1);
+      expect(await secretCount(T1)).toBe(1);
+    });
+
+    test("it is bounded per tenant and finishes the backlog over the next runs", async () => {
+      registerFakeAdapter();
+
+      for (let n = 0; n < 5; n += 1) {
+        await startFlow(T1, U1, old);
+        await startFlow(T1, U1B, old);
+      }
+
+      expect(await stateCount(T1)).toBe(10);
+
+      const first = await runOAuthStateSweepJob(getRuntimeSql(), {
+        now: LONG_AFTER,
+        batch: 3,
+        maxPasses: 2
+      });
+
+      expect(first.statesDeleted).toBe(6);
+      expect(first.tenantsBacklogged).toBe(1);
+      expect(await stateCount(T1)).toBe(4);
+
+      const second = await runOAuthStateSweepJob(getRuntimeSql(), {
+        now: LONG_AFTER,
+        batch: 3,
+        maxPasses: 2
+      });
+
+      expect(second.statesDeleted).toBe(4);
+      expect(second.tenantsBacklogged).toBe(0);
+      expect(await stateCount(T1)).toBe(0);
+      expect(await secretCount(T1)).toBe(0);
+    });
+
+    test("a failing tenant is counted and never stops the others", async () => {
+      registerFakeAdapter();
+      await startFlow(T1, U1, old);
+      await startFlow(T2, U2, old);
+
+      const admin = getAdminSql();
+
+      await admin.unsafe(`
+        CREATE FUNCTION pg_temp_sweep_boom() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF OLD.tenant_id = '${T1}' THEN RAISE EXCEPTION 'sweep boom'; END IF;
+          RETURN OLD;
+        END $$`);
+      await admin.unsafe(`
+        CREATE TRIGGER sweep_boom BEFORE DELETE ON awcms_channel_oauth_states
+        FOR EACH ROW EXECUTE FUNCTION pg_temp_sweep_boom()`);
+
+      try {
+        const run = await runOAuthStateSweepJob(getRuntimeSql(), {
+          now: LONG_AFTER
+        });
+
+        expect(run.tenantsChecked).toBe(2);
+        expect(run.tenantsErrored).toBe(1);
+        // The healthy tenant was still swept, with its ciphertext.
+        expect(await stateCount(T2)).toBe(0);
+        expect(await secretCount(T2)).toBe(0);
+        // The failing tenant's work rolled back whole: no orphaned half.
+        expect(await stateCount(T1)).toBe(1);
+        expect(await secretCount(T1)).toBe(1);
+      } finally {
+        await admin.unsafe(
+          "DROP TRIGGER sweep_boom ON awcms_channel_oauth_states"
+        );
+        await admin.unsafe("DROP FUNCTION pg_temp_sweep_boom()");
+      }
+    });
+
+    test("a dry run counts what is due and changes nothing", async () => {
+      registerFakeAdapter();
+      await startFlow(T1, U1, old);
+
+      const run = await runOAuthStateSweepJob(getRuntimeSql(), {
+        now: LONG_AFTER,
+        dryRun: true
+      });
+
+      expect(run.statesDue).toBe(1);
+      expect(run.statesDeleted).toBe(0);
+      expect(await stateCount(T1)).toBe(1);
+      expect(await secretCount(T1)).toBe(1);
+    });
+
+    test("a cancelled run visits no tenant", async () => {
+      registerFakeAdapter();
+      await startFlow(T1, U1, old);
+
+      const controller = new AbortController();
+
+      controller.abort();
+
+      const run = await runOAuthStateSweepJob(getRuntimeSql(), {
+        now: LONG_AFTER,
+        signal: controller.signal
+      });
+
+      expect(run).toMatchObject({ aborted: true, tenantsChecked: 0 });
+      expect(await stateCount(T1)).toBe(1);
     });
   });
 });

@@ -9252,6 +9252,9 @@ msgstr ""
 msgid "Scope: {type}"
 msgstr ""
 
+msgid "Account claims"
+msgstr ""
+
 msgid "Channel accounts"
 msgstr ""
 
@@ -9520,6 +9523,99 @@ msgid "Enter the current six-digit code, then replace the credential again."
 msgstr ""
 
 msgid "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest."
+msgstr ""
+
+msgid "This tenant has more provider connections than this screen loads. Showing the newest {count}. The API lists the rest."
+msgstr ""
+
+msgid "10 to 500 characters: how you verified the real owner. No email address or phone number."
+msgstr ""
+
+msgid "A child account of the holder still holds a claim of its own; release that one by its own id first."
+msgstr ""
+
+msgid "Abuse confirmed"
+msgstr ""
+
+msgid "Channel accounts are switched off on this deployment, so no claim can be released."
+msgstr ""
+
+msgid "Check the fields: the reason needs 10 to 500 characters without an email address or phone number, and the ticket reference looks like TKT-1215."
+msgstr ""
+
+msgid "Choose…"
+msgstr ""
+
+msgid "Could not release the claim. Please try again."
+msgstr ""
+
+msgid "Enter the current six-digit code, then release the claim again."
+msgstr ""
+
+msgid "External id"
+msgstr ""
+
+msgid "No live claim is held for that provider, kind and external id."
+msgstr ""
+
+msgid "Ownership dispute resolved"
+msgstr ""
+
+msgid "Platform operators only. An external account id is held by one tenant; when the wrong tenant holds it, verify the real owner out of band, then release the claim here."
+msgstr ""
+
+msgid "Provider and account kind"
+msgstr ""
+
+msgid "Reason (your audit trail only)"
+msgstr ""
+
+msgid "Reason code"
+msgstr ""
+
+msgid "Registered in error"
+msgstr ""
+
+msgid "Release a claim"
+msgstr ""
+
+msgid "Release a contested account claim"
+msgstr ""
+
+msgid "Release claim"
+msgstr ""
+
+msgid "Releasing a claim needs two-factor authentication. Turn it on under your account first."
+msgstr ""
+
+msgid "That code is not right. Check it and try again; the form is unchanged."
+msgstr ""
+
+msgid "The claim was released. The holder's account is ended and its credential erased; the real owner can register and verify the account now."
+msgstr ""
+
+msgid "The two external ids do not match. Nothing was changed."
+msgstr ""
+
+msgid "This ends the holder's account (soft delete), erases its stored credential and webhook secrets, and writes a critical audit entry in your trail and a warning entry in the holder's trail. It does not decide who is right: you must have verified the claimant yourself."
+msgstr ""
+
+msgid "This page could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Ticket reference (optional)"
+msgstr ""
+
+msgid "Too many wrong codes. The factor is locked for a while; the form is unchanged."
+msgstr ""
+
+msgid "Type the external id again to confirm"
+msgstr ""
+
+msgid "Uppercase prefix, hyphen and number. It is visible in the holder's audit trail."
+msgstr ""
+
+msgid "You do not have permission to release account claims."
 msgstr ""
 
 msgid "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."

@@ -658,6 +658,43 @@ export function validateListAccountsQuery(
       };
 }
 
+/** The page query of the connection and assignment lists (#1215 N3): the same 1-100 window and opaque keyset cursor as the account list. */
+export type ListPageQuery = {
+  provider: string | null;
+  limit: number;
+  cursor: string | null;
+};
+
+export function validateListConnectionsQuery(
+  params: URLSearchParams
+): Validated<ListPageQuery> {
+  const parsed = validateListAccountsQuery(params);
+
+  return parsed.valid
+    ? {
+        valid: true,
+        value: {
+          provider: parsed.value.provider,
+          limit: parsed.value.limit,
+          cursor: parsed.value.cursor
+        }
+      }
+    : parsed;
+}
+
+export function validateListAssignmentsQuery(
+  params: URLSearchParams
+): Validated<Pick<ListPageQuery, "limit" | "cursor">> {
+  const parsed = validateListAccountsQuery(params);
+
+  return parsed.valid
+    ? {
+        valid: true,
+        value: { limit: parsed.value.limit, cursor: parsed.value.cursor }
+      }
+    : parsed;
+}
+
 // ---------------------------------------------------------------------------
 // Provider risk acknowledgement (Issue #1142)
 // ---------------------------------------------------------------------------

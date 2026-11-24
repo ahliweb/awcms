@@ -201,6 +201,26 @@ describe("validateEnv", () => {
       }
     });
 
+    test("#1215: an http APP_URL is refused unless APP_ENV is development (fail-closed)", () => {
+      const refused = (env: Record<string, string>) =>
+        validateEnv({ ...enabled, ...env }).some((p) =>
+          p.includes("CHANNEL_ACCOUNTS_ENABLED=true")
+        );
+
+      expect(
+        refused({ APP_ENV: "production", APP_URL: "http://cms.example.test" })
+      ).toBe(true);
+      expect(
+        refused({ APP_ENV: "test", APP_URL: "http://cms.example.test" })
+      ).toBe(true);
+      expect(
+        refused({ APP_ENV: "development", APP_URL: "http://localhost:4321" })
+      ).toBe(false);
+      expect(
+        refused({ APP_ENV: "production", APP_URL: "https://cms.example.test" })
+      ).toBe(false);
+    });
+
     test("a disabled module does not care about APP_URL beyond the global rule", () => {
       expect(
         validateEnv({ ...base, CHANNEL_ACCOUNTS_ENABLED: "false" })

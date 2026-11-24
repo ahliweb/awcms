@@ -757,8 +757,7 @@ export type ConnectionAccountBinding = {
 
 /**
  * The live accounts bound to ONE connection (`connectionId`) or to the tenant's
- * 200 newest connections of a provider (`connectionId` null) — the same window
- * `listConnections` shows — with the assignment decision made in SQL, exactly
+ * connections of one listed page (`connectionIds`, `connectionId` null), with the assignment decision made in SQL, exactly
  * the rule of {@link isAccountVisibleTo}. The business-scope half is the
  * caller's (it needs the chokepoint). Revoked accounts are included on purpose:
  * revoking a connection must still be authorised against every account it holds.
@@ -768,7 +767,15 @@ export async function listConnectionAccountBindings(
   tenantId: string,
   viewer: { tenantUserId: string; bypass: boolean },
   minimumKind: ChannelAssignmentKind,
-  filter: { connectionId: string | null; provider: string | null }
+  filter: {
+    connectionId: string | null;
+    /**
+     * The connections of ONE listed page (#1215 N3). Replaces the old "200
+     * newest connections" window, which would have dropped every connection
+     * past it from a paged list.
+     */
+    connectionIds?: readonly string[];
+  }
 ): Promise<ConnectionAccountBinding[]> {
   const rows = (await tx`
     SELECT acc.id, acc.connection_id, acc.business_scope_type,
@@ -792,13 +799,7 @@ export async function listConnectionAccountBindings(
       AND (${filter.connectionId}::uuid IS NULL
            OR acc.connection_id = ${filter.connectionId})
       AND (${filter.connectionId}::uuid IS NOT NULL
-           OR acc.connection_id IN (
-             SELECT c.id FROM awcms_channel_provider_connections AS c
-             WHERE c.tenant_id = ${tenantId}
-               AND (${filter.provider}::text IS NULL
-                    OR c.provider = ${filter.provider})
-             ORDER BY c.created_at DESC, c.id DESC
-             LIMIT 200))
+           OR acc.connection_id = ANY(${tx.array([...(filter.connectionIds ?? [])], "uuid")}))
   `) as {
     id: string;
     connection_id: string;
@@ -1303,20 +1304,43 @@ function toAssignment(row: AssignmentRow): AssignmentView {
   };
 }
 
+export type ListAssignmentsResult =
+  | { ok: true; items: AssignmentView[]; nextCursor: string | null }
+  | { ok: false; code: "INVALID_CURSOR" };
+
+/** Oldest first, keyset-paginated (#1215 N3: was `LIMIT 200` with no way past it). */
 export async function listAssignments(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string
-): Promise<AssignmentView[]> {
+  accountId: string,
+  query: { limit: number; cursor: string | null }
+): Promise<ListAssignmentsResult> {
+  const cursor = query.cursor ? decodeKeysetCursor(query.cursor) : null;
+
+  if (query.cursor && !cursor) return { ok: false, code: "INVALID_CURSOR" };
+
   const rows = (await tx`
-    SELECT id, account_id, tenant_user_id, kind, created_at
+    SELECT id, account_id, tenant_user_id, kind, created_at,
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_channel_account_assignments
     WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+      AND (${cursor?.createdAt ?? null}::timestamptz IS NULL
+           OR (created_at, id) >
+              (${cursor?.createdAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
     ORDER BY created_at, id
-    LIMIT 200
-  `) as AssignmentRow[];
+    LIMIT ${query.limit + 1}
+  `) as (AssignmentRow & { created_at_cursor: string })[];
+  const page = rows.slice(0, query.limit);
+  const last = page[page.length - 1];
 
-  return rows.map(toAssignment);
+  return {
+    ok: true,
+    items: page.map(toAssignment),
+    nextCursor:
+      rows.length > query.limit && last
+        ? encodeKeysetCursor(last.created_at_cursor, last.id)
+        : null
+  };
 }
 
 export type AssignOutcome =

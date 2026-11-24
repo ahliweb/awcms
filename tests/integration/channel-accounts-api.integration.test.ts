@@ -1408,12 +1408,15 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
     test("connections list is empty and never contains a credential field", async () => {
       if (!handlerReady) return;
 
-      const response = await call<unknown[]>(listConnections, {
+      const response = await call<{
+        items: unknown[];
+        nextCursor: string | null;
+      }>(listConnections, {
         path: `${BASE}/connections`
       });
 
       expect(response.status).toBe(200);
-      expect(response.body.data).toEqual([]);
+      expect(response.body.data).toEqual({ items: [], nextCursor: null });
     });
   });
   describe("business scope and connection authority (ADR-0148 review M1, M2, M3)", () => {
@@ -1692,18 +1695,20 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       );
 
       const list = (token: string) =>
-        call<{ id: string }[]>(listConnections, {
+        call<{ items: { id: string }[] }>(listConnections, {
           path: `${BASE}/connections`,
           token
         });
-      const ids = (await list(operator.token)).body.data!.map((c) => c.id);
+      const ids = (await list(operator.token)).body.data!.items.map(
+        (c) => c.id
+      );
 
       // `empty` has no account and was not started by this person: not theirs.
       expect(ids).toEqual([visible]);
 
       await holdScope(operator.tenantUserId, office);
 
-      const withScope = (await list(operator.token)).body.data!.map(
+      const withScope = (await list(operator.token)).body.data!.items.map(
         (c) => c.id
       );
 
@@ -1711,7 +1716,9 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       // The tenant administrator (unconfined, holds assignments.assign) is
       // break-glass over every connection of the tenant.
-      const ownerIds = (await list(env.token)).body.data!.map((c) => c.id);
+      const ownerIds = (await list(env.token)).body.data!.items.map(
+        (c) => c.id
+      );
 
       expect(ownerIds.sort()).toEqual(
         [visible, assignedAway, scopedAway, empty].sort()
@@ -1937,11 +1944,11 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       });
       const seen = async (token: string) =>
         (
-          await call<{ id: string }[]>(listConnections, {
+          await call<{ items: { id: string }[] }>(listConnections, {
             path: `${BASE}/connections`,
             token
           })
-        ).body.data!.map((c) => c.id);
+        ).body.data!.items.map((c) => c.id);
 
       expect(await seen(starter.token)).toEqual([connection]);
       expect(await seen(stranger.token)).toEqual([]);
@@ -1950,6 +1957,103 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect((await revoke(connection, stranger.token)).status).toBe(404);
       expect(await grantState(connection)).toBe("failed");
       expect((await revoke(connection, starter.token)).status).toBe(200);
+    });
+
+    test("#1215 L5: having started a SCOPED connection is not authority once the scope is gone", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("L5-A");
+      const starter = await seedUser(env.tenantId, "l5s-start", OPERATOR_KEYS);
+      const connection = await seedConnection({
+        officeId: office,
+        connectedBy: starter.tenantUserId
+      });
+      const seen = async () =>
+        (
+          await call<{ items: { id: string }[] }>(listConnections, {
+            path: `${BASE}/connections`,
+            token: starter.token
+          })
+        ).body.data!.items.map((c) => c.id);
+
+      // The stamp alone no longer lists, nor lets them revoke, a scoped connection.
+      expect(await seen()).toEqual([]);
+      expect((await revoke(connection, starter.token)).status).toBe(404);
+      expect(await grantState(connection)).toBe("failed");
+
+      // The scope, not the stamp, is the authority: holding it brings both back.
+      await holdScope(starter.tenantUserId, office);
+      expect(await seen()).toEqual([connection]);
+      expect((await revoke(connection, starter.token)).status).toBe(200);
+    });
+
+    test("#1215 N3: the connection list is keyset-paged, follows the raw page and never skips or repeats", async () => {
+      if (!handlerReady) return;
+
+      const starter = await seedUser(env.tenantId, "n3-start", OPERATOR_KEYS);
+      const all: string[] = [];
+
+      for (let i = 0; i < 5; i += 1) {
+        all.push(
+          await seedConnection({
+            connectedBy: i % 2 === 0 ? starter.tenantUserId : undefined
+          })
+        );
+      }
+
+      type Page = {
+        items: { id: string }[];
+        nextCursor: string | null;
+      };
+      const walk = async (token: string, limit: number) => {
+        const ids: string[] = [];
+        let cursor: string | null = null;
+        let pages = 0;
+
+        do {
+          const query: string =
+            `?limit=${limit}` +
+            (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+          const response = await call<Page>(listConnections, {
+            path: `${BASE}/connections${query}`,
+            token
+          });
+
+          expect(response.status).toBe(200);
+          ids.push(...response.body.data!.items.map((c) => c.id));
+          cursor = response.body.data!.nextCursor;
+          pages += 1;
+        } while (cursor !== null && pages < 20);
+
+        return { ids, pages };
+      };
+
+      // The administrator sees all five, newest first, over three pages of two.
+      const admin5 = await walk(env.token, 2);
+
+      expect(admin5.ids).toEqual([...all].reverse());
+      expect(admin5.pages).toBe(3);
+
+      // The starter sees only its own three: pages that lost rows to the
+      // visibility rule are short, but nothing is skipped or repeated.
+      const mine = await walk(starter.token, 2);
+
+      expect(new Set(mine.ids).size).toBe(mine.ids.length);
+      expect(mine.ids.sort()).toEqual([all[0]!, all[2]!, all[4]!].sort());
+
+      const tampered = await call(listConnections, {
+        path: `${BASE}/connections?cursor=not-a-cursor`
+      });
+
+      expect(tampered.status).toBe(400);
+      expect(
+        (await call(listConnections, { path: `${BASE}/connections?limit=0` }))
+          .status
+      ).toBe(400);
+      expect(
+        (await call(listConnections, { path: `${BASE}/connections?limit=101` }))
+          .status
+      ).toBe(400);
     });
 
     test("M-a: an ABAC deny on assignments.assign closes the assignment-visibility bypass", async () => {
@@ -2032,11 +2136,11 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       const guarded = await connection();
       const idsFor = async (token: string) =>
         (
-          await call<{ id: string }[]>(listConnections, {
+          await call<{ items: { id: string }[] }>(listConnections, {
             path: `${BASE}/connections`,
             token
           })
-        ).body.data!.map((c) => c.id);
+        ).body.data!.items.map((c) => c.id);
 
       // Someone else owns the only account, so only break-glass can reach it.
       for (const id of [unconfined, guarded]) {
@@ -2152,7 +2256,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             `) as { n: number }[]
           )[0]!.n;
         const before = await count();
-        const list = await call<{ id: string }[]>(listConnections, {
+        const list = await call<{ items: { id: string }[] }>(listConnections, {
           path: `${BASE}/connections`,
           token: operator.token
         });
@@ -2161,7 +2265,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
         return {
           rows: (await count()) - before,
-          listed: list.body.data!.length
+          listed: list.body.data!.items.length
         };
       };
       const addScopedConnections = async (howMany: number, tag: string) => {
@@ -2509,7 +2613,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             `) as { n: number }[]
           )[0]!.n;
         const before = await count();
-        const list = await call<{ id: string }[]>(listConnections, {
+        const list = await call<{ items: { id: string }[] }>(listConnections, {
           path: `${BASE}/connections`
         });
 
@@ -2517,7 +2621,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
         return {
           rows: (await count()) - before,
-          listed: list.body.data!.length
+          listed: list.body.data!.items.length
         };
       };
 
@@ -2954,11 +3058,11 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       });
     const assignments = async (id: string) =>
       (
-        await call<Assignment[]>(listAssignments, {
+        await call<{ items: Assignment[] }>(listAssignments, {
           path: `${BASE}/accounts/${id}/assignments`,
           params: { id }
         })
-      ).body.data!;
+      ).body.data!.items;
     const setMode = (id: string, mode: string, token?: string) =>
       call<{ accountId: string; accessMode: string }>(putAccessMode, {
         method: "PUT",
@@ -3028,6 +3132,61 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect((await readAccount(id, colleague.token)).status).toBe(404);
       // The tenant administrator is the break-glass.
       expect((await readAccount(id, env.token)).status).toBe(200);
+    });
+
+    test("#1215 N3: the assignment list is keyset-paged, oldest first", async () => {
+      if (!handlerReady) return;
+
+      const id = await closed("n3-assign");
+      const people: string[] = [];
+
+      for (let i = 0; i < 4; i += 1) {
+        const user = await seedUser(env.tenantId, `n3-a${i}`, [
+          "channel_accounts.accounts.read"
+        ]);
+
+        people.push(user.tenantUserId);
+        expect(
+          (await assignRoute(id, user.tenantUserId, "viewer")).status
+        ).toBe(200);
+      }
+
+      const full = await assignments(id);
+
+      expect(full.length).toBeGreaterThanOrEqual(4);
+
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
+
+      do {
+        const query: string =
+          "?limit=2" + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+        const response = await call<{
+          items: Assignment[];
+          nextCursor: string | null;
+        }>(listAssignments, {
+          path: `${BASE}/accounts/${id}/assignments${query}`,
+          params: { id }
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.data!.items.length).toBeLessThanOrEqual(2);
+        ids.push(...response.body.data!.items.map((a) => a.id));
+        cursor = response.body.data!.nextCursor;
+        pages += 1;
+      } while (cursor !== null && pages < 20);
+
+      expect(ids).toEqual(full.map((a) => a.id));
+      expect(pages).toBe(Math.ceil(full.length / 2));
+      expect(
+        (
+          await call(listAssignments, {
+            path: `${BASE}/accounts/${id}/assignments?cursor=bogus`,
+            params: { id }
+          })
+        ).status
+      ).toBe(400);
     });
 
     test("an assigned account whose assignees are all gone is administrators-only, never open", async () => {

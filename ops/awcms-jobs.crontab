@@ -63,6 +63,14 @@ AWCMS_LOCK=/opt/awcms-jobs/locks
 # 7.5).
 * * * * * /usr/bin/flock -n $AWCMS_LOCK/booking-reminders-dispatch.lock $AWCMS_RUN_JOB booking:reminders:dispatch >> $AWCMS_JOB_LOG/booking-reminders-dispatch.log 2>&1
 
+# channel_accounts — For every active tenant, delete expired OAuth
+# authorisation states (with their PKCE verifier ciphertext) and fail
+# `pending` provider connections whose code was never exchanged within a day
+# (erasing the hand-off ciphertext), in bounded per-tenant passes (Issue #1215
+# N2). Until now this ran only when the same tenant started another flow. A
+# failure in one tenant never stops the others.
+17 * * * * /usr/bin/flock -n $AWCMS_LOCK/channel-accounts-oauth-state-sweep.lock $AWCMS_RUN_JOB channel-accounts:oauth-state:sweep >> $AWCMS_JOB_LOG/channel-accounts-oauth-state-sweep.log 2>&1
+
 # comments — Bounded, per-tenant retention/anonymization sweep: NULL author
 # identity fields on comments older than the retention cutoff (retaining row +
 # body + append-only moderation history), and delete unconfirmed reply

@@ -61,6 +61,7 @@ describe("APP_ROLE_SCHEDULED_EXCEPTIONS", () => {
   test("the real list matches the real crontab in both directions", () => {
     expect(run(APP_ROLE_SCHEDULED_EXCEPTIONS)).toEqual([]);
     expect(APP_ROLE_SCHEDULED_EXCEPTIONS.map((e) => e.target).sort()).toEqual([
+      "channel-accounts:oauth-state:sweep",
       "email:senders:verify",
       "hr-commission:intents:post",
       "omnichannel-inbox:sla"

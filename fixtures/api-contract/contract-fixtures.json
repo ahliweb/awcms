@@ -1,6 +1,6 @@
 {
   "packVersion": 1,
-  "contractSha256": "d98f65deedb3d552ac7d6cb1c9d04df3149ad1752bcbad3479dcfa1c5e4424b0",
+  "contractSha256": "6389d5583a50a0a71621a5c1a5948812fc627600a27eee0dc1f26231efef78cb",
   "summary": {
     "operations": 743,
     "fixtures": 1786,
@@ -11888,15 +11888,18 @@
           "source": "generated",
           "value": {
             "success": true,
-            "data": [
-              {
-                "id": "00000000-0000-4000-8000-000000000000",
-                "accountId": "00000000-0000-4000-8000-000000000000",
-                "tenantUserId": "00000000-0000-4000-8000-000000000000",
-                "kind": "owner",
-                "createdAt": "2026-01-01T00:00:00Z"
-              }
-            ],
+            "data": {
+              "items": [
+                {
+                  "id": "00000000-0000-4000-8000-000000000000",
+                  "accountId": "00000000-0000-4000-8000-000000000000",
+                  "tenantUserId": "00000000-0000-4000-8000-000000000000",
+                  "kind": "owner",
+                  "createdAt": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "nextCursor": "example"
+            },
             "meta": {}
           }
         },
@@ -12653,30 +12656,33 @@
           "source": "generated",
           "value": {
             "success": true,
-            "data": [
-              {
-                "id": "00000000-0000-4000-8000-000000000000",
-                "provider": "example",
-                "authMode": "oauth2",
-                "grantState": "pending",
-                "label": "example",
-                "grantedScopes": [
-                  "example"
-                ],
-                "issuedAt": "2026-01-01T00:00:00Z",
-                "expiresAt": "2026-01-01T00:00:00Z",
-                "refreshExpiresAt": "2026-01-01T00:00:00Z",
-                "revokedAt": "2026-01-01T00:00:00Z",
-                "hasAccessCredential": true,
-                "awaitingExchange": true,
-                "connectedBy": "00000000-0000-4000-8000-000000000000",
-                "businessScope": {
-                  "type": "example",
-                  "id": "00000000-0000-4000-8000-000000000000"
-                },
-                "createdAt": "2026-01-01T00:00:00Z"
-              }
-            ],
+            "data": {
+              "items": [
+                {
+                  "id": "00000000-0000-4000-8000-000000000000",
+                  "provider": "example",
+                  "authMode": "oauth2",
+                  "grantState": "pending",
+                  "label": "example",
+                  "grantedScopes": [
+                    "example"
+                  ],
+                  "issuedAt": "2026-01-01T00:00:00Z",
+                  "expiresAt": "2026-01-01T00:00:00Z",
+                  "refreshExpiresAt": "2026-01-01T00:00:00Z",
+                  "revokedAt": "2026-01-01T00:00:00Z",
+                  "hasAccessCredential": true,
+                  "awaitingExchange": true,
+                  "connectedBy": "00000000-0000-4000-8000-000000000000",
+                  "businessScope": {
+                    "type": "example",
+                    "id": "00000000-0000-4000-8000-000000000000"
+                  },
+                  "createdAt": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "nextCursor": "example"
+            },
             "meta": {}
           }
         },

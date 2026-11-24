@@ -117,8 +117,7 @@ export async function resolveAccountDetailAccess(
 
     connection =
       fetched &&
-      (await filterVisibleConnections(context, G.read, [fetched], null))
-        .length > 0
+      (await filterVisibleConnections(context, G.read, [fetched])).length > 0
         ? fetched
         : null;
   }
@@ -143,7 +142,7 @@ export async function resolveAccountDetailAccess(
             bypass: await canSeeAllAccounts(context)
           },
           "viewer",
-          { connectionId: connection.id, provider: null }
+          { connectionId: connection.id }
         )
       ).length;
     }
