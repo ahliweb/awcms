@@ -8,15 +8,16 @@ import { readFileSync } from "node:fs";
 
 import {
   NON_PAYROLL_LOOKALIKE_EXCEPTIONS,
-  PAYROLL_REQUIRED_FOREIGN_KEYS,
-  PAYROLL_REQUIRED_TRIGGERS,
   assertNonPayrollLookalikeExceptionsValid,
   validateNonPayrollLookalikeExceptions
 } from "../src/modules/_shared/payroll-data-boundary";
+import type { CatalogSnapshot } from "../scripts/lib/payroll-catalog-boundary";
 import {
-  analysePayrollCatalog,
-  type CatalogSnapshot
-} from "../scripts/lib/payroll-catalog-boundary";
+  HEALTHY_PAYROLL_COLUMNS,
+  HEALTHY_PAYROLL_FOREIGN_KEYS,
+  HEALTHY_PAYROLL_TRIGGERS,
+  analysePayrollCatalog
+} from "./fixtures/payroll-fingerprint-snapshot";
 
 const ACCRUALS = "public.awcms_hr_commission_accruals";
 const TRANSITIONS = "public.awcms_hr_commission_transitions";
@@ -26,32 +27,35 @@ const REASON =
   "append-only order-state history; shares generic columns, holds no pay data";
 const EXC = { [HISTORY]: REASON };
 
-const columns = Array.from({ length: 12 }, (_, i) => `c${i}:text`);
+/**
+ * The look-alikes copy the columns of a REAL payroll table (transitions: its
+ * fingerprint has no name-free tolerance, so only `payroll-lookalike` can
+ * speak). The snapshot is otherwise HEALTHY and fingerprinted (#1436), so no
+ * `payroll-fingerprint-drift` is expected from the real tables.
+ */
+const realColumns = HEALTHY_PAYROLL_COLUMNS.find(
+  (entry) => entry.relation === TRANSITIONS
+)!.columns;
+// ~75% of the real columns: over the 70% share, not an identical copy.
+const partialColumns = realColumns.slice(
+  0,
+  Math.ceil(realColumns.length * 0.75)
+);
 
 function snapshot(partial: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
   return {
     migrationOwner: "owner",
-    columns: [],
-    foreignKeys: PAYROLL_REQUIRED_FOREIGN_KEYS.map((edge) => ({
-      from: `public.${edge.from}`,
-      to: `public.${edge.to}`
-    })),
+    columns: HEALTHY_PAYROLL_COLUMNS,
+    foreignKeys: HEALTHY_PAYROLL_FOREIGN_KEYS,
     roles: [],
     namedObjects: [],
     rules: [],
     functions: [],
-    triggers: Object.entries(PAYROLL_REQUIRED_TRIGGERS).flatMap(
-      ([table, names]) =>
-        names.map((name) => ({
-          relation: `public.${table}`,
-          name,
-          function: `public.${name}_fn`
-        }))
-    ),
+    triggers: HEALTHY_PAYROLL_TRIGGERS,
     grants: [],
     inheritance: [],
-    relations: [ACCRUALS, TRANSITIONS].map((name) => ({
-      name,
+    relations: HEALTHY_PAYROLL_COLUMNS.map(({ relation }) => ({
+      name: relation,
       relkind: "r",
       owner: "owner",
       comment: "payroll-boundary: test"
@@ -67,8 +71,11 @@ function snapshot(partial: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
 const withTables = (...relations: string[]) =>
   snapshot({
     columns: [
-      { relation: ACCRUALS, columns },
-      ...relations.map((relation) => ({ relation, columns: [...columns] }))
+      ...HEALTHY_PAYROLL_COLUMNS,
+      ...relations.map((relation) => ({
+        relation,
+        columns: relation === COPY ? [...realColumns] : [...partialColumns]
+      }))
     ]
   });
 
@@ -86,6 +93,10 @@ describe("NON_PAYROLL_LOOKALIKE_EXCEPTIONS (#1354)", () => {
     expect(
       validateNonPayrollLookalikeExceptions(NON_PAYROLL_LOOKALIKE_EXCEPTIONS)
     ).toEqual([]);
+  });
+
+  test("the fingerprinted baseline snapshot is clean (no drift to hide)", () => {
+    expect(codes(snapshot())).toEqual([]);
   });
 
   test("a 70%+ overlapping table is flagged until registered with a reason", () => {
