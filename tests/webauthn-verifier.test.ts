@@ -13,7 +13,7 @@ import {
   randomBytes,
   verify as cryptoVerify
 } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   decodeBase64UrlStrict,
@@ -1149,10 +1149,11 @@ describe("S1 ships dark: nothing outside the pure module reaches it", () => {
     );
     const importers: string[] = [];
     const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const name = entry.name;
         const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.(ts|astro|mts)$/.test(name)) {
+        if (entry.isDirectory()) walk(path);
+        else if (entry.isFile() && /\.(ts|astro|mts)$/.test(name)) {
           const rel = relative(root, path);
           if (
             !own.has(rel) &&
