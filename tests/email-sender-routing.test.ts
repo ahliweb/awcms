@@ -302,7 +302,8 @@ describe("provider parsers are fail-closed", () => {
       transport: async (request) => {
         urls.push(request.url);
         bodies.push(request.body);
-        expect(request.headers.Authorization).toBe("Bearer CANARY-probe-token");
+        expect(request.headers["X-Api-Token"]).toBe("CANARY-probe-token");
+        expect(request.headers.Authorization).toBeUndefined();
 
         return {
           ok: true,

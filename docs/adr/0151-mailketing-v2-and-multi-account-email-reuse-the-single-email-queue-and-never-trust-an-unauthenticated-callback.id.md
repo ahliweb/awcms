@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md)
 
-<!-- i18n-source-hash: sha256:c1da1106ef651ffe4badcd60aae17163bc24141e4e6393329b8db0f3307bd15c -->
+<!-- i18n-source-hash: sha256:390468c12804de2c47f8cb2fb814de76ab701476e3a1bf3fc7a1d9e4d8293de5 -->
 
 # ADR-0151 — Mailketing v2 dan email multi-akun memakai ulang satu antrean `email`, dan callback provider tanpa autentikasi tidak pernah mengubah state pelanggan
 
@@ -219,6 +219,7 @@ M12. Tidak ada klaim di kode, UI, atau dokumen tentang kapabilitas kampanye jara
 - **Q10.** Apakah perjanjian atau addendum pemrosesan dengan Mailketing sudah ada, dan di mana ia memproses data? (tindakan pengendali)
 - **Q11.** Lingkup perkiraan kredit: rata-rata bergerak penasihat sederhana (direkomendasikan) atau anggaran yang ditegakkan dan memblokir pengiriman?
 - **Q12.** Pilihan antara `Authorization: Bearer` dan `X-Api-Token` untuk header v2. Rekomendasi: `Authorization: Bearer`, dikonfirmasi sandbox.
+  **Amandemen (Issue #1159, 2026-11-23):** rekomendasi dibalik untuk _bawaan_. Sebuah deployment produksi hilir mengirim email lewat v2 dengan `X-Api-Token` sejak 2026-11-12 (komentar isu #1159, 2026-11-14); `Authorization: Bearer` belum punya bukti live. Skema kini dapat dikonfigurasi lewat `EMAIL_MAILKETING_V2_AUTH_SCHEME` (`x-api-token` bawaan, `bearer` opt-in, fail-closed untuk nilai lain, tepat satu header dikirim). Ini bukti konsumen, bukan pemeriksaan tahap 2: pertanyaan tetap **terbuka** sampai `EMAIL_MAILKETING_V2_VERIFIED` diset setelah pemeriksaan live terhadap adapter ini.
 
 ## Alternatif yang ditolak
 

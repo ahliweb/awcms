@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:48a7b01800b6d2b62cc1a3d3f5c886caf531a5f79eda140e06fed81c7fa30364 -->
+<!-- i18n-source-hash: sha256:63d3d02bf717ebb182a62d875160902ed5556be95e1f82febe338c6aff2d2e34 -->
 
 # Email
 
@@ -62,8 +62,14 @@ per pesan.
 - `infrastructure/mailketing-v2-provider.ts` — adapter Mailketing REST API
   **v2** **opsional** (Issue #1159, ADR-0151 §1), dipilih hanya oleh
   `EMAIL_MAILKETING_API_VERSION=v2`. `POST /api/v2/send` berformat JSON; token
-  dikirim **hanya** di `Authorization: Bearer` (tidak pernah di URL, query,
-  body, log, atau hasil). Egress lewat `ssrfSafeFetch` ke host **tetap**
+  dikirim di **satu header saja** (tidak pernah di URL, query, body, log, atau
+  hasil): `X-Api-Token` secara bawaan, atau `Authorization: Bearer` bila
+  `EMAIL_MAILKETING_V2_AUTH_SCHEME=bearer` (ADR-0151 Q12; nilai tak dikenal
+  adalah galat konfigurasi yang ditunda dan tidak ada yang dikirim).
+  **Keputusan terbuka:** bawaan bertumpu pada bukti live satu konsumen produksi
+  (komentar isu #1159, 2026-11-14); `bearer` tidak punya bukti, dan bentuk
+  kanonik vendor baru dipastikan oleh pemeriksaan tahap 2
+  (`EMAIL_MAILKETING_V2_VERIFIED`). Egress lewat `ssrfSafeFetch` ke host **tetap**
   `https://api.mailketing.co.id` (`EMAIL_MAILKETING_API_BASE_URL` harus kosong
   atau persis origin itu), dengan `maxRedirects: 0`, timeout total, dan batas
   ukuran respons. Klasifikasi (murni, `domain/mailketing-v2-contract.ts`): 200

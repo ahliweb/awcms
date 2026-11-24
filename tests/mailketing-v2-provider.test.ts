@@ -11,6 +11,7 @@ import type { EmailMessage } from "../src/modules/email/domain/email-provider-co
 import { createMailketingEmailProvider } from "../src/modules/email/infrastructure/mailketing-provider";
 import { resolveEmailProvider } from "../src/modules/email/infrastructure/email-provider-resolver";
 import {
+  createMailketingV2AccountProbe,
   createMailketingV2Provider,
   createSsrfGuardedMailketingTransport,
   type MailketingV2Transport,
@@ -337,16 +338,16 @@ describe("Mailketing v2 — credentials never leak", () => {
     }
   );
 
-  test("the token is only in the Authorization header: not in URL, body, or any other header", async () => {
+  test("the token is only in the X-Api-Token header (default): not in URL, body, or any other header", async () => {
     const { provider, calls } = v2(json(200, { success: true }));
     await provider.send(MESSAGE);
     const call = calls[0]!;
 
     expect(call.url).not.toContain(TOKEN);
     expect(call.body).not.toContain(TOKEN);
-    expect(call.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(call.headers["X-Api-Token"]).toBe(TOKEN);
     for (const [name, value] of Object.entries(call.headers)) {
-      if (name !== "Authorization") {
+      if (name !== "X-Api-Token") {
         expect(value).not.toContain(TOKEN);
       }
     }
@@ -404,7 +405,7 @@ describe("Mailketing v2 — real wire through the SSRF-guarded transport", () =>
       hostname: "127.0.0.1",
       async fetch(request) {
         seen.push({
-          auth: request.headers.get("authorization"),
+          auth: request.headers.get("x-api-token"),
           ct: request.headers.get("content-type"),
           url: request.url,
           body: await request.text()
@@ -442,7 +443,7 @@ describe("Mailketing v2 — real wire through the SSRF-guarded transport", () =>
         ok: true,
         providerMessageId: "wire_1"
       });
-      expect(seen[0]!.auth).toBe(`Bearer ${TOKEN}`);
+      expect(seen[0]!.auth).toBe(TOKEN);
       expect(seen[0]!.ct).toBe("application/json");
       expect(seen[0]!.url).not.toContain(TOKEN);
       expect(seen[0]!.body).not.toContain(TOKEN);
@@ -573,7 +574,7 @@ describe("v1 is unchanged and remains the default", () => {
     expect(calls[0]!.url).toContain("/api/v1/send");
   });
 
-  test("resolver: version=v2 selects /api/v2 with a Bearer header and no token in the body", async () => {
+  test("resolver: version=v2 selects /api/v2 with an X-Api-Token header and no token in the body", async () => {
     const calls = stubFetch(() =>
       Response.json({ success: true, data: { message_id: "v2_1" } })
     );
@@ -588,9 +589,9 @@ describe("v1 is unchanged and remains the default", () => {
     });
     expect(calls[0]!.url).toBe("https://api.mailketing.co.id/api/v2/send");
     expect(String(calls[0]!.init.body)).not.toContain(TOKEN);
-    expect(
-      (calls[0]!.init.headers as Record<string, string>).Authorization
-    ).toBe(`Bearer ${TOKEN}`);
+    const sent = calls[0]!.init.headers as Record<string, string>;
+    expect(sent["X-Api-Token"]).toBe(TOKEN);
+    expect(sent.Authorization).toBeUndefined();
     expect(calls[0]!.init.redirect).toBe("manual");
   });
 
@@ -688,5 +689,113 @@ describe("v1 is unchanged and remains the default", () => {
       EMAIL_MAILKETING_API_VERSION: "garbage"
     } as unknown as NodeJS.ProcessEnv);
     expect(await provider.healthCheck()).toEqual({ ok: true });
+  });
+});
+
+describe("Mailketing v2 auth scheme on the wire (Issue #1159, ADR-0151 Q12)", () => {
+  const OK = json(200, { success: true, data: { message_id: "mk_1" } });
+
+  function withEnv(
+    scheme: string | undefined,
+    extra: { authScheme?: "bearer" | "x-api-token" } = {}
+  ) {
+    const { transport, calls } = fakeTransport(OK);
+    const provider = createMailketingV2Provider({
+      apiToken: TOKEN,
+      transport,
+      now: () => NOW,
+      env: { EMAIL_MAILKETING_V2_AUTH_SCHEME: scheme } as NodeJS.ProcessEnv,
+      ...extra
+    });
+
+    return { provider, calls };
+  }
+
+  test("default: send AND health carry X-Api-Token and no Authorization", async () => {
+    const { provider, calls } = withEnv(undefined);
+
+    await provider.send(MESSAGE);
+    await provider.healthCheck();
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.headers["X-Api-Token"]).toBe(TOKEN);
+      expect(call.headers.Authorization).toBeUndefined();
+      expect(call.url).not.toContain(TOKEN);
+      expect(call.body ?? "").not.toContain(TOKEN);
+    }
+  });
+
+  test("env bearer: Authorization: Bearer only", async () => {
+    const { provider, calls } = withEnv("bearer");
+
+    await provider.send(MESSAGE);
+    await provider.healthCheck();
+
+    for (const call of calls) {
+      expect(call.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+      expect(call.headers["X-Api-Token"]).toBeUndefined();
+    }
+  });
+
+  test("an explicit authScheme wins over the env", async () => {
+    const { provider, calls } = withEnv("bearer", {
+      authScheme: "x-api-token"
+    });
+
+    await provider.send(MESSAGE);
+
+    expect(calls[0]!.headers["X-Api-Token"]).toBe(TOKEN);
+    expect(calls[0]!.headers.Authorization).toBeUndefined();
+  });
+
+  test("an unknown scheme value sends NOTHING and defers as a config error without leaking the token or the value", async () => {
+    const { provider, calls } = withEnv("Bearer-ish");
+
+    const send = await provider.send(MESSAGE);
+    const health = await provider.healthCheck();
+
+    expect(calls).toHaveLength(0);
+    expect(send).toMatchObject({
+      ok: false,
+      retryable: true,
+      skipped: true,
+      configError: true
+    });
+    expect(health.ok).toBe(false);
+
+    const dump = JSON.stringify([send, health]);
+    expect(dump).not.toContain(TOKEN);
+    expect(dump).not.toContain("Bearer-ish");
+    expect(dump).toContain("EMAIL_MAILKETING_V2_AUTH_SCHEME");
+  });
+
+  test("the account probe uses the same scheme and refuses to send on an unknown one", async () => {
+    const seen: Record<string, string>[] = [];
+    const transport = async (request: { headers: Record<string, string> }) => {
+      seen.push(request.headers);
+      return json(200, { success: true, data: { credits: 5 } });
+    };
+
+    const good = createMailketingV2AccountProbe({
+      apiToken: TOKEN,
+      transport,
+      env: { EMAIL_MAILKETING_V2_AUTH_SCHEME: "bearer" } as NodeJS.ProcessEnv
+    });
+    expect(await good.readCredits()).toMatchObject({ ok: true });
+    expect(seen[0]!.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(seen[0]!["X-Api-Token"]).toBeUndefined();
+
+    seen.length = 0;
+    const bad = createMailketingV2AccountProbe({
+      apiToken: TOKEN,
+      transport,
+      env: { EMAIL_MAILKETING_V2_AUTH_SCHEME: "nope" } as NodeJS.ProcessEnv
+    });
+    expect(await bad.readCredits()).toEqual({
+      ok: false,
+      failure: "unavailable"
+    });
+    expect(seen).toHaveLength(0);
   });
 });

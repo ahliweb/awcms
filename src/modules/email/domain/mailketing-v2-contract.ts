@@ -7,7 +7,8 @@
  * ## Provenance and what is NOT verified
  *
  * Built from the documented contract (ADR-0151 §Context, official docs
- * v2.0.2): header auth, `POST /api/v2/send` with JSON, response
+ * v2.0.2): header auth (scheme configurable, see
+ * `resolveMailketingV2AuthScheme`), `POST /api/v2/send` with JSON, response
  * `{ success, data: { message_id } }`, statuses 401/402/403/404/422/429/5xx,
  * `GET /credits` + `GET /senders`. It was written WITHOUT network access:
  * **nothing here has been verified against the live API**. The send-body field
@@ -172,15 +173,70 @@ export function isMailketingTokenHeaderSafe(token: string): boolean {
   return /^[\x21-\x7E]{1,512}$/.test(token);
 }
 
-/** Header-only credential (Q12 recommendation: `Authorization: Bearer`). */
+/**
+ * Header-only credential scheme (Issue #1159, ADR-0151 Q12).
+ *
+ * The official docs name two header forms (`Authorization: Bearer <token>` and
+ * `X-Api-Token: <token>`). Only `x-api-token` has live evidence: a downstream
+ * deployment has sent production mail through v2 with it since 2026-11-12
+ * (issue #1159 comment of 2026-11-14). `bearer` is kept as an explicit opt-in
+ * and is NOT corroborated by any live consumer. Which one the vendor treats as
+ * canonical remains an open decision until the stage-2 check.
+ */
+export const MAILKETING_V2_AUTH_SCHEMES = ["x-api-token", "bearer"] as const;
+export type MailketingV2AuthScheme =
+  (typeof MAILKETING_V2_AUTH_SCHEMES)[number];
+
+/** Default = the scheme with live evidence. Changing it is a deliberate, documented act. */
+export const DEFAULT_MAILKETING_V2_AUTH_SCHEME: MailketingV2AuthScheme =
+  "x-api-token";
+
+export type MailketingV2AuthSchemeResolution =
+  { ok: true; scheme: MailketingV2AuthScheme } | { ok: false; reason: string };
+
+/**
+ * Fail-closed scheme switch (same discipline as the version switch). Unset or
+ * blank = the default; exactly `x-api-token` or `bearer` otherwise. Any other
+ * value (`Bearer`, `x_api_token`, a typo) is a configuration error, never
+ * coerced: a silent fallback would send the token in a header the operator
+ * did not choose. The reason never echoes the offending value.
+ */
+export function resolveMailketingV2AuthScheme(
+  env: NodeJS.ProcessEnv = process.env
+): MailketingV2AuthSchemeResolution {
+  const raw = env.EMAIL_MAILKETING_V2_AUTH_SCHEME;
+
+  if (raw === undefined || raw.trim() === "") {
+    return { ok: true, scheme: DEFAULT_MAILKETING_V2_AUTH_SCHEME };
+  }
+
+  const value = raw.trim();
+
+  if ((MAILKETING_V2_AUTH_SCHEMES as readonly string[]).includes(value)) {
+    return { ok: true, scheme: value as MailketingV2AuthScheme };
+  }
+
+  return {
+    ok: false,
+    reason: `EMAIL_MAILKETING_V2_AUTH_SCHEME must be one of [${MAILKETING_V2_AUTH_SCHEMES.join(", ")}].`
+  };
+}
+
+/** Header-only credential: exactly ONE credential header per request, never both. */
 export function buildMailketingV2Headers(
   apiToken: string,
-  hasBody: boolean
+  hasBody: boolean,
+  scheme: MailketingV2AuthScheme = DEFAULT_MAILKETING_V2_AUTH_SCHEME
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiToken}`,
     Accept: "application/json"
   };
+
+  if (scheme === "bearer") {
+    headers.Authorization = `Bearer ${apiToken}`;
+  } else {
+    headers["X-Api-Token"] = apiToken;
+  }
 
   if (hasBody) {
     headers["Content-Type"] = "application/json";
