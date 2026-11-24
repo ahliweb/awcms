@@ -538,12 +538,11 @@ allow-listed address and a confirmation step that do not exist) and remote
 list/campaign management (Mailketing has no documented API for it). Mailketing
 is outbound only; the page says there is no inbox.
 
-Not here (recorded follow-ups of #1162): the Mailketing webhook callback
-management and the provider-event quarantine review queue
-(`email.webhook.*`, `email.provider_events.approve`), a message-level queue
-list, "use the deployment sender" as an explicit default, a connect wizard
-(`channel_accounts` #1154), a test send, and an approval flow for disconnect or
+Not here (recorded follow-ups of #1162): a connect wizard (`channel_accounts`
+#1154), a constrained test send (#1521) and an approval flow for disconnect or
 rotation (the endpoints exist under `channel_accounts` with step-up and audit).
+The webhook callbacks, the quarantine, the message queue and "use the
+deployment sender" are below.
 
 Open decisions: the sender address is masked on this screen (the API never
 returns it); whether operators should see it whole is a product decision. The
@@ -555,6 +554,60 @@ login is in; when a tenant-wide default exists but names a sender the caller
 cannot see, the deployment lane's "is default" is unknown (`null`) and the page
 says the default is not shown, instead of claiming the deployment sender; health
 facts are loaded only for the accounts the caller may see.
+
+## Admin screens: webhooks, queue and deployment sender (Issue #1162)
+
+Three additions to the email admin group, each with a navigation entry in the
+same change, a real page, and the endpoints' own permission enforced and seeded
+(no new migration: `sql/014`, `sql/347` and `sql/380` already seed every key).
+
+**`/admin/email-webhooks`** (`email.webhook.read`; `.configure` and
+`email.provider_events.approve` gate the controls):
+
+- the callback address of each Mailketing account (status, last event, issued);
+  **issue or rotate** (`POST /email/webhook-callbacks`, confirmation first when
+  the account already has a live address) and **revoke**
+  (`POST .../{id}/revoke`). The new address is shown **once**, written into a
+  read-only field by the page script from the one response that carries it; it
+  is never in the HTML the server sent, only its hash is stored, and a lost
+  address is recovered by issuing a new one. The address uses the origin the
+  operator is browsing, so behind a proxy that rewrites the host it must be
+  checked before it is pasted into the vendor dashboard;
+- the **quarantine** of provider-reported events, filtered by review status
+  (default `pending`), keyset-paged by an opaque cursor (`?cursor=`, no offset),
+  every row marked unauthenticated, recipients masked, a click as its link host
+  only. **Confirm into suppression** and **Dismiss**
+  (`POST /email/provider-events/{id}/review`) are offered only to a caller
+  holding `provider_events.approve`, only on a `pending` bounce or unsubscribe,
+  and each asks for confirmation. A soft bounce below the threshold is refused by
+  the endpoint and the page says why;
+- visibility is the API's: per account through `canUseAccount(..., "viewer")`,
+  so another tenant, an account assigned to somebody else and an account outside
+  the caller's business scope contribute neither callbacks nor events. A channel
+  registry that cannot load is "unavailable", never an empty list; one switched
+  off says so. The application function is
+  `application/email-webhooks-screen.ts`.
+
+**`/admin/email-queue`** (`email.message.read`; `email.message.cancel` gates the
+control): the outbound queue, newest first, optionally by status, keyset-paged
+(opaque cursor, a filter change drops it). The recipient is the masked column;
+the raw address is never selected. **Cancel message** is offered only for
+`queued` and `retry_wait`, the statuses the endpoint can still cancel; other rows
+say "Cannot be cancelled now". Cancel is idempotent by state (a repeat is
+`409 NOT_CANCELLABLE`), so it sends no `Idempotency-Key`. "Sent" means accepted by
+the provider, not delivered.
+
+**`/admin/email-senders`** gains **Use the deployment sender as the default**:
+an explicit tenant-wide `PUT /email/sender-policy` with
+`defaultSenderAccountId: null`. It is offered only to a caller holding
+`sender_policy.configure`, when routing is on and a tenant sender is currently
+the default (so it is never a no-op), not to a brand-confined caller, and it
+applies to later messages only. Brand-level "use the deployment sender" is not
+offered; the endpoint supports it, the page does not.
+
+Open decision: whether operators may see the full sender address. It stays
+**masked** on every screen (fail-closed; the API never returns it) until a
+maintainer decides. A constrained test send is #1521.
 
 ## Disabled / offline-LAN behavior
 

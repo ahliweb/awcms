@@ -54,10 +54,9 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "comments.settings.read",
   "comments.settings.update",
 
-  // email (6)
+  // email (4) — `email.message.read` and `.cancel` left this list in Issue
+  // #1162, when `/admin/email-queue` landed.
   "email.announcement.create",
-  "email.message.cancel",
-  "email.message.read",
   "email.template.delete",
   "email.template.restore",
   "email.template.update",
@@ -343,14 +342,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "telegram_engagement.contacts.delete",
   "telegram_engagement.contacts.read",
   "telegram_engagement.messages.create",
-
-  // email Mailketing webhook (3) — Issue #1161, ADR-0151 section 5. API-first:
-  // the callback URL management and the quarantine review queue ("provider-
-  // reported, unauthenticated") belong to the email admin UI of Issue #1162,
-  // which claims these keys and removes them from this ledger in that change.
-  "email.provider_events.approve",
-  "email.webhook.configure",
-  "email.webhook.read",
 
   // omnichannel_inbox live counts (1) — Issue #1171, ADR-0154 task 3. API-first:
   // `GET /api/v1/omnichannel-inbox/progress` (snapshot) and `.../progress/stream`

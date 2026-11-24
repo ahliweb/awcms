@@ -1,0 +1,787 @@
+---
+/**
+ * Email webhooks and the provider-event quarantine (Issue #1162, ADR-0151
+ * section 5, ADR-0149 data page).
+ *
+ * ## What this screen is, and is not
+ *
+ * The operator's view of how Mailketing reports back, and the one place a
+ * person decides what those reports are worth. It is not a second mail console:
+ * connecting an account stays on `/admin/channel-accounts`, the senders and
+ * their health on `/admin/email-senders`, the queue on `/admin/email-queue`, the
+ * suppression list on `/admin/email-suppression`.
+ *
+ * - **Callbacks.** One live callback URL per Mailketing account. Issuing a new
+ *   one REVOKES the old one in the same transaction, so "rotate" is also how a
+ *   leaked URL is cut off. The URL is shown once, in the response to the issue
+ *   request; only a hash is stored, so it can never be shown again.
+ * - **Quarantine.** Mailketing documents no signature, so every event it
+ *   reports is UNAUTHENTICATED and, in the only mode this deployment runs
+ *   (`strict`), changes nothing by itself. A person confirms a bounce or an
+ *   unsubscribe into the suppression list, or dismisses it. That decision is the
+ *   only path by which a provider report changes anything.
+ *
+ * ## What it never shows
+ *
+ * No token and no token hash (the list carries neither), no raw recipient (the
+ * masked form only), and a click's link host rather than the link. The callback
+ * URL appears in the page only as the one-time answer to an issue request, in a
+ * script-written field, never in the HTML the server sent.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  bounceClassLabel,
+  callbackStatusLabel,
+  callbackStatusTone,
+  providerEventTypeLabel,
+  reviewStatusLabel,
+  reviewStatusTone
+} from "../../lib/i18n/labels/email-webhooks";
+import {
+  channelAccountStatusLabel,
+  channelAccountStatusTone
+} from "../../lib/i18n/labels/channel-accounts";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  parseReviewStatusFilter,
+  resolveEmailWebhooksScreen,
+  REVIEW_STATUS_FILTERS
+} from "../../modules/email/application/email-webhooks-screen";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard and the two affordance guards, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * this screen claims. Held equal to the endpoints' own guards by
+ * `tests/admin-email-webhooks-page-contract.test.ts`.
+ */
+const READ_GUARD = {
+  moduleKey: "email",
+  activityCode: "webhook",
+  action: "read"
+} as const;
+const CONFIGURE_GUARD = {
+  moduleKey: "email",
+  activityCode: "webhook",
+  action: "configure"
+} as const;
+const APPROVE_GUARD = {
+  moduleKey: "email",
+  activityCode: "provider_events",
+  action: "approve"
+} as const;
+
+const PATH = "/admin/email-webhooks";
+
+const reviewStatus = parseReviewStatusFilter(
+  Astro.url.searchParams.get("reviewStatus")
+);
+const cursor = Astro.url.searchParams.get("cursor");
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, auth, can }) =>
+    resolveEmailWebhooksScreen(
+      {
+        tx,
+        tenantId: ssr.tenantId,
+        tokenHash: ssr.tokenHash,
+        auth,
+        now: new Date(),
+        request: Astro.request,
+        clientAddress: Astro.clientAddress
+      },
+      (guard) => can({ ...guard }),
+      { reviewStatus, cursor }
+    ),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/email-webhooks.astro: failed to load the email webhooks",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "no callbacks" and not a denial.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+
+const canConfigure = data?.canConfigure === true;
+const issuableAccounts = (data?.accounts ?? []).filter(
+  (account) => account.status === "connected" || account.status === "pending"
+);
+
+/** The page, with only the review filter (and no cursor, which is a position in ONE ordering). */
+function filterHref(value: string): string {
+  return value === "pending" ? PATH : `${PATH}?reviewStatus=${value}`;
+}
+
+function nextHref(next: string): string {
+  const params = new URLSearchParams();
+
+  if (reviewStatus !== "pending") params.set("reviewStatus", reviewStatus);
+  params.set("cursor", next);
+
+  return `${PATH}?${params.toString()}`;
+}
+
+function eventDetail(event: {
+  eventType: string;
+  bounceClass: string | null;
+  statusCode: string | null;
+  linkHost: string | null;
+}): string {
+  const parts: string[] = [];
+
+  if (event.bounceClass !== null)
+    parts.push(bounceClassLabel(t, event.bounceClass));
+  if (event.statusCode !== null) parts.push(event.statusCode);
+  if (event.linkHost !== null)
+    parts.push(t("Link host: {host}", { host: event.linkHost }));
+
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+---
+
+<AdminLayout
+  title={t("Email webhooks")}
+  description={t(
+    "How Mailketing reports delivery back to this tenant: the callback address of each account, and the bounces and unsubscribes waiting for a person to decide. Nothing a provider reports changes anything until you confirm it."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="email-webhooks-denied">
+      {t("You do not have permission to view email webhooks.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="email-webhooks-error">
+      {t(
+        "Email webhooks could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && data && data.unavailable && (
+    <p class="state-notice fade-in-up" id="email-webhooks-unavailable">
+      {t(
+        "The channel account registry could not be loaded, so webhook status is not known. This is not the same as having no callbacks."
+      )}
+    </p>
+  )}
+
+  {canRead &&
+    !loadError &&
+    data &&
+    !data.unavailable &&
+    !data.channelAccountsEnabled && (
+      <p class="state-notice fade-in-up" id="email-webhooks-disabled">
+        {t(
+          "Channel accounts are switched off on this deployment, so Mailketing callbacks cannot be issued or listed."
+        )}
+      </p>
+    )}
+
+  {canRead &&
+    !loadError &&
+    data &&
+    !data.unavailable &&
+    data.channelAccountsEnabled && (
+      <>
+        <p
+          class="state-notice"
+          id="email-webhooks-action-error"
+          role="alert"
+          hidden
+        ></p>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-webhooks-trust-title"
+          id="email-webhooks-trust"
+        >
+          <h2 class="admin-section-title" id="email-webhooks-trust-title">
+            {t("What these reports are worth")}
+          </h2>
+          <p class="page-description">
+            <span class="admin-status-pill" data-tone="warning">
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {t("Unauthenticated")}
+            </span>
+            <span
+              class="admin-status-pill"
+              data-tone={data.webhookEnabled ? "success" : "neutral"}
+              id="email-webhooks-enabled"
+              data-enabled={data.webhookEnabled ? "true" : "false"}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true"></span>
+              {data.webhookEnabled
+                ? t("Callbacks accepted")
+                : t("Callbacks switched off")}
+            </span>
+          </p>
+          <p class="page-description">
+            {t(
+              "Mailketing does not sign what it sends, so the callback address is the only thing that locates an account, and anyone who learns it can post to it. Every report is therefore held for review and changes nothing by itself."
+            )}
+          </p>
+          {!data.webhookEnabled && (
+            <p class="state-notice" id="email-webhooks-off">
+              {t(
+                "This deployment is not accepting Mailketing callbacks, so the address of an account answers nothing and nothing new will arrive below."
+              )}
+            </p>
+          )}
+          <p class="page-description">
+            {t(
+              "A soft or unclassified bounce can be confirmed only after the same recipient has bounced {count} times on different messages in 30 days.",
+              { count: data.softBounceThreshold }
+            )}
+          </p>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-callbacks-title"
+          id="email-callbacks"
+        >
+          <h2 class="admin-section-title" id="email-callbacks-title">
+            {t("Callback addresses")}
+          </h2>
+          {data.accountsTruncated && (
+            <p class="state-notice" id="email-webhooks-truncated">
+              {t(
+                "This tenant has more Mailketing accounts than this screen loads. The newest are shown."
+              )}
+            </p>
+          )}
+          {data.callbacks.length === 0 ? (
+            <div class="empty-state">
+              <p id="email-callbacks-empty">
+                {t(
+                  "No callback address has been issued. Issue one for an account, then enter it in the Mailketing dashboard."
+                )}
+              </p>
+            </div>
+          ) : (
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="email-callbacks-caption"
+            >
+              <table
+                class="data-table data-table--stack"
+                id="email-callbacks-table"
+              >
+                <caption id="email-callbacks-caption">
+                  {t("Callback addresses by Mailketing account")}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Account")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Last event")}</th>
+                    <th scope="col">{t("Issued")}</th>
+                    {canConfigure && <th scope="col">{t("Actions")}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.callbacks.map((callback) => (
+                    <tr data-callback-status={callback.status}>
+                      <th scope="row" data-label={t("Account")}>
+                        {callback.accountName ?? t("Another account")}
+                      </th>
+                      <td data-label={t("Status")}>
+                        <span
+                          class="admin-status-pill"
+                          data-tone={callbackStatusTone(callback.status)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {callbackStatusLabel(t, callback.status)}
+                        </span>
+                      </td>
+                      <td data-label={t("Last event")}>
+                        {callback.lastEventAt
+                          ? formatUtcMinute(callback.lastEventAt)
+                          : t("Never")}
+                      </td>
+                      <td data-label={t("Issued")}>
+                        {formatUtcMinute(callback.createdAt)}
+                      </td>
+                      {canConfigure && (
+                        <td data-label={t("Actions")}>
+                          {(callback.status === "active" ||
+                            callback.status === "pending") && (
+                            <button
+                              type="button"
+                              class="btn btn-secondary js-email-callback-revoke"
+                              data-callback-id={callback.id}
+                              data-account-name={
+                                callback.accountName ?? t("Another account")
+                              }
+                            >
+                              {t("Revoke")}
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {canConfigure && (
+            <form
+              id="email-callback-issue-form"
+              class="admin-form"
+              aria-labelledby="email-callback-issue-title"
+            >
+              <h3 id="email-callback-issue-title">
+                {t("Issue or rotate a callback address")}
+              </h3>
+              <p class="page-description">
+                {t(
+                  "Issuing a new address stops the account's current one at once. The new address is shown once, below; copy it before leaving the page, because it cannot be shown again."
+                )}
+              </p>
+              {issuableAccounts.length === 0 ? (
+                <p class="cell-muted" id="email-callback-no-accounts">
+                  {t(
+                    "There is no Mailketing account you can issue an address for. Connect one under Channel accounts."
+                  )}
+                </p>
+              ) : (
+                <>
+                  <label for="email-callback-account">{t("Account")}</label>
+                  <select
+                    id="email-callback-account"
+                    name="espAccountId"
+                    required
+                  >
+                    {issuableAccounts.map((account) => (
+                      <option
+                        value={account.id}
+                        data-has-live={
+                          account.liveCallbackId !== null ? "true" : "false"
+                        }
+                      >
+                        {account.displayName} ·{" "}
+                        {channelAccountStatusLabel(t, account.status)}
+                        {account.liveCallbackId !== null
+                          ? ` · ${t("has an address")}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    id="email-callback-issue-submit"
+                    type="submit"
+                    class="btn btn-primary"
+                  >
+                    {t("Issue address")}
+                  </button>
+                </>
+              )}
+            </form>
+          )}
+
+          <div
+            id="email-callback-reveal"
+            class="admin-section"
+            role="status"
+            tabindex="-1"
+            hidden
+          >
+            <h3 id="email-callback-reveal-title">
+              {t("Your new callback address")}
+            </h3>
+            <p class="page-description">
+              {t(
+                "Shown once. Enter it in the Mailketing dashboard as the webhook address. If you lose it, issue a new one."
+              )}
+            </p>
+            <label for="email-callback-reveal-url">
+              {t("Callback address")}
+            </label>
+            <input
+              id="email-callback-reveal-url"
+              type="text"
+              readonly
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-events-title"
+          id="email-events"
+          data-review-status={data.reviewStatus}
+        >
+          <h2 class="admin-section-title" id="email-events-title">
+            {t("Reported events")}
+          </h2>
+          <nav
+            class="admin-segmented"
+            aria-label={t("Filter by review status")}
+            id="email-events-filter"
+          >
+            {REVIEW_STATUS_FILTERS.map((value) => (
+              <a
+                class="admin-segmented-option"
+                href={filterHref(value)}
+                aria-current={value === data.reviewStatus ? "page" : undefined}
+              >
+                {reviewStatusLabel(t, value)}
+              </a>
+            ))}
+          </nav>
+
+          {data.events.length === 0 ? (
+            <div class="empty-state">
+              <p id="email-events-empty">{t("No events with this status.")}</p>
+            </div>
+          ) : (
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="email-events-caption"
+            >
+              <table
+                class="data-table data-table--stack"
+                id="email-events-table"
+              >
+                <caption id="email-events-caption">
+                  {t("Events reported by Mailketing, unauthenticated")}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Event")}</th>
+                    <th scope="col">{t("Recipient")}</th>
+                    <th scope="col">{t("Detail")}</th>
+                    <th scope="col">{t("Account")}</th>
+                    <th scope="col">{t("Received")}</th>
+                    <th scope="col">{t("Review")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.events.map((event) => (
+                    <tr data-event-type={event.eventType}>
+                      <th scope="row" data-label={t("Event")}>
+                        {providerEventTypeLabel(t, event.eventType)}
+                      </th>
+                      <td data-label={t("Recipient")}>
+                        {event.recipientMasked}
+                      </td>
+                      <td data-label={t("Detail")}>{eventDetail(event)}</td>
+                      <td data-label={t("Account")}>
+                        {event.accountName ?? t("Another account")}
+                      </td>
+                      <td data-label={t("Received")}>
+                        {formatUtcMinute(event.receivedAt)}
+                      </td>
+                      <td data-label={t("Review")}>
+                        <span
+                          class="admin-status-pill"
+                          data-tone={reviewStatusTone(event.reviewStatus)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {reviewStatusLabel(t, event.reviewStatus)}
+                        </span>
+                        {event.reviewable && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              class="btn btn-secondary js-email-event-review"
+                              data-event-id={event.id}
+                              data-decision="confirm"
+                            >
+                              {t("Confirm into suppression")}
+                            </button>{" "}
+                            <button
+                              type="button"
+                              class="btn btn-secondary js-email-event-review"
+                              data-event-id={event.id}
+                              data-decision="dismiss"
+                            >
+                              {t("Dismiss")}
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <nav aria-label={t("Pagination")} id="email-events-pager">
+            {data.nextCursor !== null ? (
+              <a href={nextHref(data.nextCursor)} rel="next">
+                {t("Older events")}
+              </a>
+            ) : (
+              <span class="cell-muted">{t("No older events")}</span>
+            )}
+            {cursor !== null && (
+              <a href={filterHref(reviewStatus)}>{t("Back to the newest")}</a>
+            )}
+          </nav>
+          <p class="page-description">
+            {t(
+              "Confirming adds the recipient to the suppression list as a provider report, which never blocks security mail such as a password reset. Dismissing records that you did nothing. A decision is final."
+            )}
+          </p>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="email-webhooks-related-title"
+        >
+          <h2 class="admin-section-title" id="email-webhooks-related-title">
+            {t("Related email screens")}
+          </h2>
+          <nav class="admin-segmented" aria-label={t("Related email screens")}>
+            <a class="admin-segmented-option" href="/admin/email-suppression">
+              {t("Email suppression list")}
+            </a>
+            <a class="admin-segmented-option" href="/admin/email-queue">
+              {t("Email queue")}
+            </a>
+            <a class="admin-segmented-option" href="/admin/email-senders">
+              {t("Email senders")}
+            </a>
+          </nav>
+        </section>
+
+        <div
+          id="email-webhooks-i18n"
+          hidden
+          data-busy={t("Please wait…")}
+          data-confirm-revoke={t(
+            "Revoke the callback address of {account}? It stops working at once and cannot be re-activated; issue a new one to receive reports again."
+          )}
+          data-confirm-rotate={t(
+            "This account already has a callback address. Issuing a new one stops the current one at once. Continue?"
+          )}
+          data-confirm-confirm={t(
+            "Add this recipient to the suppression list? Mail to them will be skipped from now on (security mail is not affected)."
+          )}
+          data-confirm-dismiss={t(
+            "Dismiss this report? It will be recorded as reviewed and nothing will be suppressed."
+          )}
+          data-failed={t("That did not work. Please try again.")}
+          data-account-unavailable={t(
+            "That account cannot receive a callback address: it must be a Mailketing account of this tenant that you operate."
+          )}
+          data-unavailable={t(
+            "Channel accounts are not available on this deployment."
+          )}
+          data-person-only={t(
+            "This needs a signed-in person; a machine credential cannot do it."
+          )}
+          data-not-found={t("That item no longer exists.")}
+          data-already-reviewed={t(
+            "This event has already been reviewed. Reload the page."
+          )}
+          data-below-threshold={t(
+            "A soft or unclassified bounce can be confirmed only after repeated bounces of the same recipient. Dismiss it, or wait."
+          )}
+          data-forbidden={t("You do not have permission to do that.")}
+          data-conflict={t(
+            "That was already done, or the request conflicts with an earlier one. Reload the page."
+          )}
+          data-rate-limited={t("Too many attempts. Try again later.")}
+        ></div>
+      </>
+    )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    onAction,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
+
+  const host = document.getElementById("email-webhooks-i18n");
+
+  /** A string the server rendered for us, never a fallback invented here. */
+  function say(key: string): string {
+    return host?.dataset[key] ?? "";
+  }
+
+  const actionError = messageBox("email-webhooks-action-error");
+
+  /** One key per distinct (method, url, body): a retry of the same request replays. */
+  const keyFor = createIdempotencyKeySource();
+
+  /**
+   * Every code below is one the three endpoints really emit
+   * (`tests/admin-email-webhooks-page-contract.test.ts` holds each case to the
+   * routes' sources).
+   */
+  function messageFor(errorCode: string | null): string {
+    switch (errorCode) {
+      case "ACCOUNT_UNAVAILABLE":
+        return say("accountUnavailable");
+      case "SERVICE_UNAVAILABLE":
+        return say("unavailable");
+      case "INTERACTIVE_SESSION_REQUIRED":
+        return say("personOnly");
+      case "NOT_FOUND":
+        return say("notFound");
+      case "ALREADY_REVIEWED":
+        return say("alreadyReviewed");
+      case "BELOW_SOFT_BOUNCE_THRESHOLD":
+        return say("belowThreshold");
+      case "ACCESS_DENIED":
+        return say("forbidden");
+      case "IDEMPOTENCY_CONFLICT":
+        return say("conflict");
+      case "RATE_LIMITED":
+        return say("rateLimited");
+      default:
+        return say("failed");
+    }
+  }
+
+  const form = document.getElementById("email-callback-issue-form");
+  const reveal = document.getElementById("email-callback-reveal");
+  const revealUrl = document.getElementById("email-callback-reveal-url");
+
+  onSubmit("email-callback-issue-form", async ({ data, submit }) => {
+    if (!submit) return;
+    actionError.clear();
+
+    const espAccountId = String(data.get("espAccountId") ?? "");
+    const select = form?.querySelector("select");
+    const selected = select?.selectedOptions[0];
+
+    if (selected?.dataset.hasLive === "true") {
+      if (!(await confirmAction(say("confirmRotate")))) return;
+    }
+
+    const body = { espAccountId };
+    const url = "/api/v1/email/webhook-callbacks";
+    const unlock = lockElement(submit, say("busy"));
+    const result = await sendJsonForData<{
+      callbackPath?: string;
+      revealed?: boolean;
+    }>("POST", url, body, {
+      "Idempotency-Key": keyFor({ method: "POST", url, body })
+    });
+
+    if (
+      result.ok &&
+      result.data?.callbackPath &&
+      reveal &&
+      revealUrl instanceof HTMLInputElement
+    ) {
+      // The only place the address ever exists in the page: written here from
+      // the one response that carries it, never rendered by the server.
+      revealUrl.value = `${window.location.origin}${result.data.callbackPath}`;
+      reveal.hidden = false;
+      reveal.focus();
+      // The list is stale now (the old address is revoked); the next load shows it.
+      unlock();
+      return;
+    }
+
+    actionError.show(result.ok ? say("failed") : messageFor(result.errorCode));
+    unlock();
+  });
+
+  onAction(".js-email-callback-revoke", async (button) => {
+    actionError.clear();
+
+    const id = button.dataset.callbackId;
+    const account = button.dataset.accountName ?? "";
+
+    if (!id) return;
+    if (
+      !(await confirmAction(say("confirmRevoke").replace("{account}", account)))
+    )
+      return;
+
+    const url = `/api/v1/email/webhook-callbacks/${id}/revoke`;
+    const unlock = lockElement(button, say("busy"));
+    const result = await sendJson("POST", url, undefined, {
+      "Idempotency-Key": keyFor({ method: "POST", url, body: null })
+    });
+
+    if (result.ok) {
+      holdForNavigation();
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode));
+    unlock();
+  });
+
+  onAction(".js-email-event-review", async (button) => {
+    actionError.clear();
+
+    const id = button.dataset.eventId;
+    const decision = button.dataset.decision;
+
+    if (!id || (decision !== "confirm" && decision !== "dismiss")) return;
+    if (
+      !(await confirmAction(
+        say(decision === "confirm" ? "confirmConfirm" : "confirmDismiss")
+      ))
+    )
+      return;
+
+    const body = { decision };
+    const url = `/api/v1/email/provider-events/${id}/review`;
+    const unlock = lockElement(button, say("busy"));
+    const result = await sendJson("POST", url, body, {
+      "Idempotency-Key": keyFor({ method: "POST", url, body })
+    });
+
+    if (result.ok) {
+      holdForNavigation();
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode));
+    unlock();
+  });
+</script>

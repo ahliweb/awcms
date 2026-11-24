@@ -11386,3 +11386,237 @@ msgstr[0] "{count} pemberitahuan staf"
 msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] "{count} aturan"
+
+msgid "The deployment sender is now the default. It applies to messages queued from now on."
+msgstr "Pengirim deployment kini menjadi default. Berlaku untuk pesan yang diantrekan mulai sekarang."
+
+msgid "Use the deployment sender as the default"
+msgstr "Pakai pengirim deployment sebagai default"
+
+msgid "Whole tenant. Messages already queued keep the sender they were given; brand defaults are not changed."
+msgstr "Seluruh tenant. Pesan yang sudah diantrekan tetap memakai pengirim yang diberikan kepadanya; default per brand tidak diubah."
+
+msgid "Link host: {host}"
+msgstr "Host tautan: {host}"
+
+msgid "Email webhooks"
+msgstr "Webhook email"
+
+msgid "How Mailketing reports delivery back to this tenant: the callback address of each account, and the bounces and unsubscribes waiting for a person to decide. Nothing a provider reports changes anything until you confirm it."
+msgstr "Cara Mailketing melaporkan pengiriman kembali ke tenant ini: alamat callback tiap akun, serta bounce dan berhenti berlangganan yang menunggu keputusan seseorang. Laporan penyedia tidak mengubah apa pun sampai Anda mengonfirmasinya."
+
+msgid "You do not have permission to view email webhooks."
+msgstr "Anda tidak memiliki izin untuk melihat webhook email."
+
+msgid "Email webhooks could not be loaded right now. Please try again later."
+msgstr "Webhook email tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "The channel account registry could not be loaded, so webhook status is not known. This is not the same as having no callbacks."
+msgstr "Registri akun kanal tidak dapat dimuat, sehingga status webhook tidak diketahui. Ini tidak sama dengan tidak adanya callback."
+
+msgid "Channel accounts are switched off on this deployment, so Mailketing callbacks cannot be issued or listed."
+msgstr "Akun kanal dimatikan pada deployment ini, sehingga callback Mailketing tidak dapat diterbitkan atau didaftar."
+
+msgid "What these reports are worth"
+msgstr "Seberapa berharga laporan ini"
+
+msgid "Unauthenticated"
+msgstr "Tidak terautentikasi"
+
+msgid "Callbacks accepted"
+msgstr "Callback diterima"
+
+msgid "Callbacks switched off"
+msgstr "Callback dimatikan"
+
+msgid "Mailketing does not sign what it sends, so the callback address is the only thing that locates an account, and anyone who learns it can post to it. Every report is therefore held for review and changes nothing by itself."
+msgstr "Mailketing tidak menandatangani apa yang dikirimnya, sehingga alamat callback adalah satu-satunya penanda sebuah akun, dan siapa pun yang mengetahuinya dapat mengirim ke sana. Karena itu setiap laporan ditahan untuk ditinjau dan tidak mengubah apa pun dengan sendirinya."
+
+msgid "This deployment is not accepting Mailketing callbacks, so the address of an account answers nothing and nothing new will arrive below."
+msgstr "Deployment ini tidak menerima callback Mailketing, sehingga alamat sebuah akun tidak menjawab apa pun dan tidak ada yang baru akan muncul di bawah."
+
+msgid "A soft or unclassified bounce can be confirmed only after the same recipient has bounced {count} times on different messages in 30 days."
+msgstr "Bounce lunak atau tak terklasifikasi dapat dikonfirmasi hanya setelah penerima yang sama mengalami bounce {count} kali pada pesan berbeda dalam 30 hari."
+
+msgid "Callback addresses"
+msgstr "Alamat callback"
+
+msgid "This tenant has more Mailketing accounts than this screen loads. The newest are shown."
+msgstr "Tenant ini memiliki lebih banyak akun Mailketing daripada yang dimuat layar ini. Yang terbaru ditampilkan."
+
+msgid "No callback address has been issued. Issue one for an account, then enter it in the Mailketing dashboard."
+msgstr "Belum ada alamat callback yang diterbitkan. Terbitkan satu untuk sebuah akun, lalu masukkan ke dasbor Mailketing."
+
+msgid "Callback addresses by Mailketing account"
+msgstr "Alamat callback per akun Mailketing"
+
+msgid "Last event"
+msgstr "Peristiwa terakhir"
+
+msgid "Another account"
+msgstr "Akun lain"
+
+msgid "Issue or rotate a callback address"
+msgstr "Terbitkan atau putar alamat callback"
+
+msgid "Issuing a new address stops the account's current one at once. The new address is shown once, below; copy it before leaving the page, because it cannot be shown again."
+msgstr "Menerbitkan alamat baru menghentikan alamat akun saat ini seketika. Alamat baru ditampilkan sekali, di bawah; salin sebelum meninggalkan halaman, karena tidak dapat ditampilkan lagi."
+
+msgid "There is no Mailketing account you can issue an address for. Connect one under Channel accounts."
+msgstr "Tidak ada akun Mailketing yang dapat Anda terbitkan alamatnya. Hubungkan satu di Akun kanal."
+
+msgid "has an address"
+msgstr "sudah punya alamat"
+
+msgid "Issue address"
+msgstr "Terbitkan alamat"
+
+msgid "Your new callback address"
+msgstr "Alamat callback baru Anda"
+
+msgid "Shown once. Enter it in the Mailketing dashboard as the webhook address. If you lose it, issue a new one."
+msgstr "Ditampilkan sekali. Masukkan ke dasbor Mailketing sebagai alamat webhook. Jika hilang, terbitkan yang baru."
+
+msgid "Callback address"
+msgstr "Alamat callback"
+
+msgid "Reported events"
+msgstr "Peristiwa yang dilaporkan"
+
+msgid "Filter by review status"
+msgstr "Saring menurut status tinjauan"
+
+msgid "No events with this status."
+msgstr "Tidak ada peristiwa dengan status ini."
+
+msgid "Events reported by Mailketing, unauthenticated"
+msgstr "Peristiwa yang dilaporkan Mailketing, tidak terautentikasi"
+
+msgid "Review"
+msgstr "Tinjauan"
+
+msgid "Confirm into suppression"
+msgstr "Konfirmasi ke daftar supresi"
+
+msgid "Older events"
+msgstr "Peristiwa lebih lama"
+
+msgid "No older events"
+msgstr "Tidak ada peristiwa lebih lama"
+
+msgid "Back to the newest"
+msgstr "Kembali ke yang terbaru"
+
+msgid "Confirming adds the recipient to the suppression list as a provider report, which never blocks security mail such as a password reset. Dismissing records that you did nothing. A decision is final."
+msgstr "Mengonfirmasi menambahkan penerima ke daftar supresi sebagai laporan penyedia, yang tidak pernah memblokir email keamanan seperti reset kata sandi. Mengabaikan mencatat bahwa Anda tidak melakukan apa pun. Keputusan bersifat final."
+
+msgid "Email queue"
+msgstr "Antrean email"
+
+msgid "Revoke the callback address of {account}? It stops working at once and cannot be re-activated; issue a new one to receive reports again."
+msgstr "Cabut alamat callback {account}? Alamat itu berhenti bekerja seketika dan tidak dapat diaktifkan kembali; terbitkan yang baru untuk menerima laporan lagi."
+
+msgid "This account already has a callback address. Issuing a new one stops the current one at once. Continue?"
+msgstr "Akun ini sudah punya alamat callback. Menerbitkan yang baru menghentikan yang sekarang seketika. Lanjutkan?"
+
+msgid "Add this recipient to the suppression list? Mail to them will be skipped from now on (security mail is not affected)."
+msgstr "Tambahkan penerima ini ke daftar supresi? Email kepadanya akan dilewati mulai sekarang (email keamanan tidak terpengaruh)."
+
+msgid "Dismiss this report? It will be recorded as reviewed and nothing will be suppressed."
+msgstr "Abaikan laporan ini? Laporan akan dicatat sebagai sudah ditinjau dan tidak ada yang disupresi."
+
+msgid "That did not work. Please try again."
+msgstr "Itu tidak berhasil. Silakan coba lagi."
+
+msgid "That account cannot receive a callback address: it must be a Mailketing account of this tenant that you operate."
+msgstr "Akun itu tidak dapat menerima alamat callback: harus berupa akun Mailketing tenant ini yang Anda operasikan."
+
+msgid "Channel accounts are not available on this deployment."
+msgstr "Akun kanal tidak tersedia pada deployment ini."
+
+msgid "This needs a signed-in person; a machine credential cannot do it."
+msgstr "Ini memerlukan orang yang sedang masuk; kredensial mesin tidak dapat melakukannya."
+
+msgid "That item no longer exists."
+msgstr "Item itu tidak ada lagi."
+
+msgid "This event has already been reviewed. Reload the page."
+msgstr "Peristiwa ini sudah ditinjau. Muat ulang halaman."
+
+msgid "A soft or unclassified bounce can be confirmed only after repeated bounces of the same recipient. Dismiss it, or wait."
+msgstr "Bounce lunak atau tak terklasifikasi dapat dikonfirmasi hanya setelah penerima yang sama berulang kali bounce. Abaikan, atau tunggu."
+
+msgid "Outbound email waiting, sending, sent or failed for this tenant. A message that has not been picked up yet can be cancelled. Recipients are masked."
+msgstr "Email keluar yang menunggu, sedang dikirim, terkirim, atau gagal untuk tenant ini. Pesan yang belum diambil dapat dibatalkan. Penerima disamarkan."
+
+msgid "You do not have permission to view the email queue."
+msgstr "Anda tidak memiliki izin untuk melihat antrean email."
+
+msgid "The email queue could not be loaded right now. Please try again later."
+msgstr "Antrean email tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Messages"
+msgstr "Pesan"
+
+msgid "The queue is empty."
+msgstr "Antrean kosong."
+
+msgid "No messages with this status."
+msgstr "Tidak ada pesan dengan status ini."
+
+msgid "Outbound email messages, newest first"
+msgstr "Pesan email keluar, terbaru lebih dulu"
+
+msgid "Cancel message"
+msgstr "Batalkan pesan"
+
+msgid "Cannot be cancelled now"
+msgstr "Tidak dapat dibatalkan sekarang"
+
+msgid "Older messages"
+msgstr "Pesan lebih lama"
+
+msgid "No older messages"
+msgstr "Tidak ada pesan lebih lama"
+
+msgid "Newest {count} per page. Sent means the provider accepted the message, not that it was delivered; delivery reports are on the Email webhooks screen."
+msgstr "{count} terbaru per halaman. Terkirim berarti penyedia menerima pesan, bukan bahwa pesan sudah sampai; laporan pengiriman ada di layar Webhook email."
+
+msgid "Cancel this message? It will not be sent. This cannot be undone."
+msgstr "Batalkan pesan ini? Pesan tidak akan dikirim. Ini tidak dapat dibatalkan."
+
+msgid "Could not cancel that message. Please try again."
+msgstr "Tidak dapat membatalkan pesan itu. Silakan coba lagi."
+
+msgid "That message can no longer be cancelled: it was already picked up, sent or cancelled. Reload the page."
+msgstr "Pesan itu tidak dapat dibatalkan lagi: sudah diambil, terkirim, atau dibatalkan. Muat ulang halaman."
+
+msgid "That message no longer exists. Reload the page."
+msgstr "Pesan itu sudah tidak ada. Muat ulang halaman."
+
+msgid "Waiting for the first event"
+msgstr "Menunggu peristiwa pertama"
+
+msgid "Bounce"
+msgstr "Bounce"
+
+msgid "Unsubscribe"
+msgstr "Berhenti berlangganan"
+
+msgid "Click"
+msgstr "Klik"
+
+msgid "Hard bounce"
+msgstr "Bounce keras"
+
+msgid "Soft bounce"
+msgstr "Bounce lunak"
+
+msgid "Unclassified bounce"
+msgstr "Bounce tak terklasifikasi"
+
+msgid "Awaiting review"
+msgstr "Menunggu tinjauan"
+
+msgid "Dismissed"
+msgstr "Diabaikan"

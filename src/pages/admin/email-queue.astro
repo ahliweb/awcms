@@ -1,0 +1,407 @@
+---
+/**
+ * Email queue — the operator's view of the outbound message queue, with cancel
+ * (Issue #1162, Issue #499 for the endpoints, ADR-0149 data page).
+ *
+ * ## What it answers
+ *
+ * "Did our mail go out, and if not, where is it stuck?" Each row is a message
+ * the dispatcher owns: waiting, being sent, sent, failed, waiting to retry,
+ * cancelled, or skipped because the recipient is suppressed. A message that is
+ * still `queued` or waiting to retry can be cancelled before the dispatcher
+ * claims it, which is the mitigation for an accidental bulk send. One that is
+ * already sending, sent or failed cannot, and the page says why rather than
+ * hiding the control.
+ *
+ * ## What it never shows
+ *
+ * The recipient is the MASKED address the queue stores (`to_address_masked`); the
+ * raw address is not selected by the query. A sent message means the provider
+ * ACCEPTED it, not that it was delivered: delivery reports arrive, unauthenticated,
+ * on `/admin/email-webhooks`.
+ *
+ * ## Paging
+ *
+ * Keyset on `(created_at, id)`, newest first, one page of at most
+ * `EMAIL_MESSAGE_LIST_LIMIT` rows and an opaque cursor for the next. An
+ * unreadable cursor is read as the first page (an SSR page does not answer a
+ * bookmark with a 400).
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  isCancellableMessageStatus,
+  messageStatusLabel,
+  messageStatusTone
+} from "../../lib/i18n/labels/email-webhooks";
+import { formatUtcMinute } from "../../lib/ui/channel-accounts-screen";
+import {
+  EMAIL_MESSAGE_LIST_LIMIT,
+  fetchEmailMessageEntries,
+  type EmailMessageStatus
+} from "../../modules/email/application/email-message-directory";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard and the one affordance guard, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * this screen claims. Held equal to the endpoints' own guards by
+ * `tests/admin-email-queue-page-contract.test.ts`.
+ */
+const READ_GUARD = {
+  moduleKey: "email",
+  activityCode: "message",
+  action: "read"
+} as const;
+const CANCEL_GUARD = {
+  moduleKey: "email",
+  activityCode: "message",
+  action: "cancel"
+} as const;
+
+const PATH = "/admin/email-queue";
+
+const STATUS_FILTERS: readonly EmailMessageStatus[] = [
+  "queued",
+  "sending",
+  "retry_wait",
+  "failed",
+  "sent",
+  "cancelled",
+  "suppressed"
+];
+
+const rawStatus = Astro.url.searchParams.get("status");
+const status = STATUS_FILTERS.find((value) => value === rawStatus) ?? null;
+const rawCursor = Astro.url.searchParams.get("cursor");
+const cursor = rawCursor ? decodeKeysetCursor(rawCursor) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time.
+    page: await fetchEmailMessageEntries(
+      tx,
+      ssr.tenantId,
+      status ?? undefined,
+      cursor ?? undefined
+    ),
+    canCancel: await can({ ...CANCEL_GUARD })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/email-queue.astro: failed to load the email queue",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const messages = data?.page.messages ?? [];
+const nextCursor = data?.page.nextCursor ?? null;
+const canCancel = data?.canCancel === true;
+
+/** A filter change DROPS the cursor: a cursor is a position in one specific result set. */
+function filterHref(value: string | null): string {
+  return value === null ? PATH : `${PATH}?status=${value}`;
+}
+
+function nextHref(next: string): string {
+  const params = new URLSearchParams();
+
+  if (status !== null) params.set("status", status);
+  params.set("cursor", next);
+
+  return `${PATH}?${params.toString()}`;
+}
+
+/** A diagnostic line, not a log dump: bounded, and escaped by the template. */
+function shortError(value: string | null): string {
+  if (value === null || value === "") return "—";
+
+  return value.length > 120 ? `${value.slice(0, 117)}...` : value;
+}
+---
+
+<AdminLayout
+  title={t("Email queue")}
+  description={t(
+    "Outbound email waiting, sending, sent or failed for this tenant. A message that has not been picked up yet can be cancelled. Recipients are masked."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="email-queue-denied">
+      {t("You do not have permission to view the email queue.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="email-queue-error">
+      {t(
+        "The email queue could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p
+        class="state-notice"
+        id="email-queue-action-error"
+        role="alert"
+        hidden
+      ></p>
+
+      <nav
+        class="admin-segmented"
+        aria-label={t("Filter by status")}
+        id="email-queue-filter"
+      >
+        <a
+          class="admin-segmented-option"
+          href={filterHref(null)}
+          aria-current={status === null ? "page" : undefined}
+        >
+          {t("All")}
+        </a>
+        {STATUS_FILTERS.map((value) => (
+          <a
+            class="admin-segmented-option"
+            href={filterHref(value)}
+            aria-current={value === status ? "page" : undefined}
+          >
+            {messageStatusLabel(t, value)}
+          </a>
+        ))}
+      </nav>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="email-queue-title"
+        id="email-queue"
+      >
+        <h2 class="admin-section-title" id="email-queue-title">
+          {t("Messages")}
+        </h2>
+
+        {messages.length === 0 ? (
+          <div class="empty-state">
+            <p id="email-queue-empty">
+              {status === null
+                ? t("The queue is empty.")
+                : t("No messages with this status.")}
+            </p>
+          </div>
+        ) : (
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="email-queue-caption"
+          >
+            <table class="data-table data-table--stack" id="email-queue-table">
+              <caption id="email-queue-caption">
+                {t("Outbound email messages, newest first")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Queued")}</th>
+                  <th scope="col">{t("Category")}</th>
+                  <th scope="col">{t("Recipient")}</th>
+                  <th scope="col">{t("Subject")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Retries")}</th>
+                  <th scope="col">{t("Last error")}</th>
+                  {canCancel && <th scope="col">{t("Actions")}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {messages.map((message) => (
+                  <tr data-message-status={message.status}>
+                    <th scope="row" data-label={t("Queued")}>
+                      {formatUtcMinute(message.createdAt)}
+                    </th>
+                    <td data-label={t("Category")}>{message.category}</td>
+                    <td data-label={t("Recipient")}>
+                      {message.toAddressMasked}
+                    </td>
+                    <td data-label={t("Subject")}>{message.subject}</td>
+                    <td data-label={t("Status")}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={messageStatusTone(message.status)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {messageStatusLabel(t, message.status)}
+                      </span>
+                    </td>
+                    <td data-label={t("Retries")}>{message.retryCount}</td>
+                    <td data-label={t("Last error")}>
+                      {shortError(message.lastError)}
+                    </td>
+                    {canCancel && (
+                      <td data-label={t("Actions")}>
+                        {isCancellableMessageStatus(message.status) ? (
+                          <button
+                            type="button"
+                            class="btn btn-secondary js-email-message-cancel"
+                            data-message-id={message.id}
+                          >
+                            {t("Cancel message")}
+                          </button>
+                        ) : (
+                          <span class="cell-muted">
+                            {t("Cannot be cancelled now")}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <nav aria-label={t("Pagination")} id="email-queue-pager">
+          {nextCursor !== null ? (
+            <a href={nextHref(nextCursor)} rel="next">
+              {t("Older messages")}
+            </a>
+          ) : (
+            <span class="cell-muted">{t("No older messages")}</span>
+          )}
+          {rawCursor !== null && (
+            <a href={filterHref(status)}>{t("Back to the newest")}</a>
+          )}
+        </nav>
+        <p class="page-description">
+          {t(
+            "Newest {count} per page. Sent means the provider accepted the message, not that it was delivered; delivery reports are on the Email webhooks screen.",
+            { count: EMAIL_MESSAGE_LIST_LIMIT }
+          )}
+        </p>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="email-queue-related-title"
+      >
+        <h2 class="admin-section-title" id="email-queue-related-title">
+          {t("Related email screens")}
+        </h2>
+        <nav class="admin-segmented" aria-label={t("Related email screens")}>
+          <a class="admin-segmented-option" href="/admin/email-senders">
+            {t("Email senders")}
+          </a>
+          <a class="admin-segmented-option" href="/admin/email-webhooks">
+            {t("Email webhooks")}
+          </a>
+          <a class="admin-segmented-option" href="/admin/email-suppression">
+            {t("Email suppression list")}
+          </a>
+        </nav>
+      </section>
+
+      <div
+        id="email-queue-i18n"
+        hidden
+        data-busy={t("Please wait…")}
+        data-confirm-cancel={t(
+          "Cancel this message? It will not be sent. This cannot be undone."
+        )}
+        data-failed={t("Could not cancel that message. Please try again.")}
+        data-not-cancellable={t(
+          "That message can no longer be cancelled: it was already picked up, sent or cancelled. Reload the page."
+        )}
+        data-not-found={t("That message no longer exists. Reload the page.")}
+        data-forbidden={t("You do not have permission to do that.")}
+        data-rate-limited={t("Too many attempts. Try again later.")}
+      ></div>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    holdForNavigation,
+    lockElement,
+    messageBox,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+
+  const host = document.getElementById("email-queue-i18n");
+
+  /** A string the server rendered for us, never a fallback invented here. */
+  function say(key: string): string {
+    return host?.dataset[key] ?? "";
+  }
+
+  const actionError = messageBox("email-queue-action-error");
+
+  /**
+   * Every code below is one `POST /api/v1/email/messages/{id}/cancel` really
+   * emits (`tests/admin-email-queue-page-contract.test.ts` holds each case to
+   * the route's source).
+   */
+  function messageFor(errorCode: string | null): string {
+    switch (errorCode) {
+      case "NOT_CANCELLABLE":
+        return say("notCancellable");
+      case "RESOURCE_NOT_FOUND":
+        return say("notFound");
+      case "ACCESS_DENIED":
+        return say("forbidden");
+      case "RATE_LIMITED":
+        return say("rateLimited");
+      default:
+        return say("failed");
+    }
+  }
+
+  onAction(".js-email-message-cancel", async (button) => {
+    actionError.clear();
+
+    const id = button.dataset.messageId;
+
+    if (!id) return;
+    if (!(await confirmAction(say("confirmCancel")))) return;
+
+    const unlock = lockElement(button, say("busy"));
+    // No Idempotency-Key: cancelling is idempotent by STATE. A repeat answers
+    // `409 NOT_CANCELLABLE` rather than acting twice.
+    const result = await sendJson(
+      "POST",
+      `/api/v1/email/messages/${id}/cancel`
+    );
+
+    if (result.ok) {
+      holdForNavigation();
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode));
+    unlock();
+  });
+</script>

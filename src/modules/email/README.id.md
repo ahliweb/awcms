@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:48a7b01800b6d2b62cc1a3d3f5c886caf531a5f79eda140e06fed81c7fa30364 -->
+<!-- i18n-source-hash: sha256:a7c4de3191095553fb5683dbc9dc44a2af59027de5e5cceac46dcc341bb9fc11 -->
 
 # Email
 
@@ -573,12 +573,11 @@ dipegang). Berlaku untuk pesan berikutnya saja.
 daftar/kampanye jarak jauh (Mailketing tidak punya API terdokumentasi untuk itu).
 Mailketing hanya keluar; halaman menyatakan tidak ada kotak masuk.
 
-Bukan di sini (tindak lanjut tercatat #1162): pengelolaan URL callback webhook
-Mailketing dan antrean tinjauan karantina event penyedia (`email.webhook.*`,
-`email.provider_events.approve`), daftar antrean tingkat pesan, "pakai pengirim
-deployment" sebagai default eksplisit, wizard hubungkan (`channel_accounts`
-#1154), kirim uji, dan alur persetujuan untuk pemutusan atau rotasi (endpoint-nya
-ada di `channel_accounts` dengan step-up dan audit).
+Bukan di sini (tindak lanjut tercatat #1162): wizard hubungkan
+(`channel_accounts` #1154), kirim uji terbatas (#1521) dan alur persetujuan untuk
+pemutusan atau rotasi (endpoint-nya ada di `channel_accounts` dengan step-up dan
+audit). Callback webhook, karantina, antrean pesan dan "pakai pengirim
+deployment" ada di bawah.
 
 Keputusan terbuka: alamat pengirim disamarkan di layar ini (API tidak pernah
 mengembalikannya); apakah operator perlu melihatnya utuh adalah keputusan
@@ -592,6 +591,62 @@ tidak terlihat pemanggil, "adalah default" pada lajur deployment menjadi tidak
 diketahui (`null`) dan halaman menyatakan default tidak ditampilkan, bukan
 mengklaim pengirim deployment; fakta kesehatan hanya dimuat untuk akun yang
 boleh dilihat pemanggil.
+
+## Layar admin: webhook, antrean dan pengirim deployment (Issue #1162)
+
+Tiga tambahan pada grup admin email, masing-masing dengan entri navigasi pada
+perubahan yang sama, halaman nyata, serta izin milik endpoint yang ditegakkan dan
+sudah di-seed (tanpa migrasi baru: `sql/014`, `sql/347` dan `sql/380` sudah
+men-seed semua kunci).
+
+**`/admin/email-webhooks`** (`email.webhook.read`; `.configure` dan
+`email.provider_events.approve` menggerbangi kontrol):
+
+- alamat callback tiap akun Mailketing (status, peristiwa terakhir, waktu
+  terbit); **terbitkan atau putar** (`POST /email/webhook-callbacks`, dengan
+  konfirmasi lebih dulu bila akun sudah punya alamat aktif) dan **cabut**
+  (`POST .../{id}/revoke`). Alamat baru ditampilkan **sekali**, ditulis ke kolom
+  baca-saja oleh skrip halaman dari satu-satunya respons yang membawanya; ia tidak
+  pernah ada di HTML yang dikirim server, hanya hash-nya yang disimpan, dan
+  alamat yang hilang dipulihkan dengan menerbitkan yang baru. Alamat memakai
+  origin yang sedang dibuka operator, jadi di balik proxy yang menulis ulang host
+  ia harus diperiksa sebelum ditempel ke dasbor vendor;
+- **karantina** peristiwa yang dilaporkan penyedia, disaring menurut status
+  tinjauan (bawaan `pending`), berpaging keyset dengan kursor buram (`?cursor=`,
+  tanpa offset), tiap baris ditandai tidak terautentikasi, penerima disamarkan,
+  klik hanya sebagai host tautannya. **Konfirmasi ke daftar supresi** dan
+  **Abaikan** (`POST /email/provider-events/{id}/review`) hanya ditawarkan kepada
+  pemegang `provider_events.approve`, hanya untuk bounce atau berhenti
+  berlangganan berstatus `pending`, dan masing-masing meminta konfirmasi. Bounce
+  lunak di bawah ambang ditolak endpoint dan halaman menyebut alasannya;
+- visibilitas adalah milik API: per akun lewat `canUseAccount(..., "viewer")`,
+  sehingga tenant lain, akun yang ditugaskan ke orang lain dan akun di luar
+  cakupan bisnis pemanggil tidak menyumbang callback maupun peristiwa. Registri
+  kanal yang tidak dapat dimuat adalah "tidak tersedia", bukan daftar kosong;
+  yang dimatikan menyatakannya. Fungsi aplikasinya
+  `application/email-webhooks-screen.ts`.
+
+**`/admin/email-queue`** (`email.message.read`; `email.message.cancel`
+menggerbangi kontrol): antrean email keluar, terbaru lebih dulu, opsional per
+status, berpaging keyset (kursor buram, pergantian filter membuangnya). Penerima
+adalah kolom tersamar; alamat mentah tidak pernah dipilih. **Batalkan pesan**
+hanya ditawarkan untuk `queued` dan `retry_wait`, status yang masih dapat
+dibatalkan endpoint; baris lain menyatakan "Tidak dapat dibatalkan sekarang".
+Pembatalan idempoten menurut status (ulangan adalah `409 NOT_CANCELLABLE`),
+sehingga tidak mengirim `Idempotency-Key`. "Terkirim" berarti diterima penyedia,
+bukan sampai.
+
+**`/admin/email-senders`** mendapat **Pakai pengirim deployment sebagai
+default**: `PUT /email/sender-policy` tenant-wide eksplisit dengan
+`defaultSenderAccountId: null`. Ditawarkan hanya kepada pemegang
+`sender_policy.configure`, saat routing menyala dan sebuah pengirim tenant sedang
+menjadi default (jadi tidak pernah no-op), bukan kepada pemanggil yang terkurung
+merek, dan berlaku untuk pesan berikutnya saja. "Pakai pengirim deployment" per
+merek tidak ditawarkan; endpoint mendukungnya, halaman tidak.
+
+Keputusan terbuka: apakah operator boleh melihat alamat pengirim utuh. Alamat
+tetap **disamarkan** di semua layar (fail-closed; API tidak pernah
+mengembalikannya) sampai maintainer memutuskan. Kirim uji terbatas adalah #1521.
 
 ## Perilaku saat nonaktif / offline-LAN
 

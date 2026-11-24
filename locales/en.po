@@ -11443,3 +11443,237 @@ msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "The deployment sender is now the default. It applies to messages queued from now on."
+msgstr ""
+
+msgid "Use the deployment sender as the default"
+msgstr ""
+
+msgid "Whole tenant. Messages already queued keep the sender they were given; brand defaults are not changed."
+msgstr ""
+
+msgid "Link host: {host}"
+msgstr ""
+
+msgid "Email webhooks"
+msgstr ""
+
+msgid "How Mailketing reports delivery back to this tenant: the callback address of each account, and the bounces and unsubscribes waiting for a person to decide. Nothing a provider reports changes anything until you confirm it."
+msgstr ""
+
+msgid "You do not have permission to view email webhooks."
+msgstr ""
+
+msgid "Email webhooks could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The channel account registry could not be loaded, so webhook status is not known. This is not the same as having no callbacks."
+msgstr ""
+
+msgid "Channel accounts are switched off on this deployment, so Mailketing callbacks cannot be issued or listed."
+msgstr ""
+
+msgid "What these reports are worth"
+msgstr ""
+
+msgid "Unauthenticated"
+msgstr ""
+
+msgid "Callbacks accepted"
+msgstr ""
+
+msgid "Callbacks switched off"
+msgstr ""
+
+msgid "Mailketing does not sign what it sends, so the callback address is the only thing that locates an account, and anyone who learns it can post to it. Every report is therefore held for review and changes nothing by itself."
+msgstr ""
+
+msgid "This deployment is not accepting Mailketing callbacks, so the address of an account answers nothing and nothing new will arrive below."
+msgstr ""
+
+msgid "A soft or unclassified bounce can be confirmed only after the same recipient has bounced {count} times on different messages in 30 days."
+msgstr ""
+
+msgid "Callback addresses"
+msgstr ""
+
+msgid "This tenant has more Mailketing accounts than this screen loads. The newest are shown."
+msgstr ""
+
+msgid "No callback address has been issued. Issue one for an account, then enter it in the Mailketing dashboard."
+msgstr ""
+
+msgid "Callback addresses by Mailketing account"
+msgstr ""
+
+msgid "Last event"
+msgstr ""
+
+msgid "Another account"
+msgstr ""
+
+msgid "Issue or rotate a callback address"
+msgstr ""
+
+msgid "Issuing a new address stops the account's current one at once. The new address is shown once, below; copy it before leaving the page, because it cannot be shown again."
+msgstr ""
+
+msgid "There is no Mailketing account you can issue an address for. Connect one under Channel accounts."
+msgstr ""
+
+msgid "has an address"
+msgstr ""
+
+msgid "Issue address"
+msgstr ""
+
+msgid "Your new callback address"
+msgstr ""
+
+msgid "Shown once. Enter it in the Mailketing dashboard as the webhook address. If you lose it, issue a new one."
+msgstr ""
+
+msgid "Callback address"
+msgstr ""
+
+msgid "Reported events"
+msgstr ""
+
+msgid "Filter by review status"
+msgstr ""
+
+msgid "No events with this status."
+msgstr ""
+
+msgid "Events reported by Mailketing, unauthenticated"
+msgstr ""
+
+msgid "Review"
+msgstr ""
+
+msgid "Confirm into suppression"
+msgstr ""
+
+msgid "Older events"
+msgstr ""
+
+msgid "No older events"
+msgstr ""
+
+msgid "Back to the newest"
+msgstr ""
+
+msgid "Confirming adds the recipient to the suppression list as a provider report, which never blocks security mail such as a password reset. Dismissing records that you did nothing. A decision is final."
+msgstr ""
+
+msgid "Email queue"
+msgstr ""
+
+msgid "Revoke the callback address of {account}? It stops working at once and cannot be re-activated; issue a new one to receive reports again."
+msgstr ""
+
+msgid "This account already has a callback address. Issuing a new one stops the current one at once. Continue?"
+msgstr ""
+
+msgid "Add this recipient to the suppression list? Mail to them will be skipped from now on (security mail is not affected)."
+msgstr ""
+
+msgid "Dismiss this report? It will be recorded as reviewed and nothing will be suppressed."
+msgstr ""
+
+msgid "That did not work. Please try again."
+msgstr ""
+
+msgid "That account cannot receive a callback address: it must be a Mailketing account of this tenant that you operate."
+msgstr ""
+
+msgid "Channel accounts are not available on this deployment."
+msgstr ""
+
+msgid "This needs a signed-in person; a machine credential cannot do it."
+msgstr ""
+
+msgid "That item no longer exists."
+msgstr ""
+
+msgid "This event has already been reviewed. Reload the page."
+msgstr ""
+
+msgid "A soft or unclassified bounce can be confirmed only after repeated bounces of the same recipient. Dismiss it, or wait."
+msgstr ""
+
+msgid "Outbound email waiting, sending, sent or failed for this tenant. A message that has not been picked up yet can be cancelled. Recipients are masked."
+msgstr ""
+
+msgid "You do not have permission to view the email queue."
+msgstr ""
+
+msgid "The email queue could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Messages"
+msgstr ""
+
+msgid "The queue is empty."
+msgstr ""
+
+msgid "No messages with this status."
+msgstr ""
+
+msgid "Outbound email messages, newest first"
+msgstr ""
+
+msgid "Cancel message"
+msgstr ""
+
+msgid "Cannot be cancelled now"
+msgstr ""
+
+msgid "Older messages"
+msgstr ""
+
+msgid "No older messages"
+msgstr ""
+
+msgid "Newest {count} per page. Sent means the provider accepted the message, not that it was delivered; delivery reports are on the Email webhooks screen."
+msgstr ""
+
+msgid "Cancel this message? It will not be sent. This cannot be undone."
+msgstr ""
+
+msgid "Could not cancel that message. Please try again."
+msgstr ""
+
+msgid "That message can no longer be cancelled: it was already picked up, sent or cancelled. Reload the page."
+msgstr ""
+
+msgid "That message no longer exists. Reload the page."
+msgstr ""
+
+msgid "Waiting for the first event"
+msgstr ""
+
+msgid "Bounce"
+msgstr ""
+
+msgid "Unsubscribe"
+msgstr ""
+
+msgid "Click"
+msgstr ""
+
+msgid "Hard bounce"
+msgstr ""
+
+msgid "Soft bounce"
+msgstr ""
+
+msgid "Unclassified bounce"
+msgstr ""
+
+msgid "Awaiting review"
+msgstr ""
+
+msgid "Dismissed"
+msgstr ""

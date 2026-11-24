@@ -74,6 +74,10 @@ export const READ_WAVE: readonly string[] = [
   // WRITE_WAVE.
   "a11y-axe.e2e.ts",
   "admin-deny-path.e2e.ts",
+  // Issue #1162 — `/admin/email-queue`, `/admin/email-webhooks` and
+  // `/admin/email-senders` at 360px with axe (light and dark). Its two queue
+  // rows are terminal and seeded straight to the database; GETs only.
+  "admin-email-screens.e2e.ts",
   // ahliweb/awcms#831 — injects a synthetic `.cell-muted` element via
   // `page.evaluate` (a client-side DOM mutation only) to assert the CSS
   // contract; it sends no non-GET request of its own beyond the shared

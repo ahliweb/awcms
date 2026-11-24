@@ -89,6 +89,22 @@ export const emailModule = defineModule({
       path: "/admin/email-senders",
       order: 34,
       requiredPermission: "email.senders.read"
+    },
+    // Issue #1162. The outbound queue with cancel, and the Mailketing callback
+    // addresses with the provider-event quarantine. Each opens a page that
+    // exists and is gated by the key its endpoints enforce; 35 and 36 follow 34
+    // so the sidebar keeps a stable order within the email group.
+    {
+      labelKey: "admin.layout.nav_email_queue",
+      path: "/admin/email-queue",
+      order: 35,
+      requiredPermission: "email.message.read"
+    },
+    {
+      labelKey: "admin.layout.nav_email_webhooks",
+      path: "/admin/email-webhooks",
+      order: 36,
+      requiredPermission: "email.webhook.read"
     }
   ],
   /**

@@ -288,6 +288,8 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_email_templates": "Email templates",
   "admin.layout.nav_email_suppression": "Email suppression",
   "admin.layout.nav_email_senders": "Email senders",
+  "admin.layout.nav_email_queue": "Email queue",
+  "admin.layout.nav_email_webhooks": "Email webhooks",
   "admin.layout.nav_audit_trail": "Audit trail",
   "admin.layout.nav_comments": "Moderation queue",
   "admin.layout.nav_visitor_analytics": "Visitor analytics",
@@ -410,6 +412,8 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_email_templates": "mail",
   "admin.layout.nav_email_suppression": "flag",
   "admin.layout.nav_email_senders": "mail",
+  "admin.layout.nav_email_queue": "mail",
+  "admin.layout.nav_email_webhooks": "link",
   "admin.layout.nav_audit_trail": "clock",
   "admin.layout.nav_seo": "link",
   // Content.

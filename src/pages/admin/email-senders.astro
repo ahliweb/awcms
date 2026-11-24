@@ -103,6 +103,9 @@ const CONNECTIONS_PATH = "/admin/channel-accounts";
 const NOTICES: Record<string, string> = {
   "default-set": t(
     "The default sender was changed. It applies to messages queued from now on."
+  ),
+  "deployment-set": t(
+    "The deployment sender is now the default. It applies to messages queued from now on."
   )
 };
 const noticeKey = Astro.url.searchParams.get("notice") ?? "";
@@ -649,6 +652,26 @@ function laneText(lane: EmailSenderLane | null): string {
                     )}
             </p>
             <p class="page-description">{laneText(data.deploymentLane)}</p>
+            {data.canConfigurePolicy &&
+              data.routingEnabled &&
+              data.deploymentIsDefault === false && (
+                <p class="page-description">
+                  <button
+                    type="button"
+                    class="btn btn-secondary js-email-use-deployment-sender"
+                    id="email-use-deployment-sender"
+                    aria-describedby="email-use-deployment-sender-why"
+                  >
+                    {t("Use the deployment sender as the default")}
+                  </button>
+                  <span class="cell-muted" id="email-use-deployment-sender-why">
+                    {" "}
+                    {t(
+                      "Whole tenant. Messages already queued keep the sender they were given; brand defaults are not changed."
+                    )}
+                  </span>
+                </p>
+              )}
           </section>
         )}
 
@@ -803,6 +826,31 @@ function laneText(lane: EmailSenderLane | null): string {
         return say("defaultFailed");
     }
   }
+
+  // An explicit decision, not an absence: `defaultSenderAccountId: null` on
+  // the tenant-wide scope is what `PUT /email/sender-policy` documents as "use
+  // the deployment sender".
+  onAction(".js-email-use-deployment-sender", async (button) => {
+    defaultError.clear();
+
+    const body = { businessScope: null, defaultSenderAccountId: null };
+    const url = "/api/v1/email/sender-policy";
+    const unlock = lockElement(button, say("busy"));
+    const result = await sendJson("PUT", url, body, {
+      "Idempotency-Key": keyFor({ method: "PUT", url, body })
+    });
+
+    if (result.ok) {
+      holdForNavigation();
+      window.location.assign(
+        `${window.location.pathname}?notice=deployment-set`
+      );
+      return;
+    }
+
+    defaultError.show(messageFor(result.errorCode));
+    unlock();
+  });
 
   onAction(".js-email-default-sender", async (button) => {
     defaultError.clear();

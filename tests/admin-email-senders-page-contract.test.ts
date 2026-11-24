@@ -199,8 +199,21 @@ describe("the one mutation is safe", () => {
     expect(script).toContain('"PUT"');
     expect(script).toContain('"Idempotency-Key"');
     expect(script).toContain("createIdempotencyKeySource");
-    // It is the ONLY mutation the script can send.
-    expect(script.match(/sendJson\(/g)?.length).toBe(1);
+    // It is the ONLY mutation the script can send, from two controls: "make
+    // default" (a named sender) and "use the deployment sender" (an explicit
+    // `null`), one endpoint, one key source.
+    expect(script.match(/sendJson\(/g)?.length).toBe(2);
+    expect(script.match(/PUT/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("using the deployment sender is an explicit tenant-wide null, offered only when it is not already the default", () => {
+    expect(script).toContain(
+      "{ businessScope: null, defaultSenderAccountId: null }"
+    );
+    expect(page).toContain("js-email-use-deployment-sender");
+    expect(page).toContain("data.deploymentIsDefault === false");
+    expect(page).toContain("data.canConfigurePolicy");
+    expect(page).toContain("data.routingEnabled");
   });
 
   test("the script is bundled (an import-free script would be inlined and refused by the CSP)", () => {

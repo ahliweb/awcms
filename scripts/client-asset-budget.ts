@@ -1410,8 +1410,18 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * **Raised again for Issue #1162** (email queue, webhooks and quarantine
+ * screens): +3,525 B (393,025 -> 396,550), measured 396,481 locally. Two page
+ * scripts, each on its own screen only: `/admin/email-queue` (cancel one
+ * message, 754 B) and `/admin/email-webhooks` (issue or rotate a callback
+ * address, revoke it, confirm or dismiss a quarantined event; 2,398 B), plus
+ * the "use the deployment sender" control in the existing senders script. They
+ * duplicate nothing: lifecycle, key source and confirmation are the shared
+ * `admin-form-client.ts`, `admin-idempotency-key.ts` and
+ * `confirm-dialog-client.ts`. 69 B of margin for the local/CI build difference.
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 396_550;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
