@@ -241,7 +241,10 @@ describe("ci:local ↔ workflow jobs", () => {
   test("every job in ci.yml and changesets.yml is mapped in the runner, and nothing else is", () => {
     const { missing, stale } = jobMappingProblems(
       allWorkflowJobIds(),
-      JOBS.map((job) => `${job.workflow}#${job.workflowJob}`)
+      JOBS.flatMap((job) => [
+        `${job.workflow}#${job.workflowJob}`,
+        ...(job.aggregatedBy ? [`${job.workflow}#${job.aggregatedBy}`] : [])
+      ])
     );
 
     expect(
@@ -260,7 +263,9 @@ describe("ci:local ↔ workflow jobs", () => {
 
   test("a job's title is the workflow job's display name — the required-check name in the ruleset", () => {
     for (const job of JOBS) {
-      expect(job.title).toBe(workflowJob(job.workflow, job.workflowJob).name!);
+      expect(job.title).toBe(
+        workflowJob(job.workflow, job.aggregatedBy ?? job.workflowJob).name!
+      );
     }
   });
 
@@ -320,7 +325,7 @@ describe("ci:local ↔ workflow facts it hard-codes", () => {
 
   test("the Bun versions the runner reports are the ones CI pins", () => {
     expect(CI_BUN_CURRENT).toBe("1.4.4");
-    for (const id of ["quality", "e2e-smoke", "integration-tests"]) {
+    for (const id of ["quality", "e2e-smoke", "integration-shards"]) {
       expect(bunVersionsOf(WORKFLOW_CI, id), id).toEqual([CI_BUN_CURRENT]);
     }
     expect(bunVersionsOf(WORKFLOW_CHANGESETS, "policy-check")).toEqual([
@@ -342,7 +347,7 @@ describe("ci:local ↔ workflow facts it hard-codes", () => {
   });
 
   test("the PostgreSQL major is the one the database jobs' service container runs", () => {
-    for (const id of ["e2e-smoke", "integration-tests"]) {
+    for (const id of ["e2e-smoke", "integration-shards"]) {
       expect(
         workflowJob(WORKFLOW_CI, id).services?.postgres?.image,
         id
@@ -503,11 +508,11 @@ describe("the parity guard itself bites", () => {
 
   test("a step REMOVED from the workflow leaves a stale runner step, which is reported", () => {
     const mutated = structuredClone(real).filter(
-      (step) => step.run !== "bun test tests/integration/ --timeout 60000"
+      (step) => step.name !== "Run DB-gated integration tests"
     );
 
     const problems = accountForJob(mutated, job);
-    expect(problems.some((p) => p.includes("dropped or changed it"))).toBe(
+    expect(problems.some((p) => p.includes("matches no workflow step"))).toBe(
       true
     );
   });
@@ -527,9 +532,12 @@ describe("the parity guard itself bites", () => {
   });
 
   test("a NEW workflow job, or a job removed from the workflows, is reported by the job-level check", () => {
-    const mapped = JOBS.map(
-      (candidate) => `${candidate.workflow}#${candidate.workflowJob}`
-    );
+    const mapped = JOBS.flatMap((candidate) => [
+      `${candidate.workflow}#${candidate.workflowJob}`,
+      ...(candidate.aggregatedBy
+        ? [`${candidate.workflow}#${candidate.aggregatedBy}`]
+        : [])
+    ]);
     const real = allWorkflowJobIds();
 
     expect(jobMappingProblems(real, mapped)).toEqual({

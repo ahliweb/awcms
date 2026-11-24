@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ci-local.md)
 
-<!-- i18n-source-hash: sha256:8627299c6d7be35c9dfbb2140ca491592221cfbb3367d35640a7a2cca63b6121 -->
+<!-- i18n-source-hash: sha256:23e0550a976b627675f578bd0949d281e3ebbf98591d7574f0f138b97162abb9 -->
 
 # Menjalankan setiap job CI secara lokal (`bun run ci:local`)
 
@@ -38,16 +38,17 @@ memperingatkan bila working tree kotor.
 Job berjalan **berurutan**, yang paling murah lebih dulu (urutan di bawah),
 karena semuanya berbagi `dist/` dan mesin yang sama.
 
-| Job lokal           | Mencerminkan (`workflow` > job)   | Yang dijalankan                                                                                                                                                                                                                                   | Butuh                          |
-| ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `hygiene`           | `ci.yml` > `hygiene`              | grep Bun-only atas script `package.json`; tidak ada berkas `.env` ter-track. (Pemindaian manifes peluncuran yang lebih luas, `tests/bun-only-launch-manifests.test.ts`, adalah `bun test` dan berjalan di `quality`.) Shell workflow, apa adanya. | bash, git                      |
-| `changesets`        | `changesets.yml` > `policy-check` | Fetch base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` dengan `CHANGESET_POLICY_BASE_REF=<--base>`.                                                                                                                       | riwayat git dengan merge-base  |
-| `quality`           | `ci.yml` > `quality`              | Fetch tag (gerbang `version:check` membutuhkannya), install frozen, `bun run check` **penuh** dengan `DATABASE_URL` kosong.                                                                                                                       | —                              |
-| `integration`       | `ci.yml` > `integration-tests`    | Database sementara, install frozen, `bun run db:migrate`, `bun test tests/integration/ --timeout 60000`, lalu daftar berkas suite legacy ad-hoc.                                                                                                  | superuser PostgreSQL           |
-| `minimum-supported` | `ci.yml` > `minimum-supported`    | Di atas **Bun 1.3.0**: install frozen, `typecheck`, `build`, `family:conformance:check`.                                                                                                                                                          | Bun 1.3.0 (lihat di bawah)     |
-| `e2e`               | `ci.yml` > `e2e-smoke`            | Database sementara, migrate, build, menyalakan server, seed lewat `POST /api/v1/setup/initialize`, `bun run test:e2e`.                                                                                                                            | superuser PostgreSQL, Chromium |
+| Job lokal           | Mencerminkan (`workflow` > job)                         | Yang dijalankan                                                                                                                                                                                                                                                        | Butuh                          |
+| ------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `hygiene`           | `ci.yml` > `hygiene`                                    | grep Bun-only atas script `package.json`; tidak ada berkas `.env` ter-track. (Pemindaian manifes peluncuran yang lebih luas, `tests/bun-only-launch-manifests.test.ts`, adalah `bun test` dan berjalan di `quality`.) Shell workflow, apa adanya.                      | bash, git                      |
+| `changesets`        | `changesets.yml` > `policy-check`                       | Fetch base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` dengan `CHANGESET_POLICY_BASE_REF=<--base>`.                                                                                                                                            | riwayat git dengan merge-base  |
+| `quality`           | `ci.yml` > `quality`                                    | Fetch tag (gerbang `version:check` membutuhkannya), install frozen, `bun run check` **penuh** dengan `DATABASE_URL` kosong.                                                                                                                                            | —                              |
+| `integration`       | `ci.yml` > `integration-shards` (+ `integration-tests`) | Database sementara, install frozen, `bun run db:migrate`, batas katalog payroll, `bun test tests/integration/ --timeout 60000` (di CI dijalankan sebagai lima job `--shard=<i>/5`; lokal satu proses menjalankan gabungannya), lalu daftar berkas suite legacy ad-hoc. | superuser PostgreSQL           |
+| `minimum-supported` | `ci.yml` > `minimum-supported`                          | Di atas **Bun 1.3.0**: install frozen, `typecheck`, `build`, `family:conformance:check`.                                                                                                                                                                               | Bun 1.3.0 (lihat di bawah)     |
+| `e2e`               | `ci.yml` > `e2e-smoke`                                  | Database sementara, migrate, build, menyalakan server, seed lewat `POST /api/v1/setup/initialize`, `bun run test:e2e`.                                                                                                                                                 | superuser PostgreSQL, Chromium |
 
-Id job workflow (`policy-check`, `integration-tests`, `e2e-smoke`) diterima
+Id job workflow (`policy-check`, `integration-tests`, `integration-shards`,
+`e2e-smoke`) diterima
 sebagai alias `--job`.
 
 ## Opsi, hasil, dan exit code

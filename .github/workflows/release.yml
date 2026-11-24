@@ -94,7 +94,7 @@ jobs:
         # DB-gated test files (each opening their own ad-hoc connection to
         # `DATABASE_URL`) were never designed to run concurrently against one
         # shared, already-migrated database in a single `bun test` process —
-        # `.github/workflows/ci.yml`'s `integration-tests` job comment
+        # `.github/workflows/ci.yml`'s `integration-shards` job comment
         # documents the empirically-reproduced 26-failure collision from this
         # exact trigger (DATABASE_URL set + migrated schema + bare `bun
         # test`). Unset DATABASE_URL for just this step so its `bun test`
@@ -117,7 +117,7 @@ jobs:
         # `tests/integration/harness.ts`), not a bare `bun test`. The legacy
         # ad-hoc DB-gated suite runs in its own step below, in a fresh
         # `bun test` process, to avoid the collision documented in
-        # `.github/workflows/ci.yml`'s `integration-tests` job.
+        # `.github/workflows/ci.yml`'s `integration-shards` job.
         #
         # `--timeout 60000` is not decoration. `setupIntegrationDatabase()`
         # creates an ephemeral database and applies EVERY file in `sql/` as a

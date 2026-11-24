@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](branch-protection.md)
 
-<!-- i18n-source-hash: sha256:6fd2aa683e31009b3c978d5b3c2dda73e0e3259e551c6f8fb86c072d90fe29c4 -->
+<!-- i18n-source-hash: sha256:ca3fb0308215acb154688f3240146f9f1fcac7878157a772fc6ba02f3bd01b60 -->
 
 # Branch Protection — Required Status Checks
 
@@ -104,6 +104,20 @@ di bagian "Applying this" untuk caranya), bukan sesuatu yang dokumen ini
 menetapkan.
 
 ### `Integration tests (RLS + DB role separation)` — ada dan berjalan, informational only
+
+> **Pembaruan (Issue #1510): job ini kini di-shard.** Step DB-gated dulu satu
+> kali `bun test tests/integration/` selama ~37,5 menit. Kini lima job paralel,
+> `Integration shard <i>/5` (job `integration-shards`), masing-masing dengan
+> service Postgres sendiri dan menjalankan `bun test tests/integration/
+--shard=<i>/5 --timeout 60000`; shard 1 juga menjalankan batas katalog payroll
+> dan suite legacy ad-hoc satu kali. Check bernama
+> `Integration tests (RLS + DB role separation)` kini adalah job **agregator**
+> `integration-tests`: `needs` semua shard, `if: always()`, dan gagal kecuali
+> setiap shard berakhir `success` (shard gagal, dibatalkan, atau dilewati
+> menggagalkannya). Namanya tidak berubah, jadi ruleset tidak berubah. Nama
+> shard sengaja berbeda dan tidak boleh ditambahkan sebagai check wajib.
+> `tests/ci-integration-shards.test.ts` mengunci hal ini. Paragraf di bawah
+> menggambarkan bentuk satu-job sebelumnya.
 
 `ci.yml` juga punya job `integration-tests` (nama check:
 `Integration tests (RLS + DB role separation)`) yang menyalakan Postgres

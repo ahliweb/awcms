@@ -11,7 +11,7 @@
  * It is NOT in `bun run check` (that chain runs with no database). The same
  * analysis runs, with the probes that prove it, in
  * `tests/integration/payroll-catalog-boundary.integration.test.ts`, which the
- * CI `integration-tests` job executes; this command is the operator form
+ * CI `integration-shards` job (shard 1) executes; this command is the operator form
  * ("is THIS database clean"), for a deployed or restored database.
  */
 import { PAYROLL_EXPECTED_OWNERS } from "../src/modules/_shared/payroll-data-boundary";
