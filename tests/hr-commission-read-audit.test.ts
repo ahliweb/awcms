@@ -1,8 +1,11 @@
 /**
- * The commission accrual POST returns a stored accrual (amount, status) on a
- * replay, which is a READ of someone's earnings (#978 re-audit L-A). Both replay
- * paths audit it, and the gate's blind spots found in the same re-audit (M-A)
- * are closed.
+ * The commission accrual POST used to return a stored accrual (amount, status)
+ * on a replay, which was a READ of someone's earnings that had to be audited
+ * (#978 re-audit L-A). Since Issue #1095 (owner decision K3) it returns the
+ * MASKED receipt instead, on a first accrual and on both replay paths, and
+ * stores the receipt for its Idempotency-Key, so a replay reads nobody's
+ * earnings and needs no read audit. The gate's blind spots found in the same
+ * re-audit (M-A) stay closed.
  */
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -19,27 +22,28 @@ const ROUTE_SUPPORT = readFileSync(
   "utf8"
 );
 
-describe("POST /api/v1/hr-commission/accruals audits both replay paths", () => {
-  test("the replayed-outcome branch calls the read audit for accruals.read", () => {
+describe("POST /api/v1/hr-commission/accruals returns the masked receipt on every path (Issue #1095)", () => {
+  test("the body is the receipt, never the stored accrual", () => {
     expect(POST_ROUTE).toMatch(
-      /result\.outcome === "replayed"[\s\S]*?auditAccrualReplayRead\(/
+      /accrual: toMutationReceipt\(stored!\.accrual\)/
     );
+    expect(POST_ROUTE).not.toMatch(/accrual: stored!\.accrual/);
   });
 
-  test("an Idempotency-Key replay (stored body, produce never runs) is hooked too", () => {
-    // runIdempotent calls the hook with the stored body BEFORE returning it...
+  test("a body stored before the masking is projected on replay, before it is returned", () => {
+    expect(POST_ROUTE).toMatch(/projectStoredAccrueBody\s*\)/);
     expect(ROUTE_SUPPORT).toMatch(
-      /await onStoredReplay\?\.\(existing\.responseBody\);\s*return jsonResponse\(existing\.responseBody/
-    );
-    // ...and the POST passes one that records the stored accrual's id.
-    expect(POST_ROUTE).toMatch(
-      /async \(storedBody\) => \{[\s\S]*?auditAccrualReplayRead\(/
+      /projectStoredBody\s*\?\s*projectStoredBody\(existing\.responseBody\)\s*:\s*existing\.responseBody/
     );
   });
 
-  test("the helper audits under the read policy with the accrual id and a count", () => {
+  test("no replay read audit is left behind: a masked replay reads no earnings", () => {
+    expect(POST_ROUTE).not.toContain("auditAccrualReplayRead");
+  });
+
+  test("the GET list still records the sensitive read it always did", () => {
     expect(POST_ROUTE).toMatch(
-      /permission: "hr_commission\.accruals\.read",\s*itemCount: 1,\s*resourceIds: \[accrualId\]/
+      /recordSensitiveRead\(tx, \{[\s\S]*?permission: "hr_commission\.accruals\.read"/
     );
   });
 });

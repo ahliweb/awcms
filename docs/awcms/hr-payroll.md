@@ -1379,13 +1379,13 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   definition. Also: the catalog does not read extension objects,
   superusers or `BYPASSRLS` roles (they bypass every grant by definition);
   `NO FORCE` / `DISABLE ROW LEVEL SECURITY` on a payroll table are other RLS
-  gates' business; the check is not scheduled against a DEPLOYED database (that
-  needs a credential and an operator cron, an operations decision); the
-  existing mutation routes (`approve`, `release`, `pay`, `void`, and the port
-  adapter) are allow-listed WITHOUT a read audit (`auditExemptImporters`): they
-  return the transitioned accrual to a caller who holds only the transition
-  power, so whether they should record a read or return a masked shape is a
-  product decision, not made here; an uncalled function that contains
+  gates' business; the check runs daily against the DEPLOYED database as the job
+  `payroll:catalog-boundary:job` (Issue #1095, see "Scheduled catalog check"
+  below), so a drift between two releases is found within a day, not at the next
+  manual run; the mutation routes (`approve`, `release`, `pay`, `void`) and the
+  port adapter return a MASKED shape instead of a read audit (Issue #1095, see
+  "Masked mutation results" below), and the gate refuses a write path that
+  imports the ledger's write functions and stops calling its mask; an uncalled function that contains
   `recordSensitiveRead` still satisfies the sensitive-read gate (the dead-branch
   limit); a dynamic `import(ident)` whose specifier shows no part of the
   ledger's file name; the literal masking treats `${ ... }` inside a template
@@ -1393,6 +1393,60 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   the audit call is in the file, not on every handler path.
   Exemptions are `PAYROLL_CATALOG_EXEMPTIONS` (empty; the way out is the payroll
   family name).
+- _Masked mutation results (Issue #1095, owner decision K3 of 2026-11-22)._
+  `POST /api/v1/hr-commission/accruals/{id}/approve|release|pay|void` and the
+  in-process `CommissionAccrualPort` (contract `commission_accrual` **2.0.0**, a
+  MAJOR break) no longer return the accrual. They return a **masked receipt**
+  built field by field: the status edge (`id`, `status`, rule key and version,
+  currency, `sourceType`, `calculation`, `occurredOn` and the transition
+  timestamps, plus `masked: true`) and **never** the amount, base, units, rate,
+  fixed amount, `employmentId`, `sourceRef`, `sourceLine`, `paymentReference` or
+  `ruleId`. The full values are readable only through
+  `GET /api/v1/hr-commission/accruals[/{id}]`, which records a sensitive read
+  (`hr_commission.accruals.read`). This means a mutation needs **no read audit**
+  and no extra audit write per mutation. The `auditExemptImporters` exemption
+  for the four routes and the adapter is **gone**: they are listed in
+  `maskedResultImporters` instead, and `sensitive-reads:check` fails when such a
+  file imports `accrueCommission`, `transitionAccrual` or `voidCommissionBySource`
+  and does not call its mask (`toMutationReceipt`, or `maskAccrueOutcome` and
+  `maskVoidOutcome`) outside comments and literals, unless it records the read
+  audit itself. **The same applies to `POST /accruals`** (it now returns the
+  receipt, on a first accrual and on a replay, and stores the receipt for its
+  Idempotency-Key, so a replay needs no read audit either), and a replay of a body
+  stored before the masking is projected onto the receipt keys (`pickReceipt`)
+  instead of returned as stored. The gate's own limit: it proves the mask is
+  _called_ in the file, not that its result is the one returned; a handler that
+  calls the mask and then returns the full accrual (a mask "called and thrown
+  away") passes the text scan, and only the response-contract tests (the
+  `HrCommissionAccrualMutationReceipt` schema is `additionalProperties: false`,
+  validated with `ajv` against the real response bodies) catch it. The only remaining `auditExemptImporters` entries are the
+  own-only readers (the employee's own earnings) and the intake poster, which
+  discards the accrual it posts. **Residual:** the gate proves the mask is called
+  in the file, not on every handler path (the dead-branch limit), and an
+  idempotent replay stored BEFORE this change still returns the old full body
+  until its idempotency record expires.
+- _Scheduled catalog check (Issue #1095, owner decision K3)._
+  `bun run payroll:catalog-boundary:job` runs daily (03:17, the `hr_commission`
+  job registry entry, so `ops/awcms-jobs.crontab` carries it) against the
+  deployed database as its own role `awcms_catalog_boundary_audit` (`sql/420`,
+  shipped `NOLOGIN`): CONNECT and the catalog views and **no privilege on any
+  application table**, so a leaked login reads no data row. It is a
+  dedicated-role job like `social-publishing:dispatch`: its only login is
+  `PAYROLL_CATALOG_AUDIT_DATABASE_URL` (job-scoped, no fallback), the runner
+  withholds `DATABASE_URL`, `WORKER_DATABASE_URL` and `SETUP_DATABASE_URL`, and
+  the job refuses to start unless the server says it is that role.
+  `security:readiness` pins the role (no table or column privilege, no
+  membership, owns nothing). It fails loudly (exit 1, each finding on stderr):
+  on a finding, on a refused connection, and, on a split-role deployment, when
+  `PAYROLL_EXPECTED_OWNERS` is empty (the message names the variable). Every
+  outcome is a structured `error`-level log line from the repo logger, not a bare
+  `console.error`. **Not activated** (`PAYROLL_CATALOG_AUDIT_DATABASE_URL` unset)
+  logs `SKIPPED (not activated)` and exits 0, and a `security:readiness` WARNING
+  says there is no drift alarm until the role has a LOGIN; a URL that is set but
+  wrong is a refusal (exit 1). The
+  operator form `payroll:catalog-boundary:check` (`DATABASE_URL`) stays for
+  restored databases. Setup and the alarm are in
+  [`payroll-catalog-boundary-job.md`](payroll-catalog-boundary-job.md).
 - _Commission is inside the boundary (owner decision)._ `awcms_hr_commission_accruals`
   (with its transition log) and the module `hr_commission` are forbidden as
   projection, search, comment, cache and export sources, and `hr_commission` is a

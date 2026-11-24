@@ -12,14 +12,13 @@
  * analysis runs, with the probes that prove it, in
  * `tests/integration/payroll-catalog-boundary.integration.test.ts`, which the
  * CI `integration-shards` job (shard 1) executes; this command is the operator form
- * ("is THIS database clean"), for a deployed or restored database.
+ * ("is THIS database clean"), for a restored database or an ad-hoc run.
+ *
+ * The SCHEDULED form against the deployed database is a different command,
+ * `payroll:catalog-boundary:job` (Issue #1095), which connects as its own
+ * least-privilege role instead of `DATABASE_URL`.
  */
-import { PAYROLL_EXPECTED_OWNERS } from "../src/modules/_shared/payroll-data-boundary";
-import {
-  analysePayrollCatalog,
-  loadPayrollCatalogSnapshot,
-  staleCatalogExemptions
-} from "./lib/payroll-catalog-boundary";
+import { runPayrollCatalogCheck } from "./lib/payroll-catalog-check-run";
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -35,41 +34,17 @@ async function main(): Promise<void> {
   const sql = new Bun.SQL(url);
 
   try {
-    const snapshot = await loadPayrollCatalogSnapshot(
-      sql as unknown as Parameters<typeof loadPayrollCatalogSnapshot>[0]
-    );
-    // Split-role deployments (migrations run by one role, payroll objects owned
-    // by another) name the owner role(s) here; the default is the owner of the
-    // migration ledger (docs/awcms/hr-payroll.md section 13.3).
-    const configuredOwners = (process.env.PAYROLL_EXPECTED_OWNERS ?? "")
-      .split(",")
-      .map((owner) => owner.trim())
-      .filter(Boolean);
-    const findings = analysePayrollCatalog(snapshot, {
-      expectedOwners: [...PAYROLL_EXPECTED_OWNERS, ...configuredOwners]
+    const result = await runPayrollCatalogCheck(sql, {
+      PAYROLL_EXPECTED_OWNERS: process.env.PAYROLL_EXPECTED_OWNERS
     });
-    const stale = staleCatalogExemptions(snapshot);
 
-    if (findings.length > 0 || stale.length > 0) {
-      console.error("payroll:catalog-boundary:check FAILED -");
-
-      for (const finding of findings) {
-        console.error(`  - [${finding.code}] ${finding.message}`);
-      }
-
-      for (const object of stale) {
-        console.error(
-          `  - stale PAYROLL_CATALOG_EXEMPTIONS entry: ${object} no longer exists.`
-        );
-      }
-
+    if (!result.ok) {
+      for (const line of result.lines) console.error(line);
       process.exitCode = 1;
       return;
     }
 
-    console.log(
-      `payroll:catalog-boundary:check OK - ${snapshot.rules.length} rule(s), ${snapshot.functions.length} function(s), ${snapshot.triggers.length} trigger(s), ${snapshot.grants.length} grant(s), ${snapshot.relations.length} relation(s), ${snapshot.memberships.length} role membership(s), ${snapshot.publications.length} publication(s), ${snapshot.foreignTables.length} foreign table(s) and ${snapshot.dependencies.length} dependency row(s) read from the catalog; nothing outside the payroll family reaches a payroll table.`
-    );
+    for (const line of result.lines) console.log(line);
   } finally {
     await sql.close();
   }

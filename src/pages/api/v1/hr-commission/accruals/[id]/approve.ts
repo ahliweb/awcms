@@ -1,5 +1,9 @@
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import { transitionAccrual } from "../../../../../../modules/hr-commission/application/hr-commission-accrual-ledger";
+import {
+  projectStoredMutationBody,
+  toMutationReceipt
+} from "../../../../../../modules/hr-commission/application/hr-commission-accrual-receipt";
 import { transitionRefusal } from "../../../../../../modules/hr-commission/application/hr-commission-accrual-route-support";
 import {
   asUuid,
@@ -76,7 +80,9 @@ export const POST = defineTenantRoute<Prepared>({
           throw new Error("unreachable: transition refusal handled above");
         }
 
-        return { status: 200, body: result.accrual };
-      }
+        return { status: 200, body: toMutationReceipt(result.accrual) };
+      },
+      undefined,
+      projectStoredMutationBody
     )
 });

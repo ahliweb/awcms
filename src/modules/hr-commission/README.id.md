@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:546a77fdcdacbc2cae061ab50e327ad29ec215203c3b5cc422a5c51346c47a20 -->
+<!-- i18n-source-hash: sha256:8e83019750e8cfee41b627fdadd041147bd5fab467ba267db93497fed9c6b021 -->
 
 # `hr_commission`
 
@@ -183,6 +183,22 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
   seseorang; baris buku besar menyimpan jumlahnya dan correlation id
   menghubungkannya ke baris audit). Alasan void adalah kode pendek dan referensi
   pembayaran adalah token buram: keduanya bukan teks bebas.
+- **Hasil mutasi tersamar (Issue #1095, kontrak port `commission_accrual`
+  2.0.0).** `approve`, `release`, `pay`, `void`, dan port in-process
+  mengembalikan tanda terima tersamar (tepi status, kunci dan versi aturan,
+  mata uang, cap waktu transisi, `masked: true`), tidak pernah jumlah,
+  penerima, referensi sumber, atau referensi pembayaran; nilai penuh hanya dari
+  `GET /accruals[/{id}]` yang diaudit. Jadi mutasi tidak butuh audit baca.
+  Tanda terima dibangun field demi field di
+  `application/hr-commission-accrual-receipt.ts`, dan `sensitive-reads:check`
+  menolak jalur tulis yang berhenti memanggil penyamarnya.
+  `CommissionAccrualRecord` milik port kehilangan `amount` dan `employmentId`
+  (MAJOR).
+- **Pemeriksaan katalog terjadwal (Issue #1095).** Job
+  `payroll:catalog-boundary:job` berjalan harian terhadap database yang dideploy
+  sebagai role least-privilege `awcms_catalog_boundary_audit` (`sql/420`, dikirim
+  `NOLOGIN`, tanpa privilege pada tabel mana pun); lihat
+  [`docs/awcms/payroll-catalog-boundary-job.id.md`](../../../docs/awcms/payroll-catalog-boundary-job.id.md).
 - **Tanpa data personal.** Akrual merujuk sebuah employment (id buram) dan empat
   stempel aktor; tabelnya tidak memuat kolom nama, identifier, kontak, rekening,
   foto, biometrik, atau perangkat (sebuah tes memindainya).

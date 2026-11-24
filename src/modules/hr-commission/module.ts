@@ -190,6 +190,21 @@ export const hrCommissionModule = defineModule({
       environmentNotes:
         "Database-only operation, no external network dependency. Runs as `awcms_app` (DATABASE_URL), NOT the worker: it posts accruals, and the payroll boundary lets only the request role touch them. The event consumer that feeds the queue is `awcms_worker` and holds INSERT on the intake table and nothing else. A tenant whose hr_commission module or `commission_intake_enabled` switch is off is not touched (its rows wait); retention housekeeping still runs. Bounded per-tenant passes in the maintenance work class; safe alongside request traffic and alongside a second instance (SKIP LOCKED plus a lease). `--dry-run` counts the due rows and the terminal rows past retention.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run payroll:catalog-boundary:job",
+      schedule: {
+        mode: "cron",
+        expression: "17 3 * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Reads the catalog of the DEPLOYED database once a day and fails (non-zero exit) when a view, rule, function, trigger or grant reaches a payroll table from outside the payroll family, a required payroll trigger or foreign key is missing, or an object has an unaccounted owner (Issue #1095, owner decision K3; the same analysis as `payroll:catalog-boundary:check`, docs/awcms/hr-payroll.md section 13.3). It is a drift alarm for the payroll data boundary, not a data job: it reads no row of any table.",
+      recommendedSchedule:
+        "Daily at 03:17 via cron/systemd timer (off the top of the hour).",
+      environmentNotes:
+        "Runs as its OWN role `awcms_catalog_boundary_audit` (sql/420): CONNECT and the catalog views, NO privilege on any application table. It is a dedicated-role job: the runner withholds DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL, and the only login is PAYROLL_CATALOG_AUDIT_DATABASE_URL (job-scoped, no fallback). The operator gives the NOLOGIN role a LOGIN and a password. Not activated (PAYROLL_CATALOG_AUDIT_DATABASE_URL unset) logs `SKIPPED (not activated)` and exits 0 (security:readiness warns); a URL that is set but wrong, or a shared URL next to it, is a refusal and exits 1. Split-role deployments (migrations run by one role, payroll objects owned by another) MUST set PAYROLL_EXPECTED_OWNERS=role1,role2; without it the job fails loudly naming the variable. Database-only, no external network dependency. Every outcome is a structured repo-logger line: info on a clean run, one error line per finding and a final error line (exit 1).",
+      safeInOfflineLan: true
     }
   ],
   // No `dataLifecycle` descriptor for the rules, the accruals or the transitions,

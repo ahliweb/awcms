@@ -172,7 +172,8 @@ describe("imports of the exempt ledger's read functions", () => {
     "getAccrual",
     "reconcileAccruals",
     "accrueCommission",
-    "transitionAccrual"
+    "transitionAccrual",
+    "voidCommissionBySource"
   ];
 
   test.each([
@@ -244,10 +245,16 @@ describe("imports of the exempt ledger's read functions", () => {
   test("an allow-listed mutation route needs no read audit, but only while it imports nothing but the write path", () => {
     const route = "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts";
 
+    // Issue #1095: the exemption is conditional on the MASK. A route that
+    // imports only the write path and calls `toMutationReceipt` needs no audit;
+    // one that returns the accrual unmasked and unaudited is refused.
+    const masked = `${importer("{ transitionAccrual }")}export const x = toMutationReceipt(1);\n`;
+
+    expect(evaluate({ [route]: masked }).forbiddenReadImports).toEqual([]);
     expect(
       evaluate({ [route]: importer("{ transitionAccrual }") })
-        .forbiddenReadImports
-    ).toEqual([]);
+        .forbiddenReadImports[0]?.problem
+    ).toContain("toMutationReceipt");
 
     const widened = evaluate({
       [route]: importer("{ transitionAccrual, listAccruals }")

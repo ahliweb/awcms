@@ -8,18 +8,31 @@
  * check and, for `accrue`, writes no audit row (`void` rides the one transition
  * core, which audits and publishes `awcms.hr.commission.voided`); the contract that puts that duty on the caller
  * is `_shared/ports/commission-accrual-port.ts`.
+ *
+ * What it returns is MASKED (Issue #1095, contract 2.0.0): the port records no
+ * sensitive read, so no amount and no beneficiary leave it. Every result passes
+ * through `maskAccrueOutcome` / `maskVoidOutcome`, and the sensitive-read gate
+ * refuses this file if it stops calling them.
  */
 import type { CommissionAccrualPort } from "../../_shared/ports/commission-accrual-port";
 import {
   accrueCommission,
   voidCommissionBySource
 } from "./hr-commission-accrual-ledger";
+import {
+  maskAccrueOutcome,
+  maskVoidOutcome
+} from "./hr-commission-accrual-receipt";
 
 export function createCommissionAccrualPort(): CommissionAccrualPort {
   return {
-    accrue: (tx, tenantId, actorTenantUserId, request) =>
-      accrueCommission(tx, tenantId, actorTenantUserId, request),
-    void: (tx, tenantId, actorTenantUserId, request) =>
-      voidCommissionBySource(tx, tenantId, actorTenantUserId, request)
+    accrue: async (tx, tenantId, actorTenantUserId, request) =>
+      maskAccrueOutcome(
+        await accrueCommission(tx, tenantId, actorTenantUserId, request)
+      ),
+    void: async (tx, tenantId, actorTenantUserId, request) =>
+      maskVoidOutcome(
+        await voidCommissionBySource(tx, tenantId, actorTenantUserId, request)
+      )
   };
 }

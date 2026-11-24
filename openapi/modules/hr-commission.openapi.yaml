@@ -390,7 +390,7 @@ paths:
       tags:
         - HR Commission
       summary: Report a sale fact and accrue its commission
-      description: "Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the action-time SoD check can be authored over who may post). Accrues the commission a source event earns an EMPLOYMENT, exactly once per `(source type, source ref, source line, employment)` (a database unique key, race-safe). The AMOUNT is computed from the PUBLISHED version of `ruleKey` whose window contains `occurredOn` (never now()), by exact decimal arithmetic; the body can never assert an amount, a rule version, a status or a stamp, and money is a decimal string (a JSON number is 400). `source.type` must equal the rule's source type and `currencyCode` its currency. A redelivery of the same canonical request returns the ORIGINAL with `replayed: true` (200) whatever Idempotency-Key it arrives under, also after the accrual was voided; the same source with a different amount, date, rule or currency is 409 `SOURCE_CONFLICT`. The employment must be live and employed on `occurredOn`, and the event at most 730 days old; the database recomputes the stored amount from the rule version and refuses a mismatch. Requires an Idempotency-Key. A NEW accrual is audited at info severity (employment, rule key and version, source type; never an amount, a base, a rate or a source reference); a replay audits nothing. The in-process adapter contract is `_shared/ports/commission-accrual-port.ts`. Employee commission only: affiliate and referral commission is not here."
+      description: "Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the action-time SoD check can be authored over who may post). Accrues the commission a source event earns an EMPLOYMENT, exactly once per `(source type, source ref, source line, employment)` (a database unique key, race-safe). The AMOUNT is computed from the PUBLISHED version of `ruleKey` whose window contains `occurredOn` (never now()), by exact decimal arithmetic; the body can never assert an amount, a rule version, a status or a stamp, and money is a decimal string (a JSON number is 400). `source.type` must equal the rule's source type and `currencyCode` its currency. A redelivery of the same canonical request returns the ORIGINAL with `replayed: true` (200) whatever Idempotency-Key it arrives under, also after the accrual was voided; the same source with a different amount, date, rule or currency is 409 `SOURCE_CONFLICT`. The employment must be live and employed on `occurredOn`, and the event at most 730 days old; the database recomputes the stored amount from the rule version and refuses a mismatch. Requires an Idempotency-Key. A NEW accrual is audited at info severity (employment, rule key and version, source type; never an amount, a base, a rate or a source reference); a replay audits nothing. The response, and the body stored for the Idempotency-Key, is the MASKED receipt `HrCommissionAccrualMutationReceipt` (no amount, beneficiary, source reference or payment reference; Issue #1095): the full values are readable only through the audited `GET /api/v1/hr-commission/accruals/{id}`, and a replay of a body stored before the masking is projected onto the receipt keys. The in-process adapter contract is `_shared/ports/commission-accrual-port.ts`. Employee commission only: affiliate and referral commission is not here."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
@@ -408,13 +408,13 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "201":
-          description: A new accrual, status `pending`.
+          description: The masked receipt of a new accrual, status `pending`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HrCommissionAccrualCreated"
         "200":
-          description: "The same source was already accrued for this employment with the same request; the original is returned (`replayed: true`)."
+          description: "The same source was already accrued for this employment with the same request; the original's masked receipt is returned (`replayed: true`)."
           content:
             application/json:
               schema:
@@ -516,7 +516,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "200":
-          description: The accrual after the transition.
+          description: The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit.
           content:
             application/json:
               schema:
@@ -527,7 +527,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrCommissionAccrual"
+                    $ref: "#/components/schemas/HrCommissionAccrualMutationReceipt"
                   meta:
                     type: object
         "404":
@@ -577,7 +577,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "200":
-          description: The accrual after the transition.
+          description: The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit.
           content:
             application/json:
               schema:
@@ -588,7 +588,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrCommissionAccrual"
+                    $ref: "#/components/schemas/HrCommissionAccrualMutationReceipt"
                   meta:
                     type: object
         "404":
@@ -637,7 +637,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "200":
-          description: The accrual after the transition.
+          description: The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit.
           content:
             application/json:
               schema:
@@ -648,7 +648,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrCommissionAccrual"
+                    $ref: "#/components/schemas/HrCommissionAccrualMutationReceipt"
                   meta:
                     type: object
         "404":
@@ -697,7 +697,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "200":
-          description: The accrual after the transition.
+          description: The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit.
           content:
             application/json:
               schema:
@@ -708,7 +708,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrCommissionAccrual"
+                    $ref: "#/components/schemas/HrCommissionAccrualMutationReceipt"
                   meta:
                     type: object
         "404":
@@ -1346,7 +1346,7 @@ components:
             replayed:
               type: boolean
             accrual:
-              $ref: "#/components/schemas/HrCommissionAccrual"
+              $ref: "#/components/schemas/HrCommissionAccrualMutationReceipt"
         meta:
           type: object
     HrCommissionAccrual:
@@ -1432,6 +1432,63 @@ components:
         voidReasonCode:
           type: string
           nullable: true
+    HrCommissionAccrualMutationReceipt:
+      description: "The MASKED shape a transition (`approve`, `release`, `pay`, `void`) answers with (Issue #1095). It confirms the status edge and carries NO earnings, beneficiary, source reference or payment reference, because a mutation records no sensitive-read audit. The full `HrCommissionAccrual` is only returned by the audited read endpoints."
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - masked
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/HrCommissionAccrualStatus"
+        currencyCode:
+          type: string
+        ruleKey:
+          type: string
+        ruleVersion:
+          type: integer
+          minimum: 1
+        sourceType:
+          type: string
+        calculation:
+          type: string
+          enum:
+            - percent
+            - fixed
+        occurredOn:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        releasedAt:
+          type: string
+          format: date-time
+          nullable: true
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        voidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        voidReasonCode:
+          type: string
+          nullable: true
+        masked:
+          type: boolean
+          enum:
+            - true
     HrCommissionAccrualTransition:
       type: object
       properties:

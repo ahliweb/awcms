@@ -340,6 +340,39 @@ export function lintOpenApiContract(doc: AnyRecord): ContractLintResult {
   return { compiled, failures };
 }
 
+/**
+ * A validator for ONE schema location of the bundled contract (a JSON pointer such
+ * as `/paths/~1api~1v1~1x/post/responses/200/content/application~1json/schema`
+ * or `/components/schemas/Thing`), compiled the same way the lint compiles it.
+ * Used by response-contract tests: a handler's real body is validated against the
+ * schema the contract publishes for it.
+ */
+export function createContractValidator(
+  doc: AnyRecord,
+  pointer: string
+): (value: unknown) => { valid: boolean; errors: string } {
+  const ajv = createAjv(doc);
+
+  ajv.addSchema(doc as AnySchema, ROOT_ID);
+
+  const validate = ajv.compile({ $ref: `${ROOT_ID}#${pointer}` });
+
+  return (value) => {
+    const valid = validate(value) as boolean;
+
+    return {
+      valid,
+      errors: valid ? "" : ajv.errorsText(validate.errors)
+    };
+  };
+}
+
+export async function loadBundledContract(
+  bundlePath = path.resolve(process.cwd(), BUNDLED_PATH)
+): Promise<AnyRecord> {
+  return parseYaml(await readFile(bundlePath, "utf8")) as AnyRecord;
+}
+
 export async function runContractLint(
   bundlePath = path.resolve(process.cwd(), BUNDLED_PATH)
 ): Promise<ContractLintResult> {

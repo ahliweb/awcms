@@ -52,6 +52,10 @@ import {
   POST as postAccrual
 } from "../../src/pages/api/v1/hr-commission/accruals/index";
 import { GET as getAccrual } from "../../src/pages/api/v1/hr-commission/accruals/[id]";
+import {
+  createContractValidator,
+  loadBundledContract
+} from "../../scripts/api-contract-lint";
 import { POST as approveAccrual } from "../../src/pages/api/v1/hr-commission/accruals/[id]/approve";
 import { POST as releaseAccrual } from "../../src/pages/api/v1/hr-commission/accruals/[id]/release";
 import { POST as voidAccrual } from "../../src/pages/api/v1/hr-commission/accruals/[id]/void";
@@ -599,14 +603,18 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
 
       expect(response.status).toBe(201);
       expect(response.body.data!.replayed).toBe(false);
+      // The response is the MASKED receipt (Issue #1095); the COMPUTED amount
+      // is read through the audited GET.
       expect(response.body.data!.accrual).toMatchObject({
         status: "pending",
-        amount: "25.000000",
         ruleKey: "upsell",
         ruleVersion: 1,
         currencyCode: "XTS",
-        employmentId
+        masked: true
       });
+      expect(
+        (await detail(response.body.data!.accrual.id)).body.data!.accrual
+      ).toMatchObject({ amount: "25.000000", employmentId });
     });
 
     test("a double delivery is one accrual: 200 replayed with the original, whatever Idempotency-Key it arrives under", async () => {
@@ -723,6 +731,54 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
     });
   });
 
+  describe("mutation responses are masked (Issue #1095)", () => {
+    test("approve, release, pay and void return the receipt and no earnings, person or reference", async () => {
+      if (!handlerReady) return;
+      const SENSITIVE = [
+        "amount",
+        "baseAmount",
+        "units",
+        "rate",
+        "fixedAmount",
+        "employmentId",
+        "sourceRef",
+        "sourceLine",
+        "paymentReference",
+        "ruleId"
+      ];
+      const paidId = await accrued("MASK-1");
+      const voidedId = await accrued("MASK-2");
+      const responses = [
+        await act("approve", paidId),
+        await act("release", paidId),
+        await act("pay", paidId, undefined, {
+          paymentReference: "MASK-PAYOUT-1"
+        }),
+        await act("void", voidedId)
+      ];
+
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+
+        const data = response.body.data as unknown as Record<string, unknown>;
+
+        expect(data.masked).toBe(true);
+
+        for (const field of SENSITIVE) {
+          expect(Object.hasOwn(data, field)).toBe(false);
+        }
+
+        expect(JSON.stringify(response.body)).not.toContain("MASK-PAYOUT-1");
+      }
+
+      // The audited read still carries the full values.
+      const full = (await detail(paidId)).body.data!.accrual;
+
+      expect(full.amount).toMatch(/^\d+\.\d{6}$/);
+      expect(full.paymentReference).toBe("MASK-PAYOUT-1");
+    });
+  });
+
   describe("the lifecycle", () => {
     test("pending -> approved -> payable -> paid, each by a person, with the log to match", async () => {
       if (!handlerReady) return;
@@ -735,12 +791,13 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
         paymentReference: "batch-2026/10"
       });
 
-      expect(paid.body.data).toMatchObject({
-        status: "paid",
-        paymentReference: "batch-2026/10"
-      });
+      // The mutation answers with a MASKED receipt (Issue #1095): the status
+      // edge, never the amount, the beneficiary or the payout reference.
+      expect(paid.body.data).toMatchObject({ status: "paid", masked: true });
 
       const found = (await detail(id)).body.data!;
+
+      expect(found.accrual.paymentReference).toBe("batch-2026/10");
 
       expect(
         found.transitions.map((t) => `${t.fromStatus}>${t.toStatus}`)
@@ -1269,7 +1326,9 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
       );
 
       expect(late.status).toBe(201);
-      expect(late.body.data!.accrual.amount).toBe("30.000000");
+      expect(
+        (await detail(late.body.data!.accrual.id)).body.data!.accrual.amount
+      ).toBe("30.000000");
     });
 
     test("a window starting today or later needs no reason, is not flagged and drops one if sent", async () => {
@@ -1308,8 +1367,31 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
     });
   });
 
-  describe("a replay is a READ of someone's earnings: it is audited, and fail-closed (#978 re-audit L-A)", () => {
+  describe("POST /accruals answers with the masked receipt too, and so does its replay (Issue #1095, M2 and L1)", () => {
+    const SENSITIVE = [
+      "amount",
+      "baseAmount",
+      "units",
+      "rate",
+      "fixedAmount",
+      "employmentId",
+      "sourceRef",
+      "sourceLine",
+      "paymentReference",
+      "ruleId"
+    ];
     const READ_KIND = "sensitive_read.commission_accrual";
+
+    function expectMasked(body: unknown) {
+      const accrual = (body as { data: { accrual: Record<string, unknown> } })
+        .data.accrual;
+
+      expect(accrual.masked).toBe(true);
+
+      for (const field of SENSITIVE) {
+        expect(Object.hasOwn(accrual, field)).toBe(false);
+      }
+    }
 
     async function readAuditsNaming(id: string): Promise<number> {
       const rows = (await admin()`
@@ -1323,116 +1405,158 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
       return rows[0]!.n;
     }
 
-    test("the canonical-request replay (a NEW Idempotency-Key, outcome 'replayed') writes a read-audit row naming the accrual", async () => {
+    test("201, the canonical replay and the stored-key replay all carry the receipt and no earnings, and write no read audit", async () => {
+      if (!handlerReady) return;
+      const key = nextKey();
+      const first = await accrue(saleBody(), undefined, key);
+      const canonical = await accrue(saleBody(), undefined, nextKey());
+      const stored = await accrue(saleBody(), undefined, key);
+
+      expect(first.status).toBe(201);
+      expect(canonical.status).toBe(200);
+      expect(stored.status).toBe(201);
+
+      for (const response of [first, canonical, stored]) {
+        expectMasked(response.body);
+        expect(JSON.stringify(response.body)).not.toContain("25.000000");
+        expect(JSON.stringify(response.body)).not.toContain(employmentId);
+      }
+
+      // Masked, so not a read of anyone's earnings: no read audit anywhere.
+      expect(await readAuditsNaming(first.body.data!.accrual.id)).toBe(0);
+      // The full values are still one audited GET away.
+      const full = (await detail(first.body.data!.accrual.id)).body.data!
+        .accrual;
+
+      expect(full.amount).toBe("25.000000");
+    });
+
+    test("the body STORED for the key is the receipt, not the accrual", async () => {
       if (!handlerReady) return;
       const first = await accrue(saleBody(), undefined, nextKey());
       const id = first.body.data!.accrual.id;
+      const rows = (await admin()`
+        SELECT response_body::text AS body
+        FROM awcms_idempotency_keys
+        WHERE tenant_id = ${env.tenantId}
+          AND request_scope = 'hr_commission_accrual_create'
+          AND response_body #>> '{data,accrual,id}' = ${id}
+      `) as { body: string }[];
 
-      expect(first.status).toBe(201);
-      // Creating is audited as an accrual, not as a read.
-      expect(await readAuditsNaming(id)).toBe(0);
-
-      const replay = await accrue(saleBody(), undefined, nextKey());
-
-      expect(replay.status).toBe(200);
-      expect(replay.body.data!.replayed).toBe(true);
-      expect(await readAuditsNaming(id)).toBe(1);
-
-      const row = (await admin()`
-        SELECT actor_tenant_user_id, message, attributes::text AS attributes
-        FROM awcms_audit_events
-        WHERE tenant_id = ${env.tenantId} AND action = ${READ_KIND}
-      `) as {
-        actor_tenant_user_id: string;
-        message: string;
-        attributes: string;
-      }[];
-
-      expect(row[0]!.actor_tenant_user_id).toBe(env.ownerTenantUserId);
-      // Ids and counts only: the amount the response carried is nowhere in it.
-      expect(row[0]!.attributes).not.toContain(
-        replay.body.data!.accrual.amount
-      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.body).not.toContain("25.000000");
+      expect(rows[0]!.body).not.toContain(employmentId);
+      expect(rows[0]!.body).not.toContain("sourceRef");
     });
 
-    test("the stored Idempotency-Key replay (the producer never runs) writes a read-audit row naming the accrual", async () => {
+    test("a body stored BEFORE the masking (the full accrual) is projected to the receipt on replay (L1)", async () => {
       if (!handlerReady) return;
       const key = nextKey();
       const first = await accrue(saleBody(), undefined, key);
       const id = first.body.data!.accrual.id;
+      const full = (await detail(id)).body.data!.accrual;
 
-      expect(first.status).toBe(201);
-      expect(await readAuditsNaming(id)).toBe(0);
+      // Put the OLD shape back, as a pre-#1095 record would hold it.
+      await admin()`
+        UPDATE awcms_idempotency_keys
+        SET response_body = ${{
+          success: true,
+          data: { replayed: false, accrual: full },
+          meta: {}
+        }}::jsonb
+        WHERE tenant_id = ${env.tenantId}
+          AND request_scope = 'hr_commission_accrual_create'
+          AND response_body #>> '{data,accrual,id}' = ${id}
+      `;
 
       const replay = await accrue(saleBody(), undefined, key);
 
       expect(replay.status).toBe(201);
+      expectMasked(replay.body);
       expect(replay.body.data!.accrual.id).toBe(id);
-      expect(await readAuditsNaming(id)).toBe(1);
+      expect(JSON.stringify(replay.body)).not.toContain("25.000000");
     });
 
-    /** The handler's transaction aborts: no response, hence no accrual body, is ever produced. */
-    async function expectNoBody(
-      attempt: () => Promise<{ status: number; body: unknown }>
-    ): Promise<void> {
-      let produced: { status: number; body: unknown } | null = null;
-      let failure: unknown = null;
+    test("the same projection holds for approve, release, pay and void replays of an old full body", async () => {
+      if (!handlerReady) return;
+      const id = await accrued("L1-PAY");
+      const approveKey = nextKey();
+      const approved = await act("approve", id, undefined, {}, approveKey);
 
-      try {
-        produced = await attempt();
-      } catch (error) {
-        failure = error;
-      }
+      expect(approved.status).toBe(200);
 
-      // Either the handler threw (the usual shape here) or it answered with a
-      // 5xx envelope; what it must never do is return the accrual.
-      if (produced) {
-        expect(produced.status).toBeGreaterThanOrEqual(500);
-        expect(JSON.stringify(produced.body)).not.toContain("accrual");
-      } else {
-        expect(String(failure)).toContain("zz_injected_failure");
-      }
-    }
+      const full = (await detail(id)).body.data!.accrual;
 
-    async function withFailingReadAudit<T>(run: () => Promise<T>): Promise<T> {
-      // A constraint that every new row version violates: the counter upsert
-      // inside recordSensitiveRead fails, whatever the caller does.
       await admin()`
-        ALTER TABLE awcms_sensitive_read_windows
-          ADD CONSTRAINT zz_injected_failure CHECK (false) NOT VALID
+        UPDATE awcms_idempotency_keys
+        SET response_body = ${{
+          success: true,
+          data: full,
+          meta: {}
+        }}::jsonb
+        WHERE tenant_id = ${env.tenantId}
+          AND request_scope = 'hr_commission_accrual_approve'
+          AND response_body #>> '{data,id}' = ${id}
       `;
 
-      try {
-        return await run();
-      } finally {
-        await admin()`
-          ALTER TABLE awcms_sensitive_read_windows
-            DROP CONSTRAINT zz_injected_failure
-        `;
+      const replay = await act("approve", id, undefined, {}, approveKey);
+      const data = replay.body.data as unknown as Record<string, unknown>;
+
+      expect(replay.status).toBe(200);
+      expect(data.masked).toBe(true);
+      expect(data.id).toBe(id);
+
+      for (const field of SENSITIVE) {
+        expect(Object.hasOwn(data, field)).toBe(false);
       }
-    }
-
-    test("fail-closed: when the audit fails the canonical replay returns NO accrual body", async () => {
-      if (!handlerReady) return;
-      const first = await accrue(saleBody(), undefined, nextKey());
-
-      expect(first.status).toBe(201);
-
-      await withFailingReadAudit(() =>
-        expectNoBody(() => accrue(saleBody(), undefined, nextKey()))
-      );
     });
 
-    test("fail-closed: when the audit fails the stored-key replay returns NO accrual body", async () => {
+    test("every real response validates against the schema the contract publishes (additionalProperties: false)", async () => {
       if (!handlerReady) return;
-      const key = nextKey();
-      const first = await accrue(saleBody(), undefined, key);
-
-      expect(first.status).toBe(201);
-
-      await withFailingReadAudit(() =>
-        expectNoBody(() => accrue(saleBody(), undefined, key))
+      const doc = await loadBundledContract();
+      const validators = {
+        receipt: createContractValidator(
+          doc,
+          "/components/schemas/HrCommissionAccrualMutationReceipt"
+        ),
+        created: createContractValidator(
+          doc,
+          "/components/schemas/HrCommissionAccrualCreated"
+        )
+      };
+      const created = await accrue(
+        saleBody({ source: { type: "sale_line", ref: "CONTRACT-1" } })
       );
+      const id = created.body.data!.accrual.id;
+
+      expect(validators.created(created.body)).toEqual({
+        valid: true,
+        errors: ""
+      });
+
+      for (const verb of ["approve", "release"] as const) {
+        const response = await act(verb, id);
+
+        expect(response.status).toBe(200);
+        expect(validators.receipt(response.body.data)).toEqual({
+          valid: true,
+          errors: ""
+        });
+      }
+
+      const paid = await act("pay", id, undefined, {
+        paymentReference: "CONTRACT-PAY"
+      });
+
+      expect(validators.receipt(paid.body.data)).toEqual({
+        valid: true,
+        errors: ""
+      });
+
+      // The schema itself rejects a body that smuggles the amount back in.
+      expect(
+        validators.receipt({ ...paid.body.data, amount: "1.000000" }).valid
+      ).toBe(false);
     });
   });
 });

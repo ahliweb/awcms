@@ -172,6 +172,20 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
   reference** (earnings are financial data about a person; the ledger row holds the
   amount and the correlation id joins it to the audit row). The void reason is a
   short code and the payment reference an opaque token: neither is free text.
+- **Masked mutation results (Issue #1095, port contract `commission_accrual`
+  2.0.0).** `approve`, `release`, `pay`, `void` and the in-process port return a
+  masked receipt (status edge, rule key and version, currency, transition
+  timestamps, `masked: true`), never the amount, the beneficiary, the source
+  reference or the payment reference; the full values come only from the audited
+  `GET /accruals[/{id}]`. So a mutation needs no read audit. The receipt is built
+  field by field in `application/hr-commission-accrual-receipt.ts`, and
+  `sensitive-reads:check` refuses a write path that stops calling its mask. The
+  port's `CommissionAccrualRecord` lost `amount` and `employmentId` (MAJOR).
+- **Scheduled catalog check (Issue #1095).** The job
+  `payroll:catalog-boundary:job` runs daily against the deployed database as the
+  least-privilege role `awcms_catalog_boundary_audit` (`sql/420`, shipped
+  `NOLOGIN`, no privilege on any table); see
+  [`docs/awcms/payroll-catalog-boundary-job.md`](../../../docs/awcms/payroll-catalog-boundary-job.md).
 - **No personal data.** An accrual references an employment (an opaque id) and four
   actor stamps; the tables hold no name, identifier, contact, account, photo,
   biometric or device column (a test scans them).

@@ -87,7 +87,29 @@ type Actor = {
   correlationId: string | undefined;
 };
 
-export type CommissionAccrual = CommissionAccrualRecord & {
+/**
+ * The ledger's own view of an accrual's headline: the port's masked receipt
+ * PLUS the beneficiary and the amount. Only the ledger and its audited readers
+ * hold this; the in-process port adapter and the mutation routes narrow it to
+ * the masked receipt before anything leaves (Issue #1095).
+ */
+export type LedgerAccrualRecord = CommissionAccrualRecord & {
+  employmentId: string;
+  /** Fixed-scale decimal string. */
+  amount: string;
+};
+
+/** What `accrueCommission` returns to a caller INSIDE the ledger's trust boundary. */
+export type LedgerAccrueOutcome =
+  | Exclude<CommissionAccrualOutcome, { accrual: unknown }>
+  | { outcome: "accrued" | "replayed"; accrual: LedgerAccrualRecord };
+
+/** What `voidCommissionBySource` returns to a caller INSIDE the ledger's trust boundary. */
+export type LedgerVoidOutcome =
+  | Exclude<CommissionVoidOutcome, { accrual: unknown }>
+  | { outcome: "voided" | "already_voided"; accrual: LedgerAccrualRecord };
+
+export type CommissionAccrual = LedgerAccrualRecord & {
   ruleId: string;
   sourceType: string;
   sourceRef: string;
@@ -203,7 +225,7 @@ function mapAccrual(row: AccrualRow): CommissionAccrual {
   };
 }
 
-function toRecord(accrual: CommissionAccrual): CommissionAccrualRecord {
+function toRecord(accrual: CommissionAccrual): LedgerAccrualRecord {
   return {
     id: accrual.id,
     employmentId: accrual.employmentId,
@@ -515,10 +537,7 @@ async function findBySource(
   return rows[0] ?? null;
 }
 
-function answerExisting(
-  row: AccrualRow,
-  digest: string
-): CommissionAccrualOutcome {
+function answerExisting(row: AccrualRow, digest: string): LedgerAccrueOutcome {
   return row.request_digest === digest
     ? { outcome: "replayed", accrual: toRecord(mapAccrual(row)) }
     : { outcome: "source_conflict", accrualId: row.id };
@@ -535,7 +554,7 @@ export async function accrueCommission(
   actorTenantUserId: string | null,
   rawRequest: CommissionAccrualRequest,
   now: Date = new Date()
-): Promise<CommissionAccrualOutcome> {
+): Promise<LedgerAccrueOutcome> {
   const validation = validateAccrualRequest(rawRequest, now);
 
   if (!validation.valid) {
@@ -705,7 +724,7 @@ export async function auditAccrued(
   tx: Bun.SQL,
   tenantId: string,
   actor: Actor,
-  accrual: CommissionAccrualRecord,
+  accrual: LedgerAccrualRecord,
   sourceType: string
 ): Promise<void> {
   await recordAuditEvent(tx, {
@@ -908,7 +927,7 @@ export async function voidCommissionBySource(
   tenantId: string,
   actorTenantUserId: string | null,
   rawRequest: CommissionVoidRequest
-): Promise<CommissionVoidOutcome> {
+): Promise<LedgerVoidOutcome> {
   const validation = validateVoidRequest(rawRequest);
 
   if (!validation.valid) {
@@ -942,7 +961,7 @@ export async function voidCommissionBySource(
     return { outcome: "not_found" };
   }
 
-  const record = async (): Promise<CommissionAccrualRecord> => {
+  const record = async (): Promise<LedgerAccrualRecord> => {
     const fetched = await getAccrual(tx, tenantId, row.id);
 
     return toRecord(fetched!.accrual);

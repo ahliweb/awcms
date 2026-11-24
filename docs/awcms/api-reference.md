@@ -14526,7 +14526,7 @@ Gated by `hr_commission.accruals.read`. Newest first, keyset paginated (`cursor`
 - **operationId**: `hrCommissionAccrualCreate`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the action-time SoD check can be authored over who may post). Accrues the commission a source event earns an EMPLOYMENT, exactly once per `(source type, source ref, source line, employment)` (a database unique key, race-safe). The AMOUNT is computed from the PUBLISHED version of `ruleKey` whose window contains `occurredOn` (never now()), by exact decimal arithmetic; the body can never assert an amount, a rule version, a status or a stamp, and money is a decimal string (a JSON number is 400). `source.type` must equal the rule's source type and `currencyCode` its currency. A redelivery of the same canonical request returns the ORIGINAL with `replayed: true` (200) whatever Idempotency-Key it arrives under, also after the accrual was voided; the same source with a different amount, date, rule or currency is 409 `SOURCE_CONFLICT`. The employment must be live and employed on `occurredOn`, and the event at most 730 days old; the database recomputes the stored amount from the rule version and refuses a mismatch. Requires an Idempotency-Key. A NEW accrual is audited at info severity (employment, rule key and version, source type; never an amount, a base, a rate or a source reference); a replay audits nothing. The in-process adapter contract is `_shared/ports/commission-accrual-port.ts`. Employee commission only: affiliate and referral commission is not here.
+Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the action-time SoD check can be authored over who may post). Accrues the commission a source event earns an EMPLOYMENT, exactly once per `(source type, source ref, source line, employment)` (a database unique key, race-safe). The AMOUNT is computed from the PUBLISHED version of `ruleKey` whose window contains `occurredOn` (never now()), by exact decimal arithmetic; the body can never assert an amount, a rule version, a status or a stamp, and money is a decimal string (a JSON number is 400). `source.type` must equal the rule's source type and `currencyCode` its currency. A redelivery of the same canonical request returns the ORIGINAL with `replayed: true` (200) whatever Idempotency-Key it arrives under, also after the accrual was voided; the same source with a different amount, date, rule or currency is 409 `SOURCE_CONFLICT`. The employment must be live and employed on `occurredOn`, and the event at most 730 days old; the database recomputes the stored amount from the rule version and refuses a mismatch. Requires an Idempotency-Key. A NEW accrual is audited at info severity (employment, rule key and version, source type; never an amount, a base, a rate or a source reference); a replay audits nothing. The response, and the body stored for the Idempotency-Key, is the MASKED receipt `HrCommissionAccrualMutationReceipt` (no amount, beneficiary, source reference or payment reference; Issue #1095): the full values are readable only through the audited `GET /api/v1/hr-commission/accruals/{id}`, and a replay of a body stored before the masking is projected onto the receipt keys. The in-process adapter contract is `_shared/ports/commission-accrual-port.ts`. Employee commission only: affiliate and referral commission is not here.
 
 **Parameters**
 
@@ -14541,8 +14541,8 @@ Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the actio
 
 | Status | Description                                                                                                                                   | Schema                                                             |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 200    | The same source was already accrued for this employment with the same request; the original is returned (`replayed: true`).                   | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
-| 201    | A new accrual, status `pending`.                                                                                                              | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
+| 200    | The same source was already accrued for this employment with the same request; the original's masked receipt is returned (`replayed: true`).  | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
+| 201    | The masked receipt of a new accrual, status `pending`.                                                                                        | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
 | 400    | Validation error.                                                                                                                             | [`ApiError`](#standard-error-envelope)                             |
 | 401    | Missing or invalid session.                                                                                                                   | [`ApiError`](#standard-error-envelope)                             |
 | 403    | Access denied by RBAC/ABAC.                                                                                                                   | [`ApiError`](#standard-error-envelope)                             |
@@ -14592,14 +14592,14 @@ Gated by `hr_commission.accruals.approve` (high-risk). `pending` -> `approved`. 
 
 **Responses**
 
-| Status | Description                                                                  | Schema                                 |
-| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The accrual after the transition.                                            | object                                 |
-| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
-| 403    | Forbidden, APPROVE_OWN_ACCRUAL_FORBIDDEN or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
-| 404    | RESOURCE_NOT_FOUND.                                                          | [`ApiError`](#standard-error-envelope) |
-| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit. | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, APPROVE_OWN_ACCRUAL_FORBIDDEN or SEGREGATION_OF_DUTIES.                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED.                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/hr-commission/accruals/{id}/pay` — Record that a payable accrual has been paid
 
@@ -14620,14 +14620,14 @@ Gated by `hr_commission.accruals.pay` (high-risk). `payable` -> `paid`, terminal
 
 **Responses**
 
-| Status | Description                                                                  | Schema                                 |
-| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The accrual after the transition.                                            | object                                 |
-| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
-| 403    | Forbidden, or SEGREGATION_OF_DUTIES.                                         | [`ApiError`](#standard-error-envelope) |
-| 404    | RESOURCE_NOT_FOUND.                                                          | [`ApiError`](#standard-error-envelope) |
-| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit. | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED.                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/hr-commission/accruals/{id}/release` — Release an approved accrual as payable
 
@@ -14648,14 +14648,14 @@ Gated by `hr_commission.accruals.release` (high-risk). `approved` -> `payable`: 
 
 **Responses**
 
-| Status | Description                                                                  | Schema                                 |
-| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The accrual after the transition.                                            | object                                 |
-| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
-| 403    | Forbidden, or SEGREGATION_OF_DUTIES.                                         | [`ApiError`](#standard-error-envelope) |
-| 404    | RESOURCE_NOT_FOUND.                                                          | [`ApiError`](#standard-error-envelope) |
-| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit. | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, ACCRUAL_INVALID_STATE or BENEFICIARY_LOGIN_UNRESOLVED.                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/hr-commission/accruals/{id}/void` — Void a pending or approved accrual
 
@@ -14676,14 +14676,14 @@ Gated by `hr_commission.accruals.cancel` (high-risk). `pending` or `approved` ->
 
 **Responses**
 
-| Status | Description                                    | Schema                                 |
-| ------ | ---------------------------------------------- | -------------------------------------- |
-| 200    | The accrual after the transition.              | object                                 |
-| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
-| 403    | Forbidden, or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
-| 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
-| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The MASKED receipt of the accrual after the transition (no amount, beneficiary, source reference or payment reference). Read the full values from `GET /api/v1/hr-commission/accruals/{id}`, which records a sensitive-read audit. | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE.                                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/hr-commission/intake/exceptions` — List the commission intake requests that need a human
 
@@ -20273,72 +20273,6 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 }
 ```
 
-### Schema: HrCommissionAccrual
-
-One commission earned by one employment from one source event. The monetary facts are immutable by trigger; only `status` and its stamps advance. `amount` is a fixed-scale decimal string.
-
-| Field              | Type                                                             | Required | Nullable | Description |
-| ------------------ | ---------------------------------------------------------------- | -------- | -------- | ----------- |
-| `id`               | string (uuid)                                                    | no       | no       |             |
-| `employmentId`     | string (uuid)                                                    | no       | no       |             |
-| `ruleId`           | string (uuid)                                                    | no       | no       |             |
-| `ruleKey`          | string                                                           | no       | no       |             |
-| `ruleVersion`      | integer                                                          | no       | no       |             |
-| `status`           | [`HrCommissionAccrualStatus`](#schema-hrcommissionaccrualstatus) | no       | no       |             |
-| `amount`           | string                                                           | no       | no       |             |
-| `currencyCode`     | string                                                           | no       | no       |             |
-| `sourceType`       | string                                                           | no       | no       |             |
-| `sourceRef`        | string                                                           | no       | no       |             |
-| `sourceLine`       | string                                                           | no       | no       |             |
-| `operation`        | enum(`accrue`)                                                   | no       | no       |             |
-| `calculation`      | enum(`percent`, `fixed`)                                         | no       | no       |             |
-| `baseAmount`       | string                                                           | no       | yes      |             |
-| `units`            | integer                                                          | no       | yes      |             |
-| `rate`             | string                                                           | no       | yes      |             |
-| `fixedAmount`      | string                                                           | no       | yes      |             |
-| `occurredAt`       | string (date-time)                                               | no       | no       |             |
-| `occurredOn`       | string (date)                                                    | no       | no       |             |
-| `createdAt`        | string (date-time)                                               | no       | no       |             |
-| `approvedAt`       | string (date-time)                                               | no       | yes      |             |
-| `releasedAt`       | string (date-time)                                               | no       | yes      |             |
-| `paidAt`           | string (date-time)                                               | no       | yes      |             |
-| `paymentReference` | string                                                           | no       | yes      |             |
-| `voidedAt`         | string (date-time)                                               | no       | yes      |             |
-| `voidReasonCode`   | string                                                           | no       | yes      |             |
-
-**Example**
-
-```json
-{
-  "id": "00000000-0000-0000-0000-000000000000",
-  "employmentId": "00000000-0000-0000-0000-000000000000",
-  "ruleId": "00000000-0000-0000-0000-000000000000",
-  "ruleKey": "string",
-  "ruleVersion": 1,
-  "status": "pending",
-  "amount": "25.000000",
-  "currencyCode": "string",
-  "sourceType": "string",
-  "sourceRef": "string",
-  "sourceLine": "string",
-  "operation": "accrue",
-  "calculation": "percent",
-  "baseAmount": "string",
-  "units": 0,
-  "rate": "string",
-  "fixedAmount": "string",
-  "occurredAt": "2026-01-01T00:00:00.000Z",
-  "occurredOn": "2026-01-01",
-  "createdAt": "2026-01-01T00:00:00.000Z",
-  "approvedAt": "2026-01-01T00:00:00.000Z",
-  "releasedAt": "2026-01-01T00:00:00.000Z",
-  "paidAt": "2026-01-01T00:00:00.000Z",
-  "paymentReference": "string",
-  "voidedAt": "2026-01-01T00:00:00.000Z",
-  "voidReasonCode": "string"
-}
-```
-
 ### Schema: HrCommissionAccrualCreated
 
 | Field     | Type         | Required | Nullable | Description |
@@ -20356,31 +20290,20 @@ One commission earned by one employment from one source event. The monetary fact
     "replayed": false,
     "accrual": {
       "id": "00000000-0000-0000-0000-000000000000",
-      "employmentId": "00000000-0000-0000-0000-000000000000",
-      "ruleId": "00000000-0000-0000-0000-000000000000",
+      "status": "pending",
+      "currencyCode": "string",
       "ruleKey": "string",
       "ruleVersion": 1,
-      "status": "pending",
-      "amount": "25.000000",
-      "currencyCode": "string",
       "sourceType": "string",
-      "sourceRef": "string",
-      "sourceLine": "string",
-      "operation": "accrue",
       "calculation": "percent",
-      "baseAmount": "string",
-      "units": 0,
-      "rate": "string",
-      "fixedAmount": "string",
-      "occurredAt": "2026-01-01T00:00:00.000Z",
       "occurredOn": "2026-01-01",
       "createdAt": "2026-01-01T00:00:00.000Z",
       "approvedAt": "2026-01-01T00:00:00.000Z",
       "releasedAt": "2026-01-01T00:00:00.000Z",
       "paidAt": "2026-01-01T00:00:00.000Z",
-      "paymentReference": "string",
       "voidedAt": "2026-01-01T00:00:00.000Z",
-      "voidReasonCode": "string"
+      "voidReasonCode": "string",
+      "masked": true
     }
   },
   "meta": "(operation-specific payload)"
@@ -20418,6 +20341,50 @@ Exactly one of `baseAmount` (a percent rule) or `units` (a fixed rule). No amoun
   "currencyCode": "string",
   "occurredAt": "2026-01-01T00:00:00.000Z",
   "occurredOn": "2026-01-01"
+}
+```
+
+### Schema: HrCommissionAccrualMutationReceipt
+
+The MASKED shape a transition (`approve`, `release`, `pay`, `void`) answers with (Issue #1095). It confirms the status edge and carries NO earnings, beneficiary, source reference or payment reference, because a mutation records no sensitive-read audit. The full `HrCommissionAccrual` is only returned by the audited read endpoints.
+
+| Field            | Type                                                             | Required | Nullable | Description |
+| ---------------- | ---------------------------------------------------------------- | -------- | -------- | ----------- |
+| `id`             | string (uuid)                                                    | yes      | no       |             |
+| `status`         | [`HrCommissionAccrualStatus`](#schema-hrcommissionaccrualstatus) | yes      | no       |             |
+| `currencyCode`   | string                                                           | no       | no       |             |
+| `ruleKey`        | string                                                           | no       | no       |             |
+| `ruleVersion`    | integer                                                          | no       | no       |             |
+| `sourceType`     | string                                                           | no       | no       |             |
+| `calculation`    | enum(`percent`, `fixed`)                                         | no       | no       |             |
+| `occurredOn`     | string (date)                                                    | no       | no       |             |
+| `createdAt`      | string (date-time)                                               | no       | no       |             |
+| `approvedAt`     | string (date-time)                                               | no       | yes      |             |
+| `releasedAt`     | string (date-time)                                               | no       | yes      |             |
+| `paidAt`         | string (date-time)                                               | no       | yes      |             |
+| `voidedAt`       | string (date-time)                                               | no       | yes      |             |
+| `voidReasonCode` | string                                                           | no       | yes      |             |
+| `masked`         | enum(`true`)                                                     | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "status": "pending",
+  "currencyCode": "string",
+  "ruleKey": "string",
+  "ruleVersion": 1,
+  "sourceType": "string",
+  "calculation": "percent",
+  "occurredOn": "2026-01-01",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "approvedAt": "2026-01-01T00:00:00.000Z",
+  "releasedAt": "2026-01-01T00:00:00.000Z",
+  "paidAt": "2026-01-01T00:00:00.000Z",
+  "voidedAt": "2026-01-01T00:00:00.000Z",
+  "voidReasonCode": "string",
+  "masked": true
 }
 ```
 

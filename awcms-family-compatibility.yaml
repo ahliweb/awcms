@@ -180,8 +180,10 @@ contracts:
     # (#951) and bound by a downstream sale-attribution adapter at its own
     # composition root. 1.1.0 since #1109: `void` (reverse an accrual by source
     # identity) was ADDED to the port (MINOR). The key is declared here for the
-    # first time; 1.0.0 was the accrue-only shape.
-    commission_accrual: "1.1.0"
+    # first time; 1.0.0 was the accrue-only shape. 2.0.0 since #1095 (MAJOR): the
+    # record the port returns is MASKED; `amount` and `employmentId` were removed
+    # (the port performs no sensitive-read audit).
+    commission_accrual: "2.0.0"
     # commission_intake is owned (provided) by the base `hr_commission` module
     # (#1189, ADR-0147): the port an event-driven consumer running as
     # `awcms_worker` submits a commission request through, because the worker may

@@ -174,6 +174,16 @@ AWCMS_LOCK=/opt/awcms-jobs/locks
 # through the e-mail outbox. Database-only: no provider call.
 */5 * * * * /usr/bin/flock -n $AWCMS_LOCK/omnichannel-inbox-sla.lock $AWCMS_RUN_JOB omnichannel-inbox:sla >> $AWCMS_JOB_LOG/omnichannel-inbox-sla.log 2>&1
 
+# hr_commission — Reads the catalog of the DEPLOYED database once a day and
+# fails (non-zero exit) when a view, rule, function, trigger or grant reaches
+# a payroll table from outside the payroll family, a required payroll trigger
+# or foreign key is missing, or an object has an unaccounted owner (Issue
+# #1095, owner decision K3; the same analysis as
+# `payroll:catalog-boundary:check`, docs/awcms/hr-payroll.md section 13.3). It
+# is a drift alarm for the payroll data boundary, not a data job: it reads no
+# row of any table.
+17 3 * * * /usr/bin/flock -n $AWCMS_LOCK/payroll-catalog-boundary-job.lock $AWCMS_RUN_JOB payroll:catalog-boundary:job >> $AWCMS_JOB_LOG/payroll-catalog-boundary-job.log 2>&1
+
 # push_delivery — Drain the due push delivery queue (claim-lease,
 # retry/backoff, circuit breaker, dead-subscription disabling) for every
 # active tenant.

@@ -395,6 +395,7 @@ jobs:
           tests/security-readiness-channel-accounts-access.test.ts
           tests/security-readiness-channel-accounts-claim.test.ts
           tests/security-readiness-telegram-engagement-dispatch.test.ts
+          tests/security-readiness-payroll-catalog-audit-role.test.ts
           tests/security-readiness-schema-create-and-tenant-policy.test.ts
           tests/security-readiness-view-rls-bypass.test.ts
           tests/security-readiness-worker-credential-columns.test.ts
