@@ -9734,7 +9734,16 @@ msgstr ""
 msgid "No tags yet."
 msgstr ""
 
-msgid "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
+msgid "Loading the people who can be assigned…"
+msgstr ""
+
+msgid "Nobody else is eligible to be assigned this conversation."
+msgstr ""
+
+msgid "Could not load the list of people. Please try again."
+msgstr ""
+
+msgid "Load more"
 msgstr ""
 
 msgid "Omnichannel inbox"

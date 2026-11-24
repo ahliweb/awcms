@@ -511,6 +511,40 @@ export async function fetchGrantedPermissionKeys(
 }
 
 /**
+ * The set form of {@link holdsTenantWidePermissionKey}: an embeddable fragment
+ * selecting `tenant_user_id` for EVERY person who holds `permissionKey` on a
+ * TENANT-WIDE grant (directly or through a group) in force right now. Used by
+ * pickers that list eligible staff in ONE statement instead of probing each
+ * person (a directory of N people would otherwise cost N queries).
+ *
+ * Same predicate as the single-person form, line for line; a parity test
+ * (`tests/integration/eligible-staff-directory.integration.test.ts`) pins that
+ * the two never disagree. Like `activeRoleGrants`, it is a fragment: awaiting
+ * it alone would return the whole tenant's holders, so every caller filters it
+ * in the statement it is spliced into.
+ */
+export function tenantWidePermissionHolders(
+  tx: Bun.SQL,
+  tenantId: string,
+  permissionKey: string
+) {
+  const [moduleKey, activityCode, action] = permissionKey.split(".");
+
+  return tx`
+    SELECT DISTINCT grants.tenant_user_id
+    FROM (${activeRoleGrants(tx, tenantId)}) grants
+    JOIN awcms_role_permissions rp ON rp.role_id = grants.role_id AND rp.tenant_id = ${tenantId}
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    JOIN awcms_roles r ON r.id = grants.role_id AND r.tenant_id = ${tenantId}
+    WHERE grants.scope_type = 'tenant'
+      AND r.deleted_at IS NULL
+      AND p.module_key = ${moduleKey ?? ""}
+      AND p.activity_code = ${activityCode ?? ""}
+      AND p.action = ${action ?? ""}
+  `;
+}
+
+/**
  * Whether `tenantUserId` holds `permissionKey` through a TENANT-WIDE grant
  * (`scope_type = 'tenant'`), as opposed to through a grant confined to a
  * business scope — Issue #1215 LOW-1, ADR-0080.

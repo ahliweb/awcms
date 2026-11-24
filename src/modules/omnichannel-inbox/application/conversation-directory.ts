@@ -334,6 +334,30 @@ export async function getConversation(
   };
 }
 
+/**
+ * The business scope and reachability of a conversation the caller may SEE, or
+ * `null` (unknown, foreign and invisible are one answer, no IDOR oracle). What
+ * the eligible-assignee picker needs and nothing more: no customer data.
+ */
+export async function getVisibleConversationScope(
+  tx: Bun.SQL,
+  tenantId: string,
+  id: string,
+  visibility: ConversationVisibility
+): Promise<{ scope: ScopeRef | null; reachable: boolean } | null> {
+  const row = await fetchVisibleRow(tx, tenantId, id, visibility, false);
+
+  if (!row) return null;
+
+  return {
+    scope:
+      row.business_scope_type && row.business_scope_id
+        ? { type: row.business_scope_type, id: row.business_scope_id }
+        : null,
+    reachable: row.customer_state === "active"
+  };
+}
+
 async function recordActivity(
   tx: Bun.SQL,
   tenantId: string,

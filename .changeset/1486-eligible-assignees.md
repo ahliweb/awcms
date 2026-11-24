@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+feat(omnichannel-inbox): eligible-assignee picker (Issue #1486, #1164). New `GET /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees` lists the staff who may be assigned a conversation: the set form of the assignment rule (active person, `conversations.update` on a tenant-wide grant, and if scope-confined a started assignment covering the conversation's scope or an ancestor). It needs `conversations.assign` and visibility of the conversation (unknown, foreign and invisible are one `404`), is keyset-paginated (`limit` 1-50, opaque `cursor`), returns `{ tenantUserId, displayName }` only and is never a staff directory: an ineligible colleague is absent. `/admin/omnichannel-inbox/[id]` replaces the disabled "Assign to another person" button with a picker over it that posts through the existing assignment call (stable `Idempotency-Key`, `expectedVersion`). The query is shared and parameterised (`listEligibleStaff` in `identity-access`, plus `tenantWidePermissionHolders` in `auth-context`) so the `crm_follow_up` rule editor can reuse it behind its own route and guard. No migration. Four new msgids (en/id); one retired.

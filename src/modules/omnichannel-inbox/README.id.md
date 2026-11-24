@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:83aa2a344d74ea1a0ab77497037f11b31b7a4495ddabd6cdd72a84260f1c3c65 -->
+<!-- i18n-source-hash: sha256:8336f3020f43e076627ae5cebdeaaf01be81af01d52a9d9b1f77bfb21e7c09c2 -->
 
 # `omnichannel_inbox`
 
@@ -173,10 +173,34 @@ Stream `inbox.status.progress` (ADR-0154) dibangunkan lintas instance oleh trigg
 
 ## Tindak lanjut
 
-- Pemilih orang untuk "tugaskan ke orang lain" butuh endpoint yang mendaftar
-  calon penerima tugas; pemilih lingkup bisnis untuk kebijakan SLA per lingkup.
+- Pemilih lingkup bisnis untuk kebijakan SLA per lingkup (pemilih orang untuk
+  "tugaskan ke orang lain" sudah hadir bersama #1486, lihat di bawah).
 - Topik realtime "inbox hint" (registry ADR-0154), event outbound "balasan
   diantrekan" dari modul kanal untuk menggantikan pencatatan respons manual,
   dan inbound WhatsApp setelah tersedia.
 - Bila `data_lifecycle` kelak punya override retensi per tenant, jendela
   rebuild wajib mengikutinya.
+
+## Pemilih calon penerima tugas (Isu #1486)
+
+`GET /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees`
+mendaftar staf yang dapat ditugaskan percakapan itu, untuk pemilih "tugaskan ke
+orang lain" di `/admin/omnichannel-inbox/[id]`.
+
+- Butuh `conversations.assign`, orang yang masuk, dan **dapat melihat
+  percakapan**; tak dikenal, milik tenant lain, dan tak terlihat adalah satu
+  `404`.
+- Ini **bentuk himpunan dari `assigneeEligibility`**: orang aktif
+  (`principal_kind = 'user'`) yang memegang `conversations.update` pada grant
+  seluruh-tenant dan, bila terkurung lingkup (termasuk kurungan yang belum
+  mulai), mencakup lingkup percakapan atau leluhurnya. Rekan yang tidak
+  memenuhi syarat tidak muncul, sama seperti yang tidak ada: ini bukan direktori
+  staf. Endpoint penugasan tetap memeriksa ulang saat menulis.
+- Item hanya `{ tenantUserId, displayName }`, keyset menurut nama tampilan
+  (`limit` 1-50, bawaan 25, `cursor` buram). Percakapan pelanggan yang menarik
+  diri menghasilkan daftar kosong.
+- Kuerinya ada di `identity-access`
+  (`application/eligible-staff-directory.ts`, `listEligibleStaff`) dan
+  berparameter kunci izin dan lingkup, sehingga pemilih modul lain (editor
+  aturan `crm_follow_up`, #1484/#1486) memakainya di balik rute, guard, dan
+  aturan visibilitas **miliknya sendiri**, bukan milik rute ini.

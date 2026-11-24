@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:d18183b05d047da19facf464d1fb9fbe3e93cfb127fae97bf9462654ebf79d8c -->
+<!-- i18n-source-hash: sha256:27ac57e6faeac9b2be9562dd6dca00ea4649930611f1e5e3e4c776f57d4f2c78 -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -77,7 +77,7 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 
 <!-- BEGIN GENERATED: single-flight-audit -->
 
-243 titik masuk di 83 berkas; 239 mengirim request yang mengubah data dan 4 tidak. Sebelum #1224 ke-239 itu dijaga `lockElement`/`mutateAndReload` pada 224, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 239 dari 243 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
+246 titik masuk di 83 berkas; 240 mengirim request yang mengubah data dan 6 tidak. Sebelum #1224 ke-240 itu dijaga `lockElement`/`mutateAndReload` pada 225, flag buatan sendiri pada 11, dan tidak ada sama sekali pada 4. Sesudahnya: 242 dari 246 dipasang lewat helper bersama (single flight secara bawaan); 4 sisanya adalah pengecualian terdaftar yang mempertahankan penjaganya sendiri yang sudah ditinjau.
 
 | Berkas                                             | Target                                         | Dipasang sebagai (kini) | Sebelum #1224                                                                                                                              | Sesudah #1224             | Idempotency-Key dikirim |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ----------------------- |
@@ -223,6 +223,9 @@ diklasifikasikan dilaporkan sebagai `none`, tidak pernah dibuang, dan fakta
 | `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-respond`                            | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | —                       |
 | `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-assign-me`                          | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-unassign`                           | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
+| `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-load-assignees`                     | onAction                | tanpa request                                                                                                                              | single-flight (helper)    | —                       |
+| `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-more-assignees`                     | onAction                | tanpa request                                                                                                                              | single-flight (helper)    | —                       |
+| `src/pages/admin/omnichannel-inbox/[id].astro`     | `.js-inbox-assign-selected`                    | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/omnichannel-inbox/settings.astro` | `omnichannel-policy-form`                      | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/omnichannel-inbox/settings.astro` | `.js-inbox-policy-retire`                      | onAction                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |
 | `src/pages/admin/omnichannel-inbox/settings.astro` | `omnichannel-tag-form`                         | onSubmit                | `lockElement`/`mutateAndReload`                                                                                                            | single-flight (helper)    | ya                      |

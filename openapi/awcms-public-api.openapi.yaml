@@ -25434,6 +25434,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omnichannel-inbox/conversations/{id}/eligible-assignees:
+    get:
+      operationId: listOmnichannelInboxEligibleAssignees
+      tags:
+        - Omnichannel Inbox
+      summary: List the staff who could be assigned a conversation
+      description: "Requires `omnichannel_inbox.conversations.assign`, a signed-in person and visibility of the conversation (business scope); unknown, foreign and invisible are one `404`. Returns ONLY people who pass the assignment rule (an active person holding `conversations.update` on a tenant-wide grant and, if scope-confined, covering the conversation's business scope or an ancestor), so it is never a staff directory: an ineligible colleague is absent, exactly like one who does not exist. A withdrawn customer's conversation yields an empty list. Keyset-paginated by display name; the items carry a display name and the tenant user id and nothing else. The assignment endpoint re-checks eligibility at write time."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 25
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 400
+      responses:
+        "200":
+          description: One page of eligible assignees.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmnichannelInboxEligibleAssigneeList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/omnichannel-inbox/conversations/{id}/responses:
     post:
       operationId: recordOmnichannelInboxResponse
@@ -47346,6 +47388,34 @@ components:
                 - recorded
             conversation:
               $ref: "#/components/schemas/OmnichannelInboxConversation"
+        meta:
+          type: object
+    OmnichannelInboxEligibleAssigneeList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  tenantUserId:
+                    type: string
+                    format: uuid
+                  displayName:
+                    type: string
+                required:
+                  - tenantUserId
+                  - displayName
+            nextCursor:
+              type: string
+              nullable: true
         meta:
           type: object
     OmnichannelInboxProgressChange:

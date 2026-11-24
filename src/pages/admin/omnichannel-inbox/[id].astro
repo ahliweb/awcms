@@ -22,9 +22,11 @@
  *   - assign to me / unassign need `conversations.assign` (high-risk,
  *     Idempotency-Key).
  *
- * "Assign to someone else" is shown DISABLED with its reason: no endpoint lists
- * the people eligible to be assignees, and a raw user-id box would be a worse
- * affordance than none. There is NO reply box and no note box: the inbox sends
+ * "Assign to another person" loads the people eligible to be assignees from
+ * `GET .../eligible-assignees` (Issue #1486): only people who pass the
+ * assignment rule, one page at a time, never a free user-id box and never a
+ * staff directory. The choice is then sent through the same assignment endpoint
+ * as "assign to me", which re-checks eligibility at write time. There is NO reply box and no note box: the inbox sends
  * nothing and stores no text (ADR-0160 section 2); an answer goes out through
  * the arrival channel's own route and is then recorded here.
  *
@@ -377,19 +379,55 @@ const assigneeText =
               >
                 {t("Unassign")}
               </button>
-              <button
-                class="btn btn-secondary"
-                type="button"
-                disabled
-                aria-describedby="omnichannel-assign-other-why"
-              >
-                {t("Assign to another person")}
-              </button>
-              <p class="cell-muted" id="omnichannel-assign-other-why">
-                {t(
-                  "Not available yet: there is no list of the people eligible to be assignees. They can assign the conversation to themselves."
+              <div
+                id="omnichannel-assign-other"
+                class="admin-form"
+                data-msg-loading={t("Loading the people who can be assigned…")}
+                data-msg-empty={t(
+                  "Nobody else is eligible to be assigned this conversation."
                 )}
-              </p>
+                data-msg-error={t(
+                  "Could not load the list of people. Please try again."
+                )}
+              >
+                <button
+                  class="btn btn-secondary js-inbox-load-assignees"
+                  type="button"
+                  disabled={!reachable}
+                  aria-controls="omnichannel-assign-other-picker"
+                >
+                  {t("Assign to another person")}
+                </button>
+                <div id="omnichannel-assign-other-picker" hidden>
+                  <label class="field-label" for="omnichannel-assignee-select">
+                    {t("Person")}
+                  </label>
+                  <select
+                    class="field-input"
+                    id="omnichannel-assignee-select"
+                  />
+                  <button
+                    class="btn btn-secondary js-inbox-more-assignees"
+                    type="button"
+                    hidden
+                  >
+                    {t("Load more")}
+                  </button>
+                  <button
+                    class="btn btn-primary js-inbox-assign-selected"
+                    type="button"
+                    disabled
+                  >
+                    {t("Assign")}
+                  </button>
+                </div>
+                <p
+                  class="cell-muted"
+                  id="omnichannel-assign-other-status"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
             </div>
           )}
         </section>
@@ -555,4 +593,81 @@ const assigneeText =
     assign(button, button.dataset.assignee ?? null)
   );
   onAction(".js-inbox-unassign", (button) => assign(button, null));
+
+  // "Assign to another person" (Issue #1486): the eligible people come from the
+  // endpoint (the SET form of the assignment rule, one page at a time); the
+  // pick goes through the SAME assignment call, which re-checks at write time.
+  // Option labels are set with textContent, never as markup.
+  const other = document.getElementById("omnichannel-assign-other");
+  const picker = document.getElementById("omnichannel-assign-other-picker");
+  const select = document.getElementById("omnichannel-assignee-select");
+  const status = document.getElementById("omnichannel-assign-other-status");
+  const moreButton = picker?.querySelector<HTMLButtonElement>(
+    ".js-inbox-more-assignees"
+  );
+  const assignSelected = picker?.querySelector<HTMLButtonElement>(
+    ".js-inbox-assign-selected"
+  );
+  let nextCursor: string | null = null;
+
+  type EligiblePage = {
+    items?: { tenantUserId: string; displayName: string }[];
+    nextCursor?: string | null;
+  };
+
+  function say(key: "loading" | "empty" | "error" | null) {
+    if (!status || !other) return;
+    status.textContent = key
+      ? (other.dataset[`msg${key[0]!.toUpperCase()}${key.slice(1)}`] ?? "")
+      : "";
+  }
+
+  async function loadAssignees(cursor: string | null): Promise<void> {
+    if (!(select instanceof HTMLSelectElement) || !picker) return;
+
+    say("loading");
+
+    try {
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+      const response = await fetch(`${base}/eligible-assignees${query}`, {
+        credentials: "same-origin"
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        data?: EligiblePage;
+      } | null;
+
+      if (!response.ok || payload?.success !== true || !payload.data) {
+        say("error");
+        return;
+      }
+
+      for (const item of payload.data.items ?? []) {
+        const option = document.createElement("option");
+
+        option.value = item.tenantUserId;
+        option.textContent = item.displayName;
+        select.append(option);
+      }
+
+      nextCursor = payload.data.nextCursor ?? null;
+      picker.hidden = select.options.length === 0;
+      if (moreButton) moreButton.hidden = nextCursor === null;
+      if (assignSelected) assignSelected.disabled = select.options.length === 0;
+      say(select.options.length === 0 ? "empty" : null);
+    } catch {
+      say("error");
+    }
+  }
+
+  onAction(".js-inbox-load-assignees", async () => {
+    if (select instanceof HTMLSelectElement) select.replaceChildren();
+    await loadAssignees(null);
+  });
+  onAction(".js-inbox-more-assignees", () => loadAssignees(nextCursor));
+  onAction(".js-inbox-assign-selected", (button) =>
+    select instanceof HTMLSelectElement && select.value
+      ? assign(button, select.value)
+      : undefined
+  );
 </script>
