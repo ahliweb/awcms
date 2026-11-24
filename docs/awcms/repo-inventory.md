@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 292   |
+| Migrations                          | 295   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 927   |
+| Test files                          | 931   |
 | Route files                         | 699   |
 | ADR                                 | 346   |
 
@@ -357,6 +357,9 @@
 | 290 | `sql/416_awcms_channel_accounts_claim_on_verify.sql`                   |
 | 291 | `sql/418_awcms_realtime_wake_hint_notify.sql`                          |
 | 292 | `sql/420_awcms_catalog_boundary_audit_role.sql`                        |
+| 293 | `sql/426_awcms_social_dispatch_credential_report_function.sql`         |
+| 294 | `sql/427_awcms_social_dispatch_secret_view_and_value_bounds.sql`       |
+| 295 | `sql/428_awcms_social_dispatch_session_timeouts.sql`                   |
 
 ### Tables & Row-Level Security
 
@@ -645,9 +648,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 684        |
+| `(root)`      | 687        |
 | `e2e`         | 33         |
-| `integration` | 208        |
+| `integration` | 209        |
 | `unit`        | 2          |
 
 ### Routes
