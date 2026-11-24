@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:339d0a3cf6850b6dcbada7616b1223e4053990268930d08c27a8e85c74de620e -->
+<!-- i18n-source-hash: sha256:5a961d59048bef52414efd707d87919e531bed1c4fc70a0bf73178c906bbf0bb -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1116,7 +1116,12 @@ deployment.
   notifikasi mengikuti hasil O5.
 - **Penilaian dampak.** Fase 1 (tanpa bukti) adalah pemrosesan data kepegawaian
   rutin; fase 3 dan fitur bukti apa pun membutuhkan penilaian dampak terdokumentasi
-  sebelum implementasi.
+  sebelum implementasi. **Sebuah DRAF untuk fase 3 sudah ada:
+  [`dpia-hr-payroll-phase-3.id.md`](dpia-hr-payroll-phase-3.id.md) (Issue #976). Draf
+  itu belum disetujui atau ditandatangani**, sehingga persyaratan ini masih belum
+  terpenuhi; draf itu juga mencatat bahwa data keuangan pribadi kemungkinan data
+  pribadi spesifik, yang belum dinyatakan bagian ini (menunggu konfirmasi penasihat
+  hukum).
 
 ### 13.3 Pembacaan, salinan turunan, dan ekspor (PS-18, Issue #978)
 
