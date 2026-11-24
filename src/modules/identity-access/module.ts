@@ -1,4 +1,5 @@
 import { defineModule } from "../_shared/module-contract";
+import { PUBLIC_FORM_NAMES } from "../_shared/public-form-names";
 import { turnstileChallengeProvider } from "./infrastructure/turnstile-challenge-provider";
 
 export const identityAccessModule = defineModule({
@@ -13,6 +14,21 @@ export const identityAccessModule = defineModule({
   // public-form challenge seam. Off unless TURNSTILE_ENABLED=true on the
   // full-online profile.
   publicFormChallengeProviders: [turnstileChallengeProvider],
+  // The pre-session forms this module owns (Issue #1353). Names come from the
+  // dependency-free `_shared/public-form-names` (a descriptor must stay out of
+  // reach of the web-only Turnstile secret).
+  publicFormChallengeForms: [
+    { formName: PUBLIC_FORM_NAMES.login, routes: ["/api/v1/auth/login"] },
+    { formName: PUBLIC_FORM_NAMES.register, routes: ["/api/v1/auth/register"] },
+    {
+      formName: PUBLIC_FORM_NAMES.passwordReset,
+      routes: ["/api/v1/auth/password/forgot", "/api/v1/auth/password/reset"]
+    },
+    {
+      formName: PUBLIC_FORM_NAMES.invitationAccept,
+      routes: ["/api/v1/auth/invitations/[token]/accept"]
+    }
+  ],
   api: {
     openApiPath: "openapi/modules/identity-access.openapi.yaml",
     basePath: "/api/v1/auth",

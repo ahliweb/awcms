@@ -5,7 +5,7 @@ description: Konteks desain lintas-fitur untuk pengerasan auth online awcms (Tur
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:7b0ee3a335a87cb3781df0e03df460837bb7da5e199d6a1cab3683a23567b031 -->
+<!-- i18n-source-hash: sha256:82682b742eb9aab80c64723c5359342d317c3d1257bc2cfd6e16f410b667a4a4 -->
 
 # AWCMS — Full-Online Auth Security Hardening
 
@@ -205,11 +205,14 @@ isTurnstileRequired(env)
   sedangkan `TURNSTILE_ENABLED` didesain runtime-toggleable seperti flag
   lain; widget sendiri tetap runtime-gated lewat `isTurnstileRequired()`
   di `login.astro`.
-- **Widget UI** hanya di-render di `login.astro` (form publik lain —
-  forgot/reset/setup — belum punya halaman UI di repo ini, baru endpoint
-  API-nya) saat `isTurnstileRequired()` true; token dikirim sebagai field
-  opsional `turnstileToken` di body JSON, dibaca dari hidden field
-  `cf-turnstile-response` yang otomatis diisi widget.
+- **Widget UI** di-render oleh `src/components/PublicFormChallengeWidget.astro`
+  dari widget yang dideklarasikan provider challenge yang MENYALA (Issue #1353;
+  Turnstile saat ini, hanya bila `isTurnstileRequired()` true) di login,
+  register, forgot, reset, dan accept-invitation. Skrip halaman mengirim field
+  hasilnya lewat `readChallengeFields` (`challengeToken`, dibaca dari hidden
+  `cf-turnstile-response` yang diisi widget); server tetap MENERIMA
+  `turnstileToken` lama (kontrak terbit) tetapi tak ada halaman yang
+  mengirimnya.
 - Error code i18n: `error.turnstile_required`/`error.turnstile_invalid`
   (`src/lib/i18n/error-messages.ts`, `i18n/en.po`+`id.po`).
 

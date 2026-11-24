@@ -41,6 +41,7 @@
 import "./public-form-challenge-bindings";
 import { log } from "../logging/logger";
 import { fail } from "../../modules/_shared/api-response";
+import { challengeRoutePatternToRegExp } from "../../modules/_shared/extension-point-declarations";
 import { requireExtensionPointModules } from "../../modules/_shared/extension-point-source";
 import type {
   ModulePublicFormChallengeProvider,
@@ -49,20 +50,11 @@ import type {
 } from "../../modules/_shared/public-form-challenge-contract";
 import { resolveClientIp } from "./rate-limit";
 
-/**
- * Names of the platform's own pre-session forms. They double as the Turnstile
- * `action` labels (a token is bound to its form), so this table and
- * `turnstile.ts`'s `*_TURNSTILE_ACTION` constants must agree
- * (`tests/public-form-challenge.test.ts` pins it). A module's own form just
- * passes its own `snake_case` name; it need not appear here.
- */
-export const PUBLIC_FORM_NAMES = {
-  login: "login",
-  setup: "setup",
-  passwordReset: "password_reset",
-  register: "register",
-  invitationAccept: "invitation_accept"
-} as const;
+// The names live in a dependency-free module so a descriptor and a gate can use
+// them without reaching this file (and `turnstile.ts`'s web-only secret).
+import { PUBLIC_FORM_NAMES } from "../../modules/_shared/public-form-names";
+
+export { PUBLIC_FORM_NAMES };
 
 const DEFAULT_REQUIRED_CODE = "CHALLENGE_REQUIRED";
 const DEFAULT_INVALID_CODE = "CHALLENGE_INVALID";
@@ -451,11 +443,125 @@ export async function solvePublicFormChallengeForTests(
   return solver ? solver(formName, normaliseTenant(tenantId)) : null;
 }
 
-/** Path of each platform pre-session form's API route, to the form name; the harness uses it to pick the form for a request. */
-export const PUBLIC_FORM_ROUTE_FORMS: Readonly<Record<string, string>> = {
-  "/api/v1/auth/login": PUBLIC_FORM_NAMES.login,
-  "/api/v1/setup/initialize": PUBLIC_FORM_NAMES.setup,
-  "/api/v1/auth/register": PUBLIC_FORM_NAMES.register,
-  "/api/v1/auth/password/forgot": PUBLIC_FORM_NAMES.passwordReset,
-  "/api/v1/auth/password/reset": PUBLIC_FORM_NAMES.passwordReset
+/**
+ * The form a concrete API path belongs to, from the `publicFormChallengeForms`
+ * the modules declared (Issue #1353), or `undefined`. The integration harness
+ * uses it to pick the form for a request, so a module's new protected route needs
+ * a declaration in its own descriptor and no harness edit.
+ */
+export function resolvePublicFormForRoute(
+  pathname: string
+): string | undefined {
+  for (const module of requireExtensionPointModules(
+    "The public-form challenge route map"
+  )) {
+    for (const form of module.publicFormChallengeForms ?? []) {
+      if (
+        form.routes.some((route) =>
+          challengeRoutePatternToRegExp(route).test(pathname)
+        )
+      ) {
+        return form.formName;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+export type PublicFormChallengeWidgetSpec = {
+  providerKey: string;
+  /** External loader URL (never inline), or `undefined`. */
+  scriptSrc: string | undefined;
+  containerClass: string;
+  /** `data-*` attributes only; anything else the provider returned is dropped. */
+  attributes: Record<string, string>;
 };
+
+const WIDGET_ATTRIBUTE_NAME = /^data-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const WIDGET_ATTRIBUTE_MAX = 2_048;
+
+/**
+ * What a page renders for `formName`: the widget the ENABLED provider declared
+ * (Turnstile today), or `null` when no provider is on, the provider declares no
+ * widget, or it cannot be rendered. NEVER throws and never decides access: a
+ * page without a widget just cannot present a token, and the server still
+ * refuses it (`enforcePublicFormCaptcha` is the only gate). That is why every
+ * failure here is "render nothing" rather than an error page.
+ *
+ * Provider output is untrusted at this boundary: only `data-*` attribute names
+ * with string values of bounded length are kept, so a provider cannot inject an
+ * event handler (`onload`) or another element's attributes through the widget.
+ */
+export async function resolvePublicFormChallengeWidget(
+  formName: string,
+  tenantId: string | null = null,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<PublicFormChallengeWidgetSpec | null> {
+  try {
+    const active = resolveActivePublicFormChallengeProvider(env);
+
+    if (active.kind !== "one" || !active.provider.widget) {
+      return null;
+    }
+
+    const { provider } = active;
+    const widget = provider.widget as NonNullable<
+      ModulePublicFormChallengeProvider["widget"]
+    >;
+    const challenge = await withDeadline(
+      provider.issue(formName, normaliseTenant(tenantId)),
+      PUBLIC_FORM_CHALLENGE_TIMEOUT_MS
+    );
+    const raw = widget.attributes({ formName, challenge });
+
+    if (raw === null || typeof raw !== "object") {
+      return null;
+    }
+
+    const attributes: Record<string, string> = {};
+
+    for (const [name, value] of Object.entries(raw)) {
+      if (
+        WIDGET_ATTRIBUTE_NAME.test(name) &&
+        name !== "data-challenge-widget" &&
+        typeof value === "string" &&
+        value.length > 0 &&
+        value.length <= WIDGET_ATTRIBUTE_MAX
+      ) {
+        attributes[name] = value;
+      }
+    }
+
+    return {
+      providerKey: provider.key,
+      scriptSrc: widget.scriptSrc,
+      containerClass: widget.containerClass,
+      attributes
+    };
+  } catch {
+    log("warning", "public_form_challenge.widget_unavailable", { formName });
+    return null;
+  }
+}
+
+/**
+ * The CSP origins the enabled provider's widget needs (`script-src` and
+ * `frame-src`), or `[]`. Same fail-safe direction as the widget: any problem
+ * opens NOTHING (the policy only ever narrows on error), because an unopened
+ * origin merely stops a widget rendering, whereas a wrongly opened one widens
+ * the policy.
+ */
+export function resolvePublicFormChallengeCspOrigins(
+  env: NodeJS.ProcessEnv = process.env
+): readonly string[] {
+  try {
+    const active = resolveActivePublicFormChallengeProvider(env);
+
+    return active.kind === "one"
+      ? [...(active.provider.widget?.cspOrigins ?? [])]
+      : [];
+  } catch {
+    return [];
+  }
+}

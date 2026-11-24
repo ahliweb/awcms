@@ -13,10 +13,12 @@
  * instead, which is read as `challengeToken` here (the server also still accepts
  * the older `turnstileToken` field).
  *
- * No widget is rendered here: rendering is provider-specific (a script from the
- * provider's origin, or a self-hosted prompt), so it stays with the page that
- * enables that provider. With no widget on the page, `readChallengeFields`
- * returns `{}`, so the body is byte-for-byte what it was before the seam.
+ * No widget is rendered here. The widget is server-rendered by
+ * `src/components/PublicFormChallengeWidget.astro` from whatever the ENABLED
+ * provider declared in its descriptor (`widget`), so no page hard-codes a
+ * provider's markup or loader. With no widget on the page (no provider
+ * enabled), `readChallengeFields` returns `{}`, so the body is byte-for-byte
+ * what it was before the seam.
  */
 
 export const CHALLENGE_WIDGET_SELECTOR = "[data-challenge-widget]";

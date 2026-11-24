@@ -122,7 +122,18 @@ function moduleWith(
     status: "active",
     description: "fixture",
     dependencies: [],
-    publicFormChallengeProviders: providers
+    publicFormChallengeProviders: providers,
+    // The harness maps route to form from the declarations (Issue #1353).
+    publicFormChallengeForms: [
+      {
+        formName: "password_reset",
+        routes: ["/api/v1/auth/password/forgot"]
+      },
+      {
+        formName: "invitation_accept",
+        routes: ["/api/v1/auth/invitations/[token]/accept"]
+      }
+    ]
   } as unknown as ModuleDescriptor;
 }
 

@@ -31,18 +31,13 @@ import "../styles/tokens.css";
 import "../styles/motion.css";
 import "../styles/auth.css";
 import { isSelfRegistrationEnabled } from "../lib/auth/self-registration-config";
-import {
-  isTurnstileRequired,
-  resolveTurnstileSiteKey,
-  REGISTER_TURNSTILE_ACTION
-} from "../lib/security/turnstile";
+import PublicFormChallengeWidget from "../components/PublicFormChallengeWidget.astro";
+import { PUBLIC_FORM_NAMES } from "../lib/security/public-form-challenge";
 import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 import { resolveProductIdentity } from "../lib/product-identity";
 
 const enabled = isSelfRegistrationEnabled();
-const turnstileActive = enabled && isTurnstileRequired();
-const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
 
 // Only read the tenant registry when the feature is on — a disabled deployment
 // should not run a query to render a static notice.
@@ -174,13 +169,10 @@ const identity = resolveProductIdentity(process.env);
                   </p>
                 </div>
 
-                {turnstileActive && turnstileSiteKey && (
-                  <div
-                    class="cf-turnstile auth-turnstile"
-                    data-sitekey={turnstileSiteKey}
-                    data-action={REGISTER_TURNSTILE_ACTION}
-                  />
-                )}
+                <PublicFormChallengeWidget
+                  formName={PUBLIC_FORM_NAMES.register}
+                  class="auth-turnstile"
+                />
 
                 <button type="submit" id="register-submit" class="auth-submit">
                   Send request
@@ -207,20 +199,15 @@ const identity = resolveProductIdentity(process.env);
       </div>
     </main>
 
-    {turnstileActive && turnstileSiteKey && (
-      <script
-        is:inline
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        async
-        defer
-      />
-    )}
-
     <script>
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
       import { lockElement, onSubmit } from "../lib/ui/admin-form-client";
+      import {
+        focusChallengeOnRefusal,
+        readChallengeFields
+      } from "../lib/ui/public-form-challenge-client";
 
       const errorBox = document.getElementById("register-error");
       const noticeBox = document.getElementById("register-notice");
@@ -242,7 +229,7 @@ const identity = resolveProductIdentity(process.env);
         const loginIdentifier = String(
           formData.get("loginIdentifier") ?? ""
         ).trim();
-        const turnstileToken = formData.get("cf-turnstile-response");
+        const challengeFields = readChallengeFields(formData);
 
         const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
 
@@ -257,11 +244,13 @@ const identity = resolveProductIdentity(process.env);
             body: JSON.stringify({
               displayName,
               loginIdentifier,
-              ...(turnstileToken ? { turnstileToken } : {})
+              ...challengeFields
             })
           });
 
           const payload = await response.json().catch(() => null);
+
+          focusChallengeOnRefusal(form, payload);
 
           if (!response.ok || !payload || payload.success !== true) {
             // Caller-side problems only. Nothing here distinguishes "already

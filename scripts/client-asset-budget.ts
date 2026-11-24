@@ -1410,8 +1410,17 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 392,355 B, so this branch's own raise
  * (+670 B, written against 385,460 B) is stacked on it, giving
  * 393,025 B; the gate re-measures the combined bundle.
+ *
+ * **Raised again for Issue #1353 (challenge seam adoption)**: +325 B
+ * (393,025 -> 393,350), measured 393,118 B on a clean build. The login,
+ * register and accept-invitation scripts now import the SAME shared helper
+ * (`public-form-challenge-client.ts`, already one chunk) and call
+ * `readChallengeFields` / `focusChallengeOnRefusal`, replacing their hand-rolled
+ * `cf-turnstile-response` reads; the widget markup moved server-side
+ * (`PublicFormChallengeWidget.astro`), so it costs no client bytes. No
+ * per-page duplication of the helper. Margin 232 B.
  */
-export const APP_BUDGET_BYTES = 393_025;
+export const APP_BUDGET_BYTES = 393_350;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

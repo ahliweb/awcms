@@ -50,6 +50,40 @@ export type PublicFormChallengeRefusalText = {
   invalidMessage?: string;
 };
 
+/**
+ * The client widget a provider renders (Issue #1353). PURE DATA, no script:
+ * the page renders `containerClass` + `attributes` as a `<div>` and, when
+ * `scriptSrc` is set, loads that URL as an EXTERNAL script (never inline: the
+ * app's CSP forbids it). The platform CSP opens `cspOrigins` in
+ * `script-src`/`frame-src` ONLY while this provider is the enabled one.
+ */
+export type ModulePublicFormChallengeWidget = {
+  /** `https://` URL of the provider's loader, loaded as an external `<script async defer>`. Omit for a widget that needs no third-party script. */
+  scriptSrc?: string;
+  /** `https://` origins (no path) the widget's script and frame need in the CSP. Must include the origin of `scriptSrc`. */
+  cspOrigins?: readonly string[];
+  /** CSS classes of the widget container (the provider's own: Turnstile `cf-turnstile`). */
+  containerClass: string;
+  /**
+   * The `data-*` attributes of the container for this form, built from what
+   * `issue` returned (Turnstile: site key as `prompt`). Return `null` when the
+   * widget cannot be rendered (e.g. no site key); the server still refuses a
+   * request without a token, so nothing fails open.
+   */
+  attributes(input: {
+    formName: string;
+    challenge: PublicFormChallenge;
+  }): Record<string, string> | null;
+};
+
+/** A public form a module owns and the API routes that carry it. The integration harness maps route to form from this, so a new protected route needs no harness edit. */
+export type ModulePublicFormChallengeForm = {
+  /** The `snake_case` name passed to `enforcePublicFormCaptcha` (and the provider's `formName`). */
+  formName: string;
+  /** Exact API paths, Astro-style dynamic segments allowed (`/api/v1/auth/invitations/[token]/accept`). Each must be a real route file. */
+  routes: readonly string[];
+};
+
 export type ModulePublicFormChallengeProvider = {
   /** Globally unique `snake_case` key. Durable: a log field, never shown to a caller. */
   key: string;
@@ -77,6 +111,8 @@ export type ModulePublicFormChallengeProvider = {
   verify(
     input: PublicFormChallengeVerifyInput
   ): Promise<PublicFormChallengeVerifyResult>;
+  /** The widget a page renders for this provider. Omit for a provider whose challenge is not a client widget. */
+  widget?: ModulePublicFormChallengeWidget;
   /** Wire name of an older single-token field the provider's shipped clients still send (Turnstile: `turnstileToken`). Read only when `challengeToken` is absent. */
   legacyTokenField?: string;
   /** Per-provider refusal code/message, for a provider whose codes are an already-published contract (Turnstile: ADR-0029). Defaults: `CHALLENGE_REQUIRED` / `CHALLENGE_INVALID`. */

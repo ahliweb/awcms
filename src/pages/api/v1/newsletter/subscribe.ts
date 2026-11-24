@@ -11,6 +11,10 @@ import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
+import {
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../lib/security/public-form-challenge";
 import { ok, fail } from "../../../../modules/_shared/api-response";
 import { enqueueDirectAddressEmail } from "../../../../modules/email/application/direct-address-notification";
 import { newsletterPreflightResponse } from "../../../../modules/newsletter/application/public-newsletter-preflight";
@@ -167,6 +171,24 @@ export const POST: APIRoute = async ({
 
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  // Issue #1353: the human-presence challenge, when a provider is enabled (off
+  // by default). After the per-IP limiter, which stays the primary control, and
+  // before any database work. The tenant is resolved from the HOST further
+  // down, inside the transaction, so it is not known here: the form is bound by
+  // name only (`tenantId: null`), and the verifier's own binding (Turnstile:
+  // the deployment hostname) is what pins it. The refusal carries no CORS
+  // grant, like the 429 and 400 above.
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.newsletterSubscribe,
+    bodyRead.value,
+    { clientIp, tenantId: null }
+  );
+
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const validation = validateSubscriptionRequest(bodyRead.value);

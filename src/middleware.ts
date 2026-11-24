@@ -28,6 +28,7 @@ import {
 } from "./lib/security/idempotency-key-bound";
 import { requiresAuthenticatedCallerBeforeBody } from "./lib/security/api-body-auth-boundary";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
+import { resolvePublicFormChallengeCspOrigins } from "./lib/security/public-form-challenge";
 import { isTurnstileRequired } from "./lib/security/turnstile";
 import { isVideoEmbedEnabled } from "./lib/security/video-embed";
 import {
@@ -73,7 +74,10 @@ function applyResponseHeaders(
     // ADR-0110 — opens the one `youtube-nocookie.com` origin in `frame-src`
     // ONLY when an operator asked for video embeds; false (no extra origin) on
     // every deployment that has not.
-    videoEmbedEnabled: isVideoEmbedEnabled()
+    videoEmbedEnabled: isVideoEmbedEnabled(),
+    // Issue #1353 — the origins the enabled challenge provider's widget
+    // declared; none when no provider is on (and on any error).
+    challengeWidgetOrigins: resolvePublicFormChallengeCspOrigins()
   })) {
     response.headers.set(name, value);
   }

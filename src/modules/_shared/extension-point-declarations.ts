@@ -11,6 +11,7 @@
  * rendering an empty variable.
  */
 import type { ModuleDescriptor } from "./module-contract";
+import type { ModulePublicFormChallengeProvider } from "./public-form-challenge-contract";
 
 const EMAIL_CATEGORY_PATTERN = /^derived\.[a-z][a-z0-9_]*$/;
 const WHATSAPP_KEY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
@@ -292,6 +293,12 @@ export function validatePublicFormChallengeProviderDeclarations(
         }
       }
 
+      if (provider.widget !== undefined) {
+        issues.push(
+          ...validateChallengeWidget(module.key, label, provider.widget)
+        );
+      }
+
       for (const code of [
         provider.refusal?.requiredCode,
         provider.refusal?.invalidCode
@@ -307,4 +314,145 @@ export function validatePublicFormChallengeProviderDeclarations(
   }
 
   return issues;
+}
+
+const CHALLENGE_FORM_NAME_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
+// An API path: literal segments, or one Astro dynamic segment `[name]`.
+const CHALLENGE_ROUTE_PATTERN =
+  /^\/api\/(?:[A-Za-z0-9_.-]+|\[[A-Za-z0-9_]+\])(?:\/(?:[A-Za-z0-9_.-]+|\[[A-Za-z0-9_]+\]))*$/;
+const CHALLENGE_ORIGIN_PATTERN = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
+const CHALLENGE_CLASS_PATTERN =
+  /^[A-Za-z][A-Za-z0-9_-]*(?: [A-Za-z][A-Za-z0-9_-]*)*$/;
+
+function validateChallengeWidget(
+  moduleKey: string,
+  label: string,
+  widget: NonNullable<ModulePublicFormChallengeProvider["widget"]>
+): ExtensionPointIssue[] {
+  const issues: ExtensionPointIssue[] = [];
+  const add = (message: string) => issues.push({ moduleKey, message });
+
+  if (
+    typeof widget.containerClass !== "string" ||
+    !CHALLENGE_CLASS_PATTERN.test(widget.containerClass)
+  ) {
+    add(`${label} widget needs a plain containerClass (CSS class names only).`);
+  }
+
+  if (typeof widget.attributes !== "function") {
+    add(`${label} widget must implement attributes().`);
+  }
+
+  const origins = widget.cspOrigins ?? [];
+
+  for (const origin of origins) {
+    if (typeof origin !== "string" || !CHALLENGE_ORIGIN_PATTERN.test(origin)) {
+      add(
+        `${label} widget has an invalid CSP origin "${String(origin)}" (https origin, no path, no wildcard).`
+      );
+    }
+  }
+
+  if (widget.scriptSrc !== undefined) {
+    let parsed: URL | null = null;
+
+    try {
+      parsed = new URL(widget.scriptSrc);
+    } catch {
+      parsed = null;
+    }
+
+    if (
+      parsed === null ||
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.hash !== ""
+    ) {
+      add(
+        `${label} widget scriptSrc must be an https URL without credentials or fragment.`
+      );
+    } else if (!origins.includes(parsed.origin)) {
+      add(
+        `${label} widget scriptSrc origin ${parsed.origin} must be listed in cspOrigins, or the CSP blocks it.`
+      );
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * Public-form challenge FORM declarations (Issue #1353): `snake_case` names,
+ * each route an API path that is declared once across the composed registry
+ * (two modules claiming one route would make the harness and the gate
+ * ambiguous). Whether a route is a REAL file is checked by the gate
+ * (`extension-points:check`), which can see the file system. Pure.
+ */
+export function validatePublicFormChallengeFormDeclarations(
+  modules: readonly ModuleDescriptor[]
+): ExtensionPointIssue[] {
+  const issues: ExtensionPointIssue[] = [];
+  const routeOwners = new Map<string, string>();
+
+  for (const module of modules) {
+    for (const form of module.publicFormChallengeForms ?? []) {
+      const label = `challenge form "${form.formName}"`;
+
+      if (
+        typeof form.formName !== "string" ||
+        !CHALLENGE_FORM_NAME_PATTERN.test(form.formName)
+      ) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} must have a lower-case snake case name of at most 32 characters.`
+        });
+      }
+
+      if (!Array.isArray(form.routes) || form.routes.length === 0) {
+        issues.push({
+          moduleKey: module.key,
+          message: `${label} must list at least one route.`
+        });
+        continue;
+      }
+
+      for (const route of form.routes) {
+        if (typeof route !== "string" || !CHALLENGE_ROUTE_PATTERN.test(route)) {
+          issues.push({
+            moduleKey: module.key,
+            message: `${label} has an invalid route "${String(route)}" (an /api/... path; [param] segments allowed).`
+          });
+          continue;
+        }
+
+        const owner = routeOwners.get(route);
+
+        if (owner !== undefined) {
+          issues.push({
+            moduleKey: module.key,
+            message: `${label} route ${route} is also declared by ${owner}.`
+          });
+        } else {
+          routeOwners.set(route, `module "${module.key}" (${form.formName})`);
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
+/** Route patterns (`/a/[x]/b`) to a regex over a concrete path, for the harness and the gate. */
+export function challengeRoutePatternToRegExp(route: string): RegExp {
+  const source = route
+    .split("/")
+    .map((segment) =>
+      /^\[[A-Za-z0-9_]+\]$/.test(segment)
+        ? "[^/]+"
+        : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    )
+    .join("/");
+
+  return new RegExp(`^${source}$`);
 }

@@ -29,6 +29,7 @@ import { listModules } from "../src/modules";
 import {
   formatExtensionPointIssue,
   validateEmailCategoryDeclarations,
+  validatePublicFormChallengeFormDeclarations,
   validatePublicFormChallengeProviderDeclarations,
   validateWhatsappTemplateDeclarations
 } from "../src/modules/_shared/extension-point-declarations";
@@ -36,6 +37,7 @@ import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../src/modules/email/domain/email-template-categories";
 import { listWhatsappTemplates } from "../src/modules/whatsapp-delivery/domain/whatsapp-templates";
 import { installExtensionPointSource } from "../src/modules/_shared/extension-point-source";
+import { PUBLIC_FORM_NAMES } from "../src/modules/_shared/public-form-names";
 import { loadMigrations } from "./lib/migrations";
 import { stripComments } from "./lib/source-text";
 
@@ -171,6 +173,96 @@ export function findTestSolverRegistrations(
     )
     .map((file) => file.path)
     .sort();
+}
+
+/** `src/pages/api/v1/a/[x]/b.ts` or `.../b/index.ts` to the route `/api/v1/a/[x]/b`; `null` for a file that is not an API route. */
+export function apiRouteOfPageFile(file: string): string | null {
+  const match = /^src\/pages(\/api\/.+?)(?:\/index)?\.ts$/.exec(file);
+
+  return match ? (match[1] as string) : null;
+}
+
+/**
+ * Public-form challenge routes (Issue #1353), both directions, so a module's
+ * protected route needs a declaration in its OWN descriptor and nothing in a
+ * shared file:
+ *  - a declared route is a REAL route file (a stale or misspelt declaration
+ *    would make the harness solve a challenge for a route that is not there);
+ *  - a route file that calls `enforcePublicFormCaptcha` is declared (an
+ *    undeclared form gets no solved challenge in the harness, so its tests
+ *    fail only once a provider is switched on, far from the cause);
+ *  - that file names the declared form (a literal, or `PUBLIC_FORM_NAMES.key`
+ *    for a key whose value is the declared name), so route and form agree.
+ */
+export function findChallengeRouteProblems(
+  modules: readonly ModuleDescriptor[],
+  files: readonly { path: string; text: string }[],
+  publicFormNames: Readonly<Record<string, string>>
+): string[] {
+  const problems: string[] = [];
+  const declared: { route: string; formName: string; module: string }[] = [];
+
+  for (const module of modules) {
+    for (const form of module.publicFormChallengeForms ?? []) {
+      for (const route of form.routes) {
+        declared.push({
+          route,
+          formName: form.formName,
+          module: module.key
+        });
+      }
+    }
+  }
+
+  const routeFiles = new Map<string, { path: string; text: string }>();
+
+  for (const file of files) {
+    const route = apiRouteOfPageFile(file.path);
+
+    if (route !== null) {
+      routeFiles.set(route, file);
+    }
+  }
+
+  for (const entry of declared) {
+    if (!routeFiles.has(entry.route)) {
+      problems.push(
+        `module "${entry.module}" declares challenge form "${entry.formName}" on ${entry.route}, which is not an API route file under src/pages.`
+      );
+    }
+  }
+
+  for (const [route, file] of routeFiles) {
+    const code = stripComments(file.text);
+
+    if (!/\benforcePublicFormCaptcha\s*\(/.test(code)) {
+      continue;
+    }
+
+    const entry = declared.find((candidate) => candidate.route === route);
+
+    if (!entry) {
+      problems.push(
+        `${file.path} calls enforcePublicFormCaptcha but no module declares ${route} in publicFormChallengeForms. Declare the form and its routes in the owning module's descriptor (Issue #1353); without it the integration harness cannot supply a solved challenge.`
+      );
+      continue;
+    }
+
+    const keys = Object.entries(publicFormNames)
+      .filter(([, value]) => value === entry.formName)
+      .map(([key]) => key);
+    const names =
+      code.includes(`"${entry.formName}"`) ||
+      keys.some((key) => code.includes(`PUBLIC_FORM_NAMES.${key}`));
+
+    if (!names) {
+      problems.push(
+        `${file.path} calls enforcePublicFormCaptcha but never names its declared form "${entry.formName}" (module "${entry.module}"); the route and the declaration disagree.`
+      );
+    }
+  }
+
+  return problems;
 }
 
 /**
@@ -838,7 +930,8 @@ function main(): void {
       BASE_EMAIL_TEMPLATE_CATEGORIES
     ),
     ...validateWhatsappTemplateDeclarations(modules),
-    ...validatePublicFormChallengeProviderDeclarations(modules)
+    ...validatePublicFormChallengeProviderDeclarations(modules),
+    ...validatePublicFormChallengeFormDeclarations(modules)
   ]) {
     failures.push(formatExtensionPointIssue(issue));
   }
@@ -870,6 +963,14 @@ function main(): void {
     failures.push(
       `${file} imports enforceTurnstileIfRequired / verifyTurnstileToken from turnstile.ts. A public form calls enforcePublicFormCaptcha (src/lib/security/public-form-challenge.ts, Issue #1353); a direct import is a second path that skips the single-use burn, the deadline and the uniform refusal. A real exception goes in TURNSTILE_ENTRY_IMPORT_ALLOW_LIST with its reason.`
     );
+  }
+
+  for (const problem of findChallengeRouteProblems(
+    modules,
+    files,
+    PUBLIC_FORM_NAMES
+  )) {
+    failures.push(problem);
   }
 
   for (const file of findTestSolverRegistrations(files)) {

@@ -1,4 +1,5 @@
 import { defineModule } from "../_shared/module-contract";
+import { PUBLIC_FORM_NAMES } from "../_shared/public-form-names";
 
 export const tenantAdminModule = defineModule({
   key: "tenant_admin",
@@ -8,6 +9,10 @@ export const tenantAdminModule = defineModule({
   description:
     "Tenant root entity, office hierarchy, tenant settings, and the one-time setup wizard that bootstraps the first tenant, owner, office, role, and access assignment.",
   dependencies: [],
+  // Issue #1353: the one-time setup form sits behind the challenge seam.
+  publicFormChallengeForms: [
+    { formName: PUBLIC_FORM_NAMES.setup, routes: ["/api/v1/setup/initialize"] }
+  ],
   // ADR-0060: this module owns `awcms_offices`, the only real hierarchy the
   // base has, so it provides the `business_scope_hierarchy` adapter that
   // `identity_access` consumes (optionally) for scope resolution. A `provides`

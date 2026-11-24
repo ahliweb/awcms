@@ -1,4 +1,5 @@
 import { defineModule } from "../_shared/module-contract";
+import { PUBLIC_FORM_NAMES } from "../_shared/public-form-names";
 import {
   NEWSLETTER_ACTIVITY_CODE,
   NEWSLETTER_MODULE_KEY
@@ -45,6 +46,13 @@ export const newsletterModule = defineModule({
   status: "active",
   description:
     "Per-tenant newsletter subscriber list (Issue #598, ADR-0103, PRD §22/§30, FR-NWL-002/004/005). The `email` module could already SEND mail — templates, outbox, retry, circuit breaker, suppression — and there was no list a reader could join: no subscriber table, no endpoint anyone could POST to, no double opt-in, no unsubscribe, no admin screen. The legacy portal has all of it and is live, so migrating a second tenant without this would be a functional regression rather than a gap. Four lifecycle states, and the fourth is not the third: `pending` -> `active` with `unsubscribed` and `suppressed` as terminal branches, kept apart because re-subscribing is allowed from one and not the other — somebody who unsubscribed in March may sign up again in June, while an address suppressed for abuse must not be re-addable by whoever is abusing it. Double opt-in: `consent_at` is written when the confirmation link is FOLLOWED, never at submission, so the record says what happened. Both the confirmation and unsubscribe tokens are stored HASHED because both are bearer credentials, and the unsubscribe token is stable for the row's lifetime because it is printed in the footer of every message the subscriber will ever receive. The three public endpoints are anonymous, per-IP rate-limited, and answer the SAME neutral body for every outcome — a new address, an already-active one, a suppressed one, an unresolved tenant — because a distinguishing response turns a public endpoint into a way to ask whether a named person subscribes to a particular newsroom. Idempotency (FR-NWL-005) rests on the unique index over `(tenant_id, email_normalized)` and a single ON CONFLICT statement, not on a read-then-write two concurrent submissions could interleave with. Unsubscribing takes the token and nothing else — no session, no tenant header, no address (PRD §30) — and keeps the row, because 'this person asked to stop on this date' is what answers a later complaint; subject-rights erasure is the different request that removes it.",
+  // Issue #1353: the public subscribe route sits behind the challenge seam.
+  publicFormChallengeForms: [
+    {
+      formName: PUBLIC_FORM_NAMES.newsletterSubscribe,
+      routes: ["/api/v1/newsletter/subscribe"]
+    }
+  ],
   dependencies: [
     "tenant_admin",
     "identity_access",

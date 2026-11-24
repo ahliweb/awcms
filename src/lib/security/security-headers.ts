@@ -149,11 +149,20 @@ const BASE_CSP_DIRECTIVES = [
  * `script-src` at all stops the fall-through to `default-src`, and the
  * Astro-bundled admin/login clients still have to load from this origin.
  */
-function scriptSrcSources(turnstileEnabled: boolean): string {
+function scriptSrcSources(
+  turnstileEnabled: boolean,
+  challengeOrigins: readonly string[]
+): string {
   const sources = ["'self'", `'${THEME_INIT_SCRIPT_HASH}'`];
 
   if (turnstileEnabled) {
     sources.push(TURNSTILE_ORIGIN);
+  }
+
+  for (const origin of challengeOrigins) {
+    if (!sources.includes(origin)) {
+      sources.push(origin);
+    }
   }
 
   return sources.join(" ");
@@ -257,12 +266,19 @@ function connectSrcSources(
  */
 function frameSrcSources(
   turnstileEnabled: boolean,
-  videoEmbedEnabled: boolean
+  videoEmbedEnabled: boolean,
+  challengeOrigins: readonly string[]
 ): string | null {
   const sources: string[] = [];
 
   if (turnstileEnabled) {
     sources.push(TURNSTILE_ORIGIN);
+  }
+
+  for (const origin of challengeOrigins) {
+    if (!sources.includes(origin)) {
+      sources.push(origin);
+    }
   }
 
   if (videoEmbedEnabled) {
@@ -277,18 +293,25 @@ function buildContentSecurityPolicy(
   videoEmbedEnabled: boolean,
   mediaPublicBaseUrl: string,
   uploadAccountId: string,
-  uploadEndpointOverride: string
+  uploadEndpointOverride: string,
+  challengeOrigins: readonly string[]
 ): string {
   const directives: string[] = [...BASE_CSP_DIRECTIVES];
 
-  directives.push(`script-src ${scriptSrcSources(turnstileEnabled)}`);
+  directives.push(
+    `script-src ${scriptSrcSources(turnstileEnabled, challengeOrigins)}`
+  );
   directives.push(`img-src ${imgSrcSources(mediaPublicBaseUrl)}`);
   directives.push(`media-src ${mediaSrcSources(mediaPublicBaseUrl)}`);
   directives.push(
     `connect-src ${connectSrcSources(uploadAccountId, uploadEndpointOverride)}`
   );
 
-  const frameSrc = frameSrcSources(turnstileEnabled, videoEmbedEnabled);
+  const frameSrc = frameSrcSources(
+    turnstileEnabled,
+    videoEmbedEnabled,
+    challengeOrigins
+  );
 
   if (frameSrc !== null) {
     directives.push(`frame-src ${frameSrc}`);
@@ -349,7 +372,19 @@ export type SecurityHeaderOptions = {
    * an upload test pass or fail for a reason unrelated to what it tests.
    */
   mediaUploadEndpoint?: string;
+  /**
+   * Origins the ENABLED public-form challenge provider's widget needs in
+   * `script-src`/`frame-src` (Issue #1353; the middleware passes
+   * `resolvePublicFormChallengeCspOrigins()`). Defaults to none, so the policy
+   * is unchanged unless a provider is on. Only plain `https://host[:port]`
+   * origins are admitted (no path, no wildcard, no scheme-only source): anything
+   * else is dropped here even if a descriptor slipped past its gate, because a
+   * malformed entry would otherwise widen the policy.
+   */
+  challengeWidgetOrigins?: readonly string[];
 };
+
+const CHALLENGE_ORIGIN_SHAPE = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
 
 export function buildSecurityHeaders(
   options: SecurityHeaderOptions
@@ -362,7 +397,10 @@ export function buildSecurityHeaders(
         options.videoEmbedEnabled === true,
         options.mediaPublicBaseUrl ?? resolveNewsMediaR2Config().publicBaseUrl,
         options.mediaUploadAccountId ?? resolveNewsMediaR2Config().accountId,
-        options.mediaUploadEndpoint ?? ""
+        options.mediaUploadEndpoint ?? "",
+        (options.challengeWidgetOrigins ?? []).filter((origin) =>
+          CHALLENGE_ORIGIN_SHAPE.test(origin)
+        )
       )
     ],
     ["X-Content-Type-Options", "nosniff"],

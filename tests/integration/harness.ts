@@ -115,8 +115,7 @@ import { resetDatabaseCircuitBreakerForTests } from "../../src/lib/database/circ
 import { resetWorkClassGatesForTests } from "../../src/lib/database/work-class";
 import { resetRateLimitForTests } from "../../src/lib/security/rate-limit";
 import {
-  PUBLIC_FORM_NAMES,
-  PUBLIC_FORM_ROUTE_FORMS,
+  resolvePublicFormForRoute,
   solvePublicFormChallengeForTests
 } from "../../src/lib/security/public-form-challenge";
 import { installExtensionPointSource } from "../../src/modules/_shared/extension-point-source";
@@ -843,7 +842,7 @@ export type InvokeOptions = {
   /**
    * Public-form challenge (Issue #1353). By default `invoke` adds a SOLVED
    * challenge to the JSON body of a platform pre-session form when a challenge
-   * provider is on and offers `solveForTests`, so a suite needs no per-route
+   * provider is on and has a registered test solver, so a suite needs no per-route
    * edit. `false` opts out (to test the refusal); fields already in `body` are
    * never overwritten. A no-op when no provider is on (the default).
    */
@@ -856,8 +855,6 @@ export type InvokeResult<T = unknown> = {
   response: Response;
 };
 
-const INVITATION_ACCEPT_PATH = /^\/api\/v1\/auth\/invitations\/[^/]+\/accept$/;
-
 async function withSolvedChallenge(
   options: InvokeOptions,
   method: string,
@@ -865,9 +862,9 @@ async function withSolvedChallenge(
 ): Promise<unknown> {
   const body = options.body;
   const pathname = path.split("?")[0] ?? path;
-  const formName = INVITATION_ACCEPT_PATH.test(pathname)
-    ? PUBLIC_FORM_NAMES.invitationAccept
-    : PUBLIC_FORM_ROUTE_FORMS[pathname];
+  // The route-to-form map is what the owning modules DECLARED
+  // (`publicFormChallengeForms`, Issue #1353), not a table in this file.
+  const formName = resolvePublicFormForRoute(pathname);
 
   if (
     options.challenge === false ||

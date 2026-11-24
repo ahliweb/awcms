@@ -1,0 +1,43 @@
+---
+/**
+ * Renders the challenge widget the ENABLED public-form challenge provider
+ * declared (Issue #1353), so a page that sits behind the seam does not hard-code
+ * any provider's markup. Renders nothing when no provider is on (the default),
+ * the provider declares no widget, or it cannot be rendered; the server still
+ * refuses a request with no token (`enforcePublicFormCaptcha`), so a missing
+ * widget never fails open.
+ *
+ * CSP-safe: no inline script body. The provider's loader is an EXTERNAL
+ * `<script src>` whose origin the middleware opened in `script-src`/`frame-src`
+ * for the enabled provider only. The container carries `data-challenge-widget`,
+ * which `focusChallengeOnRefusal` (`lib/ui/public-form-challenge-client.ts`)
+ * hands focus back to; the page's own script reads the solved fields with
+ * `readChallengeFields` and spreads them into its JSON body.
+ *
+ * `formName` is the name the form's API route passes to
+ * `enforcePublicFormCaptcha` (use `PUBLIC_FORM_NAMES`). `class` adds the page's
+ * own layout class to the container.
+ */
+import { resolvePublicFormChallengeWidget } from "../lib/security/public-form-challenge";
+
+interface Props {
+  formName: string;
+  tenantId?: string | null;
+  class?: string;
+}
+
+const { formName, tenantId = null, class: pageClass = "" } = Astro.props;
+const widget = await resolvePublicFormChallengeWidget(formName, tenantId);
+const className = [widget?.containerClass, pageClass]
+  .filter((name) => name)
+  .join(" ");
+---
+
+{widget && (
+  <>
+    <div class={className} data-challenge-widget {...widget.attributes} />
+    {widget.scriptSrc && (
+      <script is:inline src={widget.scriptSrc} async defer />
+    )}
+  </>
+)}

@@ -208,11 +208,13 @@ isTurnstileRequired(env)
   whereas `TURNSTILE_ENABLED` is designed to be runtime-toggleable like every
   other flag; the widget itself is still runtime-gated through `isTurnstileRequired()`
   in `login.astro`.
-- **The widget UI** is only rendered in `login.astro` (the other public forms —
-  forgot/reset/setup — do not have UI pages in this repo yet, only their
-  API endpoints) when `isTurnstileRequired()` is true; the token is sent as the
-  optional `turnstileToken` field in the JSON body, read from the hidden
-  `cf-turnstile-response` field the widget fills in automatically.
+- **The widget UI** is rendered by `src/components/PublicFormChallengeWidget.astro`
+  from the widget the ENABLED challenge provider declared (Issue #1353; Turnstile
+  today, only when `isTurnstileRequired()` is true) on login, register, forgot,
+  reset and accept-invitation. The page script sends the solved fields with
+  `readChallengeFields` (`challengeToken`, read from the hidden
+  `cf-turnstile-response` the widget fills in); the server still ACCEPTS the
+  legacy `turnstileToken` (published contract) but no page sends it.
 - i18n error codes: `error.turnstile_required`/`error.turnstile_invalid`
   (`src/lib/i18n/error-messages.ts`, `i18n/en.po`+`id.po`).
 

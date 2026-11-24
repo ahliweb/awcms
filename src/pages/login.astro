@@ -36,15 +36,17 @@
  * accepted product decision for this base repo's small multi-tenant dev
  * setups; the query is capped and read-only.
  *
- * ## Cloudflare Turnstile (Issue #186)
- * The widget and its loader render ONLY when `isTurnstileRequired()` (the
- * full-online deployment-profile gate AND `TURNSTILE_ENABLED=true`). Every
- * local/offline/LAN deployment (the default) renders no `cf-turnstile` div and
- * no `challenges.cloudflare.com` script. When required, the middleware CSP
- * opens `script-src`/`frame-src` for that one Cloudflare origin
+ * ## Challenge widget (Issues #186, #1353)
+ * `PublicFormChallengeWidget` renders whatever widget the ENABLED public-form
+ * challenge provider declared (Cloudflare Turnstile today: the full-online
+ * deployment-profile gate AND `TURNSTILE_ENABLED=true`). Every
+ * local/offline/LAN deployment (the default) renders no widget and no
+ * third-party script. When a provider is on, the middleware CSP opens
+ * `script-src`/`frame-src` for the origins that provider declared
  * (`src/lib/security/security-headers.ts`) and the external loader is an
- * explicit `is:inline` `<script src>`. `TURNSTILE_SITE_KEY` is public;
+ * `is:inline` `<script src>`. `TURNSTILE_SITE_KEY` is public;
  * `TURNSTILE_SECRET_KEY` is server-side only and never reaches this page.
+ * The page script reads the solved fields with `readChallengeFields`.
  *
  * ## CSP (strict, single-owner)
  * `default-src 'self'` with NO `'unsafe-inline'`. Everything on this page obeys
@@ -58,11 +60,8 @@
 import "../styles/tokens.css";
 import "../styles/motion.css";
 import "../styles/auth.css";
-import {
-  isTurnstileRequired,
-  resolveTurnstileSiteKey,
-  LOGIN_TURNSTILE_ACTION
-} from "../lib/security/turnstile";
+import PublicFormChallengeWidget from "../components/PublicFormChallengeWidget.astro";
+import { PUBLIC_FORM_NAMES } from "../lib/security/public-form-challenge";
 import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 import { resolveProductIdentity } from "../lib/product-identity";
@@ -72,9 +71,6 @@ import {
   resolveChallengeTtlSec,
   resolveMfaMaxVerifyAttempts
 } from "../lib/auth/mfa-config";
-
-const turnstileActive = isTurnstileRequired();
-const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
 
 // --- Auto tenant picker (read-only SSR read of the root tenant registry) ---
 // Shared with `/forgot-password` — the cap, the status filter, and the
@@ -256,13 +252,10 @@ const identity = resolveProductIdentity(process.env);
               </div>
             </div>
 
-            {turnstileActive && turnstileSiteKey && (
-              <div
-                class="cf-turnstile auth-turnstile"
-                data-sitekey={turnstileSiteKey}
-                data-action={LOGIN_TURNSTILE_ACTION}
-              />
-            )}
+            <PublicFormChallengeWidget
+              formName={PUBLIC_FORM_NAMES.login}
+              class="auth-turnstile"
+            />
 
             <button type="submit" id="login-submit" class="auth-submit">
               {tx("login", "Sign in")}
@@ -383,15 +376,6 @@ const identity = resolveProductIdentity(process.env);
       </div>
     </main>
 
-    {turnstileActive && turnstileSiteKey && (
-      <script
-        is:inline
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        async
-        defer
-      />
-    )}
-
     <script>
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
@@ -413,6 +397,11 @@ const identity = resolveProductIdentity(process.env);
         lockElement,
         onSubmit
       } from "../lib/ui/admin-form-client";
+
+      import {
+        focusChallengeOnRefusal,
+        readChallengeFields
+      } from "../lib/ui/public-form-challenge-client";
 
       const errorBox = document.getElementById("login-error");
       // Server-translated messages (ADR-0095), rendered as data-msg-* on the
@@ -667,7 +656,7 @@ const identity = resolveProductIdentity(process.env);
       // click, double tap or Enter — while this handler is pending is ignored,
       // and it is released on ANY settled outcome, so a refused or expired
       // Turnstile challenge still lets the person retry.
-      onSubmit("login-form", async ({ data: formData, submit }) => {
+      onSubmit("login-form", async ({ form, data: formData, submit }) => {
         const unlock = submit
           ? lockElement(submit, messages.msgBusy ?? "")
           : () => {};
@@ -679,11 +668,12 @@ const identity = resolveProductIdentity(process.env);
           formData.get("loginIdentifier") ?? ""
         ).trim();
         const password = String(formData.get("password") ?? "");
-        // Cloudflare Turnstile (Issue #186) auto-injects a hidden
-        // `cf-turnstile-response` field into this form once solved — absent
-        // entirely when the widget is not rendered (Turnstile not required for
-        // this deployment), matching the server's own optional field.
-        const turnstileToken = formData.get("cf-turnstile-response");
+        // The challenge widget the enabled provider declared (Turnstile today,
+        // rendered by `PublicFormChallengeWidget`) writes its response into this
+        // form once solved. `readChallengeFields` returns `{}` when no widget
+        // is on the page (no provider enabled), so the body is then unchanged
+        // (Issue #1353).
+        const challengeFields = readChallengeFields(formData);
 
         try {
           const response = await fetch("/api/v1/auth/login", {
@@ -696,11 +686,13 @@ const identity = resolveProductIdentity(process.env);
             body: JSON.stringify({
               loginIdentifier,
               password,
-              ...(turnstileToken ? { turnstileToken } : {})
+              ...challengeFields
             })
           });
 
           const payload = await response.json().catch(() => null);
+
+          focusChallengeOnRefusal(form, payload);
 
           const outcome = readLoginOutcome(response.ok, payload);
 

@@ -12,6 +12,10 @@ import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
+import {
+  enforcePublicFormCaptcha,
+  PUBLIC_FORM_NAMES
+} from "../../../../lib/security/public-form-challenge";
 import { fail, ok } from "../../../../modules/_shared/api-response";
 import {
   computeRequestHash,
@@ -139,6 +143,20 @@ export const POST: APIRoute = async ({
   const body = bodyRead.value;
   if (!isRecord(body)) {
     return fail(400, "VALIDATION_ERROR", "Body must be a JSON object.");
+  }
+
+  // Issue #1353: the human-presence challenge, when a provider is enabled (off
+  // by default). After the per-IP limiter (still the primary control) and before
+  // any database work; the tenant is resolved from the HOST inside the
+  // transaction below, so the form is bound by name only (`tenantId: null`).
+  const challengeRefusal = await enforcePublicFormCaptcha(
+    request,
+    PUBLIC_FORM_NAMES.commentSubmit,
+    body,
+    { clientIp, tenantId: null }
+  );
+  if (challengeRefusal) {
+    return challengeRefusal;
   }
 
   const sql = getDatabaseClient();

@@ -312,10 +312,7 @@ export const PROVIDER_REGISTER: readonly ProviderEntry[] = [
     files: [
       "src/lib/security/security-headers.ts",
       "src/lib/security/turnstile.ts",
-      "src/pages/forgot-password.astro",
-      "src/pages/reset-password.astro",
-      "src/pages/login.astro",
-      "src/pages/register.astro"
+      "src/modules/identity-access/infrastructure/turnstile-challenge-provider.ts"
     ],
     recordedOn: "2026-11-14",
     lastReview: null,

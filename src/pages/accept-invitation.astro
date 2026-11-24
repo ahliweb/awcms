@@ -46,6 +46,8 @@ import { openUrlParams } from "../lib/security/secure-url-params";
 import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
 import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 import { resolveProductIdentity } from "../lib/product-identity";
+import PublicFormChallengeWidget from "../components/PublicFormChallengeWidget.astro";
+import { PUBLIC_FORM_NAMES } from "../lib/security/public-form-challenge";
 
 const sealed = Astro.url.searchParams.get("p")?.trim() ?? "";
 let token = "";
@@ -194,6 +196,13 @@ const identity = resolveProductIdentity(process.env);
                   />
                 </div>
 
+                {/* Issue #1353: the accept API sits behind the challenge seam; this page never rendered the widget, so with a provider on an invitation could not be accepted from it. */}
+                <PublicFormChallengeWidget
+                  formName={PUBLIC_FORM_NAMES.invitationAccept}
+                  tenantId={tenantId || null}
+                  class="auth-turnstile"
+                />
+
                 <button
                   type="submit"
                   id="invitation-submit"
@@ -234,6 +243,10 @@ const identity = resolveProductIdentity(process.env);
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
       import { lockElement, onSubmit } from "../lib/ui/admin-form-client";
       import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
+      import {
+        focusChallengeOnRefusal,
+        readChallengeFields
+      } from "../lib/ui/public-form-challenge-client";
 
       const errorBox = document.getElementById("invitation-error");
       const noticeBox = document.getElementById("invitation-notice");
@@ -354,13 +367,17 @@ const identity = resolveProductIdentity(process.env);
                 "X-AWCMS-Tenant-ID": tenantId
               },
               credentials: "same-origin",
-              body: JSON.stringify(
-                displayName ? { password, displayName } : { password }
-              )
+              body: JSON.stringify({
+                password,
+                ...(displayName ? { displayName } : {}),
+                ...readChallengeFields(formData)
+              })
             }
           );
 
           const payload = await response.json().catch(() => null);
+
+          focusChallengeOnRefusal(form, payload);
 
           if (!response.ok || !payload || payload.success !== true) {
             // One generic message: the server refuses to say WHY an invitation

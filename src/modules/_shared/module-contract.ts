@@ -5,7 +5,10 @@
  */
 
 import type { ModuleDomainEventConsumer } from "./domain-event-consumer-contract";
-import type { ModulePublicFormChallengeProvider } from "./public-form-challenge-contract";
+import type {
+  ModulePublicFormChallengeForm,
+  ModulePublicFormChallengeProvider
+} from "./public-form-challenge-contract";
 
 /** Descriptive category only — not itself an authorization or enable/disable mechanism. */
 export type ModuleType = "base" | "system" | "domain" | "integration";
@@ -427,6 +430,14 @@ export type ModuleDescriptor = {
    * `identity-access`). See `ModulePublicFormChallengeProvider`.
    */
   publicFormChallengeProviders?: ModulePublicFormChallengeProvider[];
+  /**
+   * Public pre-session forms this module OWNS and the API routes that carry
+   * them (Issue #1353). Declaring a form here is what lets the integration
+   * harness supply a solved challenge for its routes with no harness edit, and
+   * `extension-points:check` fails a route that calls `enforcePublicFormCaptcha`
+   * without being declared. See `ModulePublicFormChallengeForm`.
+   */
+  publicFormChallengeForms?: ModulePublicFormChallengeForm[];
   /**
    * High-volume table lifecycle descriptors this module owns (ported from
    * awcms-micro Issue #745, ADR-0037) — see `HighVolumeTableDescriptor`'s own
@@ -1480,6 +1491,14 @@ export type SubjectDataDescriptor = {
  * quantity (the first user is `booking`: unit-nights and seconds booked) through
  * the same `cursor_table` engine instead of a second one.
  *
+ * `4.9.0` (Issue #1353) — added the optional
+ * `ModuleDescriptor.publicFormChallengeForms` field
+ * (`ModulePublicFormChallengeForm`) and the optional
+ * `ModulePublicFormChallengeProvider.widget` (`ModulePublicFormChallengeWidget`).
+ * MINOR: purely additive, no existing descriptor changes meaning. A module
+ * declares the routes of its public forms (the harness no longer keeps a shared
+ * route-to-form table) and a provider declares the client widget a page renders.
+ *
  * `4.8.0` (Issue #1353) — added the optional
  * `ModuleDescriptor.publicFormChallengeProviders` field plus the
  * `ModulePublicFormChallengeProvider` family
@@ -1507,7 +1526,7 @@ export type SubjectDataDescriptor = {
  * join (the registry gate requires `retain_under_obligation`); the first users
  * are `awcms_hr_employment_terms` and `awcms_hr_shift_assignments`.
  */
-export const MODULE_CONTRACT_VERSION = "4.8.0";
+export const MODULE_CONTRACT_VERSION = "4.9.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;
