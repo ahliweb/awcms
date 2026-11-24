@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-capacity-runbook.md)
 
-<!-- i18n-source-hash: sha256:a41400d885b89e9064517f26fc8964988d09e712b8ee04f43fc0149832a98e7a -->
+<!-- i18n-source-hash: sha256:03c14a9d7311f3ebdb61f0083a145bbb169e38505b183bf0ba4d4553cfa9e7a6 -->
 
 # Runbook Kapasitas Database — Anggaran Pool/Work-Class Sadar-Deployment
 
@@ -362,5 +362,38 @@ menyaksikannya terjadi.
 > — datanya basi, dan begitu pula peringatan yang mestinya menghentikanmu
 > memercayai data itu. Angka kapasitas apa pun yang diambil dari berkas itu
 > sebelum tanggal ini wajib diturunkan ulang.
+
+## Apa yang membatasi tampilan halaman publik tanpa cache (Issue #1454, ukuran LOKAL)
+
+Diukur di satu workstation bersama (aplikasi dipaku ke 2 CPU, PostgreSQL di
+container dengan `fsync=off`, tanpa CDN, `EDGE_CACHE_MODE=off`, satu run per
+titik), jadi baca bentuknya, bukan angka mutlaknya.
+
+- **URL tanpa awalan locale memakan dua permintaan**: 307 locale (satu pencarian
+  tenant) dan halaman berawalan. CPU aplikasi per tampilan sekitar 1,4-1,6 ms
+  untuk halaman dan 0,3-0,5 ms untuk 307. `bun` menjalankan loop permintaan di
+  satu thread, jadi "35-46% dari kuota 2 CPU" berarti satu thread hampir jenuh,
+  bukan kapasitas menganggur.
+- **Menaikkan gerbang `interactive` bukan perbaikannya.** Dengan beban yang sama,
+  gerbang 8 memberi 34-38% 5xx pada 800-900 tampilan/dtk; gerbang 64 memberi 0%
+  5xx tetapi p50 1 dtk pada 800 dan 3,3 dtk pada 900 tampilan/dtk. Gerbang
+  mengubah kelebihan beban menjadi 503 cepat; gerbang lebih besar mengubahnya
+  menjadi antrean. Ukuran pool tidak diubah.
+- **Yang menjadikan pool sebagai langit-langit pada tenant realistis** adalah
+  agregat kandidat tautan tag (join + GROUP BY atas setiap penugasan
+  pos/tag) yang berjalan di setiap tampilan: dengan 5.000 pos, 800 tag dan
+  15.000 penugasan ia butuh sekitar 10 ms eksekusi plus 3 ms perencanaan, dan
+  median tahanan slot naik dari 0,8 ms ke 8 ms. Kini ia di-cache per tenant
+  (`BLOG_TAG_LINK_CANDIDATE_CACHE_TTL_SECONDS`, bawaan 60 dtk) dan dilewati
+  untuk tenant/pos yang menolak. Pada tenant itu, satu tampilan pada 100
+  tampilan/dtk turun dari p50 13,5 ms ke 4,4 ms; 300 tampilan/dtk dari 2,1% 5xx
+  (p50 27,8 ms) ke 0% (p50 3,3 ms); 450 tampilan/dtk dari 36% ke 11% 5xx.
+- **Tampilan publik yang ditolak kini `503` + `Retry-After`**, bukan `500`, pada
+  rute blog dan `/search`.
+- **Masih terbuka**: CPU per tampilan (pencocokan rute, lompatan 307, dua
+  transaksi per tampilan) dan menjalankan lebih dari satu proses per node. 2.000
+  rps per node 2 vCPU milik ADR-0161 tak tercapai tanpa cache dengan satu thread;
+  ia butuh edge cache atau proses kedua, yang merupakan keputusan arsitektur dan
+  tidak diambil di sini.
 
 </content>

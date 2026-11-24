@@ -10,7 +10,8 @@ import { coerceLocale } from "../../../../lib/i18n/negotiate";
 import { buildLocalisedPublicUrls } from "../../../../lib/i18n/public-locale-path";
 import {
   notFoundHtmlResponse,
-  serverErrorHtmlResponse
+  serverErrorHtmlResponse,
+  readDatabaseBusyRetryAfter
 } from "../../../../lib/html/error-responses";
 import { log } from "../../../../lib/logging/logger";
 import { parsePageParam } from "../../../../modules/_shared/offset-pagination";
@@ -134,11 +135,15 @@ ${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
       });
     });
   } catch (error) {
-    log("error", "public_blog.category.failed", {
-      tenantCode,
-      slug,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return serverErrorHtmlResponse();
+    log(
+      readDatabaseBusyRetryAfter(error) === null ? "error" : "warning",
+      "public_blog.category.failed",
+      {
+        tenantCode,
+        slug,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    );
+    return serverErrorHtmlResponse(error);
   }
 };

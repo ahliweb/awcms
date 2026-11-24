@@ -23,6 +23,7 @@ import {
 } from "../domain/internal-tag-linking";
 import { countTags, listTagLinkCandidates } from "./blog-taxonomy-directory";
 import { fetchInternalTagLinkingSettings } from "./internal-tag-link-settings-directory";
+import { getCachedTagLinkCandidates } from "./tag-link-candidate-cache";
 
 export type InternalTagLinkingDisabledReason =
   "deployment_disabled" | "tenant_disabled" | "post_disabled";
@@ -166,23 +167,48 @@ export async function renderContentHtmlWithInternalTagLinks(
   basePath: string,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<string> {
-  const context = await resolveInternalTagLinkingContext(
-    tx,
-    tenantId,
-    basePath,
-    postAutoInternalTagLinksDisabled,
-    env
-  );
+  // Issue #1454 — the public render path does NOT go through
+  // `resolveInternalTagLinkingContext`: that function always ranks the tag
+  // vocabulary (a join + GROUP BY over every assignment) and counts it, which
+  // the preview endpoint needs and a public view does not. Here the policy is
+  // decided FIRST, from one cheap settings read, so a disabled tenant/post/
+  // deployment pays no tag query at all; and the vocabulary, when needed, comes
+  // from a per-tenant bounded cache with no count query.
+  const deploymentConfig = resolveBlogAutoInternalTagLinksConfig(env);
 
-  if (!context.enabled) {
+  if (!deploymentConfig.enabled || postAutoInternalTagLinksDisabled) {
     return html;
   }
 
-  const result = await applyInternalTagLinksToHtml(
-    html,
-    context.candidates,
-    context.policy
+  const tenantSettings = await fetchInternalTagLinkingSettings(tx, tenantId);
+
+  if (!tenantSettings.enabled) {
+    return html;
+  }
+
+  const tags = await getCachedTagLinkCandidates(tenantId, () =>
+    listTagLinkCandidates(tx, tenantId, MAX_INTERNAL_TAG_LINK_CANDIDATES)
   );
+  const disabledTagIdSet = new Set(tenantSettings.disabledTagIds);
+  const candidates: InternalTagLinkCandidate[] = tags
+    .filter((term) => !disabledTagIdSet.has(term.id))
+    .map((term) => ({
+      tagId: term.id,
+      name: term.name,
+      url: buildTagArchiveUrl(basePath, term.slug)
+    }));
+
+  const policy: InternalTagLinkingPolicy = {
+    enabled: true,
+    maxPerPost: deploymentConfig.maxPerPost,
+    maxPerTag: deploymentConfig.maxPerTag,
+    minTermLength: deploymentConfig.minTermLength,
+    linkFirstOccurrenceOnly: deploymentConfig.linkFirstOccurrenceOnly,
+    excludeHeadings: deploymentConfig.excludeHeadings,
+    caseInsensitive: tenantSettings.caseInsensitive
+  };
+
+  const result = await applyInternalTagLinksToHtml(html, candidates, policy);
 
   return result.html;
 }

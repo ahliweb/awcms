@@ -25,8 +25,58 @@ export function notFoundHtmlResponse(): Response {
   );
 }
 
-/** Never pass the caught error's own message through — only ever this fixed, generic string. */
-export function serverErrorHtmlResponse(): Response {
+/**
+ * Issue #1454 — a database-gate refusal (`DatabaseBusyError`: circuit breaker
+ * open, or the work class's bounded queue full) is load shedding, not a bug.
+ * It used to surface on the public routes as a generic 500, which tells a CDN
+ * and a crawler "broken" instead of "retry shortly". Detected structurally
+ * (`code === "DATABASE_BUSY"`) so this module does not import the database
+ * layer.
+ */
+export function readDatabaseBusyRetryAfter(error: unknown): number | null {
+  if (
+    error instanceof Error &&
+    (error as { code?: unknown }).code === "DATABASE_BUSY"
+  ) {
+    const raw = Number(
+      (error as { retryAfterSeconds?: unknown }).retryAfterSeconds
+    );
+
+    return Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 300) : 1;
+  }
+
+  return null;
+}
+
+function busyHeaders(contentType: string, retryAfter: number): HeadersInit {
+  return {
+    "content-type": contentType,
+    "retry-after": String(retryAfter),
+    "cache-control": "no-store"
+  };
+}
+
+/**
+ * Never pass the caught error's own message through — only ever this fixed,
+ * generic string. Pass the caught `error` so a database refusal answers
+ * `503` + `Retry-After` instead of `500`.
+ */
+export function serverErrorHtmlResponse(error?: unknown): Response {
+  const retryAfter = readDatabaseBusyRetryAfter(error);
+
+  if (retryAfter !== null) {
+    return new Response(
+      errorPage(
+        "Temporarily Unavailable",
+        "The service is busy. Please try again shortly."
+      ),
+      {
+        status: 503,
+        headers: busyHeaders("text/html; charset=utf-8", retryAfter)
+      }
+    );
+  }
+
   return new Response(
     errorPage(
       "Something Went Wrong",
@@ -49,7 +99,19 @@ export function notFoundXmlResponse(): Response {
   );
 }
 
-export function serverErrorXmlResponse(): Response {
+export function serverErrorXmlResponse(error?: unknown): Response {
+  const retryAfter = readDatabaseBusyRetryAfter(error);
+
+  if (retryAfter !== null) {
+    return new Response(
+      '<?xml version="1.0" encoding="UTF-8"?><error>Service Unavailable</error>',
+      {
+        status: 503,
+        headers: busyHeaders("application/xml; charset=utf-8", retryAfter)
+      }
+    );
+  }
+
   return new Response(
     '<?xml version="1.0" encoding="UTF-8"?><error>Internal Server Error</error>',
     {

@@ -3,7 +3,8 @@ import type { APIRoute } from "astro";
 import { getDatabaseClient } from "../lib/database/client";
 import {
   notFoundHtmlResponse,
-  serverErrorHtmlResponse
+  serverErrorHtmlResponse,
+  readDatabaseBusyRetryAfter
 } from "../lib/html/error-responses";
 import { log } from "../lib/logging/logger";
 import { withSiteSearchTenant } from "../modules/site-search/application/public-search-tenant-resolution";
@@ -94,9 +95,13 @@ export const GET: APIRoute = async ({ request, url }) => {
 
     return result ?? notFoundHtmlResponse();
   } catch (error) {
-    log("error", "public_site_search.page_failed", {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return serverErrorHtmlResponse();
+    log(
+      readDatabaseBusyRetryAfter(error) === null ? "error" : "warning",
+      "public_site_search.page_failed",
+      {
+        error: error instanceof Error ? error.message : String(error)
+      }
+    );
+    return serverErrorHtmlResponse(error);
   }
 };

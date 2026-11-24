@@ -4,6 +4,7 @@ import type {
   UpdateBlogTermInput
 } from "../domain/blog-term-validation";
 import { boundedPageSize } from "../../_shared/offset-pagination";
+import { invalidateTagLinkCandidates } from "./tag-link-candidate-cache";
 import {
   keysetCursorCreatedAtSql,
   encodeKeysetCursor,
@@ -79,6 +80,8 @@ export async function createBlogTerm(
     RETURNING id, tenant_id, taxonomy_type, parent_id, name, slug, description,
       created_at, updated_at, deleted_at, deleted_by, delete_reason
   `) as BlogTermRow[];
+
+  invalidateTagLinkCandidates(tenantId);
 
   return toView(rows[0]!);
 }
@@ -316,6 +319,8 @@ export async function updateBlogTerm(
       created_at, updated_at, deleted_at, deleted_by, delete_reason
   `) as BlogTermRow[];
 
+  invalidateTagLinkCandidates(tenantId);
+
   return rows[0] ? toView(rows[0]) : null;
 }
 
@@ -333,6 +338,8 @@ export async function softDeleteBlogTerm(
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id
   `;
+
+  invalidateTagLinkCandidates(tenantId);
 
   return rows.length > 0;
 }
