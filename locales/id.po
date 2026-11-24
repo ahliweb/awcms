@@ -11319,9 +11319,6 @@ msgstr "Matikan tindak lanjut"
 msgid "Switch follow-up on"
 msgstr "Nyalakan tindak lanjut"
 
-msgid "A rule's published revisions never change. Creating or editing rules is not available on this screen yet."
-msgstr "Revisi aturan yang sudah diterbitkan tidak pernah berubah. Membuat atau mengubah aturan belum tersedia di layar ini."
-
 msgid "Starts when"
 msgstr "Dimulai saat"
 
@@ -11395,3 +11392,180 @@ msgstr[0] "{count} pemberitahuan staf"
 msgid "{count} rule"
 msgid_plural "{count} rules"
 msgstr[0] "{count} aturan"
+
+msgid "Someone else changed this rule. Reload the page and try again."
+msgstr "Orang lain telah mengubah aturan ini. Muat ulang halaman lalu coba lagi."
+
+msgid "A rule with this code already exists."
+msgstr "Aturan dengan kode ini sudah ada."
+
+msgid "A person you named is not an active user of this organisation."
+msgstr "Orang yang Anda sebut bukan pengguna aktif organisasi ini."
+
+msgid "This rule is archived and can no longer change."
+msgstr "Aturan ini sudah diarsipkan dan tidak dapat diubah lagi."
+
+msgid "Nothing changed: the definition is identical to the current revision."
+msgstr "Tidak ada yang berubah: definisinya sama persis dengan revisi saat ini."
+
+msgid "The working time does not allow these offsets. Allow more working days or hours."
+msgstr "Waktu kerja tidak memungkinkan jeda ini. Tambahkan hari atau jam kerja."
+
+msgid "You may not change follow-up rules."
+msgstr "Anda tidak boleh mengubah aturan tindak lanjut."
+
+msgid "This needs a signed-in person."
+msgstr "Ini memerlukan orang yang sedang masuk."
+
+msgid "That rule is no longer available."
+msgstr "Aturan itu sudah tidak tersedia."
+
+msgid "Please correct: {fields}."
+msgstr "Mohon perbaiki: {fields}."
+
+msgid "Archive this rule? It creates no new task from now on. Tasks it already created keep running, and an archived rule cannot be restored."
+msgstr "Arsipkan aturan ini? Mulai sekarang ia tidak membuat tugas baru. Tugas yang sudah dibuatnya tetap berjalan, dan aturan yang diarsipkan tidak dapat dipulihkan."
+
+msgid "Escalation recipient"
+msgstr "Penerima eskalasi"
+
+msgid "Working days"
+msgstr "Hari kerja"
+
+msgid "Work starts"
+msgstr "Jam kerja mulai"
+
+msgid "Work ends"
+msgstr "Jam kerja selesai"
+
+msgid "When it happened"
+msgstr "Kapan terjadi"
+
+msgid "Lead id"
+msgstr "ID prospek"
+
+msgid "Lead owner"
+msgstr "Pemilik prospek"
+
+msgid "A task would be created."
+msgstr "Sebuah tugas akan dibuat."
+
+msgid "No task would be created."
+msgstr "Tidak ada tugas yang akan dibuat."
+
+msgid "The sample event does not match the rule's trigger."
+msgstr "Peristiwa contoh tidak cocok dengan pemicu aturan."
+
+msgid "A stop signal is already recorded on this lead."
+msgstr "Sinyal henti sudah tercatat pada prospek ini."
+
+msgid "The lead already has as many open tasks as the rule allows."
+msgstr "Prospek ini sudah memiliki tugas terbuka sebanyak yang diizinkan aturan."
+
+msgid "No one"
+msgstr "Tidak ada orang"
+
+msgid "The candidate assignee is not an active user, so the task would have no assignee."
+msgstr "Calon penerima tugas bukan pengguna aktif, sehingga tugas tidak akan punya penerima."
+
+msgid "That lead"
+msgstr "Prospek itu"
+
+msgid "Stopped"
+msgstr "Dihentikan"
+
+msgid "Open tasks: {count}"
+msgstr "Tugas terbuka: {count}"
+
+msgid "A rule's published revisions never change: changing a rule publishes a new revision, and tasks already created keep the revision that created them."
+msgstr "Revisi aturan yang sudah terbit tidak pernah berubah: mengubah aturan menerbitkan revisi baru, dan tugas yang sudah dibuat tetap memakai revisi yang membuatnya."
+
+msgid "Archive this rule"
+msgstr "Arsipkan aturan ini"
+
+msgid "Publish a new revision"
+msgstr "Terbitkan revisi baru"
+
+msgid "Create a rule"
+msgstr "Buat aturan"
+
+msgid "Try a rule draft"
+msgstr "Coba draf aturan"
+
+msgid "The form starts from the current revision of {name}. Publishing appends revision {number}; earlier revisions stay as they are."
+msgstr "Formulir dimulai dari revisi saat ini dari {name}. Menerbitkan menambahkan revisi {number}; revisi sebelumnya tetap apa adanya."
+
+msgid "A new rule starts at revision 1. Use Simulate to see what a draft would do before saving it."
+msgstr "Aturan baru dimulai dari revisi 1. Gunakan Simulasikan untuk melihat apa yang akan dilakukan draf sebelum menyimpannya."
+
+msgid "You may simulate a draft but not save it. Simulating writes nothing."
+msgstr "Anda boleh mensimulasikan draf tetapi tidak menyimpannya. Simulasi tidak menulis apa pun."
+
+msgid "Start a new rule instead"
+msgstr "Mulai aturan baru saja"
+
+msgid "2 to 40 characters: start with a lowercase letter, then lowercase letters, digits, dashes and underscores. It cannot change later."
+msgstr "2 sampai 40 karakter: awali dengan huruf kecil, lalu huruf kecil, angka, tanda hubung, dan garis bawah. Tidak dapat diubah kemudian."
+
+msgid "Leave a filter blank to match any. A lead assigned event carries no pipeline or stage, so it takes no filter."
+msgstr "Kosongkan filter agar cocok dengan apa saja. Peristiwa prospek ditugaskan tidak membawa pipeline atau tahap, sehingga tidak memakai filter."
+
+msgid "The task"
+msgstr "Tugasnya"
+
+msgid "The person's id. They must be an active user of this organisation."
+msgstr "ID orangnya. Ia harus pengguna aktif organisasi ini."
+
+msgid "Due after (working time)"
+msgstr "Jatuh tempo setelah (waktu kerja)"
+
+msgid "Minutes"
+msgstr "Menit"
+
+msgid "Escalation and notices"
+msgstr "Eskalasi dan pemberitahuan"
+
+msgid "Leave both escalation boxes blank for a rule that never escalates."
+msgstr "Kosongkan kedua kolom eskalasi untuk aturan yang tidak pernah dieskalasi."
+
+msgid "Escalates after, hours"
+msgstr "Eskalasi setelah, jam"
+
+msgid "Escalates after, minutes"
+msgstr "Eskalasi setelah, menit"
+
+msgid "Optional: the person's id. Blank still escalates the task, but no escalation notice is sent."
+msgstr "Opsional: ID orangnya. Bila kosong tugas tetap dieskalasi, tetapi tidak ada pemberitahuan eskalasi yang dikirim."
+
+msgid "Notify when assigned"
+msgstr "Beri tahu saat ditugaskan"
+
+msgid "Notify when due"
+msgstr "Beri tahu saat jatuh tempo"
+
+msgid "An IANA name such as Asia/Jakarta."
+msgstr "Nama IANA, misalnya Asia/Jakarta."
+
+msgid "24-hour time, HH:MM. The day may end at 24:00."
+msgstr "Format 24 jam, HH:MM. Hari boleh berakhir pukul 24:00."
+
+msgid "One date per line, as YYYY-MM-DD."
+msgstr "Satu tanggal per baris, berformat YYYY-MM-DD."
+
+msgid "Sample event for the simulation"
+msgstr "Peristiwa contoh untuk simulasi"
+
+msgid "Pipeline id"
+msgstr "ID pipeline"
+
+msgid "Stage category"
+msgstr "Kategori tahap"
+
+msgid "Optional: with a lead id the simulation also checks that lead's stop signals and open tasks."
+msgstr "Opsional: dengan ID prospek, simulasi juga memeriksa sinyal henti dan tugas terbuka prospek itu."
+
+msgid "Publish revision"
+msgstr "Terbitkan revisi"
+
+msgid "Simulate this draft"
+msgstr "Simulasikan draf ini"

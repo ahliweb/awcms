@@ -1423,8 +1423,14 @@ export const READER_BUDGET_BYTES = 39_000;
  * Rebase note: `main` had moved to 393,025 B, so this branch's own raise
  * (+1,261 B, written against 392,355 B) is stacked on it, giving
  * 394,286 B; the gate re-measures the combined bundle.
+ *
+ * Rebase note (24 Nov 2026, #1165 rule editor): `main` had moved to 394,286 B
+ * (#1488). This branch's own growth (the rule editor and simulation form
+ * scripts) is stacked on it; the combined bundle measured 400,758 B, so the
+ * budget is 400,900 B (measured + 142 B margin). No per-screen duplication was
+ * found to recover; the gate re-measures the combined bundle.
  */
-export const APP_BUDGET_BYTES = 394_286;
+export const APP_BUDGET_BYTES = 400_900;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

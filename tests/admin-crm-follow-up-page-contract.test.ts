@@ -295,14 +295,61 @@ describe("the actions", () => {
     }
   });
 
-  test("the rule editor has no form here: rules are read-only on this screen", () => {
-    // The script sends only the switch; no rule write is reachable.
+  test("the rule editor sends the four rule calls, each write with a key and the version seen", () => {
     const rulesScript = rules.slice(rules.indexOf("<script>"));
 
-    expect(rulesScript).not.toContain("/rules");
-    expect(rulesScript).not.toContain("/revisions");
-    expect(rulesScript).not.toContain("/archive");
-    expect(rules).not.toContain("<form");
+    expect(rulesScript).toContain("${BASE}/rules`");
+    expect(rulesScript).toContain("/revisions`");
+    expect(rulesScript).toContain("/archive`");
+    expect(rulesScript).toContain("/rules/simulate`");
+    // The switch, create/publish (one handler) and archive: one key per distinct
+    // (url, body); the simulation sends none.
+    expect(rulesScript.match(/"Idempotency-Key": keyFor\(/g)?.length).toBe(3);
+    expect(rulesScript).toContain("publishBody(Number(editor?.dataset.version");
+    expect(rulesScript).toContain("archiveBody(");
+    // The archive is irreversible, so it is confirmed.
+    expect(rulesScript).toContain("confirmAction(messages.confirmArchive");
+  });
+
+  test("the simulation is read-only: no key, no reload, and a reader may use it", () => {
+    const rulesScript = rules.slice(rules.indexOf("<script>"));
+    const simulate = rulesScript.slice(
+      rulesScript.indexOf('onAction(".js-rule-simulate"')
+    );
+
+    expect(simulate).toContain("simulateBody(");
+    expect(simulate).not.toContain("Idempotency-Key");
+    expect(simulate).not.toContain("location.reload");
+    // The button is outside the configure gate (it is `rules.read`); only the
+    // save button and the archive button are configure-only.
+    expect(rules).toContain('{editorMode !== "draft" && (');
+    expect(rules).toContain("const editorMode = !canConfigure");
+    expect(rules).toContain('? "draft"');
+    expect(rules).toMatch(
+      /data\.canConfigure && selected\.rule\.status === "active"/
+    );
+  });
+
+  test("the form is built from the closed vocabularies, not typed free text", () => {
+    for (const list of [
+      "TRIGGER_KINDS",
+      "STAGE_CATEGORIES",
+      "ASSIGNEE_MODES"
+    ]) {
+      expect(rules).toContain(`${list}.map(`);
+    }
+
+    // A fixed person and an escalation recipient are ids until a staff picker
+    // exists; the form says so instead of offering a name search it lacks.
+    expect(rules).toContain('id="rule-person-hint"');
+  });
+
+  test("the editor never reads the clock, and its sentences ride on the element", () => {
+    const rulesScript = rules.slice(rules.indexOf("<script>"));
+
+    expect(rulesScript).not.toMatch(/new Date\(\)|Date\.now\(/);
+    expect(rules).toContain("data-messages={JSON.stringify(messages)}");
+    expect(rules).toContain("data-sim-labels={JSON.stringify(simLabels)}");
   });
 });
 

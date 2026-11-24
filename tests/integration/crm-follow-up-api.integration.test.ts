@@ -36,6 +36,15 @@ import {
   resetHandlerDatabase,
   teardownHandlerDatabase
 } from "./harness";
+import {
+  archiveBody,
+  createBody,
+  emptyValues,
+  publishBody,
+  rejectedFieldNames,
+  simulateBody,
+  valuesFromDefinition
+} from "../../src/lib/ui/crm-follow-up-rule-form";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
@@ -657,6 +666,115 @@ suite("crm_follow_up HTTP surface (#1165)", () => {
       "crm_follow_up.rule.publish",
       "crm_follow_up.rule.archive"
     ]);
+  });
+
+  test("the rule editor's own request bodies are accepted by the real handlers (#1165)", async () => {
+    if (!ready) return;
+    // Exactly what the form sends: strings typed into controls, shaped by the
+    // pure form model, with a stable key per distinct body.
+    const values = {
+      ...emptyValues(),
+      taskTitle: "Call the new lead",
+      holidays: "2026-12-25\n2026-12-31"
+    };
+    const body = createBody("editor-created", "Editor created", values);
+    const key = nextKey();
+    const created = await call(createRule, {
+      method: "POST",
+      path: `${BASE}/rules`,
+      body,
+      idempotencyKey: key
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.currentRevisionNumber).toBe(1);
+
+    // A retry of the SAME form (same body, same key) replays: no second rule.
+    const replay = await call(createRule, {
+      method: "POST",
+      path: `${BASE}/rules`,
+      body,
+      idempotencyKey: key
+    });
+
+    expect(replay.status).toBe(201);
+    expect(replay.body.data.id).toBe(created.body.data.id);
+
+    // The revise form starts from the stored revision and, unchanged, is
+    // refused: nothing is published by pressing Publish on an untouched form.
+    const stored = valuesFromDefinition(
+      created.body.data.currentRevision.definition
+    );
+    const unchanged = await call(publishRevision, {
+      method: "POST",
+      path: `${BASE}/rules/${created.body.data.id}/revisions`,
+      params: { id: created.body.data.id },
+      body: publishBody(created.body.data.version, stored)
+    });
+
+    expect(unchanged.body.error?.code).toBe("REVISION_UNCHANGED");
+
+    const edited = { ...stored, dueHours: "1", dueMinutes: "30" };
+    const published = await call(publishRevision, {
+      method: "POST",
+      path: `${BASE}/rules/${created.body.data.id}/revisions`,
+      params: { id: created.body.data.id },
+      body: publishBody(created.body.data.version, edited)
+    });
+
+    expect(published.status).toBe(201);
+    expect(published.body.data.currentRevision.definition.dueAfterMinutes).toBe(
+      90
+    );
+
+    // The simulation form's body, with no key and no write.
+    const simulated = await call(simulateRule, {
+      method: "POST",
+      path: `${BASE}/rules/simulate`,
+      idempotencyKey: null,
+      body: simulateBody(edited, {
+        occurredAt: "2026-11-16T03:00:00.000Z",
+        pipelineId: "",
+        stageCategory: "",
+        stageKey: "",
+        ownerTenantUserId: env.ownerUserId,
+        leadId: ""
+      })
+    });
+
+    expect(simulated.status).toBe(200);
+    expect(simulated.body.data.wouldCreateTask).toBe(true);
+    expect(simulated.body.data.assigneeTenantUserId).toBe(env.ownerUserId);
+
+    // A refused field is named by its own control, not by a server sentence.
+    const refused = await call(createRule, {
+      method: "POST",
+      path: `${BASE}/rules`,
+      body: createBody("bad-zone", "Bad zone", {
+        ...values,
+        timeZone: "Not/AZone",
+        workStart: "9am"
+      })
+    });
+
+    expect(refused.status).toBe(400);
+    expect(refused.body.error?.code).toBe("VALIDATION_ERROR");
+    expect(
+      rejectedFieldNames(refused.body.error?.details ?? [], {
+        timeZone: "Time zone",
+        workStartMinute: "Work starts"
+      }).sort()
+    ).toEqual(["Time zone", "Work starts"]);
+
+    // Archive, then the archive button's body on an archived rule is refused.
+    const archived = await call(archiveRule, {
+      method: "POST",
+      path: `${BASE}/rules/${created.body.data.id}/archive`,
+      params: { id: created.body.data.id },
+      body: archiveBody(published.body.data.version)
+    });
+
+    expect(archived.body.data.status).toBe("archived");
   });
 
   test("simulation answers without writing and needs no Idempotency-Key", async () => {
