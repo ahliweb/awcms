@@ -37,6 +37,7 @@ import {
   teardownHandlerDatabase
 } from "./harness";
 import { hashEnrollmentChallenge } from "../../src/modules/omes-control/domain/server-registration";
+import { validateOmesContractText } from "../../src/modules/omes-control/domain/contracts";
 import { POST as enrollPOST } from "../../src/pages/api/v1/omes/worker/enroll";
 import { POST as pollPOST } from "../../src/pages/api/v1/omes/worker/poll";
 import { POST as resultPOST } from "../../src/pages/api/v1/omes/worker/result";
@@ -883,6 +884,227 @@ suite(
       expect((legitimateResult.body as { job_id: string }).job_id).toBe(
         legitimateJobIdRows[0]!.id
       );
+    });
+
+    test("poll: the job_available body of a really leased job validates against the pinned worker-poll.response schema", async () => {
+      if (!ready) return;
+      await seedServer(TENANT_A, SERVER_ID, "online");
+      const { publicKeyPem, privateKeyPem } = keypair();
+      await seedEnrolledWorker(
+        TENANT_A,
+        SERVER_ID,
+        "worker_schema",
+        publicKeyPem
+      );
+      await seedApprovedOperation(TENANT_A, SERVER_ID, "status");
+
+      const envelope = buildEnvelope(privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        tenantId: TENANT_A,
+        serverId: SERVER_ID,
+        workerId: "worker_schema",
+        body: {
+          tenant_id: TENANT_A,
+          server_id: SERVER_ID,
+          worker_id: "worker_schema",
+          capabilities: ["status"]
+        },
+        nonceInBody: true,
+        timestampInBody: true
+      });
+
+      const polled = await invoke(pollPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+      expect(polled.status).toBe(200);
+      expect((polled.body as { status: string }).status).toBe("job_available");
+
+      const text = JSON.stringify(polled.body);
+      expect(
+        await validateOmesContractText("worker-poll.response", text),
+        `poll answered ${text}`
+      ).toEqual([]);
+
+      // The same validator is not vacuous: a body with the job's
+      // idempotency_key field renamed, or with an unknown operation, fails.
+      expect(text).toContain('"idempotency_key"');
+      expect(
+        (
+          await validateOmesContractText(
+            "worker-poll.response",
+            text.replace('"idempotency_key"', '"idempotencyKey"')
+          )
+        ).length
+      ).toBeGreaterThan(0);
+      expect(
+        (
+          await validateOmesContractText(
+            "worker-poll.response",
+            text.replace('"operation":"status"', '"operation":"format_disk"')
+          )
+        ).length
+      ).toBeGreaterThan(0);
+    });
+
+    test("result: a worker enrolled under tenant A claiming tenant B (even with a colliding worker_id and a real leased job there) is rejected and tenant B is untouched", async () => {
+      if (!ready) return;
+      await seedServer(TENANT_A, SERVER_ID, "online");
+      await seedServer(TENANT_B, SERVER_ID, "online");
+      const attackerKey = keypair();
+      const victimKey = keypair();
+      await seedEnrolledWorker(
+        TENANT_A,
+        SERVER_ID,
+        "worker_x",
+        attackerKey.publicKeyPem
+      );
+      await seedEnrolledWorker(
+        TENANT_B,
+        SERVER_ID,
+        "worker_x",
+        victimKey.publicKeyPem
+      );
+
+      // A real job leased to "worker_x" under tenant B.
+      const opId = await seedApprovedOperation(TENANT_B, SERVER_ID, "status");
+      const idem = `idem_${randomUUID().replace(/-/g, "")}`;
+      await getHandlerAdminSql()`
+        INSERT INTO awcms_omes_jobs
+          (tenant_id, job_id, operation_request_id, server_id, operation,
+           state, leased_by, leased_until, idempotency_key)
+        VALUES (${TENANT_B}, ${`job_${randomUUID()}`}, ${opId}, ${SERVER_ID},
+                'status', 'leased', 'worker_x', now() + interval '10 minutes', ${idem})
+      `;
+
+      const envelope = buildEnvelope(attackerKey.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        tenantId: TENANT_B,
+        serverId: SERVER_ID,
+        workerId: "worker_x",
+        body: {
+          tenant_id: TENANT_B,
+          server_id: SERVER_ID,
+          worker_id: "worker_x",
+          correlation_id: `corr_${randomUUID()}`,
+          idempotency_key: idem,
+          operation: "status",
+          state: "succeeded",
+          started_at: new Date(Date.now() - 1000).toISOString(),
+          completed_at: new Date().toISOString(),
+          evidence: { returncode: 0 }
+        }
+      });
+
+      const result = await invoke(resultPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe("rejected");
+      expect((result.body as { job_id: string }).job_id).toBe("unknown");
+
+      const results = (await getHandlerAdminSql()`
+        SELECT id FROM awcms_omes_worker_results WHERE idempotency_key = ${idem}
+      `) as unknown[];
+      expect(results).toHaveLength(0);
+
+      const jobs = (await getHandlerAdminSql()`
+        SELECT state, leased_by FROM awcms_omes_jobs
+        WHERE tenant_id = ${TENANT_B} AND idempotency_key = ${idem}
+      `) as { state: string; leased_by: string }[];
+      expect(jobs).toEqual([{ state: "leased", leased_by: "worker_x" }]);
+
+      // Control: the legitimate tenant B worker (its own key) is accepted
+      // for the very same job, so the rejection above is the identity check.
+      const own = buildEnvelope(victimKey.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        tenantId: TENANT_B,
+        serverId: SERVER_ID,
+        workerId: "worker_x",
+        body: envelope.body as Record<string, unknown>
+      });
+      const accepted = await invoke(resultPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        body: own.body,
+        headers: own.headers
+      });
+      expect((accepted.body as { status: string }).status).toBe("recorded");
+    });
+
+    test("heartbeat: a worker enrolled under tenant A claiming tenant B (colliding worker_id and server_id) is refused and neither tenant's server row is written", async () => {
+      if (!ready) return;
+      await seedServer(TENANT_A, SERVER_ID, "offline");
+      await seedServer(TENANT_B, SERVER_ID, "offline");
+      const attackerKey = keypair();
+      await seedEnrolledWorker(
+        TENANT_A,
+        SERVER_ID,
+        "worker_x",
+        attackerKey.publicKeyPem
+      );
+
+      const envelope = buildEnvelope(attackerKey.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/heartbeat",
+        tenantId: TENANT_B,
+        serverId: SERVER_ID,
+        workerId: "worker_x",
+        body: {
+          tenant_id: TENANT_B,
+          server_id: SERVER_ID,
+          worker_id: "worker_x",
+          status: "healthy",
+          omes_version: "0.2.0",
+          contract_version: "1.0.0",
+          capability_registry_digest: "sha256:abcdef1234567890",
+          platform: { os: "ubuntu", version: "24.04", arch: "amd64" },
+          uptime_seconds: 120
+        },
+        timestampInBody: true
+      });
+
+      const result = await invoke(heartbeatPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/heartbeat",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe(
+        "re-enroll_required"
+      );
+
+      const rows = (await getHandlerAdminSql()`
+        SELECT tenant_id, status, last_heartbeat_at, last_heartbeat_evidence
+        FROM awcms_omes_servers WHERE server_id = ${SERVER_ID}
+      `) as {
+        tenant_id: string;
+        status: string;
+        last_heartbeat_at: Date | null;
+        last_heartbeat_evidence: unknown;
+      }[];
+      expect(rows).toHaveLength(2);
+      for (const r of rows) {
+        expect(r.status, r.tenant_id).toBe("offline");
+        expect(r.last_heartbeat_at, r.tenant_id).toBeNull();
+        expect(r.last_heartbeat_evidence, r.tenant_id).toBeNull();
+      }
+
+      const nonces = (await getHandlerAdminSql()`
+        SELECT id FROM awcms_omes_worker_nonces WHERE tenant_id = ${TENANT_B}
+      `) as unknown[];
+      expect(nonces).toHaveLength(0);
     });
 
     test("heartbeat: updates status/timestamp on success and never resurrects a decommissioned server", async () => {
