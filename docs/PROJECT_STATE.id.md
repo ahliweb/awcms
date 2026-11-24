@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:0a8162b529d08b6d4e906eaf0af9f0d90751cac292b66843679a2d1548c1292b -->
+<!-- i18n-source-hash: sha256:b078edf81115335284530dced583e0d4be03e5e54bbd911de6ab945c79b9753d -->
 
 # AWCMS — Project State & Continuation
 
@@ -137,7 +137,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.12.0..HEAD`                                                   |
 | Modul base                         | **40** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **292** (`sql/001`–`420`)                                                                                                          | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0171** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0172** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **95** berkas `.astro` di `src/pages/admin/`; **2 dari 40** modul tanpa `navigation:` (`social-publishing`, `telegram-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **117** (69.160 baris) — soal typecheck lihat §6                                                                                   | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **74** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
