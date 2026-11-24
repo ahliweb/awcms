@@ -1,0 +1,133 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0172-more-than-one-application-process-per-node-is-supervised-inside-the-image-behind-an-opt-in-count-and-is-gated-on-the-state-that-assumes-one-process.id.md)
+
+# ADR-0172 — More than one application process per node is supervised inside the image behind an opt-in count, and is gated on the state that assumes one process
+
+- **Status:** Accepted
+- **Accepted:** 2026-11-24 (Q1 to Q7 answered below, K19.17 to K19.23). The default count stays 1; raising it anywhere stays gated on Decision 3 and the measurement plan.
+- **Review:** the owner answered the questions under "Open questions" on 24 November 2026 (see "Decision of 24 November 2026"). Docs only: no code, migration, OpenAPI or dependency is written until the implementation issues split from this ADR are worked.
+- **Date:** 2026-11-23
+- **Decision maker:** @ahliweb (owner). Q1 to Q7 decided 24 November 2026 (K19.17 to K19.23, mass sign-off of the recommendations).
+- **Related:** Issue [#1454](https://github.com/ahliweb/awcms/issues/1454) (this is its architectural remainder); PR [#1472](https://github.com/ahliweb/awcms/pull/1472) (the per-view measurements); [ADR-0161](0161-capacity-targets-are-measured-nfrs-and-the-scale-path-is-staged.md) (the 2,000 rps per 2-vCPU node target, stage S1 to S2); [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (shared rate limiting); [ADR-0154](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md) (SSE on the existing process); [ADR-0083](0083-this-template-deploys-to-one-environment.md) (one environment); [ADR-0033](0033-abac-dynamic-policy-evaluator.md) (ABAC evaluator; its §Cache is the origin of the per-process invalidation). Operational: [`database-pooling.md`](../awcms/database-pooling.md), [`database-capacity-runbook.md`](../awcms/database-capacity-runbook.md), [`deployment-profiles.md`](../awcms/deployment-profiles.md), [`deploy-coolify.md`](../awcms/deploy-coolify.md).
+
+**Docs and governance only.** No code, schema, API, event or dependency changes. Every number in this document is a LOCAL measurement from one shared workstation (app pinned to 2 CPUs, PostgreSQL with `fsync=off`, no CDN or edge cache, one run per point). Read the shape, not the digits. Statements marked **needs verification** were not confirmed against Bun's documentation or code and must not be relied on.
+
+## Context
+
+ADR-0161 sets an initial NFR of about 2,000 rps of dynamic origin traffic per 2-vCPU node at p95 < 500 ms. Issue #1454 measured about 15% of that on an uncached public page and PR #1472 took the cheapest steps (cache the tag-link aggregate, 503 + `Retry-After` on a refused view). What PR #1472 left is architectural.
+
+1. **One process serves requests on one thread.** Production runs `bun ./dist/standalone-entry.mjs` (`Dockerfile.production`, `CMD`). `src/lib/server/standalone-entry.ts` wraps the handler `@astrojs/node` builds and serves it from `node:http` (`http.createServer`), one process, one listener. On a 2-vCPU node one thread is at most half the machine. "CPU 35 to 46% of 2 CPUs" in #1454 is one thread close to saturation, not spare capacity.
+2. **The per-view cost is CPU in the app, not the database round trip.** PR #1472: about 1.4 to 1.6 ms of CPU for the page plus 0.3 to 0.5 ms for the 307 locale redirect; a statement costs about 12 us of app CPU and a transaction about 45 us, so database round trips are about 12% of app CPU. On the small seed of #1453 the single-thread ceiling was about 700 views/s on a quiet host. Raising the `interactive` gate from 8 to 64 gave 0% 5xx but p50 of 1 s at 800 views/s and 3.3 s at 900: a larger gate queues load, it does not add capacity.
+3. **Arithmetic the target forces.** Two threads can spend at most 2 ms of CPU per second of wall clock per request at 1,000 rps, i.e. 1.0 ms per request at 2,000 rps with both threads at 100%, about 0.7 ms at a sane 70% utilisation. At the measured 1.7 to 2.1 ms per uncached view (page plus 307), two threads give a theoretical ceiling of roughly 950 to 1,400 views/s at 100% utilisation. **Processes alone cannot reach 2,000 rps uncached.** They roughly double the one-thread ceiling; reaching the target also needs lower CPU per request, or a 99% edge hit ratio (ADR-0161 formula: origin rps = edge rps x (1 - hit ratio)).
+4. **A great deal of in-process state assumes exactly one process.** Audit of the current code:
+
+   | State                                                                                                                | Where                                                            | What breaks with N processes                                                                                                                                                                                                                                                                                                              |
+   | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | ABAC policy cache, invalidated per process, **no TTL**                                                               | `identity-access/application/policy-cache.ts`                    | A policy disabled or tightened by a request that landed on process A stays in force in process B until B restarts. The file's own header says a horizontally scaled deployment "would additionally need a cross-instance signal (LISTEN/NOTIFY or a short TTL)". **This is a stale-allow authorization defect and the one hard blocker.** |
+   | Rate limit buckets, `Map` per process; Redis when configured                                                         | `lib/security/rate-limit.ts`, ADR-0066                           | Every limit is multiplied by N without Redis. The code already logs `security.rate_limit.multi_instance_without_redis` when `APP_INSTANCE_COUNT` > 1, and `config:validate` already fails for that case, but `APP_INSTANCE_COUNT` today counts replicas, not processes.                                                                   |
+   | Circuit breakers, one per provider per process; half-open lets exactly one probe through per process (#1416/#1431)   | `lib/database/circuit-breaker.ts`                                | N probes per provider, one per process. Accepted by design (the file header already says so for replicas). Each process also opens and closes on its own failure sample, so the processes can disagree for a few seconds.                                                                                                                 |
+   | Tag-link candidate cache (#1472), 60 s TTL, in-process invalidation                                                  | `blog-content/application/tag-link-candidate-cache.ts`           | Other processes see a tag change within the TTL. Already designed and documented as bounded staleness. Memory is N times the entries (LRU of 256 tenants).                                                                                                                                                                                |
+   | OIDC discovery/JWKS caches, push token caches, i18n and formatter caches, schema/contract caches, module registry    | many `new Map` singletons (33 module-level `Map`s found by grep) | Pure read-through or derived data. Duplicated per process, memory times N, no correctness effect found. The grep does not prove each one is pure; the implementation issue must classify all 33.                                                                                                                                          |
+   | Realtime streams (SSE) and the cross-instance wake hint (#1435, default OFF, LISTEN/NOTIFY)                          | `modules/_shared/sse-stream.ts`, `work-class` `realtime_stream`  | Streams are spread across processes. Each process holds its own wake listener (one extra connection each) and its own `realtime_stream` slots (3 + queue 12 per process). Streams resume by cursor on any process (ADR-0154), so correctness holds; the hint, when ON, already assumes several instances.                                 |
+   | Connection pools and work-class gates (`interactive` 8, queue 32 by default; `DATABASE_POOL_MAX` 20 per client kind) | `lib/database/client.ts`, `work-class.ts`                        | Both are per process, so the node-wide numbers are N times the per-process ones. `capacity-config.ts` already models this for replicas, with `DATABASE_CAPACITY_*` instance counts.                                                                                                                                                       |
+   | Scheduled jobs                                                                                                       | `ops/awcms-jobs.crontab`, `ops/run-job.sh`                       | **Not affected.** Jobs run as separate `awcms-jobs` containers started by cron under `flock -n`, and each job also takes a PostgreSQL advisory lock. No app process schedules work (server-side `setInterval` was not found by grep; `setTimeout` loops were not searched).                                                               |
+   | Sessions and cookies                                                                                                 | `awcms_session` rows, signed cookie                              | The cookie carries no per-process state and sessions are rows (to be confirmed by the test plan: login on process A, request on process B).                                                                                                                                                                                               |
+   | Health and metrics                                                                                                   | `GET /api/v1/health` (static `ok`), `metrics-port.ts` adapters   | Health reports only that the responding process is up; behind a shared listener a load balancer cannot ask about a specific process. Metrics are recorded per process through the port; whether the active adapter aggregates across processes **needs verification**. Logs carry no process label today.                                 |
+   | Shutdown                                                                                                             | `standalone-entry.ts`                                            | No `SIGTERM`/`SIGINT` handler was found in `src/lib/server`. A supervisor that restarts workers needs a drain path (stop accepting, finish in-flight, close the pool) that does not exist yet.                                                                                                                                            |
+
+5. **Facts verified for this ADR on the pinned Bun (1.4.4 in `package.json` `packageManager` and CI; there is no `.bun-version` file), Linux, scratch scripts outside the repo.**
+   - `Bun.serve({ reusePort: true })` in two processes on one port: both started, 40 connections split 23 / 17.
+   - `node:http` `server.listen({ port, reusePort: true })` in two processes: the second failed with "Failed to start server. Is port in use?". The `reusePort` listen option is **not honoured by `node:http` in this Bun build**. The app serves through `node:http`, so literal `Bun.serve` + `reusePort` does not apply to it without replacing the Astro Node adapter's server path.
+   - `node:cluster` (`cluster.fork()` twice, workers `listen` on the same port): 30 connections split 14 / 16. How Bun distributes (kernel `SO_REUSEPORT` or a primary that hands off) **needs verification**; the behaviour, not the mechanism, was observed.
+   - Not verified: `worker_threads` running an Astro handler per thread; Coolify replica support for a build-from-repo Dockerfile application (see Open questions).
+6. **Deployment today.** Coolify application built from `Dockerfile.production`, Traefik, a hand-written Varnish compose with a hardcoded backend IP, one environment (ADR-0083). The offline-LAN profile runs the app under systemd or compose on a single machine with no reverse proxy and, by default, no Redis. Both must keep working.
+
+## Options
+
+### A. N processes per node, supervised in the image (`node:cluster`), opt-in count
+
+`standalone-entry.ts` grows a primary that forks `APP_PROCESS_COUNT` workers (default **1**: no behaviour change, no supervisor), each running today's code path on the shared port. The primary opens no database pool, serves nothing and runs no jobs; it restarts a worker that dies (with a restart budget), forwards `SIGTERM` as a drain, and exposes nothing new. One container, one port, one health check; works unchanged under systemd, compose, Coolify and the offline-LAN profile.
+
+- For: no orchestrator feature required; same image everywhere; the existing healthcheck and the Varnish backend address stay valid; the count is the only new knob.
+- Against: new supervisor code in the most security-sensitive file of the request path; `node:cluster` under Bun is a compatibility surface (observed working, mechanism needs verification, behaviour across Bun upgrades needs a pinned regression test); a worker crash loop must be bounded; an unbalanced split is possible (observed 14/16 and 23/17 over 30 to 40 connections, not measured under keep-alive load).
+
+### B. One container replica per vCPU at the orchestrator
+
+Each replica is today's single process; Traefik (or Varnish with several backends) balances.
+
+- For: no new application code; failure isolation per container; the same mechanism is the S2 scale-out path of ADR-0161, so it is built once.
+- Against: **needs verification** that Coolify can run several replicas of a build-from-repo Dockerfile application on a single Docker host (Swarm is not what the runbook describes); the Varnish backend is a hardcoded single IP and would need a multi-backend director; the offline-LAN profile has no orchestrator or proxy, so it gets nothing; each replica pays the full container memory overhead.
+
+### C. Worker threads inside one process
+
+- For: one PID, one listener.
+- Against: Bun's `Bun.SQL` pool, every module-level singleton and the Astro handler would be instantiated per thread anyway, so it has all of the shared-state problems of A plus shared fate (one native crash kills every thread), plus an unverified fit with the Astro Node adapter. It buys nothing over A that matters and costs a harder failure model. **Needs verification**, and not recommended.
+
+### D. Literal `Bun.serve` + `reusePort` (the ticket's wording for A)
+
+Verified to work for `Bun.serve`, but the app does not use `Bun.serve`: it uses `node:http` through the Astro Node adapter, where `reusePort` is not honoured. Adopting it means replacing the server path (translating `Request`/`Response` to the adapter's `IncomingMessage`/`ServerResponse`, or a different adapter), and the static-file security-header wrapper in `standalone-entry.ts` is built around that handler (Issue #464). Not recommended now; revisit if Astro gains a first-party Bun adapter.
+
+## Decision
+
+We propose the following.
+
+1. **Adopt A as the default mechanism and keep B as the multi-node path.** Inside one image, an opt-in `APP_PROCESS_COUNT` (positive integer, default 1, hard maximum the node's vCPU count) starts that many workers behind one port. Across nodes or hosts, B (replicas behind a balancer) remains the S2 path of ADR-0161 and composes with A (replicas x processes). C and D are rejected for now.
+2. **Default stays 1, and the supervisor is not even loaded at 1.** Nothing changes for any deployment that does not set the variable, including the offline-LAN profile.
+3. **Blocking gates before the count may exceed 1 anywhere.** Each is its own issue and each needs a test that fails when the control is removed:
+   1. **ABAC policy cache coherence (security, hard blocker).** Replace "per-process invalidation, no TTL" with a bounded-staleness mechanism that works across processes: a short TTL, a cheap per-request version check, or a LISTEN/NOTIFY signal with a TTL as the backstop. The staleness bound for a disable or a tightened policy must be stated, tested across two real processes, and documented as the revocation latency. This also fixes the same latent defect for replicas today (it is not specific to this ADR; it is exposed by it).
+   2. **Rate limiting.** `APP_INSTANCE_COUNT` is redefined, or a sibling variable added, so that the effective count is replicas x `APP_PROCESS_COUNT`. Above 1, `config:validate` fails closed without Redis, exactly as it does for replicas (ADR-0066). The offline-LAN profile therefore stays at 1 unless a local Redis is provisioned.
+   3. **Connection budget.** `capacity-config.ts` and `database:capacity:check` count processes, not only replicas: node-wide connections = processes x `DATABASE_POOL_MAX` per client kind, interactive slots = processes x 8, PostgreSQL `max_connections` and PgBouncer limits are checked against the product. The per-process `DATABASE_POOL_MAX` default is reconsidered, not assumed (it is 20 per client kind today).
+   4. **Graceful shutdown and restart budget.** The primary forwards `SIGTERM` as a drain (stop accepting, finish in-flight, close the pool, a hard timeout), restarts a dead worker with a bounded restart budget and back-off, and exits non-zero (so the container healthcheck and the orchestrator notice) when the budget is spent.
+   5. **Observability.** A process label (worker id) on logs and on any per-process gauge, aggregation or per-process scrape for metrics (verify what the active adapter does first), and a health response that does not hide a dead sibling.
+4. **State classification is part of the work.** The implementation issue classifies each of the 33 module-level `Map`s and other singletons (pure or derived, bounded staleness, or needs coordination) in a table kept next to the supervisor, and a gate keeps a new process-wide mutable singleton from landing unclassified (the same pattern as the existing registries and gates).
+5. **Jobs and cron are untouched.** They stay separate containers under `flock` plus the PostgreSQL advisory lock. No job runs in the app process and none may start to.
+6. **No invariant is loosened.** RLS stays `FORCE`, ABAC stays default-deny, authorization stays at `authorizeInTransaction`, tenant keys stay on every cache, idempotency and audit are unchanged. The work-class gates stay per process and non-env-tunable (their sizes do not change in this ADR).
+7. **Not a substitute for reducing CPU per request.** Per Context 3, this ADR roughly doubles the one-thread ceiling on a 2-vCPU node and does not by itself meet ADR-0161's 2,000 rps uncached. The route-matching share, the 307 hop and the two transactions per view stay on the #1454 backlog, and the edge hit ratio stays the lever for public pages.
+
+## Measurement plan and acceptance before this ADR becomes Accepted
+
+Run on the #1283 harness (PR #1453) with the same app pinning, seed and tenant shape as the #1472 report, restarting the app between runs. Production-like numbers wait for the environment of #1281; until then every figure is LOCAL and indicative.
+
+1. **Baseline and scaling.** N = 1, 2 (and 3 on a 4-CPU pin) at the same offered load steps. Record the clean point (p95 < 500 ms, 5xx <= 1%), CPU per process, pool and work-class gauges, and the connection count at PostgreSQL (`pg_stat_activity`).
+2. **Split under keep-alive.** Per-process request counts under a realistic keep-alive client population, to bound imbalance (observed 14/16 and 23/17 only on short connections).
+3. **Coherence tests across two real processes.** Policy disable on A is denied on B within the stated bound; session created on A is valid on B; tag-link cache change on A is visible on B within the TTL; a rate limit holds across processes with Redis and `config:validate` refuses the combination without it.
+4. **Failure tests.** `kill -9` a worker (restart, no dropped primary), `SIGTERM` the primary under load (drain, no 5xx beyond the in-flight bound), crash loop (budget spent, non-zero exit).
+5. **Memory.** RSS per process and total, with the tag-link cache and the other duplicated caches warm.
+6. **Mutation proofs.** Each gate in Decision 3 gets a test that turns red when the control is removed (for example remove the cross-process policy signal, or remove the Redis requirement).
+
+**Acceptance (initial, revised after the first baseline):** at N = 2 on a 2-CPU pin, the clean point is at least 1.7x the N = 1 clean point on the same seed; the three coherence tests and the failure tests pass; node-wide connections stay within the approved budget computed by `database:capacity:check`; the effective revocation latency of a policy change is stated and met; the existing full `bun run check` stays green with the default count of 1.
+
+## Consequences
+
+- **Positive:** roughly doubles the per-node dynamic ceiling on a 2-vCPU node without a new orchestrator feature; one mechanism for Coolify, systemd and compose; closes a stale-allow authorization defect that exists today for any multi-replica deployment; turns "single process" from an unwritten assumption into a classified, gated list.
+- **Negative / trade-off:** supervisor code in the request path's entry file; effective limits and connections become products that operators must compute (the tooling is extended to do it); memory times N; a bounded revocation latency replaces today's exact in-process invalidation; Redis becomes a precondition for N > 1 wherever rate limits matter, which keeps the offline-LAN profile at 1.
+- **Neutral:** the default is unchanged; ADR-0161 is not amended (its target stands, now with an honest statement that processes alone do not reach it uncached); the edge-cache and per-view CPU work continue in #1454.
+
+## Alternatives considered
+
+- **Raise the `interactive` gate and pool sizes.** Measured, rejected: it queues load (p50 1 s at 800 views/s, 3.3 s at 900) and spends PostgreSQL connections for no gain.
+- **Do nothing and rely on the edge cache.** Remains the primary lever for public pages (ADR-0161), but admin and API traffic cannot use it and the origin still needs a higher single-node ceiling.
+- **Replace the Astro Node adapter's server with `Bun.serve`.** Option D; deferred, larger blast radius than this ADR needs.
+
+## Open questions for the owner
+
+1. **Q1, mechanism.** A (in-image supervisor, recommended) as the default, with B only across nodes, or B only?
+2. **Q2, Coolify.** Can the Coolify installation run several replicas of the build-from-repo application on one Docker host, and would the owner accept a multi-backend Varnish director? (Decides how attractive B is on its own.)
+3. **Q3, policy revocation latency.** What bound is acceptable for an ABAC policy disable or tightening to take effect on every process (for example 2 s, 5 s, 30 s), and is a per-request version check (exact, one cheap query) preferred over a TTL?
+4. **Q4, offline-LAN profile.** Confirm it stays at one process unless a local Redis is provisioned (fail closed), rather than allowing N > 1 with per-process rate limits.
+5. **Q5, the target.** Keep "2,000 rps uncached per 2-vCPU node" in ADR-0161, or restate it as origin rps at a stated hit ratio now that processes alone cannot reach it uncached?
+6. **Q6, Bun-only.** `node:cluster` is part of the Bun runtime's Node-compatibility surface and adds no dependency or Node.js; confirm that no written exception is needed (AGENTS.md rule 11).
+7. **Q7, default count.** Should the recommended production value be the vCPU count once the gates pass, or stay 1 until the production-like baseline (#1281) exists?
+
+## Decision of 24 November 2026 (K19.17 to K19.23)
+
+The owner approved every recommendation in "Open questions". The Decision section above is unchanged; these are the answers:
+
+1. **Q1, mechanism: A.** The in-image supervisor is the default mechanism; B (replicas) is used only across nodes.
+2. **Q2, Coolify: not examined.** Whether Coolify can run several replicas on one Docker host has not been checked. Work proceeds with A first; B is reviewed if it is needed.
+3. **Q3, revocation latency: exact per-request version check.** One cheap query per request, as in #1487; the 5-minute TTL is only the backstop. Note: ABAC policy cache coherence across processes is resolved by #1487, so Decision 3.1 is satisfied by that change and only its two-process test remains here.
+4. **Q4, offline-LAN: one process** unless a local Redis is provisioned (fail closed). N > 1 with per-process rate limits is not allowed.
+5. **Q5, the target:** the ADR-0161 target "2,000 rps uncached per 2-vCPU node" is restated as origin rps at a stated edge hit ratio. Amending the wording of ADR-0161 is a follow-up doc change; this ADR does not edit it.
+6. **Q6, Bun-only:** `node:cluster` is part of the Bun runtime; no written exception is needed. The Bun-only rule is unchanged.
+7. **Q7, default count:** the recommended production value stays 1 process until a production-like baseline (#1281) exists.
+
+Acceptance of the ADR does not lift any gate: the count may exceed 1 anywhere only after Decision 3 and the measurement plan pass. Implementation is split into issues under #1454.
