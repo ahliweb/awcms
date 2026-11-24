@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:5c81095d7aded7ebe37710d98463cc162c1f3e84bd6c5cc1853699232d9831a7 -->
+<!-- i18n-source-hash: sha256:13753356f098a3b25b89108447b629e446d14569408adc02d4c9e968be675e22 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -410,3 +410,34 @@ Tes: `tests/api-contract-examples.test.ts` (bundle asli lolos; merusak satu fiel
 - **Di luar cakupan di sini.** Penerbitan paket sebagai artefak terpatok untuk konsumen (#1394) dan kesesuaian respons handler sungguhan (#1393).
 
 Tes: `tests/api-contract-fixtures.test.ts` (regenerasi identik byte, determinisme, contoh terdeklarasi dipakai, TV-0..TV-5, aturan generator `oneOf`/`allOf`/siklus/pola, kontrak yang dimutasi mengubah paket).
+
+### Gerbang kebijakan untuk operasi baru (`api:contract:policy:check`, Issue #1395)
+
+[ADR-0167](../adr/0167-contract-derived-fixtures-and-two-sided-conformance-checks-with-an-in-repo-generator-and-ajv.id.md) bagian 5 menetapkan kebijakan kontrak untuk operasi BARU; `bun run api:contract:policy:check` (dalam rantai `check`, tepat setelah `api:fixtures:check`) menegakkannya. Operasi yang sudah ada tidak diperiksa (ADR-0167 bagian 6, tanpa retrofit massal). Gerbang: `scripts/api-contract-policy.ts`; data: `scripts/api-contract-policy-baseline.ts`.
+
+| Aturan             | Operasi yang baru wajib...                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `response-example` | membawa contoh TERDEKLARASI (`example` atau `examples` pada media type; yang dipakai paket fixture sebagai `source: "declared"`) pada setiap respons 2xx yang punya body. `example` tingkat skema tidak dihitung. |
+| `required-list`    | punya array `required` pada setiap skema objek ber-`properties` yang terjangkau dari respons 2xx (`required: []` eksplisit boleh; ketiadaan tidak). Peta (hanya `additionalProperties`) tidak membutuhkannya.     |
+| `no-nullable`      | tidak memakai `nullable` pada permintaan (body, parameter) atau respons 2xx; tulis `type: [X, "null"]` (OpenAPI 3.1).                                                                                             |
+| `rate-limit-429`   | mendeklarasikan `429` bila handler-nya ber-rate-limit.                                                                                                                                                            |
+
+- **Apa itu "baru".** Operasi yang `operationId`-nya tidak ada di `CONTRACT_POLICY_BASELINE`, daftar beku 742 operasi yang dimiliki kontrak saat gerbang mendarat. Baseline **hanya mengecil**: entri yang menamai operasi yang sudah tidak ada menggagalkan gerbang (hapus barisnya), `tests/api-contract-policy.test.ts` mematok panjangnya secara persis, hash tiap baris beserta `METHOD route`-nya (id yang dipindah ke rute lain tak bisa mempertahankan pengecualian), serta bahwa ia tetap terurut dan unik, dan berkasnya menyatakan jangan menambah baris demi menghijaukan gerbang. `operationId` hilang atau ganda menggagalkan gerbang (tak bisa dibedakan dari baseline). Komponen bersama (`ApiMeta`, `Unauthorized`, ...) yang juga dijangkau operasi baseline adalah warisan dan tidak dibebankan pada operasi baru yang merujuknya; komponen yang hanya dijangkau operasi baru diperiksa penuh.
+- **Kenapa baseline, bukan diff terhadap cabang dasar.** `bun run check` berjalan di CI pada checkout dangkal tanpa `origin/main`:
+
+  | Kriteria (dari 11)            | A. Baseline beku ter-commit (dipilih)                                                         | B. Diff `git merge-base` saat cek                                               | C. CI mengambil cabang dasar                              |
+  | ----------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+  | 1 Kelebihan dan kekurangan    | + jawaban sama di mana pun; - daftar dipelihara tangan, satu suntingan kasatmata untuk curang | + tanpa daftar; - butuh riwayat yang CI tidak punya                             | + tepat; - langkah jaringan di gerbang yang local-first   |
+  | 2 Keamanan                    | gagal tertutup: id tak dikenal = baru = diperiksa                                             | merosot ke "semua baru" atau "tak ada baru" saat riwayat hilang (lubang senyap) | pengambilan gagal atau basi merosot senyap serupa         |
+  | 3 Performa                    | satu parse YAML, tanpa git                                                                    | panggilan git tiap run                                                          | satu round trip jaringan tiap run                         |
+  | 4 Perawatan                   | mengecil seiring operasi diretrofit; tes pin persis memaksa suntingan                         | tanpa daftar, tetapi rapuh pada rebase dan squash merge                         | plumbing workflow yang harus sinkron dengan run lokal     |
+  | 5 Skalabilitas                | O(jumlah operasi)                                                                             | tumbuh bersama kedalaman riwayat                                                | tumbuh bersama ukuran repositori                          |
+  | 6-8 Aksesibilitas, SEO, UI/UX | tidak berlaku (hanya perkakas)                                                                | tidak berlaku                                                                   | tidak berlaku                                             |
+  | 9 Kompatibilitas              | identik lokal, di CI, pada klon dangkal dan di worktree                                       | berbeda antara klon, klon dangkal, dan worktree                                 | hanya CI; `bun run check` lokal tak dapat mereproduksinya |
+  | 10 Kompleksitas operasional   | tidak ada                                                                                     | butuh `fetch-depth: 0` atau langkah fetch                                       | token, jaringan, dan penanganan ref dasar                 |
+  | 11 Implikasi jangka panjang   | mengikuti pola ledger satu-arah repositori (`NOT_YET_SCREENED`)                               | terikat perilaku hosting git                                                    | terikat vendor CI                                         |
+
+- **"Ber-rate-limit" diturunkan, bukan dicari.** Rate limit dipasang di dalam handler oleh `checkRateLimit`, `checkSharedRateLimit`, atau `checkAuthRateLimit` (`src/middleware.ts` tidak memasang apa pun). Gerbang bertanya apakah graf panggilan handler menjangkau salah satunya, memakai penelusur yang mendasari `tests/openapi-rate-limit-and-idempotency-declared.test.ts` (#1385), kini dibagi di `scripts/lib/route-handler-graph.ts`. **Batas deteksi** (dicatat di berkas itu): limiter di luar graf panggilan handler (middleware, edge), yang dijangkau lewat alias path, specifier telanjang, `export *`, `import()` dinamis, method kelas atau objek-literal, atau di bawah nama helper yang tidak ada di pola, tidak terlihat. Sebuah tes mematok bahwa pola menamai persis helper `check*RateLimit` yang diekspor, sehingga helper baru tak bisa lolos. Bila berkas route operasi baru tidak ditemukan di `src/pages/api/v1`, aturan GAGAL (tertutup): "tak terdeteksi" tidak pernah dibaca sebagai "tidak dibatasi".
+- **Pengecualian.** `CONTRACT_POLICY_EXCEPTIONS` membebaskan satu aturan dari satu operasi baru dan wajib membawa alasan minimal 30 karakter. Pengecualian untuk operasi baseline atau tak dikenal, aturan tak dikenal, duplikat, atau yang membebaskan aturan yang tidak dilanggar, menggagalkan gerbang: pembebasan dibersihkan, bukan ditumpuk. Hari ini tidak ada.
+
+Tes: `tests/api-contract-policy.test.ts` (tiap aturan punya kasus negatif; operasi lama dengan cacat sama diabaikan; baseline basi, `operationId` hilang dan ganda, pembukuan pengecualian; deteksi graf panggilan terhadap berkas route sintetis; bundel nyata hijau; baseline tak pernah tumbuh). Tiap kontrol dirusak bergantian dan tesnya memerah.

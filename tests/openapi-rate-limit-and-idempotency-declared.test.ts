@@ -20,20 +20,31 @@
  * sits in the mutation only) and a module such as a route-support file holds
  * both the key reader and helpers that never touch it.
  *
- * Static, no database. The policy gate of #1395 may absorb this.
+ * Static, no database. The walker is shared with the new-operation policy gate
+ * of #1395 (`scripts/api-contract-policy.ts`), which asks the same question.
  */
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
-import { stripComments } from "../scripts/lib/source-text";
+import {
+  RATE_LIMIT_HELPER,
+  parseFile,
+  reaches,
+  routeTemplate,
+  routesDir,
+  walkTs
+} from "../scripts/lib/route-handler-graph";
 
 const ROOT = path.resolve(import.meta.dir, "..");
-const ROUTES = path.join(ROOT, "src/pages/api/v1");
+const ROUTES = routesDir(ROOT);
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
-const LIMITER = /\b(checkRateLimit|checkSharedRateLimit|checkAuthRateLimit)\(/;
+// The call-graph walker and the limiter pattern live in
+// `scripts/lib/route-handler-graph.ts` since Issue #1395, which reuses them to
+// decide which NEW operations must declare 429.
+const LIMITER = RATE_LIMIT_HELPER;
 // A `retry-after` header counts only in a function that also builds a `429`,
 // so an unrelated `retry-after` elsewhere in a deep call graph (a provider
 // client, a queue) does not make a handler "send" it.
@@ -44,106 +55,6 @@ const RETRY_AFTER = {
 const IDEMPOTENCY_READ = /get\(\s*["']idempotency-key["']\s*\)/i;
 
 type AnyRecord = Record<string, any>;
-type Decl = { name: string; body: string };
-type Parsed = {
-  decls: Map<string, string>;
-  imports: Map<string, { file: string; name: string }>;
-};
-
-function walk(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = path.join(dir, entry);
-    return statSync(full).isDirectory()
-      ? walk(full)
-      : full.endsWith(".ts")
-        ? [full]
-        : [];
-  });
-}
-
-function resolveImport(from: string, spec: string): string | null {
-  if (!spec.startsWith(".")) return null;
-  const base = path.resolve(path.dirname(from), spec);
-  for (const candidate of [`${base}.ts`, path.join(base, "index.ts")]) {
-    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
-  }
-  return null;
-}
-
-const parsedCache = new Map<string, Parsed>();
-
-function parseFile(file: string): Parsed {
-  const cached = parsedCache.get(file);
-  if (cached) return cached;
-  const source = stripComments(readFileSync(file, "utf8"));
-  const decls = new Map<string, string>();
-  const starts: Array<{ name: string; index: number }> = [];
-  const declRe =
-    /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\s+(\w+)|(?:const|let|var)\s+(\w+))/gm;
-  for (const m of source.matchAll(declRe)) {
-    starts.push({ name: (m[1] ?? m[2])!, index: m.index! });
-  }
-  const list: Decl[] = starts.map((s, i) => ({
-    name: s.name,
-    body: source.slice(s.index, starts[i + 1]?.index ?? source.length)
-  }));
-  for (const d of list) decls.set(d.name, d.body);
-
-  const imports = new Map<string, { file: string; name: string }>();
-  for (const m of source.matchAll(
-    /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+"([^"]+)"/g
-  )) {
-    const resolved = resolveImport(file, m[2]!);
-    if (!resolved) continue;
-    for (const part of m[1]!.split(",")) {
-      const cleaned = part.trim().replace(/^type\s+/, "");
-      if (!cleaned) continue;
-      const [exported, local] = cleaned.split(/\s+as\s+/);
-      imports.set((local ?? exported)!.trim(), {
-        file: resolved,
-        name: exported!.trim()
-      });
-    }
-  }
-  const parsed = { decls, imports };
-  parsedCache.set(file, parsed);
-  return parsed;
-}
-
-function reaches(
-  pattern: { test(body: string): boolean; source: string },
-  file: string,
-  name: string,
-  seen = new Set<string>()
-): boolean {
-  const key = `${pattern.source}|${file}|${name}`;
-  if (seen.has(key)) return false;
-  seen.add(key);
-  const { decls, imports } = parseFile(file);
-  const body = decls.get(name);
-  if (body === undefined) return false;
-  if (pattern.test(body)) return true;
-  for (const token of new Set(body.match(/[A-Za-z_$][\w$]*/g) ?? [])) {
-    if (token === name) continue;
-    if (decls.has(token) && reaches(pattern, file, token, seen)) return true;
-    const imported = imports.get(token);
-    if (imported && reaches(pattern, imported.file, imported.name, seen)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function routeTemplate(file: string): string {
-  return (
-    "/api/v1/" +
-    path
-      .relative(ROUTES, file)
-      .replace(/\.ts$/, "")
-      .replace(/\/index$/, "")
-      .replace(/\[([^\]]+)\]/g, "{$1}")
-  );
-}
 
 const bundle = parseYaml(
   readFileSync(path.join(ROOT, "openapi/awcms-public-api.openapi.yaml"), "utf8")
@@ -166,8 +77,8 @@ type Handler = {
 };
 
 const handlers: Handler[] = [];
-for (const file of walk(ROUTES)) {
-  const template = routeTemplate(file);
+for (const file of walkTs(ROUTES)) {
+  const template = routeTemplate(file, ROOT);
   const pathItem = bundle.paths?.[template];
   if (!pathItem) continue;
   for (const method of METHODS) {
