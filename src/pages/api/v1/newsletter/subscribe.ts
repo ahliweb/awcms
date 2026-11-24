@@ -189,10 +189,10 @@ export const POST: APIRoute = async ({
 
   const sql = getDatabaseClient();
 
-  const { corsHeaders, decision } = await withPublicNewsletterTenant(
+  const { corsHeaders } = await withPublicNewsletterTenant(
     sql,
     request,
-    async (tx, tenant) => {
+    async (tx, tenant, decision) => {
       const outcome = await subscribe(
         tx,
         tenant.tenantId,

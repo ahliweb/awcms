@@ -120,6 +120,52 @@ const POLICY = {
   defaultCheckOutTime: "12:00:00"
 };
 
+const CONFIRMATION_TEMPLATE_KEY = "derived.newsletter_confirmation";
+
+async function seedConfirmationTemplate(tenantId: string): Promise<void> {
+  const actor = crypto.randomUUID();
+  await getHandlerAdminSql()`
+    INSERT INTO awcms_email_templates
+      (tenant_id, template_key, name, subject_template, text_body_template,
+       is_active, created_by, updated_by)
+    VALUES (${tenantId}, ${CONFIRMATION_TEMPLATE_KEY}, 'Newsletter confirmation',
+            ${JSON.stringify({ en: "Confirm your subscription" })}::jsonb,
+            ${JSON.stringify({ en: "Confirm: {{confirmUrl}}" })}::jsonb,
+            true, ${actor}, ${actor})
+    ON CONFLICT DO NOTHING
+  `;
+}
+
+/** A second tenant that serves `hostname` (active domain), with the template seeded. */
+async function seedSiteTenant(hostname: string): Promise<string> {
+  const admin = getHandlerAdminSql();
+  const tenantId = crypto.randomUUID();
+  await admin`
+    INSERT INTO awcms_tenants (id, tenant_code, tenant_name, status, default_locale)
+    VALUES (${tenantId}, 'site-1516', 'Site 1516', 'active', 'en')
+  `;
+  await admin`
+    INSERT INTO awcms_tenant_domains
+      (tenant_id, hostname, normalized_hostname, status, verified_at)
+    VALUES (${tenantId}, ${hostname}, ${hostname}, 'active', now())
+  `;
+  await seedConfirmationTemplate(tenantId);
+  return tenantId;
+}
+
+async function confirmationMailFor(
+  tenantId: string,
+  email: string
+): Promise<{ confirmUrl: string } | null> {
+  const rows = (await getHandlerAdminSql()`
+    SELECT variables FROM awcms_email_messages
+    WHERE tenant_id = ${tenantId}
+      AND template_key = ${CONFIRMATION_TEMPLATE_KEY}
+      AND to_address = ${email}
+  `) as { variables: { confirmUrl: string } }[];
+  return rows[0]?.variables ?? null;
+}
+
 const suite = integrationEnabled ? describe : describe.skip;
 
 suite("provider-side response conformance (integration)", () => {
@@ -216,16 +262,53 @@ suite("provider-side response conformance (integration)", () => {
       assertResponseConforms("post", route, res);
     });
 
-    // FINDING (#1393): for a host that DOES resolve a tenant with the module
-    // enabled, a FIRST subscription of a new address throws
-    // "ReferenceError: Cannot access 'decision' before initialization" at
-    // subscribe.ts (the `enqueueDirectAddressEmail` callback reads `decision`,
-    // which is destructured from the very call that is still running it), so no
-    // response is produced at all. Reported, not fixed here: this issue does not
-    // change handler behaviour. Turn this into a real test with the fix.
-    test.todo(
-      "a first subscription for a resolved tenant answers the declared neutral 200"
-    );
+    // Regression for #1516. For a host that resolves a tenant with the module
+    // enabled, a FIRST subscription of a new address used to throw
+    // "ReferenceError: Cannot access 'decision' before initialization": the
+    // handler callback read `decision` from the outer destructuring of the very
+    // call that was still running it. The unserved-origin test above could not
+    // see it, because that path never runs the callback.
+    test("a first subscription for a resolved tenant answers the declared neutral 200 and enqueues the confirmation", async () => {
+      if (!handlerReady) return;
+      await seedConfirmationTemplate(env.tenantId);
+      const res = await call({
+        email: "first-reader@example.test",
+        locale: "en"
+      });
+      expect(res.status).toBe(200);
+      assertResponseConforms("post", route, res);
+
+      const mail = await confirmationMailFor(
+        env.tenantId,
+        "first-reader@example.test"
+      );
+      expect(mail).not.toBeNull();
+      // Same-origin: the link is on the host the request arrived on (the
+      // resolver upgrades the scheme to https outside development).
+      expect(new URL(mail!.confirmUrl).origin).toBe("https://integration.test");
+      expect(new URL(mail!.confirmUrl).searchParams.get("token")).toBeTruthy();
+    });
+
+    // The granted cross-origin branch is the one that reads `decision.origin`:
+    // the confirmation link must point at the SITE, not at this CMS host.
+    test("a granted cross-origin subscription builds the confirmation URL on the site origin", async () => {
+      if (!handlerReady) return;
+      const siteHost = "site-1516.example.test";
+      const tenantId = await seedSiteTenant(siteHost);
+      const res = await call(
+        { email: "site-reader@example.test", locale: "en" },
+        { origin: `https://${siteHost}` }
+      );
+      expect(res.status).toBe(200);
+      assertResponseConforms("post", route, res);
+
+      const mail = await confirmationMailFor(
+        tenantId,
+        "site-reader@example.test"
+      );
+      expect(mail).not.toBeNull();
+      expect(new URL(mail!.confirmUrl).origin).toBe(`https://${siteHost}`);
+    });
 
     test("a malformed body answers a declared 400", async () => {
       if (!handlerReady) return;

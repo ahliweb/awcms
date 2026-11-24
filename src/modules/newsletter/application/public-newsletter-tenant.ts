@@ -51,6 +51,20 @@ export type NewsletterTenantHandler<T> = (
   tenant: PublicTenantResolution
 ) => Promise<T>;
 
+/**
+ * The handler `withPublicNewsletterTenant` runs. It receives the already
+ * classified origin `decision` as a THIRD argument (#1516): the handler runs
+ * inside the very call that produces `decision`, so a handler that read it from
+ * the caller's `const { decision } = await withPublicNewsletterTenant(...)`
+ * would touch that binding before it is initialised and throw a
+ * `ReferenceError` for every new address on a resolved tenant.
+ */
+export type PublicNewsletterTenantHandler<T> = (
+  tx: Bun.TransactionSQL,
+  tenant: PublicTenantResolution,
+  decision: NewsletterOriginDecision
+) => Promise<T>;
+
 /** See `public-search-tenant-resolution.ts` — the fail-closed sentinel `app.current_tenant_id` defaults to. */
 const TIMING_PAD_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -181,12 +195,14 @@ export type PublicNewsletterOutcome<T> = {
 export async function withPublicNewsletterTenant<T>(
   sql: Bun.SQL,
   request: Request,
-  handler: NewsletterTenantHandler<T>,
+  handler: PublicNewsletterTenantHandler<T>,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<PublicNewsletterOutcome<T>> {
   const { decision, tenant: originTenant } =
     await resolvePublicNewsletterOrigin(sql, request);
   const corsHeaders = newsletterCorsHeaders(decision);
+  const withDecision: NewsletterTenantHandler<T> = (tx, tenant) =>
+    handler(tx, tenant, decision);
 
   if (decision.kind === "refused") {
     await padUnresolvedNewsletterTenantLatency(sql);
@@ -195,14 +211,14 @@ export async function withPublicNewsletterTenant<T>(
 
   if (decision.kind === "granted" && originTenant) {
     return {
-      result: await runWithNewsletterTenant(sql, originTenant, handler),
+      result: await runWithNewsletterTenant(sql, originTenant, withDecision),
       corsHeaders,
       decision
     };
   }
 
   return {
-    result: await withNewsletterTenant(sql, request, handler, env),
+    result: await withNewsletterTenant(sql, request, withDecision, env),
     corsHeaders,
     decision
   };
