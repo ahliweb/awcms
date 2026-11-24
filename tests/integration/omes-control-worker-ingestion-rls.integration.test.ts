@@ -5,8 +5,8 @@
  *   awcms_omes_operation_requests, awcms_omes_jobs,
  *   awcms_omes_worker_nonces, awcms_omes_worker_results
  *
- * (`awcms_omes_servers` and `awcms_omes_enrollments` are already proved in
- * `omes-control.integration.test.ts`; not repeated here.)
+ * plus the two anchors `awcms_omes_servers` and `awcms_omes_enrollments`
+ * (one combined test at the end).
  *
  * Every statement runs as the real least-privilege `awcms_app` login through
  * `getRuntimeSql()` (never a superuser, never `SET ROLE`), so a table whose
@@ -362,6 +362,79 @@ suite("omes_control worker-ingestion tables: FORCE RLS as awcms_app", () => {
         (SELECT reconciled FROM awcms_omes_worker_results WHERE id = ${b.resultId}) AS reconciled
     `) as { route: string; reconciled: boolean }[];
     expect(intact[0]).toEqual({ route: "poll", reconciled: false });
+  });
+
+  test("servers and enrollments (ingestion anchors): ENABLE+FORCE RLS, foreign read/UPDATE/DELETE hit zero rows, foreign INSERT is refused", async () => {
+    const flags = (await getAdminSql()`
+      SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
+      WHERE relname IN ('awcms_omes_servers', 'awcms_omes_enrollments')
+    `) as {
+      relname: string;
+      relrowsecurity: boolean;
+      relforcerowsecurity: boolean;
+    }[];
+    expect(flags.map((r) => r.relname).sort()).toEqual([
+      "awcms_omes_enrollments",
+      "awcms_omes_servers"
+    ]);
+    for (const r of flags) {
+      expect(r.relrowsecurity, r.relname).toBe(true);
+      expect(r.relforcerowsecurity, r.relname).toBe(true);
+    }
+
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, async (tx) => {
+      const servers = (await tx`SELECT tenant_id FROM awcms_omes_servers`) as {
+        tenant_id: string;
+      }[];
+      expect(servers.map((r) => r.tenant_id)).toEqual([TENANT_A]);
+      const enrollments = (await tx`
+        SELECT tenant_id FROM awcms_omes_enrollments
+      `) as { tenant_id: string }[];
+      expect(enrollments.map((r) => r.tenant_id)).toEqual([TENANT_A]);
+
+      const upServer = (await tx`
+        UPDATE awcms_omes_servers SET status = 'decommissioned'
+        WHERE tenant_id = ${TENANT_B} RETURNING 1
+      `) as unknown[];
+      expect(upServer).toHaveLength(0);
+      const upEnrollment = (await tx`
+        UPDATE awcms_omes_enrollments SET status = 'revoked'
+        WHERE tenant_id = ${TENANT_B} RETURNING 1
+      `) as unknown[];
+      expect(upEnrollment).toHaveLength(0);
+      const delEnrollment = (await tx`
+        DELETE FROM awcms_omes_enrollments WHERE tenant_id = ${TENANT_B} RETURNING 1
+      `) as unknown[];
+      expect(delEnrollment).toHaveLength(0);
+
+      const e1 = await assertRejectedInSavepoint(
+        tx,
+        (sp) => sp`
+          INSERT INTO awcms_omes_servers (tenant_id, server_id, hostname, status)
+          VALUES (${TENANT_B}, 'srv-evil', 'evil.example.test', 'online')`,
+        "foreign-tenant server"
+      );
+      expect(e1.message).toContain("row-level security");
+      const e2 = await assertRejectedInSavepoint(
+        tx,
+        (sp) => sp`
+          INSERT INTO awcms_omes_enrollments
+            (tenant_id, server_id, worker_id, status, public_key, enrolled_at)
+          VALUES (${TENANT_B}, ${SERVER_ID}, 'worker_evil', 'enrolled', 'pem', now())`,
+        "foreign-tenant enrollment"
+      );
+      expect(e2.message).toContain("row-level security");
+    });
+
+    const intact = (await getAdminSql()`
+      SELECT
+        (SELECT status FROM awcms_omes_servers WHERE tenant_id = ${TENANT_B}) AS server_status,
+        (SELECT status FROM awcms_omes_enrollments WHERE tenant_id = ${TENANT_B}) AS enrollment_status
+    `) as { server_status: string; enrollment_status: string }[];
+    expect(intact[0]).toEqual({
+      server_status: "online",
+      enrollment_status: "enrolled"
+    });
   });
 
   test("a result row cannot reference another tenant's job: the composite FK is not satisfiable across tenants", async () => {
