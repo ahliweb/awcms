@@ -138,3 +138,84 @@ export function legalBasisLabel(t: T, basis: string): string {
       return basis;
   }
 }
+
+export function contactPointKindLabel(t: T, kind: string): string {
+  switch (kind) {
+    case "email":
+      return t("Email");
+    case "phone":
+      return t("Phone");
+    case "platform_id":
+      return t("Messaging account");
+    default:
+      return kind;
+  }
+}
+
+/**
+ * The sentence each refusal of the lead WRITE endpoints gets on the write
+ * screens (Issue #1166), keyed by the API's error code. Translated on the
+ * server and carried to the page script in a `data-messages` attribute: a
+ * client script cannot translate. A code not listed shows `fallback`, never
+ * the server's own text (no internal detail reaches the screen).
+ */
+export function crmLeadWriteMessages(t: T): Record<string, string> {
+  return {
+    VALIDATION_ERROR: t(
+      "Some of the details are not valid. Check the form and try again."
+    ),
+    VERSION_CONFLICT: t(
+      "Someone else changed this lead. Reload the page and try again."
+    ),
+    PIPELINE_NOT_FOUND: t("That pipeline no longer exists."),
+    PIPELINE_ARCHIVED: t("That pipeline is archived and takes no new leads."),
+    OWNER_NOT_FOUND: t("You cannot be made the owner of this lead."),
+    CONTACT_POINT_NOT_FOUND: t(
+      "A contact point to revoke is no longer part of this lead. Reload the page and try again."
+    ),
+    LEAD_NOT_OPEN: t("This lead can no longer be changed."),
+    LEAD_ALREADY_DELETED: t("This lead is already deleted."),
+    LEAD_NOT_DELETED: t("This lead is not deleted."),
+    PIPELINE_MISMATCH: t("Only leads of the same pipeline can be merged."),
+    ABSORBED_LEAD_CONVERTED: t("A converted lead cannot be merged away."),
+    ABSORBED_LEAD_HAS_MERGES: t(
+      "The lead to merge away already has another lead merged into it."
+    ),
+    ALREADY_REVERTED: t("This merge was already undone."),
+    UNDO_WINDOW_CLOSED: t("The time to undo this merge has passed."),
+    ABSORBED_LEAD_CHANGED: t(
+      "The merged lead is no longer merged into the survivor."
+    ),
+    EVIDENCE_REUSED: t(
+      "This evidence reference is already recorded for something else."
+    ),
+    ALREADY_CONVERTED: t("This lead is already converted."),
+    ALREADY_REVERSED: t("This conversion was already reversed."),
+    NO_CONVERTED_STAGE: t("The pipeline has no converted stage."),
+    STAGE_NOT_FOUND: t(
+      "That stage is no longer part of the pipeline. Reload the page and try again."
+    ),
+    TRANSITION_NOT_ALLOWED: t(
+      "The pipeline does not allow converting from this stage."
+    ),
+    GUARD_NOT_MET: t(
+      "This step needs something the lead does not have yet (an owner, a contact point or a reason)."
+    ),
+    CONVERSION_MODE_MISMATCH: t(
+      "That kind of conversion is not allowed for your access."
+    ),
+    CRM_LEADS_TENANT_DISABLED: t(
+      "The lead pipeline is switched off for this tenant."
+    ),
+    RESOURCE_NOT_FOUND: t("That lead is no longer available."),
+    ACCESS_DENIED: t("You do not have permission to do that."),
+    IDEMPOTENCY_CONFLICT: t(
+      "This request was already used for something else. Reload the page and try again."
+    ),
+    RATE_LIMITED: t("Too many requests. Wait a moment and try again."),
+    INTERACTIVE_SESSION_REQUIRED: t(
+      "This needs a signed-in person; a machine credential cannot do it."
+    ),
+    fallback: t("Could not save the change. Please try again.")
+  };
+}

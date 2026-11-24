@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 40    |
-| Migrations                          | 292   |
+| Migrations                          | 293   |
 | `awcms_*` tables                    | 278   |
 | Tables with `FORCE` RLS             | 259   |
 | RLS-free tables (global, by design) | 19    |
-| Test files                          | 925   |
-| Route files                         | 698   |
+| Test files                          | 927   |
+| Route files                         | 703   |
 | ADR                                 | 344   |
 
 ### Modules
@@ -357,6 +357,7 @@
 | 290 | `sql/416_awcms_channel_accounts_claim_on_verify.sql`                   |
 | 291 | `sql/418_awcms_realtime_wake_hint_notify.sql`                          |
 | 292 | `sql/420_awcms_catalog_boundary_audit_role.sql`                        |
+| 293 | `sql/430_awcms_crm_leads_deleted_list_index.sql`                       |
 
 ### Tables & Row-Level Security
 
@@ -645,9 +646,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 683        |
+| `(root)`      | 684        |
 | `e2e`         | 33         |
-| `integration` | 207        |
+| `integration` | 208        |
 | `unit`        | 2          |
 
 ### Routes
@@ -655,7 +656,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 571   |
-| `/admin/**`     | 96    |
+| `/admin/**`     | 101   |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->

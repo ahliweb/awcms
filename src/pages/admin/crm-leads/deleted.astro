@@ -1,0 +1,247 @@
+---
+/**
+ * Deleted leads — look at and restore soft-deleted prospects (Issue #1166,
+ * ADR-0153).
+ *
+ * ## What it is
+ *
+ * The tenant's SOFT-deleted leads, newest first (the newest 100; it says so
+ * when there are more), each with a Restore button behind
+ * `POST /api/v1/crm-leads/leads/{id}/restore`. Restoring puts the lead back in
+ * the list exactly as it was; nothing was erased by the delete. Erasing a
+ * PERSON is the data-subject request flow, not this screen.
+ *
+ * It shows what the API shows and no more: the display name and the MASKED
+ * contact points, never a value, never the customer reference.
+ *
+ * Gated by `crm_leads.leads.restore`, the permission of the endpoint behind the
+ * button. (The deleted list of the API needs restore OR delete; this screen
+ * exists to restore, so it takes the stricter one.) Each restore carries the
+ * version the page was rendered with and an `Idempotency-Key`.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  crmLeadWriteMessages,
+  leadStatusLabel
+} from "../../../lib/i18n/labels/crm-leads";
+import { formatUtcMinute } from "../../../lib/ui/channel-accounts-screen";
+import { loadDeletedLeads } from "../../../modules/crm-leads/application/screen-write-loaders";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/crm-leads";
+
+/** The entry guard, spelled out as a literal so `admin:screen-coverage:check` sees the permission this screen claims. */
+const RESTORE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "restore"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: RESTORE_GUARD,
+  load: ({ tx, auth }) =>
+    loadDeletedLeads({
+      context: { tx, tenantId: ssr.tenantId, me: auth.context.tenantUserId }
+    }),
+  onError: (error) => {
+    logAdminPageError("admin/crm-leads/deleted.astro: failed to load", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
+
+const allowed = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const leads = data?.leads ?? [];
+const pipelineName = (id: string) =>
+  data?.pipelines.find((pipeline) => pipeline.id === id)?.name ??
+  t("Unknown pipeline");
+
+const messages = {
+  ...crmLeadWriteMessages(t),
+  busy: t("Please wait…")
+};
+---
+
+<AdminLayout
+  title={t("Deleted leads")}
+  description={t(
+    "Leads that were deleted, newest first. Restoring a lead puts it back in the list as it was."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH}>{t("Back to the leads")}</a>
+  </p>
+
+  {!allowed && (
+    <p class="state-notice fade-in-up" id="crm-leads-deleted-denied">
+      {t("You do not have permission to restore leads.")}
+    </p>
+  )}
+
+  {allowed && loadError && (
+    <p class="state-notice fade-in-up" id="crm-leads-deleted-error">
+      {t(
+        "The deleted leads could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {allowed && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="crm-leads-deleted-disabled">
+      {t("The lead pipeline is switched off on this deployment.")}
+    </p>
+  )}
+
+  {allowed && !loadError && deploymentEnabled && data && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="crm-leads-deleted-title"
+      id="crm-leads-deleted"
+      data-messages={JSON.stringify(messages)}
+    >
+      <h2 class="admin-section-title" id="crm-leads-deleted-title">
+        {t("Deleted leads")}
+      </h2>
+
+      {!data.tenantEnabled && (
+        <p class="state-notice" id="crm-leads-deleted-tenant-off">
+          {t(
+            "The lead pipeline is switched off for this tenant, so leads cannot be restored."
+          )}
+        </p>
+      )}
+      {data.more && (
+        <p class="state-notice" id="crm-leads-deleted-truncated">
+          {t(
+            "There are more deleted leads than this screen shows. Showing the newest {count}.",
+            { count: leads.length }
+          )}
+        </p>
+      )}
+
+      <p
+        id="crm-leads-deleted-error-box"
+        class="admin-create-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      />
+
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="crm-leads-deleted-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="crm-leads-deleted-table"
+        >
+          <caption id="crm-leads-deleted-caption">
+            {tn("{count} deleted lead", "{count} deleted leads", leads.length, {
+              count: leads.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Lead")}</th>
+              <th scope="col">{t("Pipeline")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Deleted")}</th>
+              <th scope="col">{t("Actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leads.length === 0 ? (
+              <tr>
+                <td colspan={5}>
+                  <span class="cell-muted">{t("No deleted leads.")}</span>
+                </td>
+              </tr>
+            ) : (
+              leads.map((lead) => (
+                <tr data-lead-id={lead.id}>
+                  <td data-label={t("Lead")}>
+                    {lead.displayName ?? t("Unnamed lead")}
+                    {lead.contactPoints
+                      .filter((point) => point.revokedAt === null)
+                      .map((point) => (
+                        <span class="cell-muted"> {point.masked ?? "—"}</span>
+                      ))}
+                  </td>
+                  <td data-label={t("Pipeline")}>
+                    {pipelineName(lead.pipelineId)}
+                  </td>
+                  <td data-label={t("Status")}>
+                    {leadStatusLabel(t, lead.status)}
+                  </td>
+                  <td data-label={t("Deleted")}>
+                    {formatUtcMinute(lead.deletedAt)}
+                  </td>
+                  <td data-label={t("Actions")}>
+                    <button
+                      type="button"
+                      class="btn btn-secondary js-lead-restore"
+                      data-lead-id={lead.id}
+                      data-version={lead.version}
+                      disabled={!data.tenantEnabled}
+                    >
+                      {t("Restore")}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../../lib/ui/admin-idempotency-key";
+  import {
+    failureText,
+    readMessages
+  } from "../../../lib/ui/crm-leads-write-client";
+
+  const error = messageBox("crm-leads-deleted-error-box");
+  const messages = readMessages("crm-leads-deleted");
+  // One key per distinct (lead, version): a retry replays.
+  const keyFor = createIdempotencyKeySource();
+
+  onAction(".js-lead-restore", async (button) => {
+    const id = button.dataset.leadId ?? "";
+    const expectedVersion = Number(button.dataset.version ?? "0");
+    const url = `/api/v1/crm-leads/leads/${id}/restore`;
+    const body = { expectedVersion };
+
+    await mutateAndReload(
+      button,
+      error,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": keyFor({ url, body })
+        }),
+      (code) => failureText(messages, code),
+      messages.busy
+    );
+  });
+</script>

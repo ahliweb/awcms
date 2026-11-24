@@ -84,6 +84,28 @@ const ASSIGN_GUARD = {
   action: "assign"
 } as const;
 
+/** Only to decide whether to LINK to the write pages; each of those gates itself. */
+const UPDATE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "leads",
+  action: "update"
+} as const;
+const MERGE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "merges",
+  action: "manage"
+} as const;
+const APPROVE_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "conversions",
+  action: "approve"
+} as const;
+const MANUAL_GUARD = {
+  moduleKey: "crm_leads",
+  activityCode: "manual_conversions",
+  action: "create"
+} as const;
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -100,6 +122,12 @@ const screen = await loadAdminScreen({
       leadId,
       moveGuard: MOVE_GUARD,
       assignGuard: ASSIGN_GUARD,
+      writeGuards: {
+        update: UPDATE_GUARD,
+        merge: MERGE_GUARD,
+        approve: APPROVE_GUARD,
+        manual: MANUAL_GUARD
+      },
       can
     }),
   onError: (error) => {
@@ -294,6 +322,40 @@ const messages = {
           </p>
         )}
       </section>
+
+      {(detail.canEdit || detail.canMerge || detail.canConvert) && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="crm-lead-more-title"
+        >
+          <h2 class="admin-section-title" id="crm-lead-more-title">
+            {t("More")}
+          </h2>
+          <ul class="cell-muted" id="crm-lead-more-links">
+            {detail.canEdit && (
+              <li>
+                <a href={`${LIST_PATH}/${lead.id}/edit`}>
+                  {t("Edit the lead or delete it")}
+                </a>
+              </li>
+            )}
+            {detail.canMerge && (
+              <li>
+                <a href={`${LIST_PATH}/${lead.id}/merge`}>
+                  {t("Review merges")}
+                </a>
+              </li>
+            )}
+            {detail.canConvert && (
+              <li>
+                <a href={`${LIST_PATH}/${lead.id}/conversion`}>
+                  {t("Record or reverse a conversion")}
+                </a>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {(detail.canMove || detail.canAssign) && (
         <section
