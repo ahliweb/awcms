@@ -45,7 +45,17 @@ export const OPENGREP_ASSETS: Readonly<
 };
 export const RULES_REPO = "https://github.com/opengrep/opengrep-rules.git";
 export const RULES_COMMIT = "f1d2b562b414783763fd02a6ed2736eaed622efa";
-export const RULES_DIRS = ["javascript", "typescript"] as const;
+/** `yaml/github-actions` menggantikan cakupan analisis workflow (keputusan pemilik 2026-11-27). */
+export const RULES_DIRS = [
+  "javascript",
+  "typescript",
+  "yaml/github-actions"
+] as const;
+
+/** Di opengrep-rules, `*.test.yaml` dan `*.fixed.yaml` adalah fixture uji aturan YAML, bukan aturan. */
+export function isRuleFile(name: string): boolean {
+  return /\.ya?ml$/.test(name) && !/\.(test|fixed)\.ya?ml$/.test(name);
+}
 
 export const SAST_DIR = "tools/ci/sast";
 export const RULES_REL = `${SAST_DIR}/rules`;
@@ -125,7 +135,7 @@ export function normalizeRuleId(id: string): string {
   const marker = "tools.ci.sast.rules.";
   const i = id.lastIndexOf(marker);
   if (i >= 0) return id.slice(i + marker.length);
-  const m = /(?:^|\.)((?:javascript|typescript|lokal)\..+)$/.exec(id);
+  const m = /(?:^|\.)((?:javascript|typescript|yaml|lokal)\..+)$/.exec(id);
   return m ? m[1]! : id;
 }
 
@@ -457,7 +467,7 @@ function countRuleFiles(dir: string): number {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
     if (e.isDirectory()) n += countRuleFiles(p);
-    else if (/\.ya?ml$/.test(e.name)) n++;
+    else if (isRuleFile(e.name)) n++;
   }
   return n;
 }
@@ -694,7 +704,7 @@ function listRuleYaml(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
     if (e.isDirectory()) listRuleYaml(p, acc);
-    else if (/\.ya?ml$/.test(e.name)) acc.push(p);
+    else if (isRuleFile(e.name)) acc.push(p);
   }
   return acc;
 }
@@ -712,7 +722,7 @@ Salinan aturan, bukan tulisan repo ini. Jangan edit tangan; sinkron ulang dengan
 - Commit: \`${RULES_COMMIT}\`
 - Tanggal commit: ${commitDate}
 - Disalin pada: ${tanggalSinkron}
-- Cakupan: semua berkas \`.yaml\` dan \`.yml\` di \`javascript/\` dan \`typescript/\` (${jumlah} berkas), ditambah \`LICENSE\` upstream utuh.
+- Cakupan: semua berkas aturan \`.yaml\` dan \`.yml\` di ${RULES_DIRS.map((d) => `\`${d}/\``).join(", ")} (${jumlah} berkas; fixture uji \`*.test.yaml\` dan \`*.fixed.yaml\` tidak disalin), ditambah \`LICENSE\` upstream utuh.
 - Lisensi: Commons Clause + LGPL 2.1 (lihat \`LICENSE\`). Syarat Commons Clause menahan hak MENJUAL perangkat lunak; memakai aturan di CI internal tidak dibatasi.
 - Tidak dipakai: aturan Semgrep Registry (\`p/...\`) dan repo semgrep/semgrep-rules.
 - Aturan milik repo ada di \`lokal/\` dan tidak disentuh sinkron.

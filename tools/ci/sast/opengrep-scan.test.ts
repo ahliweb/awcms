@@ -13,7 +13,9 @@ import {
   parseBaseline,
   tidyBaseline,
   type Baseline,
-  type RawResult
+  type RawResult,
+  isRuleFile,
+  RULES_DIRS
 } from "./opengrep-scan.ts";
 
 const raw = (
@@ -229,5 +231,36 @@ describe("jobsFromEnv", () => {
     expect(jobsFromEnv({ CI_LOKAL_CPUS: "3" })).toBe(3);
     expect(jobsFromEnv({ CI_LOKAL_CPUS: "x" })).toBe(5);
     expect(jobsFromEnv({ CI_LOKAL_CPUS: "0" })).toBe(5);
+  });
+});
+
+describe("aturan workflow GitHub Actions", () => {
+  test("yaml/github-actions termasuk direktori aturan tersalin", () => {
+    expect([...RULES_DIRS]).toEqual([
+      "javascript",
+      "typescript",
+      "yaml/github-actions"
+    ]);
+  });
+
+  test("fixture uji aturan YAML bukan berkas aturan", () => {
+    expect(isRuleFile("run-shell-injection.yaml")).toBe(true);
+    expect(isRuleFile("third-party-action-not-pinned-to-commit-sha.yml")).toBe(
+      true
+    );
+    expect(isRuleFile("run-shell-injection.test.yaml")).toBe(false);
+    expect(isRuleFile("curl-eval.fixed.yaml")).toBe(false);
+    expect(isRuleFile("README.md")).toBe(false);
+  });
+
+  test("id aturan yaml dinormalisasi seperti aturan lain", () => {
+    expect(
+      normalizeRuleId(
+        "tmp.x.tools.ci.sast.rules.yaml.github-actions.security.run-shell-injection"
+      )
+    ).toBe("yaml.github-actions.security.run-shell-injection");
+    expect(
+      normalizeRuleId("home.u.rules.yaml.github-actions.security.curl-eval")
+    ).toBe("yaml.github-actions.security.curl-eval");
   });
 });

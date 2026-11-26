@@ -32,6 +32,7 @@ fixtures/api-contract/
 # rules live in `tools/ci/sast/rules/lokal/` and stay formatted.
 tools/ci/sast/rules/javascript/
 tools/ci/sast/rules/typescript/
+tools/ci/sast/rules/yaml/
 tools/ci/sast/rules/SUMBER.md
 # SAST baseline, written only by `opengrep-scan.ts baseline` (ADR-0173): the
 # script is its author, and a reformat would show up as churn on every `--rapikan`.
