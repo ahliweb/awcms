@@ -26,3 +26,13 @@ src/modules/omes-control/contracts/compatibility/v1/
 # contract-derived fixtures pack (bun run api:fixtures:generate, Issue #1392) -- the
 # `:check` gate compares bytes, so the generator must be its only author
 fixtures/api-contract/
+# SAST rules copied byte-for-byte from opengrep/opengrep-rules at a pinned commit
+# (ADR-0173). `bun tools/ci/sast/opengrep-scan.ts sinkron-aturan` is their only
+# author; reformatting them would diverge from the upstream bytes. The repo's own
+# rules live in `tools/ci/sast/rules/lokal/` and stay formatted.
+tools/ci/sast/rules/javascript/
+tools/ci/sast/rules/typescript/
+tools/ci/sast/rules/SUMBER.md
+# SAST baseline, written only by `opengrep-scan.ts baseline` (ADR-0173): the
+# script is its author, and a reformat would show up as churn on every `--rapikan`.
+tools/ci/sast/baseline.json

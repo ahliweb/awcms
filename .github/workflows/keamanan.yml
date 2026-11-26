@@ -1,0 +1,109 @@
+# Security leg: secrets (gitleaks) + SAST (OpenGrep with pinned, copied rules).
+# Internal cross-portfolio standard DL-098; recorded here as ADR-0173, which
+# replaces the CodeQL workflow (`codeql.yml`, removed by the same change).
+#
+# Required-check name for the `main` ruleset:
+#   "keamanan / sast-rahasia-dependensi"  (= the job's `name:` below)
+#
+# Dependency audit is NOT repeated here: `bun run deps:audit:check` already
+# gates every PR inside the `check` chain of `ci.yml` (job "Quality"), with the
+# threshold and exception ledger of `scripts/dependency-audit-check.ts`.
+# The job name keeps the standard's wording so the same check name is required
+# in every repository of the portfolio.
+#
+# Deliberately NO `paths` filter on pull_request: a required check that never
+# reports blocks merging forever. Deliberately NO SARIF upload to code scanning:
+# results stay in the job log and the summary JSON (ADR-0173 §Decision).
+name: ci-keamanan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-keamanan-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match OPENGREP_VERSION and the sha256 in tools/ci/sast/opengrep-scan.ts
+  # (cache key only; the script verifies the sha256 itself before executing).
+  OPENGREP_VERSION: v2.1.0
+  OPENGREP_SHA256_X86: d6a68a84c01a3d8ee933f60847decf1b4d0fd7791a26833b32b95922baf28974
+  GITLEAKS_VERSION: 8.30.1
+  # sha256 of gitleaks_8.30.1_linux_x64.tar.gz (GitHub release asset digest).
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  keamanan:
+    name: keamanan / sast-rahasia-dependensi
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the PR or push commit range must be present for gitleaks
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          # Same pin as every other workflow (package.json `packageManager`);
+          # the repo has no `.bun-version` file.
+          bun-version: "1.4.4"
+
+      - name: Gitleaks (pinned version, verified checksum, commit range)
+        env:
+          # Event values through env, never interpolated into the script, so
+          # they cannot inject commands.
+          KEJADIAN: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          SEBELUM: ${{ github.event.before }}
+          SESUDAH: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "$tmp/gitleaks.tgz" "$url"
+          echo "${GITLEAKS_SHA256}  $tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$tmp/gitleaks.tgz" -C "$tmp" gitleaks
+          # A commit RANGE, not the whole history: PR = base..head,
+          # push = before..after, otherwise (first push, workflow_dispatch)
+          # the tip commit only.
+          if [ "$KEJADIAN" = "pull_request" ]; then
+            rentang="${PR_BASE}..${PR_HEAD}"
+          elif [ -n "$SEBELUM" ] && ! printf '%s' "$SEBELUM" | grep -Eq '^0+$'; then
+            rentang="${SEBELUM}..${SESUDAH}"
+          else
+            rentang="-1 ${SESUDAH}"
+          fi
+          # --redact: secret values are never printed to the log. The repo has
+          # no gitleaks config of its own, so the built-in rules apply.
+          "$tmp/gitleaks" git --no-banner --redact --verbose --log-opts="$rentang" .
+
+      - name: Cache OpenGrep binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/opengrep/${{ env.OPENGREP_VERSION }}
+          key: opengrep-${{ env.OPENGREP_VERSION }}-${{ env.OPENGREP_SHA256_X86 }}
+
+      # `design/` is excluded (ADR-0173 §Coverage): a reference-only exported
+      # design canvas plus a byte-identical vendored copy of a third-party
+      # runtime, never shipped and never imported by `src/` — the same folder,
+      # for the same reason, that the CodeQL configuration excluded.
+      - name: TEMPORARY - create adoption baseline and print it
+        run: |
+          bun tools/ci/sast/opengrep-scan.ts baseline --buat --exclude design --baseline "$RUNNER_TEMP/baseline.json"
+          echo "-----BEGIN BASELINE-----"
+          cat "$RUNNER_TEMP/baseline.json"
+          echo "-----END BASELINE-----"
+
+      - name: "SAST OpenGrep (gate: new ERROR outside the baseline)"
+        run: bun tools/ci/sast/opengrep-scan.ts --exclude design --keluaran "$RUNNER_TEMP/sast"

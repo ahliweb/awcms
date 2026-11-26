@@ -1,0 +1,13 @@
+rules:
+  - id: larang-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Panggilan eval() dilarang: mengeksekusi string sebagai kode membuka injeksi kode.
+      Pakai parser data (JSON.parse) atau tabel pemetaan eksplisit.
+    pattern: eval(...)
+    metadata:
+      alasan: "eval() mengeksekusi teks sebagai kode; hampir selalu ada alternatif yang aman."
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      kategori: security
+      pemilik: repo
