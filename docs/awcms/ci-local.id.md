@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ci-local.md)
 
-<!-- i18n-source-hash: sha256:23e0550a976b627675f578bd0949d281e3ebbf98591d7574f0f138b97162abb9 -->
+<!-- i18n-source-hash: sha256:8bb1a53080a59eaad5db17d49261beff577556c5e950fa964588c724905af2dc -->
 
 # Menjalankan setiap job CI secara lokal (`bun run ci:local`)
 
@@ -180,8 +180,10 @@ dimatikan).
 
 ## Tidak tercakup
 
-`codeql.yml` (CodeQL hanya jalan di GitHub), app GitGuardian, dan `release.yml`
-(dipicu tag) tidak punya padanan lokal. `ci:local` yang hijau itu perlu, bukan
+`keamanan.yml` (gitleaks + SAST OpenGrep, [ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.id.md); pemindaian penuh melewati batas
+60 detik untuk CI di mesin kerja pemilik, jadi ia berjalan di runner GitHub-hosted),
+app GitGuardian, dan `release.yml` (dipicu tag) tidak punya padanan lokal di
+`ci:local`. `ci:local` yang hijau itu perlu, bukan
 cukup: required checks GitHub tetap yang menentukan merge.
 
 ## Lihat juga

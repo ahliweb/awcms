@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+ci(security): replace CodeQL with OpenGrep SAST and gitleaks (ADR-0173, internal cross-portfolio standard DL-098). Removes `.github/workflows/codeql.yml`, `.github/codeql/codeql-config.yml` and `tests/codeql-coverage-statement.test.ts`; adds `.github/workflows/keamanan.yml` (job `keamanan / sast-rahasia-dependensi` on a GitHub-hosted runner: gitleaks 8.30.1 over the event's commit range, then OpenGrep v2.1.0 pinned by SHA-256 with a copy of `opengrep/opengrep-rules` at a pinned commit, failing only on a new `ERROR` outside the shrink-only baseline `tools/ci/sast/baseline.json`; no SARIF upload), `tools/ci/sast/` (scanner script, its tests, copied rules, local rule, adoption baseline) and `tests/sast-coverage-statement.test.ts`. The skill `awcms-codeql-triage` is replaced by `awcms-sast-triage`. The dependency audit stays in the `check` chain. No application runtime change. Owner action: swap the three CodeQL contexts in ruleset `11653326` for `keamanan / sast-rahasia-dependensi`.

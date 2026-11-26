@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](dependency-governance.md)
 
-<!-- i18n-source-hash: sha256:0565cdc63c2784ea30dd54c98b48ebbf141bbbeb2880475129cc7a4febfa797d -->
+<!-- i18n-source-hash: sha256:2a5af438a7a046fb4a1488ae0a8a4a45681aae02d62391ec1827818aa5b9443e -->
 
 # Tata kelola dependensi — audit kesegaran dan upgrade atomik
 
@@ -47,7 +47,7 @@ install --frozen-lockfile` di mana-mana. Tidak ada `latest` mengambang di
 | Image dasar (`Dockerfile.production`, image runner cron dan backup di `deploy/cron/awcms.crontab`) | `deps:freshness` — tag terbaru sebentuk di Docker Hub, dan apakah digest yang dicatat di Dockerfile masih cocok dengan tag-nya       | mingguan                          |
 | GitHub Actions (dipin dengan SHA)                                                                  | Dependabot `github-actions`                                                                                                          | mingguan (Sen 09:30 Asia/Jakarta) |
 | Dependensi npm, usulan PR                                                                          | Dependabot `bun` (maksimum 5 PR terbuka)                                                                                             | mingguan (Sen 09:00 Asia/Jakarta) |
-| Analisis statis                                                                                    | CodeQL (required check)                                                                                                              | setiap PR                         |
+| Analisis statis                                                                                    | OpenGrep di `keamanan.yml` (ADR-0173; `ERROR` baru di luar baseline menggagalkan)                                                    | setiap PR                         |
 | Lisensi dan SBOM pohon dependensi                                                                  | `bun run deps:license:check` (di setiap `bun run check`; menulis SBOM CycloneDX dengan `--out-sbom`)                                 | setiap PR; mingguan               |
 | Changelog API provider                                                                             | `bun run deps:provider-changelog:check` (di setiap `bun run check`) terhadap `scripts/provider-api-register.ts`                      | setiap PR; mingguan               |
 | SBOM image rilis                                                                                   | `release.yml` (`anchore/sbom-action`)                                                                                                | per rilis                         |

@@ -98,12 +98,24 @@ jobs:
       # design canvas plus a byte-identical vendored copy of a third-party
       # runtime, never shipped and never imported by `src/` — the same folder,
       # for the same reason, that the CodeQL configuration excluded.
-      - name: TEMPORARY - create adoption baseline and print it
-        run: |
-          bun tools/ci/sast/opengrep-scan.ts baseline --buat --exclude design --baseline "$RUNNER_TEMP/baseline.json"
-          echo "-----BEGIN BASELINE-----"
-          cat "$RUNNER_TEMP/baseline.json"
-          echo "-----END BASELINE-----"
-
       - name: "SAST OpenGrep (gate: new ERROR outside the baseline)"
         run: bun tools/ci/sast/opengrep-scan.ts --exclude design --keluaran "$RUNNER_TEMP/sast"
+
+      # Counted from the work tree at run time, never written by hand (gap C16
+      # of docs/awcms/standar-performa-dan-keamanan.md): a hand-written number
+      # stops being true the moment a file is added. Guarded by
+      # tests/sast-coverage-statement.test.ts.
+      - name: State coverage
+        if: always()
+        run: |
+          ANALYSED=$(git ls-files '*.ts' '*.mjs' '*.js' ':!design' ':!tools/ci/sast/rules' | wc -l)
+          WORKFLOWS=$(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' | wc -l)
+          ASTRO=$(git ls-files '*.astro' | wc -l)
+          ASTRO_LINES=$(git ls-files '*.astro' | xargs --no-run-if-empty wc -l | tail -1 | awk '{print $1}')
+          {
+            echo "## Static analysis coverage (OpenGrep, ADR-0173)"
+            echo ""
+            echo "- **Analysed:** ${ANALYSED} \`.ts\`/\`.mjs\`/\`.js\` files and ${WORKFLOWS} workflow files."
+            echo "- **NOT analysed:** ${ASTRO} \`.astro\` files (${ASTRO_LINES:-0} lines) — OpenGrep has no Astro parser."
+            echo "- **Excluded:** \`design/\` (reference-only, vendored, never shipped)."
+          } >> "$GITHUB_STEP_SUMMARY"

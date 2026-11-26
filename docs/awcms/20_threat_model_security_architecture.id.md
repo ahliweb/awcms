@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](20_threat_model_security_architecture.md)
 
-<!-- i18n-source-hash: sha256:a67426bd7899497155533a4e3915c2d2cc218e6ff5745412ce66b544b824e4f6 -->
+<!-- i18n-source-hash: sha256:b5c0f9a012c59ec9c2d481ce02aa9251e8a0b676301ed3b2b71d1deaab9f2022 -->
 
 # Bagian 20 — Threat Model dan Arsitektur Keamanan
 
@@ -105,7 +105,7 @@ flowchart LR
 3. **Integritas data** — transaksi, idempotency (wajib untuk posting jurnal/pembayaran/PO), immutability, soft delete.
 4. **Kerahasiaan** — hash+mask identifier & data payroll, redaction log/audit, secret hanya dari environment.
 5. **Ketersediaan** — pooling/backpressure, offline-first outbox, circuit breaker per-provider integrasi eksternal.
-6. **Rantai pasok** — Bun-only, Dependabot, CodeQL, lockfile terkunci.
+6. **Rantai pasok** — Bun-only, Dependabot, SAST OpenGrep + gitleaks (`keamanan.yml`, ADR-0173), lockfile terkunci.
 7. **Integritas integrasi eksternal** — verifikasi signature/HMAC pada setiap webhook inbound, idempotency pada setiap callback yang bisa memicu efek finansial (lihat §Ancaman spesifik ERP).
 
 ## Penanganan secret
@@ -125,13 +125,13 @@ flowchart LR
 
 ## Automasi keamanan repositori
 
-| Kontrol                                                             | Lokasi (rencana)               |
-| ------------------------------------------------------------------- | ------------------------------ |
-| Secret scanning + push protection                                   | GitHub (setelan repo)          |
-| Dependabot alerts + updates                                         | `.github/dependabot.yml`       |
-| CodeQL code scanning                                                | `.github/workflows/codeql.yml` |
-| Lint + docs-check + typecheck + unit test + Bun-only/no-`.env` gate | `.github/workflows/ci.yml`     |
-| Private vulnerability reporting                                     | `SECURITY.md`                  |
+| Kontrol                                                             | Lokasi (rencana)                 |
+| ------------------------------------------------------------------- | -------------------------------- |
+| Secret scanning + push protection                                   | GitHub (setelan repo)            |
+| Dependabot alerts + updates                                         | `.github/dependabot.yml`         |
+| SAST (OpenGrep) + pindai rahasia per perubahan (gitleaks)           | `.github/workflows/keamanan.yml` |
+| Lint + docs-check + typecheck + unit test + Bun-only/no-`.env` gate | `.github/workflows/ci.yml`       |
+| Private vulnerability reporting                                     | `SECURITY.md`                    |
 
 ## Batasan (yang belum tercakup)
 
@@ -150,9 +150,9 @@ Struktur matrix di bawah mengikuti pola audit kepatuhan base awcms-mini (memetak
 | A03 | Injection                          | 🎯     | Seluruh query lewat tagged template parametrik; tidak ada string-concat SQL; output HTML di-escape otomatis oleh Astro.                                                                                                                                                                                                                                         |
 | A04 | Insecure Design                    | 🎯     | Threat model ini sendiri (STRIDE); immutability data posted (jurnal/transaksi finansial); idempotency mutation high-risk; self-approval & SoD workflow ditolak; fail-closed default tenant context.                                                                                                                                                             |
 | A05 | Security Misconfiguration          | 🎯     | Secret hanya dari `process.env`; CI menolak `.env` ter-commit; error tanpa stack trace; security response headers (CSP/HSTS/X-Frame-Options/dst.) direncanakan sejak awal, bukan ditambal belakangan seperti temuan gap di base.                                                                                                                                |
-| A06 | Vulnerable/Outdated Components     | 🎯     | Bun-only, dependency minimal; Dependabot + CodeQL aktif sejak awal.                                                                                                                                                                                                                                                                                             |
+| A06 | Vulnerable/Outdated Components     | 🎯     | Bun-only, dependency minimal; Dependabot + analisis statik (CodeQL sampai ADR-0173, OpenGrep sesudahnya) aktif sejak awal.                                                                                                                                                                                                                                      |
 | A07 | Identification & Auth Failures     | 🎯     | Lockout **per-principal** — satu penghitung per manusia, lintas seluruh tenant ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md), menutup #430) — + rate limit sumber+tenant sejak awal (bukan ditambal setelah insiden seperti di base); anti-enumeration pada login/forgot-password; sesi TTL + revoke eksplisit saat logout.                         |
-| A08 | Software & Data Integrity Failures | 🎯     | Checksum objek sync/upload; audit append-only; migration checksum di runner; CodeQL.                                                                                                                                                                                                                                                                            |
+| A08 | Software & Data Integrity Failures | 🎯     | Checksum objek sync/upload; audit append-only; migration checksum di runner; SAST OpenGrep (ADR-0173).                                                                                                                                                                                                                                                          |
 | A09 | Logging & Monitoring Failures      | 🎯     | Audit high-risk + decision log (append-only ditegakkan di tingkat privilege untuk audit trail, decision log, riwayat event access-policy dan business-scope, serta outbox domain-event: `sql/408`, `sql/409`) + correlation ID; redaction wajib (termasuk data payroll/finansial) sebelum log/audit.                                                            |
 | A10 | SSRF                               | 🎯     | URL provider eksternal (payment gateway/marketplace/Coretax/logistik) selalu dari konfigurasi tenant/env tervalidasi; circuit breaker per-provider; kasus tenant-configured URL (mis. OIDC issuer, endpoint webhook custom) diperlakukan sebagai accepted-risk terdokumentasi eksplisit, bukan diam-diam dianggap aman — mengikuti pola keputusan #603 di base. |
 
@@ -181,7 +181,7 @@ Struktur matrix di bawah mengikuti pola audit kepatuhan base awcms-mini (memetak
 | A.8.15 Logging                    | 🎯     | Audit trail dan ledger append-only (role runtime hanya SELECT + INSERT, `sql/408`, `sql/409`; DELETE retensi hanya sebagai `awcms_worker`) + decision log + correlation ID; retensi eksplisit + purge terjadwal. |
 | A.8.16 Monitoring                 | ⚠      | Log terstruktur direncanakan; agregasi/alerting terpusat (SIEM) tanggung jawab lapisan operasional/deployment turunan.                                                                                           |
 | A.8.24 Cryptography               | 🎯     | Argon2id (password), SHA-256 (token, checksum, hash CSP), HMAC (sync & webhook).                                                                                                                                 |
-| A.8.28 Secure coding              | 🎯     | Guardrail coding standard (belum ditulis, doc 10) akan menegakkan tagged-template query, response helper standar, ABAC/RLS/audit/idempotency per endpoint; CodeQL.                                               |
+| A.8.28 Secure coding              | 🎯     | Guardrail coding standard (belum ditulis, doc 10) akan menegakkan tagged-template query, response helper standar, ABAC/RLS/audit/idempotency per endpoint; SAST OpenGrep (ADR-0173).                             |
 | A.8.31 Separation of environments | 🎯     | `APP_ENV` menggerbang perilaku sensitif; role DB app vs migrasi terpisah.                                                                                                                                        |
 
 Matrix di atas **akan diaudit ulang secara faktual** (dengan bukti path file/fungsi konkret, sama seperti dokumen sumber) setiap kali sekelompok modul selesai dibangun — bukan diklaim terpenuhi di muka.

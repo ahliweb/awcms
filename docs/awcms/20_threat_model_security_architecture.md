@@ -103,7 +103,7 @@ flowchart LR
 3. **Data integrity** — transactions, idempotency (mandatory for journal posting/payment/PO), immutability, soft delete.
 4. **Confidentiality** — hash+mask identifiers & payroll data, log/audit redaction, secrets only from the environment.
 5. **Availability** — pooling/backpressure, offline-first outbox, per-provider circuit breaker for external integrations.
-6. **Supply chain** — Bun-only, Dependabot, CodeQL, locked lockfile.
+6. **Supply chain** — Bun-only, Dependabot, OpenGrep SAST + gitleaks (`keamanan.yml`, ADR-0173), locked lockfile.
 7. **External integration integrity** — signature/HMAC verification on every inbound webhook, idempotency on every callback that can trigger a financial effect (see §ERP-specific threats).
 
 ## Secret handling
@@ -123,13 +123,13 @@ flowchart LR
 
 ## Repository security automation
 
-| Control                                                             | Location (planned)             |
-| ------------------------------------------------------------------- | ------------------------------ |
-| Secret scanning + push protection                                   | GitHub (repo settings)         |
-| Dependabot alerts + updates                                         | `.github/dependabot.yml`       |
-| CodeQL code scanning                                                | `.github/workflows/codeql.yml` |
-| Lint + docs-check + typecheck + unit test + Bun-only/no-`.env` gate | `.github/workflows/ci.yml`     |
-| Private vulnerability reporting                                     | `SECURITY.md`                  |
+| Control                                                             | Location (planned)               |
+| ------------------------------------------------------------------- | -------------------------------- |
+| Secret scanning + push protection                                   | GitHub (repo settings)           |
+| Dependabot alerts + updates                                         | `.github/dependabot.yml`         |
+| SAST (OpenGrep) + secret scan of each change (gitleaks)             | `.github/workflows/keamanan.yml` |
+| Lint + docs-check + typecheck + unit test + Bun-only/no-`.env` gate | `.github/workflows/ci.yml`       |
+| Private vulnerability reporting                                     | `SECURITY.md`                    |
 
 ## Limitations (what is not covered yet)
 
@@ -148,9 +148,9 @@ The matrix structure below follows the awcms-mini base compliance audit pattern 
 | A03 | Injection                          | 🎯     | Every query goes through a parameterised tagged template; no SQL string concatenation; HTML output escaped automatically by Astro.                                                                                                                                                                                                                          |
 | A04 | Insecure Design                    | 🎯     | This threat model itself (STRIDE); immutability of posted data (journals/financial transactions); idempotency on high-risk mutations; self-approval & SoD workflow rejected; fail-closed default tenant context.                                                                                                                                            |
 | A05 | Security Misconfiguration          | 🎯     | Secrets only from `process.env`; CI rejects a committed `.env`; errors without stack traces; security response headers (CSP/HSTS/X-Frame-Options/etc.) planned from the start, not patched on afterwards the way the gap finding in the base was.                                                                                                           |
-| A06 | Vulnerable/Outdated Components     | 🎯     | Bun-only, minimal dependencies; Dependabot + CodeQL active from the start.                                                                                                                                                                                                                                                                                  |
+| A06 | Vulnerable/Outdated Components     | 🎯     | Bun-only, minimal dependencies; Dependabot + static analysis (CodeQL until ADR-0173, OpenGrep since) active from the start.                                                                                                                                                                                                                                 |
 | A07 | Identification & Auth Failures     | 🎯     | **Per-principal** lockout — one counter per human, across every tenant ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md), closing #430) — + source+tenant rate limit from the start (not patched in after an incident like in the base); anti-enumeration on login/forgot-password; session TTL + explicit revoke on logout.                        |
-| A08 | Software & Data Integrity Failures | 🎯     | Sync/upload object checksums; append-only audit; migration checksum in the runner; CodeQL.                                                                                                                                                                                                                                                                  |
+| A08 | Software & Data Integrity Failures | 🎯     | Sync/upload object checksums; append-only audit; migration checksum in the runner; OpenGrep SAST (ADR-0173).                                                                                                                                                                                                                                                |
 | A09 | Logging & Monitoring Failures      | 🎯     | High-risk audit + decision log (append-only is enforced at privilege level for the audit trail, the decision log, the access-policy and business-scope event histories and the domain-event outbox: `sql/408`, `sql/409`) + correlation ID; mandatory redaction (including payroll/financial data) before log/audit.                                        |
 | A10 | SSRF                               | 🎯     | External provider URLs (payment gateway/marketplace/Coretax/logistics) always come from validated tenant/env configuration; per-provider circuit breaker; the tenant-configured URL case (e.g. OIDC issuer, custom webhook endpoint) is treated as an explicitly documented accepted risk, not silently assumed safe — following decision #603 in the base. |
 
@@ -179,7 +179,7 @@ The matrix structure below follows the awcms-mini base compliance audit pattern 
 | A.8.15 Logging                    | 🎯     | Append-only audit trail and ledgers (runtime role holds SELECT + INSERT only, `sql/408`, `sql/409`; retention DELETE only as `awcms_worker`) + decision log + correlation ID; explicit retention + scheduled purge. |
 | A.8.16 Monitoring                 | ⚠      | Structured logs are planned; centralised aggregation/alerting (SIEM) is the responsibility of the derived operational/deployment layer.                                                                             |
 | A.8.24 Cryptography               | 🎯     | Argon2id (passwords), SHA-256 (tokens, checksums, CSP hashes), HMAC (sync & webhooks).                                                                                                                              |
-| A.8.28 Secure coding              | 🎯     | The coding standard guardrail (not written yet, doc 10) will enforce tagged-template queries, standard response helpers, ABAC/RLS/audit/idempotency per endpoint; CodeQL.                                           |
+| A.8.28 Secure coding              | 🎯     | The coding standard guardrail (not written yet, doc 10) will enforce tagged-template queries, standard response helpers, ABAC/RLS/audit/idempotency per endpoint; OpenGrep SAST (ADR-0173).                         |
 | A.8.31 Separation of environments | 🎯     | `APP_ENV` gates sensitive behaviour; separate app vs migration DB roles.                                                                                                                                            |
 
 The matrix above **will be re-audited factually** (with concrete file/function path evidence, exactly like the source document) every time a group of modules is finished — not claimed satisfied up front.

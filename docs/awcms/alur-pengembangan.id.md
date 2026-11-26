@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:1d2cebc7b1abcd57f456838f2e5a553ed19f2f6fe247197736485f99dc9fa9a6 -->
+<!-- i18n-source-hash: sha256:0189e4cc57bcaacc2d72e95fbdf2b64b3c23a744ea50af28cc6fe3791436223c -->
 
 # Alur pengembangan AWCMS
 
@@ -437,7 +437,7 @@ Mekaniknya di [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), template di
 proteksi branch di [`branch-protection.md`](branch-protection.md).
 
 Gerbangnya: rantai `bun run check` penuh, suite DB-gated, E2E Playwright,
-CodeQL, GitGuardian, dan changeset wajib untuk perubahan perilaku.
+job keamanan (`keamanan.yml`: SAST OpenGrep + gitleaks, ADR-0173), GitGuardian, dan changeset wajib untuk perubahan perilaku.
 
 **Sebelum push: `bun run ci:local`** ([`ci-local.md`](ci-local.md), Issue
 #1001). `bun run check` hanyalah job `quality`; `ci:local` juga menjalankan repo

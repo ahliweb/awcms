@@ -81,7 +81,7 @@ Project-level Claude Code skills for AWCMS. Each skill encodes the standards fro
 | `awcms-sensitive-data`                       | Normalize/hash/mask sensitive identifiers                                                                                                                                                                | 04                                            |
 | `awcms-sync-hmac`                            | HMAC-signed sync push/pull + anti-replay                                                                                                                                                                 | 08, 10                                        |
 | `awcms-security-review`                      | Module security review                                                                                                                                                                                   | 12, 13                                        |
-| `awcms-codeql-triage`                        | Triage & fix CodeQL code scanning findings (including the false-positive catalog)                                                                                                                        | 20                                            |
+| `awcms-sast-triage`                          | Triage & fix OpenGrep SAST findings: baseline, reasoned `nosemgrep`, local rules (ADR-0173; replaces the CodeQL triage skill)                                                                            | 20                                            |
 | `awcms-pr-review`                            | Review a pull request against the DoD                                                                                                                                                                    | 09, 10, 12                                    |
 | `awcms-testing`                              | Write layered tests (unit→security)                                                                                                                                                                      | 07                                            |
 | `awcms-browser-test`                         | Real browser E2E (Playwright + Bun) — the top of the testing pyramid                                                                                                                                     | 07, browser-test/SKILL.md                     |
@@ -189,7 +189,7 @@ flowchart TD
   VA --> SD
   II --> PR[awcms-pr-review]
   PR --> SEC[awcms-security-review]
-  PR --> CQ[awcms-codeql-triage]
+  PR --> CQ[awcms-sast-triage]
   SEC --> PF[awcms-production-preflight]
   PF --> DEP[awcms-deploy]
   DEP --> REL[awcms-release]

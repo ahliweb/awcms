@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:62854b531fbac084e34b221644e7621fd8ac22ef1120d4383a3aa9a0f45e73f3 -->
+<!-- i18n-source-hash: sha256:3ae0cccca9ab5de7ec4d6986ba3c66bc1cdaa9dcec5e0c681d0a4204efbddcf1 -->
 
 # AWCMS — Project State & Continuation
 
@@ -137,7 +137,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.12.0..HEAD`                                                   |
 | Modul base                         | **40** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **292** (`sql/001`–`420`)                                                                                                          | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0172** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0173** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **95** berkas `.astro` di `src/pages/admin/`; **2 dari 40** modul tanpa `navigation:` (`social-publishing`, `telegram-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **117** (70.130 baris) — soal typecheck lihat §6                                                                                   | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **74** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -761,6 +761,9 @@ exceptions` (`intake.read`). Batas payroll tidak bergeser:
   SHA dalam satu commit. **Aturan tetap: setiap bump `codeql-action` wajib
   memindahkan KEDUA SHA bersamaan, dan "9 check passed" pada PR semacam itu
   BUKAN bukti Analyze benar-benar jalan.**
+  (Dipensiunkan 27 November 2026 bersama `codeql.yml`: ADR-0173 mengganti
+  CodeQL dengan OpenGrep, sehingga tidak ada lagi pin `codeql-action` untuk
+  dinaikkan.)
 
   **DITOLAK — `prettier-plugin-astro@1.0.0` (#801), bertahan di 0.14.x.** Bump
   mayor itu membuat `prettier --check` crash pada

@@ -129,3 +129,6 @@ go.sum
 .agents/
 .claude/skills/pengetahuan-ringkas/
 graphify-out/
+# SAST rules copied from opengrep/opengrep-rules (ADR-0173): third-party data, not this repo's code.
+tools/ci/sast/rules/
+tools/ci/sast/baseline.json
