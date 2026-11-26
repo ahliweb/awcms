@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md)
 
-<!-- i18n-source-hash: sha256:9f0733367f5ce63a263eeb0ff4625ae92331ca49b9d4bd8b637339027f274db1 -->
+<!-- i18n-source-hash: sha256:3947430855e1e0dd8f173abe9795f4d1f810108160367d4b4d9016e027646085 -->
 
 # ADR-0173 — Analisis statik berjalan di OpenGrep dengan set aturan tersalin yang dipin dan baseline yang hanya menyusut, dan CodeQL dipensiunkan
 
@@ -41,7 +41,7 @@ Pemilik memutuskan pada 27 November 2026 bahwa CodeQL tidak dijalankan di reposi
 
 ## Pengukuran adopsi
 
-Diambil di runner GitHub-hosted, karena pemindaian yang sama melewati batas 60 detik yang berlaku untuk CI di mesin kerja pemilik (standar lintas-portofolio internal DL-099): 204 berkas aturan, 4.736 berkas dipindai, 73,6 dtk; `ERROR` 16, `WARNING` 862, `INFO` 701. Ke-16 temuan `ERROR` menjadi baseline adopsi:
+Diambil di runner GitHub-hosted, karena pemindaian yang sama melewati batas 60 detik yang berlaku untuk CI di mesin kerja pemilik (standar lintas-portofolio internal DL-099): 213 berkas aturan (212 tersalin + 1 lokal), 4.740 berkas dipindai, 76,7 dtk; `ERROR` 16, `WARNING` 862, `INFO` 701. Sembilan aturan `yaml/github-actions` tidak melaporkan temuan apa pun (dari severity mana pun) di berkas workflow repositori. Ke-16 temuan `ERROR`, semuanya dari aturan JavaScript dan TypeScript, menjadi baseline adopsi:
 
 | Aturan                                                 | Entri | Di mana                                                                                                                                                                                                           |
 | ------------------------------------------------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

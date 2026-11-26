@@ -39,7 +39,7 @@ The owner decided on 27 November 2026 that CodeQL runs in no repository of the p
 
 ## Adoption measurement
 
-Taken on the GitHub-hosted runner, because the same scan exceeded the 60-second limit that applies to CI run on the owner's workstation (internal cross-portfolio standard DL-099): 204 rule files, 4,736 files scanned, 73.6 s; `ERROR` 16, `WARNING` 862, `INFO` 701. The 16 `ERROR` findings form the adoption baseline:
+Taken on the GitHub-hosted runner, because the same scan exceeded the 60-second limit that applies to CI run on the owner's workstation (internal cross-portfolio standard DL-099): 213 rule files (212 copied + 1 local), 4,740 files scanned, 76.7 s; `ERROR` 16, `WARNING` 862, `INFO` 701. The nine `yaml/github-actions` rules report no finding (of any severity) in the repository's workflow files. The 16 `ERROR` findings, all from the JavaScript and TypeScript rules, form the adoption baseline:
 
 | Rule                                                   | Entries | Where                                                                                                                                                                                                             |
 | ------------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -21,7 +21,7 @@ Static analysis runs in `.github/workflows/keamanan.yml`, job `keamanan / sast-r
    ```bash
    bun tools/ci/sast/opengrep-scan.ts --exclude design
    ```
-   On the owner's workstation every CI command goes through `ci-lokal` (60-second limit, internal cross-portfolio standard DL-099). A full scan of this repo takes longer than that (about 74 s on the GitHub-hosted runner at adoption), so the full scan runs in CI; locally, read the rule and the code instead of looping the scan.
+   On the owner's workstation every CI command goes through `ci-lokal` (60-second limit, internal cross-portfolio standard DL-099). A full scan of this repo takes longer than that (about 77 s on the GitHub-hosted runner at adoption), so the full scan runs in CI; locally, read the rule and the code instead of looping the scan.
 3. **Read the rule before the code.** The rule file is `tools/ci/sast/rules/<language>/.../<name>.yaml` (the id `javascript.browser.security.insecure-innerhtml` maps to `tools/ci/sast/rules/javascript/browser/security/insecure-innerhtml.yaml`). The `pattern`/`patterns` block says exactly what matched; the `message` and `metadata` say why it matters. Most copied rules match a pattern within one function: they do not know where a value came from.
 4. **Decide: real defect, or a match that cannot be a defect here.** Prove it either way before writing code:
    - Follow every data path into the matched sink. A value that is provably a constant, a server-generated random token, or already escaped is evidence; "it looks fine" is not.

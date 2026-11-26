@@ -5,7 +5,7 @@ description: Triase dan perbaiki temuan analisis statik (SAST) AWCMS dari OpenGr
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:8612d244b8e6895c257e3376a065bd297353144a09301981a37019093e83faf8 -->
+<!-- i18n-source-hash: sha256:9e50b9892a96a3614aac1063a8fb4a33380440c90efcdf7f01d285a5b934c775 -->
 
 # AWCMS — Triase SAST (OpenGrep)
 
@@ -23,7 +23,7 @@ Analisis statik berjalan di `.github/workflows/keamanan.yml`, job `keamanan / sa
    ```bash
    bun tools/ci/sast/opengrep-scan.ts --exclude design
    ```
-   Di mesin kerja pemilik setiap perintah CI berjalan lewat `ci-lokal` (batas 60 detik, standar lintas-portofolio internal DL-099). Pemindaian penuh repo ini lebih lama dari itu (sekitar 74 dtk di runner GitHub-hosted saat adopsi), jadi pemindaian penuh berjalan di CI; secara lokal, baca aturan dan kodenya alih-alih mengulang pemindaian.
+   Di mesin kerja pemilik setiap perintah CI berjalan lewat `ci-lokal` (batas 60 detik, standar lintas-portofolio internal DL-099). Pemindaian penuh repo ini lebih lama dari itu (sekitar 77 dtk di runner GitHub-hosted saat adopsi), jadi pemindaian penuh berjalan di CI; secara lokal, baca aturan dan kodenya alih-alih mengulang pemindaian.
 3. **Baca aturannya sebelum kodenya.** Berkas aturan ada di `tools/ci/sast/rules/<bahasa>/.../<nama>.yaml` (id `javascript.browser.security.insecure-innerhtml` dipetakan ke `tools/ci/sast/rules/javascript/browser/security/insecure-innerhtml.yaml`). Blok `pattern`/`patterns` menyatakan persis apa yang cocok; `message` dan `metadata` menyatakan kenapa itu penting. Sebagian besar aturan yang disalin mencocokkan pola di dalam satu fungsi: ia tidak tahu dari mana sebuah nilai berasal.
 4. **Putuskan: cacat nyata, atau kecocokan yang tidak mungkin menjadi cacat di sini.** Buktikan ke salah satu arah sebelum menulis kode:
    - Ikuti setiap jalur data menuju sink yang cocok. Nilai yang terbukti konstan, token acak yang dibangkitkan server, atau yang sudah di-escape adalah bukti; "kelihatannya aman" bukan bukti.
