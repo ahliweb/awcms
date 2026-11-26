@@ -130,8 +130,6 @@ const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
   // sixty lines later, and the gate had no opinion. It now marks that one
   // passage with `<!-- aspirational:mulai -->` and is gated everywhere else.
   // Any skill here that is only PARTLY aspirational belongs in that shape too.
-  "awcms-codeql-triage":
-    "historical: cites `src/modules/application-registry.ts`, deleted by ADR-0034, as the site of a real triaged finding.",
   "awcms-new-module":
     "cross-cutting: enumerates modules NOT in the registry, so naming absent paths is the point of the passage.",
   "awcms-idempotency":

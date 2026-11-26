@@ -171,8 +171,10 @@ always killed).
 
 ## Not covered
 
-`codeql.yml` (CodeQL runs only on GitHub), the GitGuardian app, and
-`release.yml` (tag-triggered) have no local equivalent. A green `ci:local` is
+`keamanan.yml` (gitleaks + OpenGrep SAST, [ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md); a full scan exceeds the
+60-second limit for CI on the owner's workstation, so it runs on GitHub-hosted
+runners), the GitGuardian app, and `release.yml` (tag-triggered) have no
+local equivalent in `ci:local`. A green `ci:local` is
 necessary, not sufficient: GitHub's required checks still decide the merge.
 
 ## See also

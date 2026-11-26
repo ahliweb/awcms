@@ -1,6 +1,6 @@
 🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
+[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![Security](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/keamanan.yml?branch=main&label=security&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/keamanan.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
 # AWCMS — Online-First ERP & Business Solutions Template (AWCMS-family superset)
 
@@ -176,7 +176,7 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 
 - Vulnerability reporting policy: [`SECURITY.md`](SECURITY.md) (use private vulnerability reporting — **not** a public issue).
 - Threat model & security architecture: [`docs/awcms/20_threat_model_security_architecture.md`](docs/awcms/20_threat_model_security_architecture.md).
-- Automation: Dependabot, CodeQL, GitHub secret scanning + push protection, GitGuardian, CI hygiene (Bun-only + no-secret).
+- Automation: Dependabot, static analysis with OpenGrep plus gitleaks over each change's commit range (`keamanan.yml`, [ADR-0173](docs/adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md), which retired CodeQL), GitHub secret scanning + push protection, GitGuardian, CI hygiene (Bun-only + no-secret).
 
 ## Governance & community
 

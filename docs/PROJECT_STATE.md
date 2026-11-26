@@ -135,7 +135,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.12.0..HEAD`                                                   |
 | Base modules                      | **40** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
 | Migrations                        | **292** (`sql/001`–`420`)                                                                                                           | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0172** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0173** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **95** `.astro` files in `src/pages/admin/`; **2 of 40** modules without `navigation:` (`social-publishing`, `telegram-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **117** (70.130 lines) — on typechecking see §6                                                                                     | `find src -name '*.astro'`                                                              |
 | Gates                             | **74** in the `bun run check` chain                                                                                                 | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -747,6 +747,8 @@ exceptions` (`intake.read`). The payroll boundary did not move:
   after the merge. Superseded by #817, which moves both SHAs in one commit.
   **Standing rule: any future `codeql-action` bump must move both pinned SHAs
   together, and "9 checks passed" on such a PR is not evidence Analyze ran.**
+  (Retired on 27 November 2026 together with `codeql.yml`: ADR-0173 replaced
+  CodeQL with OpenGrep, so there is no `codeql-action` pin left to bump.)
 
   **REJECTED — `prettier-plugin-astro@1.0.0` (#801), staying on 0.14.x.** The
   major bump crashes `prettier --check` on `src/pages/admin/audit-trail.astro`

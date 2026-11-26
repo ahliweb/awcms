@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](branch-protection.md)
 
-<!-- i18n-source-hash: sha256:ca3fb0308215acb154688f3240146f9f1fcac7878157a772fc6ba02f3bd01b60 -->
+<!-- i18n-source-hash: sha256:7e4815b3ee0c4fd0d7a4a07c3f41aff74c41b9e5b3138732bf2928fb46de0a0f -->
 
 # Branch Protection — Required Status Checks
 
@@ -9,7 +9,8 @@
 > by [ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)) — 10
 > modul fondasi sudah ada (lihat `../ARCHITECTURE.md`), modul domain ERP
 > hidup di repo ekstensi/turunan terpisah, tidak pernah di repo ini.
-> `.github/workflows/ci.yml`, `codeql.yml`, dan `changesets.yml` **sudah
+> `.github/workflows/ci.yml`, `changesets.yml`, dan `keamanan.yml` (pengganti
+> `codeql.yml` menurut [ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.id.md)) **sudah
 > ada** di repo ini (diadaptasi dari awcms-mini). Sejak Issue #166, `ci.yml`
 > juga punya job `e2e-smoke` (Playwright + Bun) yang berjalan pada **setiap
 > push/PR** — lihat tabel di bawah untuk detail dan untuk statusnya (belum
@@ -65,15 +66,16 @@ lewat `gh api repos/ahliweb/awcms/rulesets/11653326`) — sebuah check
 direferensikan lewat `context` (nama job/check run) plus `integration_id`
 (App yang melaporkannya), bukan hanya nama:
 
-| Check name (verbatim)                                          | Integration (App)                                                | Workflow / job                                           | What it gates                                                                                                                                                                                                      |
-| -------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Quality (lint + docs + contracts + typecheck + test + build)` | GitHub Actions (`integration_id: 15368`)                         | `ci.yml` / `quality`                                     | Prettier, `check:docs` (mermaid/tautan/penamaan), `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `logging:lint:check`, typecheck, `bun test` (unit), build |
-| `Repo hygiene (Bun-only + no secrets)`                         | GitHub Actions (`integration_id: 15368`)                         | `ci.yml` / `hygiene`                                     | Konvensi tooling Bun-only, tidak ada `.env` ter-commit                                                                                                                                                             |
-| `Changeset required for behavior changes`                      | GitHub Actions (`integration_id: 15368`)                         | `changesets.yml` / `policy-check`                        | Menolak PR yang menyentuh file non-docs/non-agent-tooling tanpa `.changeset/*.md` baru — lihat `scripts/changeset-policy-check.ts`                                                                                 |
-| `Analyze (actions)`                                            | GitHub Actions (`integration_id: 15368`)                         | `codeql.yml` / `analyze`                                 | CodeQL static analysis atas berkas workflow GitHub Actions                                                                                                                                                         |
-| `Analyze (javascript-typescript)`                              | GitHub Actions (`integration_id: 15368`)                         | `codeql.yml` / `analyze`                                 | CodeQL static analysis (query security-extended + security-and-quality) atas source TypeScript/Astro                                                                                                               |
-| `CodeQL`                                                       | **CodeQL app** (`integration_id: 57789`) — beda dari App di atas | Code scanning umbrella check (bukan job di `codeql.yml`) | Check ringkasan tingkat-App dari GitHub Code Scanning atas hasil `codeql.yml`; terpisah dari kedua `Analyze (...)` per-bahasa di atas — App yang melaporkannya berbeda meski sumber datanya sama analisis CodeQL   |
-| `GitGuardian Security Checks`                                  | **GitGuardian app** (`integration_id: 46505`)                    | GitHub App eksternal (bukan workflow file di repo ini)   | Secret-scanning oleh integrasi GitGuardian organisasi — **sudah aktif dan terkonfigurasi live** di repo ini (bukan aspirational)                                                                                   |
+| Check name (verbatim)                                          | Integration (App)                                                | Workflow / job                                           | What it gates                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Quality (lint + docs + contracts + typecheck + test + build)` | GitHub Actions (`integration_id: 15368`)                         | `ci.yml` / `quality`                                     | Prettier, `check:docs` (mermaid/tautan/penamaan), `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `logging:lint:check`, typecheck, `bun test` (unit), build                                                                                                                                     |
+| `Repo hygiene (Bun-only + no secrets)`                         | GitHub Actions (`integration_id: 15368`)                         | `ci.yml` / `hygiene`                                     | Konvensi tooling Bun-only, tidak ada `.env` ter-commit                                                                                                                                                                                                                                                                                                 |
+| `Changeset required for behavior changes`                      | GitHub Actions (`integration_id: 15368`)                         | `changesets.yml` / `policy-check`                        | Menolak PR yang menyentuh file non-docs/non-agent-tooling tanpa `.changeset/*.md` baru — lihat `scripts/changeset-policy-check.ts`                                                                                                                                                                                                                     |
+| `Analyze (actions)`                                            | GitHub Actions (`integration_id: 15368`)                         | dulu `codeql.yml` / `analyze` (**dihapus**, ADR-0173)    | **Dipensiunkan.** Analisis CodeQL atas berkas workflow. Workflow-nya sudah tidak ada, jadi konteks ini tidak pernah melapor lagi; pemilik mencabutnya (lihat "Memensiunkan CodeQL" di bawah). Digantikan sembilan aturan OpenGrep `yaml/github-actions` di `keamanan / sast-rahasia-dependensi` (aturan pola, lebih dangkal daripada alur data CodeQL) |
+| `Analyze (javascript-typescript)`                              | GitHub Actions (`integration_id: 15368`)                         | dulu `codeql.yml` / `analyze` (**dihapus**, ADR-0173)    | **Dipensiunkan.** Analisis CodeQL atas source TypeScript/JavaScript, digantikan OpenGrep di `keamanan / sast-rahasia-dependensi`; tidak pernah melapor lagi, pemilik mencabutnya                                                                                                                                                                       |
+| `CodeQL`                                                       | **CodeQL app** (`integration_id: 57789`) — beda dari App di atas | Code scanning umbrella check (SARIF tidak diunggah lagi) | **Dipensiunkan.** Check ringkasan code scanning tingkat-App atas hasil CodeQL; setelah ADR-0173 tidak ada yang mengunggah hasil, jadi ia tidak pernah melapor lagi; pemilik mencabutnya                                                                                                                                                                |
+| `GitGuardian Security Checks`                                  | **GitGuardian app** (`integration_id: 46505`)                    | GitHub App eksternal (bukan workflow file di repo ini)   | Secret-scanning oleh integrasi GitGuardian organisasi — **sudah aktif dan terkonfigurasi live** di repo ini (bukan aspirational)                                                                                                                                                                                                                       |
+| `keamanan / sast-rahasia-dependensi`                           | GitHub Actions (`integration_id: 15368`)                         | `keamanan.yml` / `keamanan`                              | **Ditambahkan pemilik** (ADR-0173). gitleaks atas rentang commit + SAST OpenGrep; gagal pada `ERROR` baru di luar `tools/ci/sast/baseline.json`. Berjalan di setiap PR (tanpa filter `paths`)                                                                                                                                                          |
 
 `GitGuardian Security Checks` sebelumnya didokumentasikan di sini sebagai
 "belum dikonfigurasi apa pun di repo ini, tambahkan begitu diaktifkan" —
@@ -138,6 +140,40 @@ penulisan dokumen ini check ini **tidak** ada di daftar
 sebagai required check adalah keputusan operasional repo-admin
 tersendiri (lihat perintah `gh api` di bagian "Applying this"), bukan
 sesuatu yang dokumen ini menetapkan atau merekomendasikan satu arah.
+
+### Memensiunkan CodeQL (ADR-0173) — tindakan pemilik
+
+[ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.id.md) menghapus `codeql.yml`. Sejak
+pull request yang menerapkannya, `Analyze (javascript-typescript)`,
+`Analyze (actions)`, dan `CodeQL` tidak pernah dilaporkan, dan karena ketiganya
+masih wajib, **tidak ada pull request yang bisa di-merge** (termasuk pull
+request itu) sampai ruleset `11653326` diubah. Mengubah ruleset adalah
+tindakan repo-admin dan tidak dilakukan oleh CI maupun agent. Konteks baru
+`keamanan / sast-rahasia-dependensi` sudah melapor di pull request itu,
+sehingga pemilih di UI menawarkannya.
+
+Lewat UI: **Settings → Rules → Rulesets → "main only" → Require status
+checks to pass**: cabut ketiga konteks di atas, tambahkan
+`keamanan / sast-rahasia-dependensi` (sumber: GitHub Actions), simpan.
+
+`gh api` yang setara (repo admin; membaca ruleset hidup dan hanya mengubah
+daftar status check):
+
+```bash
+gh api repos/ahliweb/awcms/rulesets/11653326 > ruleset.json
+jq '{name, target, enforcement, conditions, bypass_actors,
+     rules: [.rules[] | if .type == "required_status_checks"
+       then .parameters.required_status_checks |=
+         ([.[] | select(.context as $c
+             | ["Analyze (javascript-typescript)", "Analyze (actions)", "CodeQL"]
+             | index($c) | not)]
+          + [{"context": "keamanan / sast-rahasia-dependensi", "integration_id": 15368}])
+       else . end]}' ruleset.json > ruleset-new.json
+gh api -X PUT repos/ahliweb/awcms/rulesets/11653326 --input ruleset-new.json
+# verifikasi
+gh api repos/ahliweb/awcms/rulesets/11653326 \
+  --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+```
 
 ### Bypass actor yang terpasang di ruleset ini
 
@@ -210,9 +246,7 @@ gh api -X POST repos/ahliweb/awcms/rulesets \
           { "context": "Quality (lint + docs + contracts + typecheck + test + build)" },
           { "context": "Repo hygiene (Bun-only + no secrets)" },
           { "context": "Changeset required for behavior changes" },
-          { "context": "Analyze (javascript-typescript)" },
-          { "context": "Analyze (actions)" },
-          { "context": "CodeQL" },
+          { "context": "keamanan / sast-rahasia-dependensi" },
           { "context": "GitGuardian Security Checks" }
         ]
       }
@@ -257,7 +291,7 @@ ia hijau.
 `11653326` yang tercantum di atas tetap yang dievaluasi GitHub sebelum PR boleh
 merge, dilaporkan oleh GitHub Actions dan kedua app — run lokal yang hijau tidak
 memberi apa-apa, dan yang merah atau di-skip tidak memblokir apa-apa. `ci:local`
-juga tidak bisa melihat CodeQL, GitGuardian, atau `release.yml`. Perlakukan ia
+juga tidak bisa melihat `keamanan.yml`, GitGuardian, atau `release.yml`. Perlakukan ia
 sebagai verifikasi sebelum push, bukan pengganti check sesudahnya.
 
 Runner lokal dijaga sejalan dengan workflow agar tidak diam-diam berhenti
@@ -289,7 +323,7 @@ bagian di atas soal statusnya sebagai required check.)
 - [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)
   — testing pyramid and production readiness checklist this CI
   orchestration serves.
-- `.github/workflows/ci.yml`, `codeql.yml`, `changesets.yml` — definisi
+- `.github/workflows/ci.yml`, `changesets.yml`, `keamanan.yml` — definisi
   workflow aktual yang dideskripsikan dokumen ini.
 - [`release-process.md`](release-process.md) — `release.yml` (tag-triggered
   build/SBOM/sign/attest/publish pipeline) sekali didokumentasikan untuk

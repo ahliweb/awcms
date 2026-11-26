@@ -34,7 +34,7 @@ Do not open public issues for exploitable vulnerabilities. Public issues are acc
 - RBAC/ABAC default-deny access control on all non-public endpoints.
 - Idempotency required on high-risk mutations (posting transactions, payroll runs, financial adjustments, integration syncs — the last two being concerns of derived ERP applications built on this foundation).
 - Audit trail with redaction on sensitive business/financial actions.
-- Security automation: GitHub secret scanning, push protection, Dependabot alerts/security updates, and CodeQL code scanning.
+- Security automation: GitHub secret scanning, push protection, Dependabot alerts/security updates, GitGuardian, and the security job `keamanan / sast-rahasia-dependensi` (`.github/workflows/keamanan.yml`): OpenGrep static analysis with a pinned, copied rule set that fails a pull request on any new `ERROR` finding outside the shrink-only baseline, plus gitleaks over the commit range of each change. CodeQL was retired by [ADR-0173](docs/adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md); its results are no longer uploaded to code scanning. The dependency audit (`bun run deps:audit:check`, blocking high/critical advisories) runs in the `check` chain of every pull request.
 - Repository policy: no real secrets, credentials, customer data, database dumps, or raw production logs in Git, issues, pull requests, or documentation.
 - External business-solution integrations (payment gateways, marketplaces, tax/Coretax, logistics providers) connect via outbox/queue, never direct synchronous calls from critical transaction paths.
 

@@ -430,7 +430,7 @@ template in
 branch protection in [`branch-protection.md`](branch-protection.md).
 
 The gates: the full `bun run check` chain, the DB-gated suite, Playwright E2E,
-CodeQL, GitGuardian, and a mandatory changeset for behaviour changes.
+the security job (`keamanan.yml`: OpenGrep SAST + gitleaks, ADR-0173), GitGuardian, and a mandatory changeset for behaviour changes.
 
 **Before you push: `bun run ci:local`** ([`ci-local.md`](ci-local.md), Issue
 #1001). `bun run check` is only the `quality` job; `ci:local` also runs repo

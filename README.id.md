@@ -1,8 +1,8 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:79b80865264de4be10c339e6de7369372f437dd8637266e239858e139596716a -->
+<!-- i18n-source-hash: sha256:e87572c4d9b0f29bb8b06928224708266129f39dabc67dece090fefa03c27f04 -->
 
-[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
+[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![Security](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/keamanan.yml?branch=main&label=security&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/keamanan.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
 # AWCMS — Template ERP & Solusi Bisnis Online-First (Superset Keluarga AWCMS)
 
@@ -178,7 +178,7 @@ Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR
 
 - Kebijakan pelaporan kerentanan: [`SECURITY.md`](SECURITY.md) (gunakan private vulnerability reporting — **jangan** issue publik).
 - Model ancaman & arsitektur keamanan: [`docs/awcms/20_threat_model_security_architecture.md`](docs/awcms/20_threat_model_security_architecture.md).
-- Automasi: Dependabot, CodeQL, GitHub secret scanning + push protection, GitGuardian, CI hygiene (Bun-only + no-secret).
+- Automasi: Dependabot, analisis statik dengan OpenGrep ditambah gitleaks atas rentang commit setiap perubahan (`keamanan.yml`, [ADR-0173](docs/adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.id.md), yang memensiunkan CodeQL), GitHub secret scanning + push protection, GitGuardian, CI hygiene (Bun-only + no-secret).
 
 ## Tata kelola & komunitas
 

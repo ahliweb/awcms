@@ -7,8 +7,9 @@
 > by [ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)) — 10
 > foundation modules already exist (see `../ARCHITECTURE.md`), ERP domain
 > modules live in separate extension/derived repos, never in this repo.
-> `.github/workflows/ci.yml`, `codeql.yml`, and `changesets.yml` **already
-> exist** in this repo (adapted from awcms-mini). Since Issue #166, `ci.yml`
+> `.github/workflows/ci.yml`, `changesets.yml`, and `keamanan.yml` **already
+> exist** in this repo (the first two adapted from awcms-mini; `keamanan.yml`
+> replaced `codeql.yml` under [ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md)). Since Issue #166, `ci.yml`
 > also has an `e2e-smoke` job (Playwright + Bun) that runs on **every**
 > push/PR — see the table below for details and for its status (not yet
 > required). `ci.yml` also already has an `integration-tests` job
@@ -62,15 +63,16 @@ via `gh api repos/ahliweb/awcms/rulesets/11653326`) — a check is
 referenced by `context` (the job/check run name) plus `integration_id`
 (the App that reports it), not by name alone:
 
-| Check name (verbatim)                                          | Integration (App)                                                       | Workflow / job                                           | What it gates                                                                                                                                                                                                                                       |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Quality (lint + docs + contracts + typecheck + test + build)` | GitHub Actions (`integration_id: 15368`)                                | `ci.yml` / `quality`                                     | Prettier, `check:docs` (mermaid/links/naming), `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `logging:lint:check`, typecheck, `bun test` (unit), build                                     |
-| `Repo hygiene (Bun-only + no secrets)`                         | GitHub Actions (`integration_id: 15368`)                                | `ci.yml` / `hygiene`                                     | Bun-only tooling conventions, no committed `.env`                                                                                                                                                                                                   |
-| `Changeset required for behavior changes`                      | GitHub Actions (`integration_id: 15368`)                                | `changesets.yml` / `policy-check`                        | Rejects a PR that touches non-docs/non-agent-tooling files without a new `.changeset/*.md` — see `scripts/changeset-policy-check.ts`                                                                                                                |
-| `Analyze (actions)`                                            | GitHub Actions (`integration_id: 15368`)                                | `codeql.yml` / `analyze`                                 | CodeQL static analysis over the GitHub Actions workflow files                                                                                                                                                                                       |
-| `Analyze (javascript-typescript)`                              | GitHub Actions (`integration_id: 15368`)                                | `codeql.yml` / `analyze`                                 | CodeQL static analysis (security-extended + security-and-quality queries) over the TypeScript/Astro source                                                                                                                                          |
-| `CodeQL`                                                       | **CodeQL app** (`integration_id: 57789`) — different from the App above | Code scanning umbrella check (not a job in `codeql.yml`) | The App-level summary check from GitHub Code Scanning over the results of `codeql.yml`; separate from the two per-language `Analyze (...)` checks above — the App reporting it is different even though the data source is the same CodeQL analysis |
-| `GitGuardian Security Checks`                                  | **GitGuardian app** (`integration_id: 46505`)                           | External GitHub App (not a workflow file in this repo)   | Secret scanning by the organisation's GitGuardian integration — **already active and configured live** in this repo (not aspirational)                                                                                                              |
+| Check name (verbatim)                                          | Integration (App)                                                       | Workflow / job                                               | What it gates                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Quality (lint + docs + contracts + typecheck + test + build)` | GitHub Actions (`integration_id: 15368`)                                | `ci.yml` / `quality`                                         | Prettier, `check:docs` (mermaid/links/naming), `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `logging:lint:check`, typecheck, `bun test` (unit), build                                                                                                          |
+| `Repo hygiene (Bun-only + no secrets)`                         | GitHub Actions (`integration_id: 15368`)                                | `ci.yml` / `hygiene`                                         | Bun-only tooling conventions, no committed `.env`                                                                                                                                                                                                                                                                        |
+| `Changeset required for behavior changes`                      | GitHub Actions (`integration_id: 15368`)                                | `changesets.yml` / `policy-check`                            | Rejects a PR that touches non-docs/non-agent-tooling files without a new `.changeset/*.md` — see `scripts/changeset-policy-check.ts`                                                                                                                                                                                     |
+| `Analyze (actions)`                                            | GitHub Actions (`integration_id: 15368`)                                | was `codeql.yml` / `analyze` (**removed**, ADR-0173)         | **Retiring.** CodeQL analysis of the workflow files. The workflow is gone, so this context never reports again; the owner removes it (see "Retiring CodeQL" below). Replaced by the nine `yaml/github-actions` OpenGrep rules in `keamanan / sast-rahasia-dependensi` (pattern rules, shallower than CodeQL's data flow) |
+| `Analyze (javascript-typescript)`                              | GitHub Actions (`integration_id: 15368`)                                | was `codeql.yml` / `analyze` (**removed**, ADR-0173)         | **Retiring.** CodeQL analysis of the TypeScript/JavaScript source, replaced by OpenGrep in `keamanan / sast-rahasia-dependensi`; never reports again, the owner removes it                                                                                                                                               |
+| `CodeQL`                                                       | **CodeQL app** (`integration_id: 57789`) — different from the App above | Code scanning umbrella check (no SARIF is uploaded any more) | **Retiring.** The App-level code-scanning summary over CodeQL results; nothing uploads results after ADR-0173, so it never reports again; the owner removes it                                                                                                                                                           |
+| `GitGuardian Security Checks`                                  | **GitGuardian app** (`integration_id: 46505`)                           | External GitHub App (not a workflow file in this repo)       | Secret scanning by the organisation's GitGuardian integration — **already active and configured live** in this repo (not aspirational)                                                                                                                                                                                   |
+| `keamanan / sast-rahasia-dependensi`                           | GitHub Actions (`integration_id: 15368`)                                | `keamanan.yml` / `keamanan`                                  | **To be added by the owner** (ADR-0173). gitleaks over the commit range + OpenGrep SAST; fails on a new `ERROR` outside `tools/ci/sast/baseline.json`. Runs on every PR (no `paths` filter)                                                                                                                              |
 
 `GitGuardian Security Checks` was previously documented here as
 "nothing configured in this repo yet, add it once it is enabled" —
@@ -132,6 +134,40 @@ like `E2E smoke (Playwright)`, as of this document's writing this check is
 adding it as a required check is a repo-admin operational decision of its
 own (see the `gh api` command in the "Applying this" section), not
 something this document settles or recommends in either direction.
+
+### Retiring CodeQL (ADR-0173) — owner action
+
+[ADR-0173](../adr/0173-static-analysis-runs-on-opengrep-with-a-pinned-copied-rule-set-and-a-shrink-only-baseline-and-codeql-is-retired.md) removes `codeql.yml`. From the
+pull request that applies it onwards, `Analyze (javascript-typescript)`,
+`Analyze (actions)` and `CodeQL` are never reported, and because they are
+still required, **no pull request can merge** (that pull request included)
+until ruleset `11653326` is changed. Changing a ruleset is a repo-admin act
+and is not done by CI or by an agent. The new context
+`keamanan / sast-rahasia-dependensi` has already reported on that pull
+request, so the UI picker offers it.
+
+Via the UI: **Settings → Rules → Rulesets → "main only" → Require status
+checks to pass**: remove the three contexts above, add
+`keamanan / sast-rahasia-dependensi` (source: GitHub Actions), save.
+
+Equivalent `gh api` (repo admin; reads the live ruleset and changes only the
+status-check list):
+
+```bash
+gh api repos/ahliweb/awcms/rulesets/11653326 > ruleset.json
+jq '{name, target, enforcement, conditions, bypass_actors,
+     rules: [.rules[] | if .type == "required_status_checks"
+       then .parameters.required_status_checks |=
+         ([.[] | select(.context as $c
+             | ["Analyze (javascript-typescript)", "Analyze (actions)", "CodeQL"]
+             | index($c) | not)]
+          + [{"context": "keamanan / sast-rahasia-dependensi", "integration_id": 15368}])
+       else . end]}' ruleset.json > ruleset-new.json
+gh api -X PUT repos/ahliweb/awcms/rulesets/11653326 --input ruleset-new.json
+# verify
+gh api repos/ahliweb/awcms/rulesets/11653326 \
+  --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+```
 
 ### The bypass actor installed in this ruleset
 
@@ -204,9 +240,7 @@ gh api -X POST repos/ahliweb/awcms/rulesets \
           { "context": "Quality (lint + docs + contracts + typecheck + test + build)" },
           { "context": "Repo hygiene (Bun-only + no secrets)" },
           { "context": "Changeset required for behavior changes" },
-          { "context": "Analyze (javascript-typescript)" },
-          { "context": "Analyze (actions)" },
-          { "context": "CodeQL" },
+          { "context": "keamanan / sast-rahasia-dependensi" },
           { "context": "GitGuardian Security Checks" }
         ]
       }
@@ -251,7 +285,7 @@ is green.
 in ruleset `11653326` listed above are still what GitHub evaluates before a PR can
 merge, reported by GitHub Actions and the two apps — a green local run grants
 nothing, and a red or skipped one blocks nothing. `ci:local` also cannot see
-CodeQL, GitGuardian or `release.yml`. Treat it as the verification before the
+`keamanan.yml`, GitGuardian or `release.yml`. Treat it as the verification before the
 push, not instead of the checks after it.
 
 The local runner is held in step with the workflows so it cannot quietly stop
@@ -283,7 +317,7 @@ section above about its status as a required check.)
 - [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)
   — testing pyramid and production readiness checklist this CI
   orchestration serves.
-- `.github/workflows/ci.yml`, `codeql.yml`, `changesets.yml` — the actual
+- `.github/workflows/ci.yml`, `changesets.yml`, `keamanan.yml` — the actual
   workflow definitions this document describes.
 - [`release-process.md`](release-process.md) — `release.yml` (the tag-triggered
   build/SBOM/sign/attest/publish pipeline) documented once for

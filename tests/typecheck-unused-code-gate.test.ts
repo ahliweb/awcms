@@ -28,7 +28,8 @@
  * annoyed someone, with no signal anywhere. Both halves are asserted because
  * either alone is inert: the flag does nothing if no command runs `tsc`, and
  * running `tsc` proves nothing if the flag is gone. Same reasoning, and the
- * same failure mode, as `codeql-coverage-statement.test.ts`.
+ * same failure mode, as `sast-coverage-statement.test.ts` (which replaced
+ * `codeql-coverage-statement.test.ts` under ADR-0173).
  *
  * Note for whoever hits this next: an intentionally-unused parameter is
  * spelled with a leading underscore (see `resolveLegacyBlogRedirect` in

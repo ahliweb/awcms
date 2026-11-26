@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:7d0b596e2799fff1bf0a5536a55bc1938046a89f566fe2ad3e1f316796de9afd -->
+<!-- i18n-source-hash: sha256:651a2c1677850e2c22587824a02c293408fa9ef90cbb6dfe5fa6e1b1002bd678 -->
 
 # AWCMS Project Skills
 
@@ -83,7 +83,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | `awcms-sensitive-data`                       | Normalize/hash/mask identifier sensitif                                                                                                                                            | 04                                          |
 | `awcms-sync-hmac`                            | Sync push/pull bertanda HMAC + anti-replay                                                                                                                                         | 08, 10                                      |
 | `awcms-security-review`                      | Review keamanan modul                                                                                                                                                              | 12, 13                                      |
-| `awcms-codeql-triage`                        | Triase & perbaiki temuan CodeQL code scanning (termasuk katalog false-positive)                                                                                                    | 20                                          |
+| `awcms-sast-triage`                          | Triase & perbaiki temuan SAST OpenGrep: baseline, `nosemgrep` beralasan, aturan lokal (ADR-0173; pengganti skill triase CodeQL)                                                    | 20                                          |
 | `awcms-pr-review`                            | Review pull request terhadap DoD                                                                                                                                                   | 09, 10, 12                                  |
 | `awcms-testing`                              | Tulis test berlapis (unit→security)                                                                                                                                                | 07                                          |
 | `awcms-browser-test`                         | E2E browser sungguhan (Playwright + Bun) — puncak piramida testing                                                                                                                 | 07, browser-test/SKILL.md                   |
@@ -191,7 +191,7 @@ flowchart TD
   VA --> SD
   II --> PR[awcms-pr-review]
   PR --> SEC[awcms-security-review]
-  PR --> CQ[awcms-codeql-triage]
+  PR --> CQ[awcms-sast-triage]
   SEC --> PF[awcms-production-preflight]
   PF --> DEP[awcms-deploy]
   DEP --> REL[awcms-release]
