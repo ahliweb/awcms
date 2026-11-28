@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:7d0b596e2799fff1bf0a5536a55bc1938046a89f566fe2ad3e1f316796de9afd -->
+<!-- i18n-source-hash: sha256:346d0761544532e5b55155c259be286352298f5b0bbc5d049bf94fbc8f84dcc3 -->
 
 # AWCMS Project Skills
 
@@ -256,6 +256,7 @@ Selain skill, tersedia **subagent** untuk delegasi kerja penuh:
 | `awcms-reviewer`         | Review PR/diff terhadap DoD (read-only)             | Read-only | Sonnet / `high`   |
 | `awcms-security-auditor` | Audit keamanan modul, verdict go-live (read-only)   | Read-only | Opus / `high`     |
 | `pelaksana-sederhana`    | Sub-tugas sederhana, mekanis, risiko rendah         | Semua     | Haiku / `low`     |
+| `pelaksana-kritis`       | Sub-tugas kritis (hanya saat orchestrator Fable)    | Semua     | Opus / `high`     |
 
 Pola pakai: `awcms-coder` mengerjakan issue → `awcms-reviewer` mereview → modul sensitif diaudit `awcms-security-auditor`.
 
