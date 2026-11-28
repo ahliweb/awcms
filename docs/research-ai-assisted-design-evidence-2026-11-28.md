@@ -22,3 +22,15 @@ Concept-only independent adoption. No copying proprietary assets/source, no send
 
 ## Next decision
 Issue #1532 owns deeper inspection (ADR, docs, actual code, CI and overlap), a bounded proposal and reviewer decision. No implementation, dependency, release or gate approval in this note. Add to the existing documentation index and run applicable gates before merge.
+
+
+## GitHub Projects — lifecycle coordination (2026-11-28)
+
+Owner direction: coordinate all applicable AWSES steps through GitHub Projects (v2); integrate with existing project management, not a second board or replacement for repo authority. Existing work: 1532. Upstream scope SYSTEM admin; no staging/UAT card falsely marked complete; record N/A with ADR evidence.
+
+- Steps 1–8: track research/specification deliverables, dependency, reviewer, acceptance criteria and evidence URL; no implementation issue before applicable Gate 9. Step 9: gate tracker references recorded decision, never inferred from board stage.
+- Steps 10–12: canonical issue per S/M unit, native parent/sub-issue and blocked-by relations where supported, milestone/priority/assignee preserved; PR references issue and CI evidence. Steps 13–15: track staging/UAT only if applicable, release-readiness evidence and decision. Steps 16–18: deployment, validation, monitoring and follow-up with release/incident evidence.
+- Reuse approved project and its existing fields (e.g. Tahap, Pelaksana, Prioritas, Mulai, Target); proposed mapping Rencana = backlog, Siap = applicable DoR, Berjalan = claimed, Menunggu = dependency/review/approval, Selesai = verified outcome, Batal = cancelled with reason. Lifecycle step is a separate field or existing issue metadata, never inferred from stage. Gate rejection remains recorded even if tracker closed. Do not mark closed-unmerged PR, duplicate/not-planned issue, or missing evidence as Selesai automatically. Preserve owner/assignee and target; do not invent deadlines.
+- Project membership/field changes: discover live owner/number, access and field IDs; use actual issue URL/node ID, idempotent add, dry-run diff, readback and reconcile; keep one canonical issue and distinguish PR items from work counts. No shared draft cards or confidential context. Review permission, avoid broad seeding or status automation conflicts, never move item across visibility boundary automatically. Board is coordination only, not merge/deploy authority. Report verified vs pending; no membership checked in this research update.
+
+References: https://docs.github.com/en/issues/planning-and-tracking-with-projects ; https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects ; https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies ; https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/about-issue-statuses .
