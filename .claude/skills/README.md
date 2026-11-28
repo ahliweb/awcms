@@ -254,6 +254,7 @@ Besides skills, **subagents** are available for delegating full pieces of work:
 | `awcms-reviewer`         | Review a PR/diff against the DoD (read-only)           | Read-only | Sonnet / `high`   |
 | `awcms-security-auditor` | Module security audit, go-live verdict (read-only)     | Read-only | Opus / `high`     |
 | `pelaksana-sederhana`    | Simple, mechanical, low-risk sub-tasks                 | All       | Haiku / `low`     |
+| `pelaksana-kritis`       | Critical sub-tasks (only under a Fable orchestrator)   | All       | Opus / `high`     |
 
 Usage pattern: `awcms-coder` works the issue → `awcms-reviewer` reviews it → sensitive modules are audited by `awcms-security-auditor`.
 
